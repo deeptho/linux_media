@@ -5092,6 +5092,7 @@ fe_lla_error_t FE_STiD135_TunerStandby(stchip_handle_t TunerHandle, FE_OXFORD_Tu
 		error |= (fe_lla_error_t)Oxford_TunerStartUp(TunerHandle, TunerNb);
 		error |= (fe_lla_error_t)Oxford_AdcStartUp(TunerHandle, TunerNb);
 	} else { /* Enable = FALSE */
+		error |= (fe_lla_error_t)Oxford_AdcStop(TunerHandle, TunerNb); //DEEPTHO
 		error |= (fe_lla_error_t)Oxford_TunerDisable(TunerHandle, TunerNb);
 	}
 	

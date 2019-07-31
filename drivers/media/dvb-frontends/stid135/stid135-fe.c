@@ -66,7 +66,7 @@ struct stv_base {
 	u8                   mode;
 
 	fe_stid135_handle_t  handle;
-
+	u8 tuner_use_count[4];
 	void (*write_properties) (struct i2c_adapter *i2c,u8 reg, u32 buf);
 	void (*read_properties) (struct i2c_adapter *i2c,u8 reg, u32 *buf);
 
@@ -82,8 +82,8 @@ struct stv_base {
 struct stv {
 	struct stv_base     *base;
 	struct dvb_frontend  fe;
-	int                  nr;
-	int                  rf_in;
+	int                  nr;     //DT: adapter aka demod: 0-7
+	int                  rf_in;  //DT  tuner frontend: 0-3
 	unsigned long        tune_time;
 	struct fe_sat_signal_info signal_info;
 
@@ -292,8 +292,12 @@ static int stid135_init(struct dvb_frontend *fe)
 	dev_dbg(&state->base->i2c->dev, "%s: demod %d + tuner %d\n", __func__, state->nr, state->rf_in);
 
 	mutex_lock(&state->base->status_lock);
+	BUG_ON(state->rf_in>3);
+	BUG_ON(state->base->tuner_use_count[state->rf_in]>1);
+	if(state->base->tuner_use_count[state->rf_in]++ == 0) {
 	err |= fe_stid135_tuner_enable(p_params->handle_demod, state->rf_in + 1);
 	err |= fe_stid135_diseqc_init(state->base->handle, state->rf_in + 1, FE_SAT_DISEQC_2_3_PWM);
+	}
 	err |= fe_stid135_set_rfmux_path(p_params->handle_demod, state->nr + 1, state->rf_in + 1);
 	mutex_unlock(&state->base->status_lock);
 
@@ -706,7 +710,6 @@ static enum dvbfe_algo stid135_get_algo(struct dvb_frontend *fe)
 static int stid135_set_voltage(struct dvb_frontend *fe, enum fe_sec_voltage voltage)
 {
 	struct stv *state = fe->demodulator_priv;
-
 	if (state->base->mode == 0)
 	{
 		if (voltage == SEC_VOLTAGE_18)
@@ -716,9 +719,11 @@ static int stid135_set_voltage(struct dvb_frontend *fe, enum fe_sec_voltage volt
 		return 0;
 	}
 
-	if (state->base->set_voltage)
+	if (state->base->set_voltage) {
+		mutex_lock(&state->base->status_lock); //DeepThought: this performs multiple i2c calls and needs to be protected
 		state->base->set_voltage(state->base->i2c, voltage, state->rf_in);
-
+		mutex_unlock(&state->base->status_lock);
+	}
 	return 0;
 }
 
@@ -807,13 +812,20 @@ static int stid135_sleep(struct dvb_frontend *fe)
 	fe_lla_error_t err = FE_LLA_NO_ERROR;
 	struct fe_stid135_internal_param *p_params = state->base->handle;;
 
-	if (state->base->mode == 0 || state->base->set_voltage)
+	if (state->base->mode == 0)
 		return 0;
 
 	dev_dbg(&state->base->i2c->dev, "%s: tuner %d\n", __func__, state->rf_in);
-
-	err = FE_STiD135_TunerStandby(p_params->handle_demod, state->rf_in + 1, 0);
-
+	
+	mutex_lock(&state->base->status_lock);
+	BUG_ON(state->rf_in>3);
+	BUG_ON(state->base->tuner_use_count[state->rf_in]==0);
+	if(state->base->tuner_use_count[state->rf_in]>0) 
+		state->base->tuner_use_count[state->rf_in]--;
+	if(state->base->tuner_use_count[state->rf_in]==0)
+		err = FE_STiD135_TunerStandby(p_params->handle_demod, state->rf_in + 1, 0);
+	mutex_unlock(&state->base->status_lock);
+	
 	if (err != FE_LLA_NO_ERROR)
 		dev_warn(&state->base->i2c->dev, "%s: STiD135 standby tuner %d failed!\n", __func__, state->rf_in);
 
@@ -933,6 +945,7 @@ static struct stv_base *match_base(struct i2c_adapter  *i2c, u8 adr)
 	return NULL;
 }
 
+//DT: called with  nr=adapter=0...7 and rf_in = nr/2=0...3
 struct dvb_frontend *stid135_attach(struct i2c_adapter *i2c,
 				    struct stid135_cfg *cfg,
 				    int nr, int rf_in)
