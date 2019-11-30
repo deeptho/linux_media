@@ -45,6 +45,8 @@
 #ifndef HOST_PC
 	#define DEMOD_IQPOWER_THRESHOLD     10
 #endif
+#define dprintk(fmt, arg...)																					\
+	printk(KERN_DEBUG pr_fmt("%s:%d " fmt),  __func__, __LINE__, ##arg)
  
 #define LNF_IP3_SWITCH_LOW  0x3C00
 #define LNF_IP3_SWITCH_HIGH 0x8000
@@ -1229,14 +1231,7 @@ fe_lla_error_t	FE_STiD135_GetSignalInfoLite(fe_stid135_handle_t Handle,
 		if ((pParams->handle_demod->Error) /*|| (pParams->h_tuner->Error)*/) 
 			error |= FE_LLA_I2C_ERROR;
 		else {
-			error |= FE_STiD135_GetStandard(
-					pParams->handle_demod, Demod, &(pInfo->standard)); 
-			if(pInfo->standard == FE_SAT_DVBS2_STANDARD) {
-				error |= FE_STiD135_CarrierGetQuality(pParams->handle_demod, NULL, Demod, &(pInfo->C_N));
-			} else { /*DVBS1/DSS*/
-				error |= FE_STiD135_CarrierGetQuality(pParams->handle_demod, NULL, Demod, &(pInfo->C_N));
-			}
-	
+			error |= FE_STiD135_CarrierGetQuality(pParams->handle_demod, Demod, &(pInfo->C_N), &(pInfo->standard));
 			if (pParams->handle_demod->Error) 
 				error = FE_LLA_I2C_ERROR; 
 		}
@@ -1709,7 +1704,7 @@ u8 FE_STiD135_GetOptimCarrierLoop(u32 SymbolRate, enum fe_sat_modcode ModCode,
 
 /*****************************************************
 --FUNCTION	::	FE_STiD135_GetStandard
---ACTION	::	Returns the current standrad (DVBS1,DSS or DVBS2
+--ACTION	::	Returns the current standard (DVBS1,DSS or DVBS2
 --PARAMS IN	::	hChip -> handle to the chip
 			Demod -> current demod 1 .. 8
 --PARAMS OUT	::	foundStandard_p -> standard (DVBS1, DVBS2 or DSS)
@@ -1762,13 +1757,12 @@ fe_lla_error_t FE_STiD135_GetStandard(stchip_handle_t hChip,
 --FUNCTION	::	FE_STiD135_CarrierGetQuality
 --ACTION	::	Returns the carrier to noise of the current carrier
 --PARAMS IN	::	hChip -> handle to the chip
-			lookup -> LUT for CNR level estimation.
 			Demod -> current demod 1 .. 8
 --PARAMS OUT	::	c_n_p -> C/N of the carrier, 0 if no carrier  
 --RETURN	::	error
 --***************************************************/
-fe_lla_error_t FE_STiD135_CarrierGetQuality(stchip_handle_t hChip, 
-			fe_lla_lookup_t *lookup, enum fe_stid135_demod Demod, s32* c_n_p)
+fe_lla_error_t FE_STiD135_CarrierGetQuality(stchip_handle_t hChip, enum fe_stid135_demod Demod, s32* c_n_p,
+																						enum fe_sat_tracking_standard* foundStandard)
 {
 	u32 lockFlagField, noiseField1, noiseField0;
 	
@@ -1777,24 +1771,21 @@ fe_lla_error_t FE_STiD135_CarrierGetQuality(stchip_handle_t hChip,
 	Imax,
 	i;
 	u16 noiseReg;
-	enum fe_sat_tracking_standard foundStandard;
+	fe_lla_lookup_t *lookup = NULL;
 	fe_lla_error_t error = FE_LLA_NO_ERROR; 
 	*c_n_p = -100, 
 	
 	lockFlagField =	FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS_LOCK_DEFINITIF(Demod);
-	error |= FE_STiD135_GetStandard(hChip,Demod, &foundStandard);
-	if (foundStandard == FE_SAT_DVBS2_STANDARD) {
-		if (lookup == NULL)
-			lookup = &FE_STiD135_S2_CN_LookUp;
+	error |= FE_STiD135_GetStandard(hChip,Demod, foundStandard);
+	dprintk("demod=%d foundStandard=%d\n", Demod, *foundStandard);
+	if (*foundStandard == FE_SAT_DVBS2_STANDARD) {
+		lookup = &FE_STiD135_S2_CN_LookUp;
 		/*If DVBS2 use PLH normilized noise indicators*/
 		noiseField1 = FLD_FC8CODEW_DVBSX_DEMOD_NNOSPLHT1_NOSPLHT_NORMED(Demod);
 		noiseField0 = FLD_FC8CODEW_DVBSX_DEMOD_NNOSPLHT0_NOSPLHT_NORMED(Demod);
 		noiseReg = (u16)REG_RC8CODEW_DVBSX_DEMOD_NNOSPLHT1(Demod);
 	} else {
-		if (lookup == NULL)
-		{	
 			lookup = &FE_STiD135_S1_CN_LookUp; 
-		}
 		/*if not DVBS2 use symbol normalized noise indicators*/ 
 		noiseField1 = FLD_FC8CODEW_DVBSX_DEMOD_NNOSDATAT1_NOSDATAT_NORMED(Demod);
 		noiseField0 = FLD_FC8CODEW_DVBSX_DEMOD_NNOSDATAT0_NOSDATAT_NORMED(Demod);
@@ -2895,16 +2886,12 @@ fe_lla_error_t fe_stid135_get_signal_quality(fe_stid135_handle_t Handle,
 	error |= FE_STiD135_GetBer(pParams->handle_demod, demod, &(pInfo->ber));
 	error |= FE_STiD135_GetRFLevel(pParams, demod, &pch_rf, &pband_rf);
 	pInfo->power = pch_rf;
-	
-	error |= FE_STiD135_GetStandard(
-			pParams->handle_demod, demod, &(pInfo->standard)); 
-
+	error |= FE_STiD135_CarrierGetQuality(pParams->handle_demod, demod, &(pInfo->C_N), &(pInfo->standard));
 	if (pInfo->standard == FE_SAT_DVBS2_STANDARD) {
-		error |= FE_STiD135_CarrierGetQuality(pParams->handle_demod, &FE_STiD135_S2_CN_LookUp, demod, &(pInfo->C_N));
-		if (mc_auto)
+		if (mc_auto) {
 			error |= fe_stid135_filter_forbidden_modcodes(pParams, demod, pInfo->C_N * 10);
+		}
 	} else {
-		error |= FE_STiD135_CarrierGetQuality(pParams->handle_demod, &FE_STiD135_S1_CN_LookUp, demod, &(pInfo->C_N));
 	}
 
 	return error;
@@ -3034,13 +3021,7 @@ fe_lla_error_t fe_stid135_get_signal_info(fe_stid135_handle_t Handle,
 				pInfo->power = pch_rf;
 				pInfo->powerdBmx10 = pch_rf * 10;
 				pInfo->band_power = pband_rf;
-				if (pInfo->standard == FE_SAT_DVBS2_STANDARD) {
-					error |= FE_STiD135_CarrierGetQuality(pParams->handle_demod, &FE_STiD135_S2_CN_LookUp, Demod, &(pInfo->C_N));
-				} 
-				else
-				{
-					error |= FE_STiD135_CarrierGetQuality(pParams->handle_demod, &FE_STiD135_S1_CN_LookUp, Demod, &(pInfo->C_N));
-				}
+				error |= FE_STiD135_CarrierGetQuality(pParams->handle_demod, Demod, &(pInfo->C_N), &(pInfo->standard));
 			} else { /* no BER, Power and CNR measurement during scan */
 				pInfo->ber = 0;
 				pInfo->power = 0;
@@ -3182,7 +3163,9 @@ fe_lla_error_t fe_stid135_tracking(fe_stid135_handle_t Handle,
 					error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSSTATUS_TSFIFO_LINEOK(Demod), &(fld_value[2]));
 					pTrackingInfo->locked = fld_value[0] && fld_value[1] && fld_value[2];  
 
-					error |= FE_STiD135_CarrierGetQuality(pParams->handle_demod, &FE_STiD135_S2_CN_LookUp,Demod, &(pTrackingInfo->C_N));
+					error |= FE_STiD135_CarrierGetQuality(pParams->handle_demod, Demod,
+																								&(pTrackingInfo->C_N), &(pTrackingInfo->standard)
+																								);
 					/* Bug fix BZ#107382 */
 					if(pTrackingInfo->C_N > SNR_MAX_THRESHOLD * 10) {
 						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DFECFG(Demod), 0x41);
@@ -3233,7 +3216,8 @@ fe_lla_error_t fe_stid135_tracking(fe_stid135_handle_t Handle,
 					error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSSTATUS_TSFIFO_LINEOK(Demod), &(fld_value[2]));
 					
 					pTrackingInfo->locked = fld_value[0] && fld_value[1] && fld_value[2];
-					error |= FE_STiD135_CarrierGetQuality(pParams->handle_demod, &FE_STiD135_S1_CN_LookUp,Demod, &(pTrackingInfo->C_N)); 
+					error |= FE_STiD135_CarrierGetQuality(pParams->handle_demod, Demod,
+																								&(pTrackingInfo->C_N), &(pTrackingInfo->standard));
   				break;
 			}
 			

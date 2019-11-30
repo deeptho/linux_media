@@ -403,8 +403,8 @@ typedef SAT_VGLNA_InitParams_t SAT_VGLNA_Params_t;
 
 /* ---------------- Private functions ---------------------- */
 
-fe_lla_error_t  FE_STiD135_CarrierGetQuality(stchip_handle_t hChip, 
-	fe_lla_lookup_t *lookup, enum fe_stid135_demod Demod, s32* c_n_p);
+fe_lla_error_t  FE_STiD135_CarrierGetQuality(stchip_handle_t hChip, enum fe_stid135_demod Demod, s32* c_n_p,
+        enum fe_sat_tracking_standard* foundStandard);
 
 #ifdef HOST_PC
 	fe_lla_error_t FE_STiD135_GetErrors(fe_stid135_handle_t Handle, enum fe_stid135_demod Demod, 

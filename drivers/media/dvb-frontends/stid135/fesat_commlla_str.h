@@ -1,6 +1,6 @@
-/* 
+/*
 * This file is part of STiD135 OXFORD LLA 
-* 
+*
 * Copyright (c) <2014>-<2018>, STMicroelectronics - All Rights Reserved 
 * Author(s): Mathias Hilaire (mathias.hilaire@st.com), Thierry Delahaye (thierry.delahaye@st.com) for STMicroelectronics. 
 * 
@@ -331,13 +331,13 @@ struct fe_sat_signal_info {
 		u32 				frequency;	/* Transponder frequency (in KHz)			*/
 		u32 				symbol_rate;	/* Transponder symbol rate  (in Mbds)			*/
 		enum fe_sat_tracking_standard	standard;	/* Found Standard DVBS1,DVBS2 or DSS or Turbo		*/
-		enum fe_sat_rate 		puncture_rate;	/* Puncture rate 			 		*/ 
+		enum fe_sat_rate 		puncture_rate;	/* Puncture rate 			 		*/
 		enum fe_sat_modcode		modcode;	/* MODCODE Only for DVBS2				*/ 
 		enum fe_sat_modulation		modulation;	/* Modulation type					*/
 		enum fe_sat_pilots		pilots;		/* pilots on,off only for DVB-S2			*/
 		enum fe_sat_frame		frame_length;	/* Found frame length only for DVB-S2			*/
 		enum fe_sat_rolloff		roll_off;	/* Rolloff factor (0.2, 0.25 or 0.35)			*/
-		s32 				power;		/* Power of the RF signal (dBm x1000)			*/			
+		s32 				power;		/* Power of the RF signal (dBm x1000)			*/
 		s32 				powerdBmx10;	/* Power of the RF signal (dBm x10000)			*/
 		s32				band_power;	/* Power of the whole freq range signal (dBm x1000)	*/
 		s32				C_N;		/* Carrier to noise ratio (dB x10)			*/
@@ -349,7 +349,8 @@ struct fe_sat_signal_info {
 
 struct fe_sat_tracking_info {
 		BOOL 			locked;		/* Transponder locked			*/
-		s32 			power;		/* Power of the RF signal (dBm)		*/			
+		enum fe_sat_tracking_standard	standard;	/* Found Standard DVBS1,DVBS2 or DSS or Turbo */
+		s32 			power;		/* Power of the RF signal (dBm)		*/
 		s32 			powerdBmx10;	/* Power of the RF signal (dBm x10)	*/			
 		s32				band_power;	/* Power of the whole freq range signal (dBm)	*/
 		s32			C_N;		/* Carrier to noise ratio (dB x10)	*/
