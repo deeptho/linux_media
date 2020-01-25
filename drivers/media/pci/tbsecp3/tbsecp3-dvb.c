@@ -119,7 +119,7 @@ static int tbs6304_read_mac(struct tbsecp3_adapter *adap)
 		//printk(" the receiver always busy !\n");
 		//check mcu status
 		*(u32 *)tmpbuf = tbs_read( BASE_ADDRESS_24CXX,  STATUS_MAC16_24CXX );
-		if((tmpbuf[0]&0x4) == 1) // bit2==1 mcu busy
+		if((tmpbuf[0]&0x4) == 0x4) // bit2==1 mcu busy
 		{
 			//printk("MCU status is busy!!!\n" );
 			// release cs;
@@ -225,7 +225,7 @@ static int tbs6308_read_mac_ext(struct tbsecp3_adapter *adap)
 		ret = 0;
 		//check mcu status
 		*(u32 *)tmpbuf = tbs_read_ext(adap, BASE_ADDRESS_24CXX,  STATUS_MAC16_24CXX );
-		if((tmpbuf[0]&0x4) == 1) // bit2==1 mcu busy
+		if((tmpbuf[0]&0x4) == 0x4) // bit2==1 mcu busy
 		{
 			//printk("MCU status is busy!!!\n" );
 			// release cs;
@@ -288,7 +288,7 @@ static void tbs6301_read_mac(struct tbsecp3_adapter *adap)
 		printk(" the receiver always busy !\n");
 		//check mcu status
 		*(u32 *)tmpbuf = tbs_read( BASE_ADDRESS_24CXX,  STATUS_MAC16_24CXX );
-		if((tmpbuf[0]&0x4) == 1) // bit2==1 mcu busy
+		if((tmpbuf[0]&0x4) == 0x4) // bit2==1 mcu busy
 		{
 			printk("MCU status is busy!!!\n" );
 			// release cs;
