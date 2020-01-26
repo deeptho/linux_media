@@ -333,6 +333,16 @@ static int tbsecp3_set_voltage(struct dvb_frontend* fe,
 		voltage == SEC_VOLTAGE_18 ? "SEC_VOLTAGE_18" :
 		"SEC_VOLTAGE_OFF");
 
+	bool is_slave =false;
+	switch(dev->info->board_id) {
+	case TBSECP3_BOARD_TBS6508:
+		is_slave = (fe->dvb->num %2); //odd numbered tuners are considered slaves
+		;
+	default:
+		;
+	}
+	if(is_slave)
+		return 0;
 	switch (voltage) {
 		case SEC_VOLTAGE_13:
 			tbsecp3_gpio_set_pin(dev, &cfg->lnb_power, 1);
