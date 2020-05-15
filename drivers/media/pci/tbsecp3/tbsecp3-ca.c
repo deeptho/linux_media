@@ -85,7 +85,7 @@ static int tbsecp3_ca_rd_cam_ctrl(struct dvb_ca_en50221 *ca,
 	data |= (address & 3) << 8;
 	data |= 0x02 << 16;
 	tbs_write(TBSECP3_CA_BASE(tbsca->nr), 0x00, data);
-	udelay(150);
+	udelay(200);
 	
 	data = tbs_read(TBSECP3_CA_BASE(tbsca->nr), 0x08);
 
@@ -112,7 +112,7 @@ static int tbsecp3_ca_wr_cam_ctrl(struct dvb_ca_en50221 *ca, int slot,
 	data |= 0x03 << 16;
 	data |= value << 24;
 	tbs_write(TBSECP3_CA_BASE(tbsca->nr), 0x00, data);
-	udelay(150);
+	udelay(200);
 
 	mutex_unlock(&tbsca->lock);
 
@@ -133,9 +133,12 @@ static int tbsecp3_ca_slot_reset(struct dvb_ca_en50221 *ca, int slot)
 
 	tbs_write(TBSECP3_CA_BASE(tbsca->nr), 0x04, 1);
 	msleep (10);
-
+	tbs_write(TBSECP3_CA_BASE(tbsca->nr), 0x08, 1);
+	msleep (500);
+	tbs_write(TBSECP3_CA_BASE(tbsca->nr), 0x08, 0);
+	msleep (1500);
 	tbs_write(TBSECP3_CA_BASE(tbsca->nr), 0x04, 0);
-	msleep (2800);
+	msleep (5000);
 
 	mutex_unlock (&tbsca->lock);
 	return 0;

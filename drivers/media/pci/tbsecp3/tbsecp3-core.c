@@ -54,11 +54,22 @@ static irqreturn_t tbsecp3_irq_handler(int irq, void *dev_id)
 	tbs_write(TBSECP3_INT_BASE, TBSECP3_INT_STAT, stat);
 
 	if (stat & 0x00000ff0) {
-		/* dma */
+		/* dma0~7 */
 		for (i = 0; i < dev->info->adapters; i++) {
 			in = dev->adapter[i].cfg->ts_in;
-			if (stat & TBSECP3_DMA_IF(in))
+			if (stat & TBSECP3_DMA_IF(in)){
 				tasklet_schedule(&dev->adapter[i].tasklet);
+				}
+		}
+	}
+
+	if (stat & 0x00ff0000) {
+		/* dma 8~15*/
+		for (i = 8; i < dev->info->adapters; i++) {
+			in = dev->adapter[i].cfg->ts_in;
+			if (stat & TBSECP3_DMA_IF1(in)){
+				tasklet_schedule(&dev->adapter[i].tasklet);
+				}
 		}
 	}
 
@@ -336,6 +347,8 @@ static const struct pci_device_id tbsecp3_id_table[] = {
 	TBSECP3_ID(TBSECP3_BOARD_TBS6912,0x6912,0x0020),	
 	TBSECP3_ID(TBSECP3_BOARD_TBS6504,0x6504,0x0001),
 	TBSECP3_ID(TBSECP3_BOARD_TBS6508,0x6508,0x0001),
+	TBSECP3_ID(TBSECP3_BOARD_TBS6916,0x6916,0x0001),
+	TBSECP3_ID(TBSECP3_BOARD_TBS6909X,0x6909,0x0009),
 	{0}
 };
 MODULE_DEVICE_TABLE(pci, tbsecp3_id_table);

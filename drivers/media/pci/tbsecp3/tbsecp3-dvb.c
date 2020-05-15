@@ -653,6 +653,11 @@ static int max_set_voltage(struct i2c_adapter *i2c,
 	tbs_write(TBSECP3_GPIO_BASE, reg, val);
 	return 0;
 }
+static int Virtual_set_voltage(struct i2c_adapter *i2c,
+		enum fe_sec_voltage voltage, u8 rf_in)
+{
+	return 0;
+}
 
 static int max_send_master_cmd(struct dvb_frontend *fe, struct dvb_diseqc_master_cmd *cmd)
 {
@@ -812,6 +817,29 @@ static struct stid135_cfg tbs6909x_stid135_cfg = {
 	.clk		= 27,
 	.ts_mode	= TS_STFE,
 	.set_voltage	= max_set_voltage,
+	.write_properties = ecp3_spi_write, 
+	.read_properties = ecp3_spi_read,
+	.set_TSsampling = NULL,
+	.set_TSparam = NULL,
+	.vglna   =false,
+};
+static struct stid135_cfg tbs6909x_stid135_cfg_b = {
+	.adr		= 0x68,
+	.clk		= 27,
+	.ts_mode	= TS_STFE,
+	.set_voltage	= max_set_voltage,
+	.write_properties = ecp3_spi_write, 
+	.read_properties = ecp3_spi_read,
+	.set_TSsampling = NULL,
+	.set_TSparam = NULL,
+	.vglna   =true,
+};
+
+static struct stid135_cfg tbs6916_stid135_cfg = {
+	.adr		= 0x68,
+	.clk		= 27,
+	.ts_mode	= TS_STFE,
+	.set_voltage	= Virtual_set_voltage,
 	.write_properties = ecp3_spi_write, 
 	.read_properties = ecp3_spi_read,
 	.set_TSsampling = NULL,
@@ -1649,12 +1677,29 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 		break;
 
 	case TBSECP3_BOARD_TBS6909X:
-		adapter->fe = dvb_attach(stid135_attach, i2c,
-				&tbs6909x_stid135_cfg, adapter->nr, adapter->nr/2);
+
+			if(pci->subsystem_device==0x0010)
+				adapter->fe = dvb_attach(stid135_attach, i2c,
+					&tbs6909x_stid135_cfg, adapter->nr, adapter->nr/2);
+			else
+				adapter->fe = dvb_attach(stid135_attach, i2c,
+					&tbs6909x_stid135_cfg, adapter->nr, adapter->nr/2);				
 		if (adapter->fe == NULL)
 			goto frontend_atach_fail;
 		break;
-
+	case TBSECP3_BOARD_TBS6916:
+		if(adapter->nr<8){
+		  adapter->fe = dvb_attach(stid135_attach, i2c,
+					&tbs6916_stid135_cfg, adapter->nr, adapter->nr/2);
+		  }
+		else{
+			adapter->fe = dvb_attach(stid135_attach, i2c,
+					  &tbs6916_stid135_cfg, (adapter->nr - 8), (adapter->nr - 8)/2);
+		}
+		
+		if (adapter->fe == NULL)
+			goto frontend_atach_fail;
+		break;
 	case TBSECP3_BOARD_TBS6903X:
 	case TBSECP3_BOARD_TBS6912:
 		if(pci->subsystem_vendor==0x6912)

@@ -632,7 +632,7 @@ STCHIP_Error_t  ChipSetRegisters(STCHIP_Handle_t hChip, u16 FirstReg, s32 NbRegs
 				#ifndef NO_I2C
 					if(hChip->Repeater && hChip->RepeaterHost && hChip->RepeaterFn)
 						hChip->RepeaterFn(hChip->RepeaterHost,TRUE);	/* Set repeater ON */
-						
+					//	printk("hChip->addr = 0x%x",hChip->I2cAddr);
 					if(I2cReadWrite(hChip->pI2CHost,I2C_WRITE,hChip->I2cAddr,data,nbdata) != I2C_ERR_NONE)	/* write data buffer */
 						hChip->Error = CHIPERR_I2C_NO_ACK;
 
