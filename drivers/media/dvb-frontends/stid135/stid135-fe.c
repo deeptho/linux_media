@@ -51,6 +51,8 @@ static unsigned int mc_auto;
 module_param(mc_auto, int, 0644);
 MODULE_PARM_DESC(mc_auto, "Enable auto modcode filtering depend from current C/N (default:0 - disabled)");
 
+
+
 struct stv_base {
 	struct list_head     stvlist;
 
@@ -79,18 +81,134 @@ struct stv_base {
 	bool vglna;
 };
 
+//for debugging only: assumes only a single card is in use
+static atomic_t llr_rate_sum;
+
 struct stv {
 	struct stv_base     *base;
 	struct dvb_frontend  fe;
 	int                  nr;     //DT: adapter aka demod: 0-7
 	int                  rf_in;  //DT  tuner frontend: 0-3
 	unsigned long        tune_time;
+	int current_llr_rate;  //Remember the current reconfiguration to avoid calling hardware needlessly
+	int current_max_llr_rate;  //Remember the current reconfiguration to avoid calling hardware needlessly
 	struct fe_sat_signal_info signal_info;
 
 	bool newTP; //for tbs6912
 	u32  bit_rate; //for tbs6912;
 	int loops ;//for tbs6912
 };
+
+static int stid135_compute_best_max_llr_rate(struct fe_sat_signal_info* signal_info, int* llr_rate)
+{
+	/*
+		p. 23
+		max 258 Bit/s per demod
+		8psk: 45 (8 tuners)     3
+		qpsk: 30     2
+		16apsk: 22.5 4
+		32apsk: 18   5
+		64apsk: 20   6
+	 */
+	int bits_per_symbol = 3;
+	switch(signal_info->modulation) {
+	case FE_SAT_MOD_QPSK:
+		bits_per_symbol = 2; break;
+	case FE_SAT_MOD_8PSK:
+	case FE_SAT_MOD_8PSK_L:
+		bits_per_symbol = 3; break;
+	case FE_SAT_MOD_16APSK:
+	case FE_SAT_MOD_16APSK_L:
+		bits_per_symbol = 4; break;
+	case FE_SAT_MOD_32APSK:
+	case FE_SAT_MOD_32APSK_L:
+		bits_per_symbol = 5; break;
+	case FE_SAT_MOD_VLSNR:
+		bits_per_symbol = 3; break; //????
+	case FE_SAT_MOD_64APSK:
+	case FE_SAT_MOD_64APSK_L:
+		bits_per_symbol = 6; break;
+	case FE_SAT_MOD_128APSK:
+		bits_per_symbol = 7; break;
+	case FE_SAT_MOD_256APSK:
+	case FE_SAT_MOD_256APSK_L:
+		bits_per_symbol = 8; break;
+	case FE_SAT_MOD_1024APSK:
+		bits_per_symbol = 10; break;
+	default:
+		break;
+	}
+
+	/*
+		We impose a limit as if this demodulator can comsume all available resources. However 
+		some limits also apply to all demodulators together. This limit is currently not imposed.
+	 */
+	*llr_rate = (signal_info->symbol_rate * bits_per_symbol + 0500000L)/1000000L;
+	if(*llr_rate <= 90)
+		return 90;
+	if(*llr_rate <= 129)
+		return 129;
+	if(*llr_rate <= 180)
+		return 180;
+	return 256;
+}
+
+
+
+fe_lla_error_t set_maxllr_rate(int line, struct stv *state,	struct fe_sat_signal_info* info) {
+	fe_lla_error_t err = FE_LLA_NO_ERROR;
+	int old=0;
+	int tot;
+	int llr_rate = 0;
+	int max_llr_rate = info->symbol_rate ==0 ? 0:
+		stid135_compute_best_max_llr_rate(info, &llr_rate);
+	
+	//	int delta = llr_rate - state->current_llr_rate;
+	int delta = max_llr_rate - state->current_max_llr_rate;
+	old = atomic_fetch_add(delta, &llr_rate_sum);
+	tot = old + delta;
+	
+	if(tot> 720) {
+		dev_warn(&state->base->i2c->dev, "line %d: demod %d: LDPC budget exceeded tot=%d\n",
+						 line, state->nr,  tot);
+		
+	}
+	if (state->current_max_llr_rate != max_llr_rate) {
+		if(max_llr_rate == 0) {
+			err |= fe_stid135_set_maxllr_rate(state->base->handle, state->nr +1, 90);
+		} else
+			if (max_llr_rate == 90) {
+			if(state->current_max_llr_rate ==0) {
+				//
+			} else 
+				err |= fe_stid135_set_maxllr_rate(state->base->handle, state->nr +1, 90);
+		} else {
+			err |= fe_stid135_set_maxllr_rate(state->base->handle, state->nr +1, max_llr_rate);
+		}
+		dev_warn(&state->base->i2c->dev, "line %d: demod %d: set_maxllr_rate=%d (was %d tot=%d) "
+						 "mod=%d symbol_rate=%d\n",
+						 line, state->nr,
+						 max_llr_rate,
+						 state->current_max_llr_rate, tot,
+						 info->modulation, info->symbol_rate);
+	} else {
+		dev_warn(&state->base->i2c->dev, "line %d: demod %d + tuner %d: set_maxllr_rate=%d (tot=%d) UNCHANGED "
+						 "mod=%d symbol_rate=%d\n",
+						 line, state->nr, state->rf_in,
+						 max_llr_rate, tot,
+						 info->modulation, info->symbol_rate);
+	}
+	state->current_max_llr_rate = max_llr_rate;
+	state->current_llr_rate = llr_rate;
+	return err;
+}
+
+fe_lla_error_t release_maxllr_rate(int line, struct stv *state) {
+	struct fe_sat_signal_info info;
+	info.symbol_rate = 0;
+	return set_maxllr_rate(line, state,	&info);
+}
+
 
 I2C_RESULT I2cReadWrite(void *pI2CHost, I2C_MODE mode, u8 ChipAddress, u8 *Data, int NbData)
 {
@@ -109,6 +227,8 @@ I2C_RESULT I2cReadWrite(void *pI2CHost, I2C_MODE mode, u8 ChipAddress, u8 *Data,
 
 	return (ret == 1) ? I2C_ERR_NONE : I2C_ERR_ACK;
 }
+
+
 
 static int stid135_probe(struct stv *state)
 {
@@ -176,27 +296,35 @@ static int stid135_probe(struct stv *state)
 		return -EINVAL;
 	}
 
-	if (state->base->ts_mode == TS_STFE) {
+	if (state->base->ts_mode == TS_STFE) { //DT: This code is called
 		dev_warn(&state->base->i2c->dev, "%s: 8xTS to STFE mode init.\n", __func__);
+		for(i=0;i<8;i++) {
+			err |= fe_stid135_set_ts_parallel_serial(state->base->handle, i+1, FE_TS_PARALLEL_ON_TSOUT_0);
+		}
 		err |= fe_stid135_enable_stfe(state->base->handle,FE_STFE_OUTPUT0);
 		err |= fe_stid135_set_stfe(state->base->handle, FE_STFE_TAGGING_MERGING_MODE, FE_STFE_INPUT1 |
 						FE_STFE_INPUT2 |FE_STFE_INPUT3 |FE_STFE_INPUT4| FE_STFE_INPUT5 |
 						FE_STFE_INPUT6 |FE_STFE_INPUT7 |FE_STFE_INPUT8 ,FE_STFE_OUTPUT0, 0xDE);
+#if 0
+		err |= fe_stid135_set_ts_parallel_serial(state->base->handle, FE_SAT_DEMOD_1, FE_TS_PARALLEL_ON_TSOUT_0);
+#endif
 
-	err |= fe_stid135_set_ts_parallel_serial(state->base->handle, FE_SAT_DEMOD_1, FE_TS_PARALLEL_ON_TSOUT_0);
-
-	} else if (state->base->ts_mode == TS_8SER) {
+	} else if (state->base->ts_mode == TS_8SER) { //DT: This code is not called
 		dev_warn(&state->base->i2c->dev, "%s: 8xTS serial mode init.\n", __func__);
 		for(i=0;i<8;i++) {
 			err |= fe_stid135_set_ts_parallel_serial(state->base->handle, i+1, FE_TS_SERIAL_CONT_CLOCK);
 			err |= fe_stid135_set_maxllr_rate(state->base->handle, i+1, 90);
 		}
-	} else {
+	} else { //DT: This code is not called
 		dev_warn(&state->base->i2c->dev, "%s: 2xTS parallel mode init.\n", __func__);
 		err |= fe_stid135_set_ts_parallel_serial(state->base->handle, FE_SAT_DEMOD_3, FE_TS_PARALLEL_PUNCT_CLOCK);
-		//err |= fe_stid135_set_maxllr_rate(state->base->handle, FE_SAT_DEMOD_3, 260);
+#if 1
+		err |= fe_stid135_set_maxllr_rate(state->base->handle, FE_SAT_DEMOD_3, 180);
+#endif
 		err |= fe_stid135_set_ts_parallel_serial(state->base->handle, FE_SAT_DEMOD_1, FE_TS_PARALLEL_PUNCT_CLOCK);
-		//err |= fe_stid135_set_maxllr_rate(state->base->handle, FE_SAT_DEMOD_1, 260);
+#if 1
+		err |= fe_stid135_set_maxllr_rate(state->base->handle, FE_SAT_DEMOD_1, 180);
+#endif
 	}
 
 	if (state->base->mode == 0) {
@@ -310,8 +438,8 @@ static int stid135_init(struct dvb_frontend *fe)
 static void stid135_release(struct dvb_frontend *fe)
 {
 	struct stv *state = fe->demodulator_priv;
-
 	dev_dbg(&state->base->i2c->dev, "%s: demod %d\n", __func__, state->nr);
+
 	state->base->count--;
 	if (state->base->count == 0) {
 		if (state->base->handle)
@@ -335,15 +463,20 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 	BOOL lock_stat=0;
 	struct fe_sat_signal_info signal_info;
 
-	dev_dbg(&state->base->i2c->dev,
+	
+	dev_warn(&state->base->i2c->dev,
 			"delivery_system=%u modulation=%u frequency=%u symbol_rate=%u inversion=%u stream_id=%d\n",
 			p->delivery_system, p->modulation, p->frequency,
-			p->symbol_rate, p->inversion, p->stream_id);
-
+					 p->symbol_rate, p->inversion, p->stream_id);
+	release_maxllr_rate(__LINE__, state);
 	mutex_lock(&state->base->status_lock);
 
 	/* Search parameters */
+#if 1
 	search_params.search_algo 	= FE_SAT_WARM_START;
+#else
+	search_params.search_algo 	= FE_SAT_COLD_START;
+#endif
 	search_params.frequency 	= p->frequency*1000;
 	search_params.symbol_rate 	= p->symbol_rate;
 	search_params.modulation	= FE_SAT_MOD_UNKNOWN;
@@ -389,20 +522,32 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 	if (p->scrambling_sequence_index) {
 		pls_mode = 1;
 		pls_code = p->scrambling_sequence_index;
+#if 1 //Deep Thought: code must be moved outside of if test or multi-stream does not work
 		/* Set PLS before search */
 		dev_dbg(&state->base->i2c->dev, "%s: set pls_mode %d, pls_code %d !\n", __func__, pls_mode, pls_code);
 		err |= fe_stid135_set_pls(state->base->handle, state->nr + 1, pls_mode, pls_code);
+#endif
 	}
-
-
+#if 1 //Deep Thought: code must be moved outside of if test or multi-stream does not work
+	/* Set PLS before search */
+	dev_dbg(&state->base->i2c->dev, "%s: set pls_mode %d, pls_code %d !\n", __func__, pls_mode, pls_code);
+	err |= fe_stid135_set_pls(state->base->handle, state->nr + 1, pls_mode, pls_code);
+#endif
 	
-//	if (err != FE_LLA_NO_ERROR)
-//		dev_err(&state->base->i2c->dev, "%s: fe_stid135_set_pls error %d !\n", __func__, err);
-
-//	err |= fe_stid135_reset_modcodes_filter(state->base->handle, state->nr + 1);
-//	if (err != FE_LLA_NO_ERROR)
-//		dev_err(&state->base->i2c->dev, "%s: fe_stid135_reset_modcodes_filter error %d !\n", __func__, err);
-
+	
+	if (err != FE_LLA_NO_ERROR)
+		dev_err(&state->base->i2c->dev, "%s: fe_stid135_set_pls error %d !\n", __func__, err);
+#if 1 /*Deep Thought: keeping filters ensures that  a demod does not cause a storm of data when demodulation is 
+				failing (e.g., ran fade) This could cause other demods to fail as well as they share resources. 
+				filter_forbidden_modcodes may be better
+				
+				There could be reasons why  fe_stid135_reset_modcodes_filter is still needed, e.g., when  too strict filters 
+				are left from an earlier tune?
+			*/
+	err |= fe_stid135_reset_modcodes_filter(state->base->handle, state->nr + 1);
+	if (err != FE_LLA_NO_ERROR)
+		dev_err(&state->base->i2c->dev, "%s: fe_stid135_reset_modcodes_filter error %d !\n", __func__, err);
+#endif
 	err |= fe_stid135_search(state->base->handle, state->nr + 1, &search_params, &search_results, 0);
 	err |= fe_stid135_get_lock_status(state->base->handle, state->nr + 1,&lock_stat );
 	if (err != FE_LLA_NO_ERROR)
@@ -413,13 +558,27 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 	}
 
 	if (search_results.locked){
+#if 1
 		dev_dbg(&state->base->i2c->dev, "%s: locked !\n", __func__);
-		fe_stid135_get_signal_info(state->base->handle, state->nr + 1,&signal_info,0);
+		fe_stid135_get_signal_info(state->base->handle, state->nr + 1, &signal_info,0);
 		if(state->base->ts_mode == TS_STFE){
-		    //set maxllr,when the  demod locked ,allocation of resources
-		    err |= fe_stid135_set_maxllr_rate(state->base->handle, state->nr +1, 180);
+			//set maxllr,when the  demod locked ,allocation of resources
+			/*Deep Thought: the value should be based on the symbo rate of the currently 
+				tuned mux
+			*/
+			/*DeepThought : without this code it is not possible to tune the italian multistreams on 5.0W
+
+        11230H@51.5E has a symbolrate of 45MS/s (bitrate of 119MB/s) and requires a setting of at least 135;
+				The next higher value = 180. 
+				12522V@5.0W has a symbolrate of 35.5MS and requires at least 3*35.5 = 100.5, but also does not work with 
+				129.
+			*/
+			err |= set_maxllr_rate(__LINE__, state,	&signal_info);
 		}
 		//for tbs6912
+#else
+		dev_warn(&state->base->i2c->dev, "%s: locked ! demod=%d tuner=%d\n", __func__,  state->nr, state->rf_in);
+#endif
 		state->newTP = true;
 		state->loops = 15;
 		if(state->base->set_TSsampling)
@@ -427,16 +586,18 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 		}
 	else {
 		err |= fe_stid135_get_band_power_demod_not_locked(state->base->handle, state->nr + 1, &rf_power);
-		dev_dbg(&state->base->i2c->dev, "%s: not locked, band rf_power %d dBm !\n", __func__, rf_power / 1000);
+		dev_dbg(&state->base->i2c->dev, "%s: not locked, band rf_power %d dBm ! demod=%d tuner=%d\n",
+						 __func__, rf_power / 1000, state->nr, state->rf_in);
 	}
 
 	/* Set ISI before search */
 	if (p->stream_id != NO_STREAM_ID_FILTER) {
-		dev_dbg(&state->base->i2c->dev, "%s: set ISI %d !\n", __func__, p->stream_id & 0xFF);
+		dev_warn(&state->base->i2c->dev, "%s: set ISI %d ! demod=%d tuner=%d\n", __func__, p->stream_id & 0xFF,
+						 state->nr, state->rf_in);
 		err |= fe_stid135_set_mis_filtering(state->base->handle, state->nr + 1, TRUE, p->stream_id & 0xFF, 0xFF);
 	} else {
-	//	dev_dbg(&state->base->i2c->dev, "%s: disable ISI filtering !\n", __func__);
-		//err |= fe_stid135_set_mis_filtering(state->base->handle, state->nr + 1, FALSE, 0, 0xFF);				
+		dev_dbg(&state->base->i2c->dev, "%s: disable ISI filtering !\n", __func__);
+		err |= fe_stid135_set_mis_filtering(state->base->handle, state->nr + 1, FALSE, 0, 0xFF);				
 	}
 	if (err != FE_LLA_NO_ERROR)
 		dev_err(&state->base->i2c->dev, "%s: fe_stid135_set_mis_filtering error %d !\n", __func__, err);
@@ -657,8 +818,6 @@ static int stid135_read_status(struct dvb_frontend *fe, enum fe_status *status)
 
 		err = fe_stid135_get_band_power_demod_not_locked(state->base->handle, state->nr + 1, &state->signal_info.power);
 		// if unlocked, set to lowest resource..
-	//	err |= fe_stid135_set_maxllr_rate(state->base->handle, state->nr +1, 90);
-		
 		mutex_unlock(&state->base->status_lock);
 		if (err != FE_LLA_NO_ERROR) {
 			dev_err(&state->base->i2c->dev, "fe_stid135_get_band_power_demod_not_locked error\n");
@@ -810,8 +969,9 @@ static int stid135_sleep(struct dvb_frontend *fe)
 {
 	struct stv *state = fe->demodulator_priv;
 	fe_lla_error_t err = FE_LLA_NO_ERROR;
-	struct fe_stid135_internal_param *p_params = state->base->handle;;
-
+	struct fe_stid135_internal_param *p_params = state->base->handle;
+	err |= release_maxllr_rate(__LINE__, state);
+	
 	if (state->base->mode == 0)
 		return 0;
 
@@ -995,7 +1155,8 @@ struct dvb_frontend *stid135_attach(struct i2c_adapter *i2c,
 	state->newTP = false;
 	state->bit_rate  = 0;
 	state->loops = 15;
-	
+	state->current_max_llr_rate = 0; 
+	state->current_llr_rate = 0; 
 	if (rfsource > 0 && rfsource < 5)
 		rf_in = rfsource - 1;
 	state->rf_in = base->mode ? rf_in : 0;
