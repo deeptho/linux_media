@@ -1777,7 +1777,7 @@ fe_lla_error_t FE_STiD135_CarrierGetQuality(stchip_handle_t hChip, enum fe_stid1
 	
 	lockFlagField =	FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS_LOCK_DEFINITIF(Demod);
 	error |= FE_STiD135_GetStandard(hChip,Demod, foundStandard);
-	dprintk("demod=%d foundStandard=%d\n", Demod, *foundStandard);
+	//dprintk("demod=%d foundStandard=%d\n", Demod, *foundStandard);
 	if (*foundStandard == FE_SAT_DVBS2_STANDARD) {
 		lookup = &FE_STiD135_S2_CN_LookUp;
 		/*If DVBS2 use PLH normilized noise indicators*/
