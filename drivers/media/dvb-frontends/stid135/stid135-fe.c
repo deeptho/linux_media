@@ -81,7 +81,9 @@ struct stv_base {
 	bool vglna;
 };
 
-//for debugging only: assumes only a single card is in use
+/*for debugging only: assumes only a single card is in use; otherwise wrong debug output 
+	will be printed, but apart from that behaviour will still be correct
+*/
 static atomic_t llr_rate_sum;
 
 struct stv {
@@ -165,6 +167,7 @@ fe_lla_error_t set_maxllr_rate(int line, struct stv *state,	struct fe_sat_signal
 	
 	//	int delta = llr_rate - state->current_llr_rate;
 	int delta = max_llr_rate - state->current_max_llr_rate;
+	
 	old = atomic_fetch_add(delta, &llr_rate_sum);
 	tot = old + delta;
 	
