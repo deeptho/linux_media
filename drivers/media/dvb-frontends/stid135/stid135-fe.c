@@ -464,7 +464,7 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 	u32 pls_mode, pls_code;
 	s32 rf_power;
 	BOOL lock_stat=0;
-	struct fe_sat_signal_info signal_info;
+	struct fe_sat_signal_info* signal_info = &state->signal_info;
 
 	
 	dev_warn(&state->base->i2c->dev,
@@ -563,7 +563,7 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 	if (search_results.locked){
 #if 1
 		dev_dbg(&state->base->i2c->dev, "%s: locked !\n", __func__);
-		fe_stid135_get_signal_info(state->base->handle, state->nr + 1, &signal_info,0);
+		fe_stid135_get_signal_info(state->base->handle, state->nr + 1, signal_info, 0);
 		if(state->base->ts_mode == TS_STFE){
 			//set maxllr,when the  demod locked ,allocation of resources
 			/*Deep Thought: the value should be based on the symbo rate of the currently 
@@ -576,7 +576,7 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 				12522V@5.0W has a symbolrate of 35.5MS and requires at least 3*35.5 = 100.5, but also does not work with 
 				129.
 			*/
-			err |= set_maxllr_rate(__LINE__, state,	&signal_info);
+			err |= set_maxllr_rate(__LINE__, state,	signal_info);
 		}
 		//for tbs6912
 #else
