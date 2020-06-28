@@ -110,8 +110,8 @@ enum fe_sat_search_standard {
 enum fe_sat_search_algo {	
 		FE_SAT_BLIND_SEARCH,					/* offset freq and SR are Unknown */
 		FE_SAT_COLD_START,						/* only the SR is known */
-		FE_SAT_WARM_START						/* offset freq and SR are known */
-	
+		FE_SAT_WARM_START,						/* offset freq and SR are known */
+		FE_SAT_NEXT
 };
 
 enum fe_sat_modulation {	
@@ -344,7 +344,9 @@ struct fe_sat_signal_info {
 		u32				ber;		/* Bit error rate	(x10^7)				*/
 		enum fe_sat_iq_inversion	spectrum;	/* IQ specrum swap setting				*/
 		u8				matype;
-		u8 				isi;		/* Current value of ISI 				*/
+	  u8 				isi;		/* Current value of ISI 				*/
+  	u8        pls_mode;
+	  u32       pls_code;
 	} ;
 
 struct fe_sat_tracking_info {

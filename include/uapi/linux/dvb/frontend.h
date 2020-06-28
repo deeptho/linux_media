@@ -29,6 +29,14 @@
 
 #include <linux/types.h>
 
+enum fe_extended_caps {
+	FE_EXTENDED_CAPS_IS_STUPID = 0x00,
+	FE_CAN_SPECTRUMSCAN        = 0x01,
+	FE_CAN_IQ                  = 0x02,
+	FE_CAN_BLINDSEARCH         = 0x04,
+	FE_CAN_MODCOD		   = 0x08
+};
+
 /**
  * enum fe_caps - Frontend capabilities
  *
@@ -156,6 +164,10 @@ struct dvb_frontend_info {
 	__u32      symbol_rate_tolerance;
 	__u32      notifier_delay;		/* DEPRECATED */
 	enum fe_caps caps;
+};
+
+struct dvb_frontend_extended_info {
+	enum fe_extended_caps extended_caps;
 };
 
 /**
@@ -314,6 +326,7 @@ enum fe_code_rate {
 	FEC_3_5,
 	FEC_9_10,
 	FEC_2_5,
+	FEC_5_11,
 	FEC_1_4,
 	FEC_1_3,  
 };
@@ -353,6 +366,10 @@ enum fe_modulation {
 	APSK_32,
 	DQPSK,
 	QAM_4_NR,
+	C_QPSK,
+	I_QPSK,
+	Q_QPSK,
+	C_OQPSK,
 	QAM_512,
 	QAM_1024,
 	QAM_4096,
@@ -566,7 +583,13 @@ enum fe_interleaving {
 /* Physical layer scrambling */
 #define DTV_SCRAMBLING_SEQUENCE_INDEX	70
 
-#define DTV_MAX_COMMAND		DTV_SCRAMBLING_SEQUENCE_INDEX
+#define DTV_MATYPE                      71
+#define DTV_FRAME_LEN                   72
+#define DTV_ENABLE_MODCOD		73
+#define DTV_ALGORITHM		74
+#define DTV_SEARCH_RANGE		75
+
+#define DTV_MAX_COMMAND				DTV_SEARCH_RANGE
 
 /**
  * enum fe_pilot - Type of pilot tone
@@ -665,6 +688,35 @@ enum fe_delivery_system {
 	SYS_TURBO,
 	SYS_DVBC_ANNEX_C,
 	SYS_DVBC2,
+	SYS_DCII,
+};
+
+/**
+ * enum fe_algorithm - Type of scan algorithm to apply
+ *
+ * @ALGORITHM_WARM:
+ *	Tune to known carrier frequency and symbol rate
+ * @ALGORITHM_BLIND:
+ *	Blind scan starting at lowest frequency
+ * @ALGORITHM_BLIND_BEST_GUESS:
+ *	Blind scan starting with a guess for frequency and symbol rate
+ * @ALGORITHM_COLD:
+ *	Blind scan starting with known symbol rate
+ * @ALGORITHM_COLD_BEST_GUESS:
+ *	Blind scan starting with known symbol rate and starting with a guessed frequency
+ * @ALGORITHM_NEXT:
+ *	Scan for the mux with the next higher frequency compared to the last one tuned
+ * @ALGORITHM_BANDWITH:
+ *	Scan full bandwith, optimized for low symbol rate
+ */
+enum fe_algorithm {
+	ALGORITHM_WARM, 
+	ALGORITHM_COLD,
+	ALGORITHM_COLD_BEST_GUESS,
+	ALGORITHM_BLIND,
+	ALGORITHM_BLIND_BEST_GUESS,
+	ALGORITHM_NEXT,
+	ALGORITHM_BANDWIDTH,
 };
 
 /* backward compatibility definitions for delivery systems */
@@ -930,6 +982,38 @@ struct dtv_properties {
 #define FE_SET_PROPERTY		   _IOW('o', 82, struct dtv_properties)
 #define FE_GET_PROPERTY		   _IOR('o', 83, struct dtv_properties)
 
+struct dvb_fe_constellation_sample {
+        __s8           real;
+        __s8           imaginary;
+};
+
+struct dvb_fe_constellation_samples {
+	__u32 num;
+	__u8  options;
+        struct dvb_fe_constellation_sample *samples;
+};
+
+#define DTV_MAX_CONSTELLATION_SAMPLES 1000
+#define FE_GET_CONSTELLATION_SAMPLES    _IOR('o', 84, struct dvb_fe_constellation_samples)
+
+typedef enum spectrum_scan {
+	SC_DB   = 0x00,
+	SC_DBM  = 0x01,
+	SC_GAIN = 0x02
+} spectrum_scan_t;
+
+
+struct dvb_fe_spectrum_scan {
+	__u32 *freq;
+	__u16 num_freq;
+	__s32 *rf_level;
+	__u32 *type;
+};
+
+#define DTV_MAX_SPECTRUM_SCAN_STEPS     2000
+#define FE_GET_SPECTRUM_SCAN            _IOW('o', 85, struct dvb_fe_spectrum_scan)
+#define FE_GET_EXTENDED_INFO		_IOR('o', 86, struct dvb_frontend_extended_info)
+
 #if defined(__DVB_CORE__) || !defined(__KERNEL__)
 
 /*
@@ -976,6 +1060,7 @@ typedef enum fe_hierarchy fe_hierarchy_t;
 typedef enum fe_pilot fe_pilot_t;
 typedef enum fe_rolloff fe_rolloff_t;
 typedef enum fe_delivery_system fe_delivery_system_t;
+typedef enum fe_algorithm fe_algorithm_t;
 
 /* DVBv3 structs */
 

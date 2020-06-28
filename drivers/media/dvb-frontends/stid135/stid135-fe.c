@@ -36,6 +36,9 @@
 #include "i2c.h"
 #include "stid135_drv.h"
 
+#define dprintk(fmt, arg...)																					\
+	printk(KERN_DEBUG pr_fmt("%s:%d " fmt),  __func__, __LINE__, ##arg)
+
 LIST_HEAD(stvlist);
 
 static int mode;
@@ -458,11 +461,13 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 	struct stv *state = fe->demodulator_priv;
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
 	fe_lla_error_t err = FE_LLA_NO_ERROR;
+	fe_lla_error_t error1 = FE_LLA_NO_ERROR;
 	struct fe_stid135_internal_param *p_params = state->base->handle;
 	struct fe_sat_search_params search_params;
 	struct fe_sat_search_result search_results;
 	u32 pls_mode, pls_code;
 	s32 rf_power;
+	BOOL satellitte_scan =0;
 	BOOL lock_stat=0;
 	struct fe_sat_signal_info* signal_info = &state->signal_info;
 
@@ -476,36 +481,70 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 
 	/* Search parameters */
 #if 1
-	search_params.search_algo 	= FE_SAT_WARM_START;
+	switch(p->algorithm) {
+	case ALGORITHM_WARM: 
+		search_params.search_algo 	= FE_SAT_WARM_START;
+		satellitte_scan = 0;
+		break;
+		
+	case ALGORITHM_COLD: 
+	case ALGORITHM_COLD_BEST_GUESS: 
+		search_params.search_algo 	= FE_SAT_COLD_START;
+		satellitte_scan = 0;
+		break;
+		
+	case ALGORITHM_BLIND: 
+	case ALGORITHM_BLIND_BEST_GUESS:
+	case ALGORITHM_BANDWIDTH:
+		search_params.search_algo 	= FE_SAT_BLIND_SEARCH;
+		search_params.standard = FE_SAT_AUTO_SEARCH;
+		satellitte_scan = 0;
+		break;
+	case ALGORITHM_NEXT: 
+		search_params.search_algo 	= FE_SAT_NEXT;
+		search_params.standard = FE_SAT_AUTO_SEARCH;
+		satellitte_scan = 0;
+		break;
+	}
+	
 #else
-	search_params.search_algo 	= FE_SAT_COLD_START;
+	search_params.search_algo 	= FE_SAT_WARM_START;
 #endif
-	search_params.frequency 	= p->frequency*1000;
-	search_params.symbol_rate 	= p->symbol_rate;
+	search_params.frequency 	=  p->frequency*1000;
+	search_params.symbol_rate 	= 	(search_params.search_algo == FE_SAT_BLIND_SEARCH ||
+																	 search_params.search_algo == FE_SAT_NEXT
+																	 ) ?    30000000/*to prevent error detected*/ : p->symbol_rate;
 	search_params.modulation	= FE_SAT_MOD_UNKNOWN;
 	search_params.modcode		= FE_SAT_DUMMY_PLF;
-	search_params.search_range	= 10000000;
+	search_params.search_range	= p->search_range > 0 ? p->search_range : 10000000;
+	printk("Search range set to %d\n", search_params.search_range);
 	search_params.puncture_rate	= FE_SAT_PR_UNKNOWN;
-	switch (p->delivery_system)
-	{
-	  case SYS_DSS:
-		search_params.standard		= FE_SAT_SEARCH_DSS;
-		break;
-	  case SYS_DVBS:
-		search_params.standard		= FE_SAT_SEARCH_DVBS1;
-		break;
-	  case SYS_DVBS2:
-		search_params.standard		= FE_SAT_SEARCH_DVBS2;
-		break;
-	  default:
-		search_params.standard		= FE_SAT_AUTO_SEARCH;
-	}
+	if(	search_params.standard != FE_SAT_AUTO_SEARCH)
+		switch (p->delivery_system)
+			{
+			case SYS_DSS:
+				search_params.standard		= FE_SAT_SEARCH_DSS;
+				break;
+			case SYS_DVBS:
+				search_params.standard		= FE_SAT_SEARCH_DVBS1;
+				break;
+			case SYS_DVBS2:
+				search_params.standard		= FE_SAT_SEARCH_DVBS2;
+				break;
+			default:
+				search_params.standard		= FE_SAT_AUTO_SEARCH;
+			}
 	search_params.iq_inversion	= FE_SAT_IQ_AUTO;
 	search_params.tuner_index_jump	= 0; // ok with narrow band signal
 
 	err = FE_STiD135_GetLoFreqHz(state->base->handle, &(search_params.lo_frequency));
 	search_params.lo_frequency *= 1000000;
-
+	if(search_params.search_algo == FE_SAT_BLIND_SEARCH ||
+		 search_params.search_algo == FE_SAT_NEXT) {
+		//search_params.frequency = 	950000000 ;
+		printk("BLIND: set freq=%d lo=%d\n", 	search_params.frequency,	search_params.lo_frequency  );
+	}
+	
 	dev_dbg(&state->base->i2c->dev, "%s: demod %d + tuner %d\n", __func__, state->nr, state->rf_in);
 	err |= fe_stid135_set_rfmux_path(p_params->handle_demod, state->nr + 1, state->rf_in + 1);
 
@@ -521,6 +560,8 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 
 
 	}
+	signal_info-> pls_code =pls_code;
+	signal_info-> pls_mode =pls_mode;
 	
 	if (p->scrambling_sequence_index) {
 		pls_mode = 1;
@@ -551,8 +592,12 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 	if (err != FE_LLA_NO_ERROR)
 		dev_err(&state->base->i2c->dev, "%s: fe_stid135_reset_modcodes_filter error %d !\n", __func__, err);
 #endif
-	err |= fe_stid135_search(state->base->handle, state->nr + 1, &search_params, &search_results, 0);
-	err |= fe_stid135_get_lock_status(state->base->handle, state->nr + 1,&lock_stat );
+	err |= (error1=fe_stid135_search(state->base->handle, state->nr + 1, &search_params, &search_results, satellitte_scan));
+	if(error1!=0)
+		dprintk("fe_stid135_search returned error=%d\n", error1);
+	err |= (error1=fe_stid135_get_lock_status(state->base->handle, state->nr + 1,&lock_stat ));
+	if(error1!=0)
+		dprintk("fe_stid135_get_lock_status returned error=%d\n", error1);
 	if (err != FE_LLA_NO_ERROR)
 	{
 		mutex_unlock(&state->base->status_lock);
@@ -560,6 +605,7 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 		return -1;
 	}
 
+	printk("set_parameters: error=%d locked=%d\n", err, search_results.locked);
 	if (search_results.locked){
 #if 1
 		dev_dbg(&state->base->i2c->dev, "%s: locked !\n", __func__);
@@ -598,9 +644,11 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 		dev_warn(&state->base->i2c->dev, "%s: set ISI %d ! demod=%d tuner=%d\n", __func__, p->stream_id & 0xFF,
 						 state->nr, state->rf_in);
 		err |= fe_stid135_set_mis_filtering(state->base->handle, state->nr + 1, TRUE, p->stream_id & 0xFF, 0xFF);
+		signal_info->isi = p->stream_id &0xff;
 	} else {
 		dev_dbg(&state->base->i2c->dev, "%s: disable ISI filtering !\n", __func__);
-		err |= fe_stid135_set_mis_filtering(state->base->handle, state->nr + 1, FALSE, 0, 0xFF);				
+		err |= fe_stid135_set_mis_filtering(state->base->handle, state->nr + 1, FALSE, 0, 0xFF);
+		signal_info->isi = 0;
 	}
 	if (err != FE_LLA_NO_ERROR)
 		dev_err(&state->base->i2c->dev, "%s: fe_stid135_set_mis_filtering error %d !\n", __func__, err);
@@ -613,10 +661,16 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 static int stid135_get_frontend(struct dvb_frontend *fe, struct dtv_frontend_properties *p)
 {
 	struct stv *state = fe->demodulator_priv;
-
+	struct fe_stid135_internal_param *p_params = state->base->handle;
+	printk("XXXXX1 stream_id=%d\n",p->stream_id);
 	if (!state->signal_info.locked)
 		return 0;
-
+	if(p_params->demod_search_algo[state->nr] == FE_SAT_BLIND_SEARCH ||
+		 p_params->demod_search_algo[state->nr] == FE_SAT_NEXT) {
+		fe_stid135_get_signal_info(p_params, state->nr + 1, &state->signal_info, 0); //TODO read only when needed
+		p->frequency = state->signal_info.frequency;
+		p->symbol_rate = state->signal_info.symbol_rate;
+	}
 	switch (state->signal_info.standard) {
 	case FE_SAT_DSS_STANDARD:
 		p->delivery_system = SYS_DSS;
@@ -730,7 +784,11 @@ static int stid135_get_frontend(struct dvb_frontend *fe, struct dtv_frontend_pro
 			p->fec_inner = FEC_NONE;
 		}
 	}
-    	return 0;
+	p->stream_id = state->signal_info.isi;
+	printk("XXXXX stream_id=%d\n",p->stream_id);
+	p->pls_mode = state->signal_info.pls_mode;
+	p->pls_code = state->signal_info.pls_code;
+	return 0;
 }
 
 static int stid135_read_status(struct dvb_frontend *fe, enum fe_status *status)
@@ -744,7 +802,8 @@ static int stid135_read_status(struct dvb_frontend *fe, enum fe_status *status)
 	if (!mutex_trylock(&state->base->status_lock)) {
 		if (state->signal_info.locked)
 			*status |= FE_HAS_SIGNAL | FE_HAS_CARRIER
-					| FE_HAS_VITERBI | FE_HAS_SYNC | FE_HAS_LOCK;
+				| FE_HAS_VITERBI | FE_HAS_SYNC | FE_HAS_LOCK;
+		dprintk("read status=%d\n", *status);
 		return 0;
 	}
 

@@ -700,6 +700,8 @@ restart:
 		if (fe->ops.get_frontend_algo) {
 			algo = fe->ops.get_frontend_algo(fe);
 			switch (algo) {
+			case DVBFE_ALGO_NOTUNE:
+				break;
 			case DVBFE_ALGO_HW:
 				dev_dbg(fe->dvb->device, "%s: Frontend ALGO = DVBFE_ALGO_HW\n", __func__);
 
@@ -956,38 +958,45 @@ static int dvb_frontend_check_parameters(struct dvb_frontend *fe)
 	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
 	u32 freq_min;
 	u32 freq_max;
-
+	switch(c->algorithm) {
+	case ALGORITHM_WARM:
+	case ALGORITHM_BLIND_BEST_GUESS:
+	case ALGORITHM_COLD_BEST_GUESS:
+		printk("checking frequency\n");
 	/* range check: frequency */
-	dvb_frontend_get_frequency_limits(fe, &freq_min, &freq_max, NULL);
-	if ((freq_min && c->frequency < freq_min) ||
-	    (freq_max && c->frequency > freq_max)) {
-		dev_warn(fe->dvb->device, "DVB: adapter %i frontend %i frequency %u out of range (%u..%u)\n",
-			 fe->dvb->num, fe->id, c->frequency,
-			 freq_min, freq_max);
-		return -EINVAL;
-	}
-
-	/* range check: symbol rate */
-	switch (c->delivery_system) {
-	case SYS_DVBS:
-	case SYS_DVBS2:
-	case SYS_TURBO:
-	case SYS_DVBC_ANNEX_A:
-	case SYS_DVBC_ANNEX_C:
-		if ((fe->ops.info.symbol_rate_min &&
-		     c->symbol_rate < fe->ops.info.symbol_rate_min) ||
-		    (fe->ops.info.symbol_rate_max &&
-		     c->symbol_rate > fe->ops.info.symbol_rate_max)) {
-			dev_warn(fe->dvb->device, "DVB: adapter %i frontend %i symbol rate %u out of range (%u..%u)\n",
-				 fe->dvb->num, fe->id, c->symbol_rate,
-				 fe->ops.info.symbol_rate_min,
-				 fe->ops.info.symbol_rate_max);
+		dvb_frontend_get_frequency_limits(fe, &freq_min, &freq_max, NULL);
+		if ((freq_min && c->frequency < freq_min) ||
+				(freq_max && c->frequency > freq_max)) {
+			dev_warn(fe->dvb->device, "DVB: adapter %i frontend %i frequency %u out of range (%u..%u)\n",
+							 fe->dvb->num, fe->id, c->frequency,
+							 freq_min, freq_max);
 			return -EINVAL;
+		}
+		
+		/* range check: symbol rate */
+		switch (c->delivery_system) {
+		case SYS_DVBS:
+		case SYS_DVBS2:
+		case SYS_TURBO:
+		case SYS_DVBC_ANNEX_A:
+		case SYS_DVBC_ANNEX_C:
+			if ((fe->ops.info.symbol_rate_min &&
+					 c->symbol_rate < fe->ops.info.symbol_rate_min) ||
+					(fe->ops.info.symbol_rate_max &&
+					 c->symbol_rate > fe->ops.info.symbol_rate_max)) {
+				dev_warn(fe->dvb->device, "DVB: adapter %i frontend %i symbol rate %u out of range (%u..%u)\n",
+								 fe->dvb->num, fe->id, c->symbol_rate,
+								 fe->ops.info.symbol_rate_min,
+								 fe->ops.info.symbol_rate_max);
+				return -EINVAL;
+			}
+		default:
+			break;
 		}
 	default:
 		break;
 	}
-
+	
 	return 0;
 }
 
@@ -1032,6 +1041,7 @@ static int dvb_frontend_clear_cache(struct dvb_frontend *fe)
 
 	c->stream_id = NO_STREAM_ID_FILTER;
 	c->scrambling_sequence_index = 0;/* default sequence */
+	c->enable_modcod = 0x0fffffff;
 
 	switch (c->delivery_system) {
 	case SYS_DVBS:
@@ -1083,6 +1093,7 @@ static struct dtv_cmds_h dtv_cmds[DTV_MAX_COMMAND + 1] = {
 
 	/* Set */
 	_DTV_CMD(DTV_FREQUENCY, 1, 0),
+	_DTV_CMD(DTV_SEARCH_RANGE, 1, 0),
 	_DTV_CMD(DTV_BANDWIDTH_HZ, 1, 0),
 	_DTV_CMD(DTV_MODULATION, 1, 0),
 	_DTV_CMD(DTV_INVERSION, 1, 0),
@@ -1123,8 +1134,11 @@ static struct dtv_cmds_h dtv_cmds[DTV_MAX_COMMAND + 1] = {
 	_DTV_CMD(DTV_STREAM_ID, 1, 0),
 	_DTV_CMD(DTV_DVBT2_PLP_ID_LEGACY, 1, 0),
 	_DTV_CMD(DTV_SCRAMBLING_SEQUENCE_INDEX, 1, 0),
+	_DTV_CMD(DTV_MATYPE, 1, 0),
+	_DTV_CMD(DTV_ENABLE_MODCOD, 1, 0),
 	_DTV_CMD(DTV_LNA, 1, 0),
-
+	_DTV_CMD(DTV_ALGORITHM, 1, 0),
+	
 	/* Get */
 	_DTV_CMD(DTV_DISEQC_SLAVE_REPLY, 0, 1),
 	_DTV_CMD(DTV_API_VERSION, 0, 0),
@@ -1157,6 +1171,7 @@ static struct dtv_cmds_h dtv_cmds[DTV_MAX_COMMAND + 1] = {
 	_DTV_CMD(DTV_STAT_POST_TOTAL_BIT_COUNT, 0, 0),
 	_DTV_CMD(DTV_STAT_ERROR_BLOCK_COUNT, 0, 0),
 	_DTV_CMD(DTV_STAT_TOTAL_BLOCK_COUNT, 0, 0),
+
 };
 
 /* Synchronise the legacy tuning parameters into the cache, so that demodulator
@@ -1341,7 +1356,6 @@ static int dtv_property_process_get(struct dvb_frontend *fe,
 				    struct file *file)
 {
 	int ncaps;
-
 	switch (tvp->cmd) {
 	case DTV_ENUM_DELSYS:
 		ncaps = 0;
@@ -1351,8 +1365,14 @@ static int dtv_property_process_get(struct dvb_frontend *fe,
 		}
 		tvp->u.buffer.len = ncaps;
 		break;
+	case DTV_ALGORITHM:
+		tvp->u.data = c->algorithm;
+		break;
 	case DTV_FREQUENCY:
 		tvp->u.data = c->frequency;
+		break;
+	case DTV_SEARCH_RANGE:
+		tvp->u.data = c->search_range;
 		break;
 	case DTV_MODULATION:
 		tvp->u.data = c->modulation;
@@ -1472,6 +1492,15 @@ static int dtv_property_process_get(struct dvb_frontend *fe,
 	case DTV_SCRAMBLING_SEQUENCE_INDEX:
 		tvp->u.data = c->scrambling_sequence_index;
 		break;
+	case DTV_ENABLE_MODCOD:
+		tvp->u.data = c->enable_modcod;
+		break;
+	case DTV_MATYPE:
+		tvp->u.data = c->matype;
+		break;
+        case DTV_FRAME_LEN:
+                tvp->u.data = c->frame_len;
+                break;
 
 	/* ATSC-MH */
 	case DTV_ATSCMH_FIC_VER:
@@ -1840,14 +1869,23 @@ static int dtv_property_process_set(struct dvb_frontend *fe,
 		 * Use the cached Digital TV properties to tune the
 		 * frontend
 		 */
+		if (fe->ops.dtv_tune)
+			fe->ops.dtv_tune(fe);
+
 		dev_dbg(fe->dvb->device,
 			"%s: Setting the frontend from property cache\n",
 			__func__);
 
 		r = dtv_set_frontend(fe);
 		break;
+	case DTV_ALGORITHM:
+		c->algorithm = data;
+		break;
 	case DTV_FREQUENCY:
 		c->frequency = data;
+		break;
+	case DTV_SEARCH_RANGE:
+		c->search_range = data;
 		break;
 	case DTV_MODULATION:
 		c->modulation = data;
@@ -1969,6 +2007,10 @@ static int dtv_property_process_set(struct dvb_frontend *fe,
 		c->scrambling_sequence_index = data;
 		break;
 
+	case DTV_ENABLE_MODCOD:
+		c->enable_modcod = data;
+		break;
+
 	/* ATSC-MH */
 	case DTV_ATSCMH_PARADE_ID:
 		fe->dtv_property_cache.atscmh_parade_id = data;
@@ -1990,6 +2032,95 @@ static int dtv_property_process_set(struct dvb_frontend *fe,
 	}
 
 	return r;
+}
+
+static int dvb_frontend_ioctl_get_spectrum_scan(struct file *file,
+			unsigned int cmd, void *parg)
+{
+	struct dvb_device *dvbdev = file->private_data;
+	struct dvb_frontend *fe = dvbdev->priv;
+
+	struct dvb_fe_spectrum_scan *s_user = parg;
+	struct dvb_fe_spectrum_scan s_kernel;
+
+	int err = -EOPNOTSUPP;
+
+	if (fe->ops.get_spectrum_scan)
+	{
+		// make sure samples are within range
+		if ((s_user->num_freq == 0) || (s_user->num_freq > DTV_MAX_SPECTRUM_SCAN_STEPS))
+			return -EINVAL;
+
+		// create kernel memory structure
+                s_kernel.type = NULL;
+                s_kernel.type = kmalloc(sizeof(__u32), GFP_KERNEL);
+		s_kernel.freq = memdup_user(s_user->freq, s_user->num_freq * sizeof(__u32));
+		s_kernel.num_freq = s_user->num_freq;
+		s_kernel.rf_level = NULL;
+		s_kernel.rf_level = kmalloc(s_user->num_freq * sizeof(__s32), GFP_KERNEL);
+
+		if (!s_kernel.rf_level || !s_kernel.type) {
+			return -ENOMEM;
+		}
+
+		// call user function
+		err = fe->ops.get_spectrum_scan(fe, &s_kernel);
+
+                // copy results to userspace
+		if (copy_to_user(s_user->rf_level, s_kernel.rf_level, s_kernel.num_freq * sizeof(__s32))) {
+                        err = -EFAULT;
+                }
+                if (copy_to_user(s_user->type, s_kernel.type, sizeof(__u32))) {
+                        err = -EFAULT;
+                }
+
+		// free kernel allocated memory
+		kfree(s_kernel.type);
+		kfree(s_kernel.rf_level);
+	}
+
+	return err;
+}
+
+static int dvb_frontend_ioctl_get_constellation_samples(struct file *file,
+			unsigned int cmd, void *parg)
+{
+	struct dvb_device *dvbdev = file->private_data;
+	struct dvb_frontend *fe = dvbdev->priv;
+
+	struct dvb_fe_constellation_samples *s_user = parg;
+	struct dvb_fe_constellation_samples s_kernel;
+
+	int err = -EOPNOTSUPP;
+
+	if (fe->ops.get_constellation_samples)
+	{
+		// make sure samples are within range
+		if ((s_user->num == 0) || (s_user->num > DTV_MAX_CONSTELLATION_SAMPLES))
+			return -EINVAL;
+
+		// create kernel memory structure
+		s_kernel.num = s_user->num;
+		s_kernel.options = s_user->options;
+		s_kernel.samples = kmalloc(s_user->num * sizeof(struct dvb_fe_constellation_sample), GFP_KERNEL);
+
+		if (!s_kernel.samples) {
+			return -ENOMEM;
+		}
+
+		// call user function
+		err = fe->ops.get_constellation_samples(fe, &s_kernel);
+
+		// copy results to userspace
+		if (copy_to_user(s_user->samples, s_kernel.samples, s_kernel.num * sizeof(struct dvb_fe_constellation_sample))) {
+			err = -EFAULT;
+		}
+
+		// free kernel allocated memory
+		kfree(s_kernel.samples);
+	}
+
+	return err;
 }
 
 static int dvb_frontend_do_ioctl(struct file *file, unsigned int cmd,
@@ -2406,7 +2537,19 @@ static int dvb_frontend_handle_ioctl(struct file *file,
 	dev_dbg(fe->dvb->device, "%s:\n", __func__);
 
 	switch (cmd) {
+	case FE_GET_CONSTELLATION_SAMPLES:
+		err = dvb_frontend_ioctl_get_constellation_samples(file, cmd, parg);
+		break;
+	case FE_GET_SPECTRUM_SCAN:
+		err = dvb_frontend_ioctl_get_spectrum_scan(file, cmd, parg);
+		break;
+	case FE_GET_EXTENDED_INFO: {
+		struct dvb_frontend_extended_info* extended_info = parg;
+		memcpy(extended_info, &fe->ops.extended_info, sizeof(struct dvb_frontend_extended_info));
 
+		err = 0;
+		break;
+	}
 	case FE_ECP3FW_READ:
 		//printk("FE_ECP3FW_READ *****************");
 		if (fe->ops.spi_read) {
@@ -2556,13 +2699,17 @@ static int dvb_frontend_handle_ioctl(struct file *file,
 		 * that user get signal state from previous tuning */
 		if (fepriv->state == FESTATE_RETUNE ||
 		    fepriv->state == FESTATE_ERROR) {
+			dprintk("FE_READ_STATUS retune=%d error=%d\n", fepriv->state == FESTATE_RETUNE ,
+							fepriv->state == FESTATE_ERROR);
 			err = 0;
 			*status = 0;
 			break;
 		}
 
-		if (fe->ops.read_status)
+		if (fe->ops.read_status) {
 			err = fe->ops.read_status(fe, status);
+			dprintk("FE_READ_STATUS READ err=%d status=%d\n", err, status);
+		}
 		break;
 	}
 

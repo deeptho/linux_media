@@ -145,6 +145,7 @@ enum dvbfe_algo {
 	DVBFE_ALGO_HW			= BIT(0),
 	DVBFE_ALGO_SW			= BIT(1),
 	DVBFE_ALGO_CUSTOM		= BIT(2),
+	DVBFE_ALGO_NOTUNE		= BIT(3),
 	DVBFE_ALGO_RECOVERY		= BIT(31),
 };
 
@@ -347,6 +348,12 @@ struct dvb_frontend_internal_info {
 	enum fe_caps caps;
 };
 
+struct dvb_frame {
+	int frame_size;
+	int packet_size;
+	int sync_byte;
+};
+
 /**
  * struct dvb_frontend_ops - Demodulation information and callbacks for
  *			      ditialt TV
@@ -436,6 +443,7 @@ struct dvb_frontend_internal_info {
  */
 struct dvb_frontend_ops {
 	struct dvb_frontend_internal_info info;
+	struct dvb_frontend_extended_info extended_info;
 
 	u8 delsys[MAX_DELSYS];
 
@@ -495,6 +503,10 @@ struct dvb_frontend_ops {
 	struct analog_demod_ops analog_ops;
 
 	int (*set_property)(struct dvb_frontend* fe, u32 cmd, u32 data);
+	int (*get_constellation_samples)(struct dvb_frontend* fe, struct dvb_fe_constellation_samples* s);
+	int (*get_spectrum_scan)(struct dvb_frontend* fe, struct dvb_fe_spectrum_scan* s);
+	int (*set_frame_ops)(struct dvb_frontend* fe, struct dvb_frame frame_ops);
+	int (*dtv_tune)(struct dvb_frontend* fe);
 
 	void(*spi_read)( struct dvb_frontend *fe,struct ecp3_info *ecp3inf);
 	void(*spi_write)( struct dvb_frontend *fe,struct ecp3_info *ecp3inf);
@@ -525,8 +537,8 @@ struct dvb_fe_events {
  * struct dtv_frontend_properties - contains a list of properties that are
  *				    specific to a digital TV standard.
  *
- * @frequency:		frequency in Hz for terrestrial/cable or in kHz for
- *			Satellite
+ * @frequency:		frequency in Hz for terrestrial/cable or in kHz for Satellite
+ * @search_range:		frequency search range Hz for blind search
  * @modulation:		Frontend modulation type
  * @voltage:		SEC voltage (only Satellite)
  * @sectone:		SEC tone mode (only Satellite)
@@ -599,8 +611,10 @@ struct dvb_fe_events {
  */
 struct dtv_frontend_properties {
 	u32			frequency;
+	u32			search_range;
+	enum fe_algorithm algorithm;
 	enum fe_modulation	modulation;
-
+	
 	enum fe_sec_voltage	voltage;
 	enum fe_sec_tone_mode	sectone;
 	enum fe_spectral_inversion inversion;
@@ -636,10 +650,15 @@ struct dtv_frontend_properties {
 
 	/* Multistream specifics */
 	u32			stream_id;
+        u32			matype;
+
+	u32			enable_modcod;
+        u32			frame_len;
 
 	/* Physical Layer Scrambling specifics */
 	u32			scrambling_sequence_index;
-
+	u32 pls_mode;
+	u32 pls_code;
 	/* ATSC-MH specifics */
 	u8			atscmh_fic_ver;
 	u8			atscmh_parade_id;

@@ -21,6 +21,11 @@
 #ifndef TAS2101_PRIV_H
 #define TAS2101_PRIV_H
 
+enum tas2101_algo {
+	TAS2101_NOTUNE,
+	TAS2101_TUNE,
+};
+
 struct tas2101_priv {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 7, 0)
 	struct i2c_mux_core *muxc;
@@ -38,7 +43,7 @@ struct tas2101_priv {
 
 	struct dvb_frontend fe;
 	const struct tas2101_config *cfg;
-
+	enum tas2101_algo algo;
 };
 
 /* demod registers */
