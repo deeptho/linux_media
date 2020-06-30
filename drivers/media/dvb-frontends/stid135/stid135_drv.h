@@ -443,7 +443,10 @@ fe_lla_error_t  FE_STiD135_CarrierGetQuality(stchip_handle_t hChip, enum fe_stid
 			      	BOOL fer_dvbs2x);
 #endif
 
-fe_lla_error_t fe_stid135_get_lock_status(fe_stid135_handle_t Handle, enum fe_stid135_demod Demod, BOOL* Locked_p);
+fe_lla_error_t fe_stid135_get_lock_status(fe_stid135_handle_t Handle, enum fe_stid135_demod Demod,
+																								BOOL* carrier_lock, BOOL *data);
+fe_lla_error_t fe_stid135_get_data_status(fe_stid135_handle_t Handle, enum fe_stid135_demod Demod, BOOL* Locked_p);
+			
 
 fe_lla_error_t  FE_STiD135_GetErrorCount(stchip_handle_t hChip, 
 	enum fe_stid135_error_counter Counter, enum fe_stid135_demod Demod, u32* ber_p); 

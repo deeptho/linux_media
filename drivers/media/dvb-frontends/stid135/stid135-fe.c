@@ -599,11 +599,6 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 	err |= (error1=fe_stid135_search(state->base->handle, state->nr + 1, &search_params, &search_results, satellitte_scan));
 	if(error1!=0)
 		dprintk("fe_stid135_search returned error=%d\n", error1);
-#if 0
-	err |= (error1=fe_stid135_get_lock_status(state->base->handle, state->nr + 1, &lock_stat ));
-	if(error1!=0)
-		dprintk("fe_stid135_get_lock_status returned error=%d\n", error1);
-#endif
 	if (err != FE_LLA_NO_ERROR)
 	{
 		mutex_unlock(&state->base->status_lock);
@@ -611,9 +606,12 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 		return -1;
 	}
 
-	printk("set_parameters: error=%d locked=%d\n", err, search_results.locked);
+	dprintk("set_parameters: error=%d locked=%d\n", err, search_results.locked);
 	if (search_results.locked){
 		state->signal_info.locked = 1;
+		state->signal_info.timedout = 0;
+		state->signal_info.tuned = 1;
+		dprintk("set_parameters: error=%d locked=%d\n", err, state->signal_info.locked);
 #if 1
 		dev_dbg(&state->base->i2c->dev, "%s: locked !\n", __func__);
 		//set maxllr,when the  demod locked ,allocation of resources
@@ -628,11 +626,14 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 			state->base->set_TSsampling(state->base->i2c,state->nr/2,4);   //for tbs6912
 		}
 	else {
+		state->signal_info.tuned = 1;
+		state->signal_info.timedout = 1;
+		state->signal_info.locked = 0;
 		err |= fe_stid135_get_band_power_demod_not_locked(state->base->handle, state->nr + 1, &rf_power);
 		dev_dbg(&state->base->i2c->dev, "%s: not locked, band rf_power %d dBm ! demod=%d tuner=%d\n",
 						 __func__, rf_power / 1000, state->nr, state->rf_in);
 	}
-
+	dprintk("set_parameters: error=%d locked=%d\n", err, state->signal_info.locked);
 	/* Set ISI before search */
 	if (p->stream_id != NO_STREAM_ID_FILTER) {
 		dev_warn(&state->base->i2c->dev, "%s: set ISI %d ! demod=%d tuner=%d\n", __func__, p->stream_id & 0xFF,
@@ -644,6 +645,7 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 		err |= fe_stid135_set_mis_filtering(state->base->handle, state->nr + 1, FALSE, 0, 0xFF);
 		signal_info->isi = 0;
 	}
+	dprintk("set_parameters: error=%d locked=%d\n", err, state->signal_info.locked);
 	if (err != FE_LLA_NO_ERROR)
 		dev_err(&state->base->i2c->dev, "%s: fe_stid135_set_mis_filtering error %d !\n", __func__, err);
 
@@ -801,7 +803,7 @@ static int stid135_read_status(struct dvb_frontend *fe, enum fe_status *status)
 		dprintk("read status=%d\n", *status);
 		return 0;
 	}
-
+	dprintk("read_status locked=%d status=%d\n", state->signal_info.locked, *status);
 	p->strength.len = 1;
 	p->strength.stat[0].scale = FE_SCALE_NOT_AVAILABLE;
 	p->cnr.len = 1;
@@ -811,41 +813,54 @@ static int stid135_read_status(struct dvb_frontend *fe, enum fe_status *status)
 	p->pre_bit_count.len =1;
 	p->pre_bit_count.stat[0].scale = FE_SCALE_NOT_AVAILABLE;
 
-	err = fe_stid135_get_lock_status(state->base->handle, state->nr + 1, &state->signal_info.locked);
+	err = fe_stid135_get_lock_status(state->base->handle, state->nr + 1, &state->signal_info.locked, &state->signal_info.data_present);
 	if (err != FE_LLA_NO_ERROR) {
 		dev_err(&state->base->i2c->dev, "fe_stid135_get_lock_status error\n");
 		mutex_unlock(&state->base->status_lock);
+		dprintk("read status=%d\n", *status);
 		return -EIO;
 	}
 
-	if (state->signal_info.locked) {
-		/* demod has lock */
-		*status |= FE_HAS_SIGNAL | FE_HAS_CARRIER
-					| FE_HAS_VITERBI | FE_HAS_SYNC | FE_HAS_LOCK;
+	if(state->signal_info.tuned)
+		*status |= FE_HAS_SIGNAL;
+	if(state->signal_info.timedout)
+		*status |= FE_TIMEDOUT;
+	if(state->signal_info.locked)
+		*status |= FE_HAS_CARRIER | FE_HAS_VITERBI;
+	if(state->signal_info.data_present)
+		*status |= FE_HAS_SYNC | FE_HAS_LOCK;
 
-		//for the tbs6912 ts setting
-		if((state->base->set_TSparam)&&(state->newTP)){
-			speed = state->base->set_TSparam(state->base->i2c,state->nr/2,4,0);
-			if(!state->bit_rate)
-				state->bit_rate = speed;
-			if((((speed-state->bit_rate)<160)&&((speed-state->bit_rate)>3))||(state->loops==0)) {
-				state->base->set_TSparam(state->base->i2c,state->nr/2,4,1);
-				state->newTP = false;
-				state->bit_rate  = 0;
-			}
-			else {
-				state->bit_rate = speed;
-				state->loops--;
-			}
+	if (!state->signal_info.locked) {
+		/* demod not locked */
+		*status |= FE_HAS_SIGNAL;
+		dprintk("HAS_SIGNAL AND TUNED locked=%d status=%d\n", state->signal_info.locked, *status);
+		err = fe_stid135_get_band_power_demod_not_locked(state->base->handle, state->nr + 1, &state->signal_info.power);
+		// if unlocked, set to lowest resource..
+		mutex_unlock(&state->base->status_lock);
+		if (err != FE_LLA_NO_ERROR) {
+			dev_err(&state->base->i2c->dev, "fe_stid135_get_band_power_demod_not_locked error\n");
+			dprintk("read status=%d\n", *status);
+			return -EIO;
 		}
 
+		p->strength.len = 2;
+		p->strength.stat[0].scale = FE_SCALE_DECIBEL;
+		p->strength.stat[0].svalue = state->signal_info.power;
+		
+		p->strength.stat[1].scale = FE_SCALE_RELATIVE;
+		p->strength.stat[1].uvalue = (100 + state->signal_info.power/1000) * 656;
+		return 0;
+	} else {
+		/* demod has lock */
+		
 		err = fe_stid135_get_signal_quality(state->base->handle, state->nr + 1, &state->signal_info, mc_auto);
 		mutex_unlock(&state->base->status_lock);
 		if (err != FE_LLA_NO_ERROR) {
 			dev_err(&state->base->i2c->dev, "fe_stid135_get_signal_quality error\n");
+			dprintk("read status=%d\n", *status);
 			return -EIO;
 		}
-
+		
 	//ss	state->signal_info.power = 800;
 	//	state->signal_info.C_N =909;
 
@@ -869,25 +884,26 @@ static int stid135_read_status(struct dvb_frontend *fe, enum fe_status *status)
 		p->post_bit_error.stat[0].scale = FE_SCALE_COUNTER;
 		p->post_bit_error.stat[0].uvalue = state->signal_info.ber;
 
-	} else {
-		/* demod not locked */
-		*status |= FE_HAS_SIGNAL;
-
-		err = fe_stid135_get_band_power_demod_not_locked(state->base->handle, state->nr + 1, &state->signal_info.power);
-		// if unlocked, set to lowest resource..
-		mutex_unlock(&state->base->status_lock);
-		if (err != FE_LLA_NO_ERROR) {
-			dev_err(&state->base->i2c->dev, "fe_stid135_get_band_power_demod_not_locked error\n");
-			return -EIO;
-		}
-
-		p->strength.len = 2;
-		p->strength.stat[0].scale = FE_SCALE_DECIBEL;
-		p->strength.stat[0].svalue = state->signal_info.power;
-
-		p->strength.stat[1].scale = FE_SCALE_RELATIVE;
-		p->strength.stat[1].uvalue = (100 + state->signal_info.power/1000) * 656;
 	}
+	dprintk("read status=%d\n", *status);
+
+		//for the tbs6912 ts setting
+	if((state->base->set_TSparam)&&(state->newTP)) {
+		speed = state->base->set_TSparam(state->base->i2c,state->nr/2,4,0);
+		if(!state->bit_rate)
+			state->bit_rate = speed;
+		if((((speed-state->bit_rate)<160)&&((speed-state->bit_rate)>3))||(state->loops==0)) {
+			state->base->set_TSparam(state->base->i2c,state->nr/2,4,1);
+			state->newTP = false;
+			state->bit_rate  = 0;
+		}
+		else {
+			state->bit_rate = speed;
+			state->loops--;
+		}
+	}
+
+	
 	return 0;
 }
 
@@ -902,11 +918,11 @@ static int stid135_tune(struct dvb_frontend *fe, bool re_tune,
 
 	if (re_tune) {
 		r = stid135_set_parameters(fe);
+		dprintk("QQQ stid135_set_parameters returned %d locked=%d\n", r, state->signal_info.locked);
 		if (r)
 			return r;
 		state->tune_time = jiffies;
 	}
-
 	r = stid135_read_status(fe, status);
 	if (r)
 		return r;

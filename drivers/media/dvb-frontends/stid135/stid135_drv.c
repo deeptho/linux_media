@@ -1261,17 +1261,20 @@ fe_lla_error_t	FE_STiD135_GetSignalInfoLite(fe_stid135_handle_t Handle,
 --ACTION	::	Return locked status
 --PARAMS IN	::	Handle -> Front End Handle
 			Demod -> Current demod 1 .. 8
---PARAMS OUT	::	Locked_p -> Bool (locked or not)
+--PARAMS OUT	::	carrier_lock -> Bool (locked or not)
+      data_present -> Bool (data found or not)
 --RETURN	::	error
 --***************************************************/
-fe_lla_error_t fe_stid135_get_lock_status(fe_stid135_handle_t handle, enum fe_stid135_demod Demod, BOOL* Locked_p)
+fe_lla_error_t fe_stid135_get_lock_status(fe_stid135_handle_t handle, enum fe_stid135_demod Demod,
+																					BOOL*carrier_lock, BOOL* data_present)
 {
 
 	struct fe_stid135_internal_param *pParams;
 	enum fe_sat_search_state demodState;
 	fe_lla_error_t error = FE_LLA_NO_ERROR;  
 	s32 fld_value[3];
-	*Locked_p = FALSE;
+	*carrier_lock = FALSE;
+	*data_present = FALSE;
 	int error1;
 	
 
@@ -1309,19 +1312,21 @@ fe_lla_error_t fe_stid135_get_lock_status(fe_stid135_handle_t handle, enum fe_st
 		switch (demodState) {
 		case FE_SAT_SEARCH:
 		case FE_SAT_PLH_DETECTED :
-			*Locked_p  = FALSE;
+			*carrier_lock  = FALSE;
 		break;
 		case FE_SAT_DVBS2_FOUND:
 			error |= (error1=ChipGetField(pParams->handle_demod, 
 																		FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS_LOCK_DEFINITIF(Demod), &(fld_value[0])));
-			dprintk("error=%d\n", error1);
+			//dprintk("error=%d\n", error1);
 			error |= (error1=ChipGetField(pParams->handle_demod,
 																		FLD_FC8CODEW_DVBSX_PKTDELIN_PDELSTATUS1_PKTDELIN_LOCK(Demod), &(fld_value[1])));
-			dprintk("error=%d\n", error1);
+			//dprintk("error=%d\n", error1);
 			error |= (error1=ChipGetField(pParams->handle_demod,
 																		FLD_FC8CODEW_DVBSX_HWARE_TSSTATUS_TSFIFO_LINEOK(Demod), &(fld_value[2])));
-			dprintk("error=%d\n", error1);
-			*Locked_p  = fld_value[0] & fld_value[1] & fld_value[2];
+			//dprintk("error=%d\n", error1);
+			*carrier_lock = fld_value[0];
+			*data_present  = fld_value[0] & fld_value[1] & fld_value[2];
+			dprintk("PPP carrier_lock=%d data_present=%d\n", *carrier_lock, *data_present);
 		break;
 		
 		case FE_SAT_DVBS_FOUND:
@@ -1337,16 +1342,32 @@ fe_lla_error_t fe_stid135_get_lock_status(fe_stid135_handle_t handle, enum fe_st
 																		FLD_FC8CODEW_DVBSX_HWARE_TSSTATUS_TSFIFO_LINEOK(Demod), &(fld_value[2])));
 			if(error1)
 				dprintk("error=%d\n", error1);
-			*Locked_p  = fld_value[0] & fld_value[1] & fld_value[2];
-		break;
+			*carrier_lock = fld_value[0];
+			*data_present  = fld_value[0] & fld_value[1] & fld_value[2];
+			break;
 		}
 	}
-	
-	else *Locked_p  = FALSE;
 		
 	return error;
-	
 }
+
+/*****************************************************
+--FUNCTION	::	fe_stid135_get_data_status
+--ACTION	::	Return data status
+--PARAMS IN	::	Handle -> Front End Handle
+			Demod -> Current demod 1 .. 8
+--PARAMS OUT	::	Locked_p -> Bool (data working or not)
+--RETURN	::	error
+--***************************************************/
+fe_lla_error_t fe_stid135_get_data_status(fe_stid135_handle_t handle, enum fe_stid135_demod Demod, BOOL* Locked_p)
+{
+
+	s32 carrier_lock=0;
+	s32 data=0;
+	int err = fe_stid135_get_lock_status(handle, Demod, carrier_lock, data);
+	*Locked_p = carrier_lock | data;
+} 
+
 
 /*****************************************************
 **FUNCTION	::	FE_STiD135_GetErrorCount
@@ -1956,7 +1977,7 @@ static fe_lla_error_t FE_STiD135_GetDemodLock (fe_stid135_handle_t handle,
 	
 		error |= ChipGetField(pParams->handle_demod, headerField, &fld_value);
 		demodState = (enum fe_sat_search_state)fld_value;
-		dprintk("NOW dmodState=%d\n", demodState);
+		//dprintk("NOW dmodState=%d\n", demodState);
 		switch (demodState) {
 		case FE_SAT_SEARCH:
 		case FE_SAT_PLH_DETECTED :	/* no signal*/ 
@@ -1966,6 +1987,7 @@ static fe_lla_error_t FE_STiD135_GetDemodLock (fe_stid135_handle_t handle,
 		case FE_SAT_DVBS2_FOUND: /* found a DVBS2 signal */ 
 		case FE_SAT_DVBS_FOUND:
 			error |= ChipGetField(pParams->handle_demod, lockField, &lock);
+			dprintk("PPP locked=%d\n", lock);
 		break;
 		}
 		
@@ -3721,35 +3743,6 @@ fe_lla_error_t FE_STiD135_Algo(struct fe_stid135_internal_param *pParams,
 			range */
 			error |= FE_STiD135_GetSignalParams(pParams, Demod,
 																					satellitte_scan, signalType_p);
-#if 0 //BAD CODE
-					/* Adapt timing loop values according to broadcast/interactive mode */
-					if(pParams->demod_results[Demod-1].standard == FE_SAT_DVBS2_STANDARD) {
-						// In Interactive profile, DVBS1 standard is not supported to reach high perf in DVBS2
-						error = (fe_lla_error_t)ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_RTCLK_TMGALPHA_LKEXP(Demod), 5);
-						error = (fe_lla_error_t)ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_RTCLK_TMGBETA_LKEXP(Demod), 6);
-						error = (fe_lla_error_t)ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_TMGTHRISE_TMGLOCK_THRISE(Demod), 0xF0);
-#if 0 // not working						
-						error = (fe_lla_error_t)ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_TMGTHFALL_TMGLOCK_THFALL(Demod), 0xE0);
-						error = (fe_lla_error_t)ChipSetRegisters(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_RTCLK(Demod), 3);
-#endif
-#if 0 //working						
-						error = (fe_lla_error_t)ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_TMGTHFALL_TMGLOCK_THFALL(Demod), 0xE0);
-						//error = (fe_lla_error_t)ChipSetRegisters(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_RTCLK(Demod), 3);
-#endif
-#if 0 //working
-						//error = (fe_lla_error_t)ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_TMGTHFALL_TMGLOCK_THFALL(Demod), 0xE0);
-						error = (fe_lla_error_t)ChipSetRegisters(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_RTCLK(Demod), 3);
-#endif
-						
-					} else {
-						// In Broadcast profile, DVBS1 standard is supported
-						error = (fe_lla_error_t)ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_RTCLK_TMGALPHA_LKEXP(Demod), 3);
-						error = (fe_lla_error_t)ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_RTCLK_TMGBETA_LKEXP(Demod), 3);
-						error = (fe_lla_error_t)ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_TMGTHRISE_TMGLOCK_THRISE(Demod), 0x20);
-						error = (fe_lla_error_t)ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_TMGTHFALL_TMGLOCK_THFALL(Demod), 0x08);
-						error = (fe_lla_error_t)ChipSetRegisters(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_RTCLK(Demod), 3);
-					}
-#endif
 			/* Manage Matype Information if DVBS2 signal */
 			if (pParams->demod_results[Demod-1].standard == FE_SAT_DVBS2_STANDARD) {
 				/* Before reading MATYPE value, we need to wait for packet delin locked */
@@ -10058,7 +10051,7 @@ fe_lla_error_t fe_stid135_get_packet_error_rate(fe_stid135_handle_t handle, enum
 		if (pParams->handle_demod->Error)
 			error = FE_LLA_I2C_ERROR; 
 		else {
-			fe_stid135_get_lock_status(handle, demod, &demod_locked);
+			fe_stid135_get_data_status(handle, demod, &demod_locked);
 			if(demod_locked == FALSE) { /*if Demod+FEC not locked */
 				*packets_error_count = 1 << 23;		 /*Packet error count is set to the maximum value*/	
 				*total_packets_count = 1 << 24;		 /*Total Packet count is set to the maximum value*/
