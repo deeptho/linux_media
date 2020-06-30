@@ -809,7 +809,8 @@ fe_lla_error_t fe_stid135_set_carrier_frequency_init(fe_stid135_handle_t Handle,
 	struct fe_stid135_internal_param *pParams;
 	
 	pParams = (struct fe_stid135_internal_param *) Handle;
-	
+	if(pParams->demod_search_algo[demod-1] == FE_SAT_NEXT)
+		return  FE_LLA_NO_ERROR; 
 	/* First, set carrier freq boundaries */
 	// CFR_UP = wanted_freq - LOF + search_range/2
 	// CFR_DOWN = wanted_freq - LOF - search_range/2
@@ -3953,8 +3954,8 @@ static fe_lla_error_t FE_STiD135_StartSearch(struct fe_stid135_internal_param *p
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	/* Reset the Demod */
-	//if(pParams->demod_search_algo[Demod-1]!= FE_SAT_NEXT)
-		error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DMDISTATE(Demod), 0x1F);
+	if(pParams->demod_search_algo[Demod-1]!= FE_SAT_NEXT)
+ 		error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DMDISTATE(Demod), 0x1F);
 
 #if 0 //test
 		error |= (fe_lla_error_t)ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_TMGTHRISE_TMGLOCK_THRISE(Demod), 0x18);
