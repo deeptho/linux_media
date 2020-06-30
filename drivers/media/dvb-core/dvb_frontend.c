@@ -718,6 +718,7 @@ restart:
 
 				if (s != fepriv->status && !(fepriv->tune_mode_flags & FE_TUNE_MODE_ONESHOT)) {
 					dev_dbg(fe->dvb->device, "%s: state changed, adding current state\n", __func__);
+					printk("ADD_EVENT stat=%d s=%d\n", 	fepriv->status, s);
 					dvb_frontend_add_event(fe, s);
 					fepriv->status = s;
 				}

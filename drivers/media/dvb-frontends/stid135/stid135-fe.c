@@ -54,8 +54,6 @@ static unsigned int mc_auto;
 module_param(mc_auto, int, 0644);
 MODULE_PARM_DESC(mc_auto, "Enable auto modcode filtering depend from current C/N (default:0 - disabled)");
 
-
-
 struct stv_base {
 	struct list_head     stvlist;
 
@@ -234,8 +232,6 @@ I2C_RESULT I2cReadWrite(void *pI2CHost, I2C_MODE mode, u8 ChipAddress, u8 *Data,
 	return (ret == 1) ? I2C_ERR_NONE : I2C_ERR_ACK;
 }
 
-
-
 static int stid135_probe(struct stv *state)
 {
 	struct fe_stid135_init_param init_params;
@@ -262,7 +258,9 @@ static int stid135_probe(struct stv *state)
 	init_params.demod_ref_clk  	= 	state->base->extclk ? state->base->extclk : 27;
 	init_params.internal_dcdc	=	0;
 	init_params.internal_ldo	=	1; // LDO supply is internal on Oxford valid board
+#if 1 //main driver has value 0xf
 	init_params.rf_input_type	=	0x0; // Single ended RF input on Oxford valid board rev2
+#endif
 	init_params.roll_off		=  	FE_SAT_35; // NYQUIST Filter value (used for DVBS1/DSS, DVBS2 is automatic)
 	init_params.tuner_iq_inversion	=	FE_SAT_IQ_NORMAL;
 	
@@ -304,17 +302,20 @@ static int stid135_probe(struct stv *state)
 
 	if (state->base->ts_mode == TS_STFE) { //DT: This code is called
 		dev_warn(&state->base->i2c->dev, "%s: 8xTS to STFE mode init.\n", __func__);
+#if 1 
 		for(i=0;i<8;i++) {
 			err |= fe_stid135_set_ts_parallel_serial(state->base->handle, i+1, FE_TS_PARALLEL_ON_TSOUT_0);
 		}
+#else // this is code from mai n driver
+		//	for(i=0;i<8;i++) {
+		err |= fe_stid135_set_ts_parallel_serial(state->base->handle, FE_SAT_DEMOD_1, FE_TS_PARALLEL_ON_TSOUT_0);
+		//	err |= fe_stid135_set_maxllr_rate(state->base->handle, i+1, 260);
+		//	}
+#endif
 		err |= fe_stid135_enable_stfe(state->base->handle,FE_STFE_OUTPUT0);
 		err |= fe_stid135_set_stfe(state->base->handle, FE_STFE_TAGGING_MERGING_MODE, FE_STFE_INPUT1 |
 						FE_STFE_INPUT2 |FE_STFE_INPUT3 |FE_STFE_INPUT4| FE_STFE_INPUT5 |
 						FE_STFE_INPUT6 |FE_STFE_INPUT7 |FE_STFE_INPUT8 ,FE_STFE_OUTPUT0, 0xDE);
-#if 0
-		err |= fe_stid135_set_ts_parallel_serial(state->base->handle, FE_SAT_DEMOD_1, FE_TS_PARALLEL_ON_TSOUT_0);
-#endif
-
 	} else if (state->base->ts_mode == TS_8SER) { //DT: This code is not called
 		dev_warn(&state->base->i2c->dev, "%s: 8xTS serial mode init.\n", __func__);
 		for(i=0;i<8;i++) {
@@ -498,11 +499,13 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 	case ALGORITHM_BANDWIDTH:
 		search_params.search_algo 	= FE_SAT_BLIND_SEARCH;
 		search_params.standard = FE_SAT_AUTO_SEARCH;
+		search_params.puncture_rate = FE_SAT_PR_UNKNOWN;
 		satellitte_scan = 0;
 		break;
 	case ALGORITHM_NEXT: 
 		search_params.search_algo 	= FE_SAT_NEXT;
 		search_params.standard = FE_SAT_AUTO_SEARCH;
+		search_params.puncture_rate = FE_SAT_PR_UNKNOWN;
 		satellitte_scan = 0;
 		break;
 	}
@@ -517,7 +520,8 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 	search_params.modulation	= FE_SAT_MOD_UNKNOWN;
 	search_params.modcode		= FE_SAT_DUMMY_PLF;
 	search_params.search_range	= p->search_range > 0 ? p->search_range : 10000000;
-	printk("Search range set to %d\n", search_params.search_range);
+	//dprintk("Search range set to %d\n", search_params.search_range);
+
 	search_params.puncture_rate	= FE_SAT_PR_UNKNOWN;
 	if(	search_params.standard != FE_SAT_AUTO_SEARCH)
 		switch (p->delivery_system)
@@ -534,10 +538,12 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 			default:
 				search_params.standard		= FE_SAT_AUTO_SEARCH;
 			}
+	//dprintk("search standard = %d\n", search_params.standard);
 	search_params.iq_inversion	= FE_SAT_IQ_AUTO;
 	search_params.tuner_index_jump	= 0; // ok with narrow band signal
 
 	err = FE_STiD135_GetLoFreqHz(state->base->handle, &(search_params.lo_frequency));
+	//dprintk("lo_frequency = %d\n", search_params.lo_frequency);
 	search_params.lo_frequency *= 1000000;
 	if(search_params.search_algo == FE_SAT_BLIND_SEARCH ||
 		 search_params.search_algo == FE_SAT_NEXT) {
@@ -557,8 +563,6 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 		pls_code = (p->stream_id>>8) & 0x3FFFF;
 		if (pls_mode == 0 && pls_code == 0)
 			pls_code = 1;
-
-
 	}
 	signal_info-> pls_code =pls_code;
 	signal_info-> pls_mode =pls_mode;
@@ -595,9 +599,11 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 	err |= (error1=fe_stid135_search(state->base->handle, state->nr + 1, &search_params, &search_results, satellitte_scan));
 	if(error1!=0)
 		dprintk("fe_stid135_search returned error=%d\n", error1);
-	err |= (error1=fe_stid135_get_lock_status(state->base->handle, state->nr + 1,&lock_stat ));
+#if 0
+	err |= (error1=fe_stid135_get_lock_status(state->base->handle, state->nr + 1, &lock_stat ));
 	if(error1!=0)
 		dprintk("fe_stid135_get_lock_status returned error=%d\n", error1);
+#endif
 	if (err != FE_LLA_NO_ERROR)
 	{
 		mutex_unlock(&state->base->status_lock);
@@ -607,23 +613,11 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 
 	printk("set_parameters: error=%d locked=%d\n", err, search_results.locked);
 	if (search_results.locked){
+		state->signal_info.locked = 1;
 #if 1
 		dev_dbg(&state->base->i2c->dev, "%s: locked !\n", __func__);
-		fe_stid135_get_signal_info(state->base->handle, state->nr + 1, signal_info, 0);
-		if(state->base->ts_mode == TS_STFE){
-			//set maxllr,when the  demod locked ,allocation of resources
-			/*Deep Thought: the value should be based on the symbo rate of the currently 
-				tuned mux
-			*/
-			/*DeepThought : without this code it is not possible to tune the italian multistreams on 5.0W
-
-        11230H@51.5E has a symbolrate of 45MS/s (bitrate of 119MB/s) and requires a setting of at least 135;
-				The next higher value = 180. 
-				12522V@5.0W has a symbolrate of 35.5MS and requires at least 3*35.5 = 100.5, but also does not work with 
-				129.
-			*/
-			err |= set_maxllr_rate(__LINE__, state,	signal_info);
-		}
+		//set maxllr,when the  demod locked ,allocation of resources
+		err |= fe_stid135_set_maxllr_rate(state->base->handle, state->nr +1, 180);
 		//for tbs6912
 #else
 		dev_warn(&state->base->i2c->dev, "%s: locked ! demod=%d tuner=%d\n", __func__,  state->nr, state->rf_in);
@@ -680,6 +674,7 @@ static int stid135_get_frontend(struct dvb_frontend *fe, struct dtv_frontend_pro
 		break;
 	case FE_SAT_DVBS1_STANDARD:
 	default:
+		//dprintk("XXXX delivery_system set to DVBS\n");
 		p->delivery_system = SYS_DVBS;
     	}
 
@@ -895,6 +890,8 @@ static int stid135_read_status(struct dvb_frontend *fe, enum fe_status *status)
 	}
 	return 0;
 }
+
+//extern void dttst(STCHIP_Handle_t *hChipHandle);
 
 static int stid135_tune(struct dvb_frontend *fe, bool re_tune,
 		unsigned int mode_flags,

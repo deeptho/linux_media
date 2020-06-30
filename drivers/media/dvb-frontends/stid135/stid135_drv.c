@@ -809,7 +809,7 @@ fe_lla_error_t fe_stid135_set_carrier_frequency_init(fe_stid135_handle_t Handle,
 	struct fe_stid135_internal_param *pParams;
 	
 	pParams = (struct fe_stid135_internal_param *) Handle;
-
+	
 	/* First, set carrier freq boundaries */
 	// CFR_UP = wanted_freq - LOF + search_range/2
 	// CFR_DOWN = wanted_freq - LOF - search_range/2
@@ -1894,7 +1894,7 @@ fe_lla_error_t FE_STiD135_CarrierGetQuality(stchip_handle_t hChip, enum fe_stid1
 --PARAMS OUT	::	Lock_p -> lock status, boolean
 --RETURN	::	error
 --***************************************************/
-static fe_lla_error_t FE_STiD135_GetDemodLock    (fe_stid135_handle_t handle,
+static fe_lla_error_t FE_STiD135_GetDemodLock (fe_stid135_handle_t handle,
 					 enum fe_stid135_demod Demod, u32 TimeOut, BOOL *Lock_p)
 {
 	u32 headerField, lockField, symbFreq1, symbFreq2;
@@ -1933,7 +1933,6 @@ static fe_lla_error_t FE_STiD135_GetDemodLock    (fe_stid135_handle_t handle,
 		symbolRate = (u32)
 				((ChipGetFieldImage(pParams->handle_demod, symbFreq2) << 8)+
 				(ChipGetFieldImage(pParams->handle_demod, symbFreq1)));
-		
 		if (TimeOut < DmdLock_TIMEOUT_LIMIT) {
 			TimeOut_SymbRate = TimeOut;
 		} else {
@@ -1957,11 +1956,11 @@ static fe_lla_error_t FE_STiD135_GetDemodLock    (fe_stid135_handle_t handle,
 	
 		error |= ChipGetField(pParams->handle_demod, headerField, &fld_value);
 		demodState = (enum fe_sat_search_state)fld_value;
-		
+		dprintk("NOW dmodState=%d\n", demodState);
 		switch (demodState) {
 		case FE_SAT_SEARCH:
 		case FE_SAT_PLH_DETECTED :	/* no signal*/ 
-			lock = 0;			
+			lock = 0;
 		break;
 		
 		case FE_SAT_DVBS2_FOUND: /* found a DVBS2 signal */ 
@@ -1970,6 +1969,20 @@ static fe_lla_error_t FE_STiD135_GetDemodLock    (fe_stid135_handle_t handle,
 		break;
 		}
 		
+#if 0 //test
+	{
+	u32 lock_level =0;
+	u32 use_mode =0;
+	int error=0;
+	error |= (fe_lla_error_t)ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_TMGLOCK1_TMGLOCK_LEVEL(Demod),
+																				&lock_level);
+	error |= (fe_lla_error_t)ChipSetFieldImage(pParams->handle_demod,
+																						 FLD_FC8CODEW_DVBSX_DEMOD_CARCFG_CFRUPLOW_USEMODE(Demod), &use_mode);
+
+	dprintk("NOW symbol_rate=%d  dmodState=%d lock_level=%d use_mode=%d lock=%d error=%d \n",
+					symbolRate, demodState, lock_level, use_mode, lock, error);
+	}
+#endif
 		if(lock == 0) {
 			mutex_unlock(pParams->master_lock);
 			ChipWaitOrAbort(pParams->handle_demod, 10);	/* wait 10ms */
@@ -1978,7 +1991,6 @@ static fe_lla_error_t FE_STiD135_GetDemodLock    (fe_stid135_handle_t handle,
 		timer += 10;
 
 	}
-
 	if(lock == TRUE) {
 		/* We have to wait for demod locked before reading ANNEXEM field (cut 1 only) */
 		error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS6_SIGNAL_ANNEXEM(Demod), &fld_value);
@@ -2277,7 +2289,6 @@ fe_lla_error_t	fe_stid135_search(fe_stid135_handle_t handle, enum fe_stid135_dem
 	struct fe_stid135_internal_param *pParams = NULL;
 	enum fe_sat_signal_type signalType = FE_SAT_NOCARRIER;
 	s32 fld_value;
-	dprintk("search called\n");
 	if (handle == NULL)
 		return FE_LLA_INVALID_HANDLE;
 
@@ -2349,7 +2360,7 @@ fe_lla_error_t	fe_stid135_search(fe_stid135_handle_t handle, enum fe_stid135_dem
 	error |= (error1=ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DMDSELOBS_NOSHDB_SEL(demod), &fld_value));
 	if(error1)
 		dprintk("error=%d\n", error1);
-
+	//dprintk("fld_value=%d srate=%d\n", fld_value, pSearch->symbol_rate);
 	if((pSearch->symbol_rate >= pParams->master_clock) && fld_value == 3) {
 		error1=FE_LLA_NOT_SUPPORTED;
 		dprintk("error=%d\n", error1);
@@ -2357,6 +2368,7 @@ fe_lla_error_t	fe_stid135_search(fe_stid135_handle_t handle, enum fe_stid135_dem
 	}
 
 	if(pSearch->symbol_rate >= pParams->master_clock) { /* if SR >= MST_CLK */
+		//dprintk("Force WARM_START\n");
 		pParams->demod_search_algo[demod-1] = FE_SAT_WARM_START; // we force warm algo if SR > MST_CLK
 		error |= (error1=fe_stid135_set_reg_values_wb(handle, demod));
 		if(error1)
@@ -2369,6 +2381,7 @@ fe_lla_error_t	fe_stid135_search(fe_stid135_handle_t handle, enum fe_stid135_dem
 		if(error1)
 			dprintk("error=%d\n", error1);
 	} else if((pSearch->symbol_rate >= pParams->master_clock >> 1) && (pSearch->symbol_rate < pParams->master_clock)) { /* if SR >= MST_CLK / 2 */
+		//dprintk("Force Medium symbol rate\n");
 		error |= (error1=ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CORRELCFG(demod), 0x83));
 		if(error1)
 			dprintk("error=%d\n", error1);
@@ -2376,6 +2389,7 @@ fe_lla_error_t	fe_stid135_search(fe_stid135_handle_t handle, enum fe_stid135_dem
 		if(error1)
 			dprintk("error=%d\n", error1);
 	} else {
+		//dprintk("other symbol rate\n");
 		error |= (error1=ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CORRELCFG(demod), 0x01));
 		if(error1)
 			dprintk("error=%d\n", error1);
@@ -2385,7 +2399,7 @@ fe_lla_error_t	fe_stid135_search(fe_stid135_handle_t handle, enum fe_stid135_dem
 	pParams->demod_modulation[demod-1] = pSearch->modulation;
 	pParams->demod_modcode[demod-1] = pSearch->modcode;
 	pParams->tuner_index_jump[demod-1] = pSearch->tuner_index_jump;
-
+	//dprintk("CHECK pr=%d mod=%d modcode=%d jump =%d\n", pSearch->puncture_rate,  pSearch->modulation, pSearch->modcode, pSearch->tuner_index_jump);
 	if (error != FE_LLA_NO_ERROR) {
 		error1=FE_LLA_NO_ERROR;
 		dprintk("error=%d\n", error1);
@@ -2716,8 +2730,9 @@ static fe_lla_error_t Estimate_Power_Int(stchip_handle_t Handle,
 		/*evaluate exp-9 */
 		exp_s32 = (s32)(exponant - 9);                                                                                                                                                                                                  
 		
-		/*evaluate exp -9 sign */
-		if (exp_s32<0) {
+		if (exp_s32<= -32) {
+			agc2x1000 = 0;
+		}else if(exp_s32<0){
 			/* if exp_s32<0 divide the mantissa  by 2^abs(exp_s32)*/
 			exp_abs_s32= XtoPowerY(2,(u32)(- exp_s32));
 			agc2x1000 = (u32)((1000 * mantisse) / exp_abs_s32);
@@ -3104,12 +3119,12 @@ fe_lla_error_t fe_stid135_get_signal_info(fe_stid135_handle_t Handle,
 				}
 			}
 			if(((Demod != FE_SAT_DEMOD_2) && (Demod != FE_SAT_DEMOD_4)) ||
-				((Demod == FE_SAT_DEMOD_2) && (reg_value != 0xD4)) ||
-				((Demod == FE_SAT_DEMOD_4) && (reg_value != 0xD4))) {
-					error = FE_STiD135_GetCarrierFrequency(pParams->handle_demod,pParams->master_clock, Demod, &carrier_frequency);
-					carrier_frequency /= 1000;
-					error = FE_STiD135_GetSymbolRate(pParams->handle_demod,pParams->master_clock,Demod, &(pInfo->symbol_rate));
-					error = FE_STiD135_TimingGetOffset(pParams->handle_demod,pInfo->symbol_rate,Demod, &symbolRateOffset);
+			    ((Demod == FE_SAT_DEMOD_2) && (fld_value[0] != 3)) ||
+			    ((Demod == FE_SAT_DEMOD_4) && (fld_value[0] != 3))) {
+				error |= FE_STiD135_GetCarrierFrequency(pParams->handle_demod,pParams->master_clock, Demod, &carrier_frequency);
+				carrier_frequency /= 1000;
+				error |= FE_STiD135_GetSymbolRate(pParams->handle_demod,pParams->master_clock,Demod, &(pInfo->symbol_rate));
+				error |= FE_STiD135_TimingGetOffset(pParams->handle_demod,pInfo->symbol_rate,Demod, &symbolRateOffset);
 			}
 			
 			if(carrier_frequency < 0) {
@@ -3382,7 +3397,7 @@ fe_lla_error_t fe_stid135_tracking(fe_stid135_handle_t Handle,
 --PARAMS OUT	::	handle -> Handle to circuit
 --RETURN	::	error
 --***************************************************/
-fe_lla_error_t fe_stid135_init (struct fe_sat_init_params *pInit, 
+fe_lla_error_t fe_stid135_init(struct fe_sat_init_params *pInit, 
 				fe_stid135_handle_t *handle)
 {
 	struct fe_stid135_internal_param *pParams = NULL;
@@ -3480,7 +3495,7 @@ fe_lla_error_t fe_stid135_init (struct fe_sat_init_params *pInit,
 			{
 				for(i=FE_SAT_DEMOD_1;i<FE_SAT_DEMOD_8;i++)
 					pParams->roll_off[i-1] = pInit->roll_off;
-
+#if 0 //not in main driver
 				/* settings for STTUNER or non-Gui applications 
 				or Auto test*/
 				pParams->quartz = pInit->demod_ref_clk;
@@ -3495,7 +3510,7 @@ fe_lla_error_t fe_stid135_init (struct fe_sat_init_params *pInit,
 					FLD_FC8CODEW_DVBSX_DEMOD_TNRCFG2_TUN_IQSWAP(PATH3),
 					pInit->tuner_iq_inversion);
 				/* switch to the PLL */
-
+#endif
 				/*Read the current Mclk*/
 				error |= FE_STiD135_GetMclkFreq(pParams, &(pParams->master_clock));
 				dprintk("MASTER CLOCK freq==%ld\n", pParams->master_clock);
@@ -3599,11 +3614,14 @@ fe_lla_error_t FE_STiD135_Algo(struct fe_stid135_internal_param *pParams,
 	/*Get the demod and FEC timeout recommended value depending on the 
 	symbol rate and the search algo*/
 	FE_STiD135_GetLockTimeout(&demodTimeout, &fecTimeout, 
-		pParams->demod_symbol_rate[Demod-1], pParams->demod_search_algo[Demod-1]);
+														pParams->demod_symbol_rate[Demod-1], pParams->demod_search_algo[Demod-1]);
+	dprintk("FE_STiD135_GetLockTimeout: demodTimeout=%d fecTimeout=%d symrate=%d algo=%d\n",
+					demodTimeout, fecTimeout, pParams->demod_symbol_rate[Demod-1], pParams->demod_search_algo[Demod-1]
+	);
 #ifdef USER2
 	demodTimeout = demodTimeout * 16; // Low CNR
 #else
-	demodTimeout = demodTimeout * 8;
+	demodTimeout = demodTimeout * 4;
 #endif
 	fecTimeout   = fecTimeout   * 4;
 	
@@ -3612,10 +3630,10 @@ fe_lla_error_t FE_STiD135_Algo(struct fe_stid135_internal_param *pParams,
 
 		error |= fe_stid135_set_carrier_frequency_init(pParams,
 																									 pParams->tuner_frequency[Demod-1], Demod);
-		
+#if 0 //not in main driver		
 		error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEMOD_MANUALS2_ROLLOFF(Demod), 0);
 		error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEMOD_MANUALSX_ROLLOFF(Demod), 0);
-
+#endif
 		/* NO signal Detection */
 		/* Read PowerI and PowerQ To check the signal Presence */
 	
@@ -3702,15 +3720,27 @@ fe_lla_error_t FE_STiD135_Algo(struct fe_stid135_internal_param *pParams,
 			/* Read signal caracteristics and check the lock 
 			range */
 			error |= FE_STiD135_GetSignalParams(pParams, Demod,
-			satellitte_scan, signalType_p);
+																					satellitte_scan, signalType_p);
+#if 0 //BAD CODE
 					/* Adapt timing loop values according to broadcast/interactive mode */
 					if(pParams->demod_results[Demod-1].standard == FE_SAT_DVBS2_STANDARD) {
 						// In Interactive profile, DVBS1 standard is not supported to reach high perf in DVBS2
 						error = (fe_lla_error_t)ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_RTCLK_TMGALPHA_LKEXP(Demod), 5);
 						error = (fe_lla_error_t)ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_RTCLK_TMGBETA_LKEXP(Demod), 6);
 						error = (fe_lla_error_t)ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_TMGTHRISE_TMGLOCK_THRISE(Demod), 0xF0);
+#if 0 // not working						
 						error = (fe_lla_error_t)ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_TMGTHFALL_TMGLOCK_THFALL(Demod), 0xE0);
 						error = (fe_lla_error_t)ChipSetRegisters(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_RTCLK(Demod), 3);
+#endif
+#if 0 //working						
+						error = (fe_lla_error_t)ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_TMGTHFALL_TMGLOCK_THFALL(Demod), 0xE0);
+						//error = (fe_lla_error_t)ChipSetRegisters(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_RTCLK(Demod), 3);
+#endif
+#if 0 //working
+						//error = (fe_lla_error_t)ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_TMGTHFALL_TMGLOCK_THFALL(Demod), 0xE0);
+						error = (fe_lla_error_t)ChipSetRegisters(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_RTCLK(Demod), 3);
+#endif
+						
 					} else {
 						// In Broadcast profile, DVBS1 standard is supported
 						error = (fe_lla_error_t)ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_RTCLK_TMGALPHA_LKEXP(Demod), 3);
@@ -3719,12 +3749,13 @@ fe_lla_error_t FE_STiD135_Algo(struct fe_stid135_internal_param *pParams,
 						error = (fe_lla_error_t)ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_TMGTHFALL_TMGLOCK_THFALL(Demod), 0x08);
 						error = (fe_lla_error_t)ChipSetRegisters(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_RTCLK(Demod), 3);
 					}
+#endif
 			/* Manage Matype Information if DVBS2 signal */
 			if (pParams->demod_results[Demod-1].standard == FE_SAT_DVBS2_STANDARD) {
 				/* Before reading MATYPE value, we need to wait for packet delin locked */
 				error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELSTATUS1_FIRST_LOCK(Demod), &fld_value);
 				while ((fld_value != TRUE) && (pdel_status_timeout < 220)) {
-						ChipWaitOrAbort(pParams->handle_demod, 8);
+					ChipWaitOrAbort(pParams->handle_demod, 8); //main driver has value 5
 					pdel_status_timeout = (u8)(pdel_status_timeout + 5);
 					error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELSTATUS1_FIRST_LOCK(Demod), &fld_value);
 				}
@@ -3932,8 +3963,13 @@ static fe_lla_error_t FE_STiD135_StartSearch(struct fe_stid135_internal_param *p
 	//if(pParams->demod_search_algo[Demod-1]!= FE_SAT_NEXT)
 		error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DMDISTATE(Demod), 0x1F);
 
+#if 0 //test
+		error |= (fe_lla_error_t)ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_TMGTHRISE_TMGLOCK_THRISE(Demod), 0x18);
+		error |= (fe_lla_error_t)ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_TMGTHFALL_TMGLOCK_THFALL(Demod), 0x08);
+#endif
 	switch (pParams->demod_search_algo[Demod-1]) {
 	case FE_SAT_WARM_START:
+		//dprintk("WARM START\n");
 		/*The symbol rate and the exact
 		carrier frequency are known */
 		/*Trig an acquisition (start the search)*/
@@ -3942,6 +3978,7 @@ static fe_lla_error_t FE_STiD135_StartSearch(struct fe_stid135_internal_param *p
 		break;
 		
 	case FE_SAT_COLD_START:
+		//dprintk("COLD START\n");
 		/*The symbol rate is known*/
 		/*Trig an acquisition (start the search)*/
 		error |= ChipSetOneRegister(pParams->handle_demod,
@@ -3949,6 +3986,7 @@ static fe_lla_error_t FE_STiD135_StartSearch(struct fe_stid135_internal_param *p
 		break;
 		
 	case FE_SAT_BLIND_SEARCH:
+		//dprintk("BLIND_SEARCH\n");
 #if 0
 		{
 		//the following always return AUTO_GLOW=1 and AUTO_GUP=1 before blindscan
@@ -3969,7 +4007,7 @@ static fe_lla_error_t FE_STiD135_StartSearch(struct fe_stid135_internal_param *p
 		break;
 	case FE_SAT_NEXT:
 		/*Trig an acquisition (start the search)*/
-		printk("SAT NEXT\n");
+		//dprintk("SAT NEXT\n");
 #if 0
 		{
 		//the following always return AUTO_GLOW=1 and AUTO_GUP=1 before blindscan
@@ -4018,16 +4056,11 @@ static fe_lla_error_t FE_STiD135_BlindSearchAlgo(struct fe_stid135_internal_para
 	dprintk("Starting blindsearch satellitte_scan=%d jump=%d freq=%d+%d\n", satellitte_scan,
 					pParams->tuner_index_jump[Demod-1], 	pParams->tuner_frequency[Demod-1],
 					pParams->demod_search_range[Demod-1]);
-#if 0
 	error |= (error1=ChipSetOneRegister(pParams->handle_demod,
 																			(u16)REG_RC8CODEW_DVBSX_DEMOD_DMDISTATE(Demod), 0x5C)); /* Demod Stop*/
-#else
-	error |= (error1=ChipSetOneRegister(pParams->handle_demod,
-																			(u16)REG_RC8CODEW_DVBSX_DEMOD_DMDISTATE(Demod), 0x1c)); /* Demod Stop*/
-#endif	
 	if(error1)
 		dprintk("error=%d\n", error1);
-#if 0	
+#if 0
 	error |= (error1=fe_stid135_set_symbol_rate(pParams->handle_demod,pParams->master_clock,
 																							pParams->demod_symbol_rate[Demod-1], Demod));
 	if(error1)
@@ -4930,15 +4963,17 @@ fe_lla_error_t fe_stid135_manage_matype_info(fe_stid135_handle_t handle,
 
 			/* If TS/GS = 11 (MPEG TS), reset matype force bit and do NOT load frames in MPEG packets */
 			if(((genuine_matype>>6) & 0x3) == 0x3) {
-			//	if((genuine_matype >> 3) & 0x3){
-			//		error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSSTATE1_TSOUT_NOSYNC(Demod), 0);
-
-			//	}else{
-			//		error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSSTATE1_TSOUT_NOSYNC(Demod), 1);
-
-			//	}
-
-
+#if 1 //present in main driver
+	  			if((genuine_matype >> 3) & 0x3) {
+					/* CCM or ISSYI used */
+					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSSTATE1_TSOUT_NOSYNC(Demod), 0);
+					//error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSSYNC_TSFIFO_SYNCMODE(Demod), 0);
+				} else {
+					/* ACM and ISSYI not used */
+					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSSTATE1_TSOUT_NOSYNC(Demod), 1);
+					//error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSSYNC_TSFIFO_SYNCMODE(Demod), 2);
+					}
+#endif
 				/* Unforce HEM mode */
 				error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL0_HEMMODE_SELECT(Demod), 0);
 				/* Go back to reset value settings */
@@ -5601,7 +5636,7 @@ fe_lla_error_t fe_stid135_diseqc_receive(fe_stid135_handle_t handle,
 			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DISEQC_DISRXSTAT1_RXEND(AFE_TUNER1), &fld_value);
 			if(fld_value) {
 				error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DISEQC_DISRXBYTES_RXFIFO_BYTES(AFE_TUNER1), &fld_value);
-				*nbdata = (u32)fld_value;
+				*nbdata = (u8)fld_value;
 				for(i = 0;i < (*nbdata);i++)
 				{
 					error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DISEQC_DISRXFIFO(AFE_TUNER1), &reg_value);
@@ -7532,7 +7567,7 @@ fe_lla_error_t fe_stid135_set_ts_parallel_serial(fe_stid135_handle_t handle, enu
 					// Enable leaky packet mechanism, the bandwidth is sustained to a minimum value
 					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSPIDFLTC_PIDFLT_LEAKPKT(demod), 1);
 					// Remove bug fix: workaround of BZ#98230: bad sampling of data[3] of TS bus
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG0_TSFIFO_BCLKDEL1CK(demod), 0);
+				//	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG0_TSFIFO_BCLKDEL1CK(demod), 0);
 				break;
 				case FE_TS_PARALLEL_ON_TSOUT_1:
 					// Setting alternate function 3 from PIO6_0 to PIO6_5
@@ -7743,7 +7778,7 @@ fe_lla_error_t fe_stid135_set_ts_parallel_serial(fe_stid135_handle_t handle, enu
 			// 130MHz Oxford-Mclk CK_F1
 			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_C8CODEW_TOP_CTRL_GPIO14CFG, 0x7E);
 			// Select Oxford-Mclk, IRQ, SGNL1[1]
-			//error = (fe_lla_error_t)ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1000, 0x00011000);
+			error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1000, 0x00011000);
 		}
 	}
 	return error;
@@ -8045,9 +8080,11 @@ fe_lla_error_t fe_stid135_set_stfe(fe_stid135_handle_t handle, enum fe_stid135_s
 		error |= ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_C8SECTPFE_TSDMA_C8SECTPFE_TSDMA_DEST0_FORMAT, &reg_value);
 		reg_value |= FSTID135_C8SECTPFE_TSDMA_C8SECTPFE_TSDMA_DEST0_FORMAT_WAIT_WHOLE_PACKET__MASK;
 		error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_C8SECTPFE_TSDMA_C8SECTPFE_TSDMA_DEST0_FORMAT, reg_value);
-//		error |= ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_C8SECTPFE_TSDMA_C8SECTPFE_TSDMA_DEST1_FORMAT, &reg_value);
-//		reg_value |= FSTID135_C8SECTPFE_TSDMA_C8SECTPFE_TSDMA_DEST1_FORMAT_WAIT_WHOLE_PACKET__MASK;
-//		error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_C8SECTPFE_TSDMA_C8SECTPFE_TSDMA_DEST1_FORMAT, reg_value);
+#if 1 //present in main driver
+		error |= ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_C8SECTPFE_TSDMA_C8SECTPFE_TSDMA_DEST1_FORMAT, &reg_value);
+		reg_value |= FSTID135_C8SECTPFE_TSDMA_C8SECTPFE_TSDMA_DEST1_FORMAT_WAIT_WHOLE_PACKET__MASK;
+		error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_C8SECTPFE_TSDMA_C8SECTPFE_TSDMA_DEST1_FORMAT, reg_value);
+#endif
 	}
 	return error;
 }
@@ -9741,7 +9778,6 @@ fe_lla_error_t fe_stid135_isi_scan(fe_stid135_handle_t handle, enum fe_stid135_d
 			}
 			// Go back to previous value of test mode
 			error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_TPKTDELIN_TESTBUS_SELECT(demod), 0);
-			//qsort(p_isi_struct->isi,p_isi_struct->nb_isi,sizeof(p_isi_struct->isi[0]),cmp_byte);
 		}
 	}
 	return error;
@@ -10509,7 +10545,18 @@ fe_lla_error_t fe_stid135_uninit_after_bb_flt_calib(fe_stid135_handle_t handle, 
 	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC1SHDB(FE_SAT_DEMOD_1), 0x00);
 
 	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_AGCRF_AGCRFREF(tuner_nb), 0x60);
-	
+#if 1 //present in main driver
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRUP2(FE_SAT_DEMOD_1), 0xCE);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRUP1(FE_SAT_DEMOD_1), 0xC9);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRUP0(FE_SAT_DEMOD_1), 0xCC);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRLOW2(FE_SAT_DEMOD_1), 0xCE);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRLOW1(FE_SAT_DEMOD_1), 0x21);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRLOW0(FE_SAT_DEMOD_1), 0x50);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRINIT2(FE_SAT_DEMOD_1), 0xCE);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRINIT1(FE_SAT_DEMOD_1), 0x75);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRINIT0(FE_SAT_DEMOD_1), 0x8E);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CARCFG(FE_SAT_DEMOD_1), 0xC6);
+#endif
 	return (fe_lla_error_t)error;
 }
 
