@@ -35,6 +35,7 @@
 #include "stid135.h"
 #include "i2c.h"
 #include "stid135_drv.h"
+#include "stid135-fft.h"
 
 #define dprintk(fmt, arg...)																					\
 	printk(KERN_DEBUG pr_fmt("%s:%d " fmt),  __func__, __LINE__, ##arg)
@@ -1134,6 +1135,51 @@ static void spi_write(struct dvb_frontend *fe,struct ecp3_info *ecp3inf)
 	return ;
 }
 
+static int stid135_get_spectrum_scan(struct dvb_frontend *fe, struct dvb_fe_spectrum_scan *s)
+{
+	s32 Reg[60];
+	fe_lla_error_t error = FE_LLA_NO_ERROR;
+	struct stv *state = fe->demodulator_priv;
+	s32 freq= 11018209;
+	u32 mode = 1; //table of 4096 samples
+	u32 nb_acquisition = 10; //average 10 samples
+	u32 table_size = 8192;
+	s32 lo_frequency;
+	u32 range = 15000000;
+	u32* table = s->freq;
+	u32 begin =0;
+	int i;
+	for(mode=1;mode<=5; ++mode) {
+		table_size = 8192>>1;
+		if(table_size <= s->num_freq)
+			break;
+	}
+
+	error = FE_STiD135_GetLoFreqHz(state->base->handle, &lo_frequency);
+	if(error) {
+		dprintk("FE_STiD135_GetLoFreqHz FAILED: error=%d\n", error);
+		return error;
+	}
+	lo_frequency *=  1000000;
+	freq = freq*1000 - lo_frequency;
+		
+	error = fe_stid135_init_fft(state->base->handle, state->nr+1, state->rf_in, Reg);
+	if(error) {
+		dprintk("fe_stid135_init_fft FAILED: error=%d\n", error);
+		return error;
+	}
+	dprintk("freq=%d lo=%d range=%d mode=%d table_size=%d\n", freq, lo_frequency, range, mode, table_size);
+	
+	error = fe_stid135_fft(state->base->handle, state->nr+1, mode, nb_acquisition, freq, range, table, &begin);
+	dprintk("begin=%d\n", begin);
+	error |= fe_stid135_term_fft(state->base->handle, state->nr+1, Reg);
+	if(error) {
+		dprintk("fe_stid135_init_fft FAILED: error=%d\n", error);
+	}
+	return error;
+}
+
+
 static struct dvb_frontend_ops stid135_ops = {
 	.delsys = { SYS_DVBS, SYS_DVBS2, SYS_DSS },
 	.info = {
@@ -1168,6 +1214,7 @@ static struct dvb_frontend_ops stid135_ops = {
 	.read_ucblocks			= stid135_read_ucblocks,
 	.spi_read			= spi_read,
 	.spi_write			= spi_write,
+	.get_spectrum_scan		= stid135_get_spectrum_scan,
 };
 
 static struct stv_base *match_base(struct i2c_adapter  *i2c, u8 adr)
