@@ -1010,7 +1010,7 @@ struct dvb_fe_spectrum_scan {
 	__u32 *type;
 };
 
-#define DTV_MAX_SPECTRUM_SCAN_STEPS     2000
+#define DTV_MAX_SPECTRUM_SCAN_STEPS     4096
 #define FE_GET_SPECTRUM_SCAN            _IOW('o', 85, struct dvb_fe_spectrum_scan)
 #define FE_GET_EXTENDED_INFO		_IOR('o', 86, struct dvb_frontend_extended_info)
 

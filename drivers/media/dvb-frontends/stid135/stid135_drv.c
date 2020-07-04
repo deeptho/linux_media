@@ -1274,9 +1274,9 @@ fe_lla_error_t fe_stid135_get_lock_status(fe_stid135_handle_t handle, enum fe_st
 	enum fe_sat_search_state demodState;
 	fe_lla_error_t error = FE_LLA_NO_ERROR;  
 	s32 fld_value[3];
+	int error1;
 	*carrier_lock = FALSE;
 	*data_present = FALSE;
-	int error1;
 	
 
 	pParams = (struct fe_stid135_internal_param	*) handle;
@@ -1365,7 +1365,7 @@ fe_lla_error_t fe_stid135_get_data_status(fe_stid135_handle_t handle, enum fe_st
 
 	s32 carrier_lock=0;
 	s32 data=0;
-	int err = fe_stid135_get_lock_status(handle, Demod, carrier_lock, data);
+	int err = fe_stid135_get_lock_status(handle, Demod, &carrier_lock, data);
 	*Locked_p = carrier_lock | data;
 } 
 
@@ -1697,7 +1697,7 @@ u8 FE_STiD135_GetOptimCarrierLoop(u32 SymbolRate, enum fe_sat_modcode ModCode,
 	u8 aclcValue = 0x29;
 	u32 i = 0;
   
-	/* Find the index parameters for the Modulation */
+	/* Find the index parame\ters for the Modulation */
 	while ((i < NB_SAT_MODCOD) && (ModCode != FE_STiD135_S2CarLoop[i].ModCode))
 		i++;
 

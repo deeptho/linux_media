@@ -2070,10 +2070,13 @@ static int dvb_frontend_ioctl_get_spectrum_scan(struct file *file,
                 // copy results to userspace
 		if (copy_to_user(s_user->rf_level, s_kernel.rf_level, s_kernel.num_freq * sizeof(__s32))) {
                         err = -EFAULT;
-                }
-                if (copy_to_user(s_user->type, s_kernel.type, sizeof(__u32))) {
+		}
+		if (copy_to_user(s_user->freq, s_kernel.freq, s_kernel.num_freq * sizeof(__s32))) {
                         err = -EFAULT;
-                }
+		}
+		if (copy_to_user(s_user->type, s_kernel.type, sizeof(__u32))) {
+			err = -EFAULT;
+		}
 
 		// free kernel allocated memory
 		kfree(s_kernel.type);

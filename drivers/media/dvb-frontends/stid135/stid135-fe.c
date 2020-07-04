@@ -470,7 +470,7 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 	u32 pls_mode, pls_code;
 	s32 rf_power;
 	BOOL satellitte_scan =0;
-	BOOL lock_stat=0;
+	//BOOL lock_stat=0;
 	struct fe_sat_signal_info* signal_info = &state->signal_info;
 
 	
@@ -1135,43 +1135,57 @@ static void spi_write(struct dvb_frontend *fe,struct ecp3_info *ecp3inf)
 	return ;
 }
 
+
 static int stid135_get_spectrum_scan(struct dvb_frontend *fe, struct dvb_fe_spectrum_scan *s)
 {
-	s32 Reg[60];
+	s32 Reg[32];
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
+	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
 	struct stv *state = fe->demodulator_priv;
-	s32 freq= 11018209;
+
+	s32 center_freq=   p->frequency; //in kHz
+	u32 range =    p->symbol_rate; //in Hz
 	u32 mode = 1; //table of 4096 samples
-	u32 nb_acquisition = 10; //average 10 samples
+	//u32 mode = 5; //table of 256 samples
+	
+	u32 nb_acquisition = 255; //average 1 samples
 	u32 table_size = 8192;
 	s32 lo_frequency;
-	u32 range = 15000000;
-	u32* table = s->freq;
+	u32* freqs = s->freq;
+	s32* rf_level = s->rf_level;
 	u32 begin =0;
 	int i;
 	for(mode=1;mode<=5; ++mode) {
-		table_size = 8192>>1;
+		table_size >>=1;
 		if(table_size <= s->num_freq)
 			break;
 	}
-
+	dprintk("Start of spectrum scan\n");
 	error = FE_STiD135_GetLoFreqHz(state->base->handle, &lo_frequency);
 	if(error) {
 		dprintk("FE_STiD135_GetLoFreqHz FAILED: error=%d\n", error);
 		return error;
 	}
-	lo_frequency *=  1000000;
-	freq = freq*1000 - lo_frequency;
+	lo_frequency *=  1000000; //now in Hz
+ 
 		
-	error = fe_stid135_init_fft(state->base->handle, state->nr+1, state->rf_in, Reg);
+	error = fe_stid135_init_fft(state->base->handle, state->nr+1, state->rf_in+1, Reg);
 	if(error) {
 		dprintk("fe_stid135_init_fft FAILED: error=%d\n", error);
 		return error;
 	}
-	dprintk("freq=%d lo=%d range=%d mode=%d table_size=%d\n", freq, lo_frequency, range, mode, table_size);
+	dprintk("freq=%d lo=%d range=%d mode=%d table_size=%d\n", center_freq, lo_frequency, range, mode, table_size);
 	
-	error = fe_stid135_fft(state->base->handle, state->nr+1, mode, nb_acquisition, freq, range, table, &begin);
+	error = fe_stid135_fft(state->base->handle, state->nr+1, mode, nb_acquisition,
+												 center_freq*1000 - lo_frequency, range, rf_level, &begin);
 	dprintk("begin=%d\n", begin);
+	int step = range/1000;
+	if(begin==1)
+		rf_level[0] = rf_level[1];
+	for(i=0; i< table_size; ++i) {
+		freqs[i]= center_freq  + ((i-(signed)table_size/2)*step)/(signed)table_size;
+	}
+	rf_level[table_size/2] = (rf_level[table_size/2-1] + rf_level[table_size/2+1])/2;
 	error |= fe_stid135_term_fft(state->base->handle, state->nr+1, Reg);
 	if(error) {
 		dprintk("fe_stid135_init_fft FAILED: error=%d\n", error);
@@ -1215,6 +1229,10 @@ static struct dvb_frontend_ops stid135_ops = {
 	.spi_read			= spi_read,
 	.spi_write			= spi_write,
 	.get_spectrum_scan		= stid135_get_spectrum_scan,
+	.extended_info = {
+		.extended_caps          = FE_CAN_SPECTRUMSCAN	|
+		FE_CAN_IQ
+	}
 };
 
 static struct stv_base *match_base(struct i2c_adapter  *i2c, u8 adr)
