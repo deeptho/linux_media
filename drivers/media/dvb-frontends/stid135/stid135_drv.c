@@ -1364,9 +1364,12 @@ fe_lla_error_t fe_stid135_get_data_status(fe_stid135_handle_t handle, enum fe_st
 {
 
 	s32 carrier_lock=0;
-	s32 data=0;
-	int err = fe_stid135_get_lock_status(handle, Demod, &carrier_lock, data);
+	BOOL data=0;
+	int err = fe_stid135_get_lock_status(handle, Demod, &carrier_lock, &data);
+	if(err) 
+		dprintk("ERROR in fe_stid135_get_lock_status: err=%d\n", err);
 	*Locked_p = carrier_lock | data;
+	return err;
 } 
 
 
