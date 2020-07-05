@@ -326,6 +326,15 @@ struct fe_sat_search_result {
 	/************************
 		INFO STRUCTURE
 	************************/
+
+struct fe_sat_isi_struct_t
+{
+	u32 nb_isi;
+	u8 isi[256];
+};
+typedef  struct fe_sat_isi_struct_t  fe_sat_isi_struct;
+
+
 struct fe_sat_signal_info {
   	BOOL        tuned;   /*tuning has finished*/
   	BOOL        timedout;   /*tuning has timed out*/
@@ -347,9 +356,10 @@ struct fe_sat_signal_info {
 		u32				ber;		/* Bit error rate	(x10^7)				*/
 		enum fe_sat_iq_inversion	spectrum;	/* IQ specrum swap setting				*/
 		u8				matype;
-	  u8 				isi;		/* Current value of ISI 				*/
-  	u8        pls_mode;
-	  u32       pls_code;
+		u8 				isi;		/* Current value of ISI 				*/
+		u8        pls_mode;
+ 		u32       pls_code;
+		fe_sat_isi_struct isi_list;
 	} ;
 
 struct fe_sat_tracking_info {

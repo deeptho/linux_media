@@ -659,12 +659,17 @@ static int stid135_get_frontend(struct dvb_frontend *fe, struct dtv_frontend_pro
 {
 	struct stv *state = fe->demodulator_priv;
 	struct fe_stid135_internal_param *p_params = state->base->handle;
-	printk("XXXXX1 stream_id=%d\n",p->stream_id);
 	if (!state->signal_info.locked)
 		return 0;
 	if(p_params->demod_search_algo[state->nr] == FE_SAT_BLIND_SEARCH ||
 		 p_params->demod_search_algo[state->nr] == FE_SAT_NEXT) {
-		fe_stid135_get_signal_info(p_params, state->nr + 1, &state->signal_info, 0); //TODO read only when needed
+		int max_isi_len= sizeof(p-> isi)/sizeof(p->isi[0]);
+		fe_stid135_get_signal_info(p_params, state->nr + 1, &state->signal_info, 0);
+		dprintk("MIS2: num=%d\n", state->signal_info.isi_list.nb_isi);
+		p-> isi_list_len = state->signal_info.isi_list.nb_isi;
+		if(p->isi_list_len>  max_isi_len)
+			p->isi_list_len = max_isi_len;
+		memcpy(p->isi, &state->signal_info.isi_list.isi[0], p->isi_list_len);
 		p->frequency = state->signal_info.frequency;
 		p->symbol_rate = state->signal_info.symbol_rate;
 	}
@@ -804,7 +809,7 @@ static int stid135_read_status(struct dvb_frontend *fe, enum fe_status *status)
 		dprintk("read status=%d\n", *status);
 		return 0;
 	}
-	dprintk("read_status locked=%d status=%d\n", state->signal_info.locked, *status);
+	//dprintk("read_status locked=%d status=%d\n", state->signal_info.locked, *status);
 	p->strength.len = 1;
 	p->strength.stat[0].scale = FE_SCALE_NOT_AVAILABLE;
 	p->cnr.len = 1;
@@ -886,7 +891,7 @@ static int stid135_read_status(struct dvb_frontend *fe, enum fe_status *status)
 		p->post_bit_error.stat[0].uvalue = state->signal_info.ber;
 
 	}
-	dprintk("read status=%d\n", *status);
+	//dprintk("read status=%d\n", *status);
 
 		//for the tbs6912 ts setting
 	if((state->base->set_TSparam)&&(state->newTP)) {
@@ -919,7 +924,7 @@ static int stid135_tune(struct dvb_frontend *fe, bool re_tune,
 
 	if (re_tune) {
 		r = stid135_set_parameters(fe);
-		dprintk("QQQ stid135_set_parameters returned %d locked=%d\n", r, state->signal_info.locked);
+		//dprintk("stid135_set_parameters returned %d locked=%d\n", r, state->signal_info.locked);
 		if (r)
 			return r;
 		state->tune_time = jiffies;
@@ -1179,7 +1184,6 @@ static int stid135_get_spectrum_scan(struct dvb_frontend *fe, struct dvb_fe_spec
 	
 	error = fe_stid135_fft(state->base->handle, state->nr+1, mode, nb_acquisition,
 												 center_freq*1000 - lo_frequency, range, rf_level, &begin);
-	dprintk("begin=%d\n", begin);
 	step = range/1000;
 	if(begin==1)
 		rf_level[0] = rf_level[1];

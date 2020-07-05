@@ -130,11 +130,5 @@ struct fe_sat_dvbs2_mode_inventory_t
 };
 	
 	
-struct fe_sat_isi_struct_t
-{
-	u32 nb_isi;
-	u8 isi[256];
-};
-
 
 #endif

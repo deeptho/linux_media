@@ -588,8 +588,9 @@ enum fe_interleaving {
 #define DTV_ENABLE_MODCOD		73
 #define DTV_ALGORITHM		74
 #define DTV_SEARCH_RANGE		75
+#define DTV_ISI_LIST		76
 
-#define DTV_MAX_COMMAND				DTV_SEARCH_RANGE
+#define DTV_MAX_COMMAND				DTV_ISI_LIST
 
 /**
  * enum fe_pilot - Type of pilot tone

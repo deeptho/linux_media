@@ -650,10 +650,10 @@ struct dtv_frontend_properties {
 
 	/* Multistream specifics */
 	u32			stream_id;
-        u32			matype;
-
+	u32			matype;
+	
 	u32			enable_modcod;
-        u32			frame_len;
+	u32			frame_len;
 
 	/* Physical Layer Scrambling specifics */
 	u32			scrambling_sequence_index;
@@ -678,6 +678,8 @@ struct dtv_frontend_properties {
 	u8			atscmh_sccc_code_mode_d;
 
 	u32			lna;
+	u8		isi_list_len;
+	u8		isi[32];
 
 	/* statistics data */
 	struct dtv_fe_stats	strength;

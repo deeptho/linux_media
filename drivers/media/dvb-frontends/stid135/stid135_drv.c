@@ -1309,10 +1309,21 @@ fe_lla_error_t fe_stid135_get_lock_status(fe_stid135_handle_t handle, enum fe_st
 		demodState = (enum fe_sat_search_state)(fld_value[0]);
 
 		if(error1)
-			dprintk("error=%d\n", error1);
+			dprintk("demodstate=%d error=%d\n", demodState, error1);
+		//dprintk("demodstate=%d error=%d\n", demodState, error1);
+		if(demodState>=1)
+						{
+				u8 p_mode;
+				u32 p_code;
+				
+				error1 = fe_stid135_get_pls(handle, Demod, &p_mode, &p_code);
+				//dprintk("GET_PLS: p_mode=%d p_code=%d error=%d\n", p_mode, p_code, error1);
+			}
 		switch (demodState) {
 		case FE_SAT_SEARCH:
 		case FE_SAT_PLH_DETECTED :
+			dprintk("FIRST PLHEADER DETECTED\n");
+
 			*carrier_lock  = FALSE;
 		break;
 		case FE_SAT_DVBS2_FOUND:
@@ -1327,7 +1338,7 @@ fe_lla_error_t fe_stid135_get_lock_status(fe_stid135_handle_t handle, enum fe_st
 			//dprintk("error=%d\n", error1);
 			*carrier_lock = fld_value[0];
 			*data_present  = fld_value[0] & fld_value[1] & fld_value[2];
-			dprintk("PPP carrier_lock=%d data_present=%d\n", *carrier_lock, *data_present);
+			//dprintk("PPP carrier_lock=%d data_present=%d\n", *carrier_lock, *data_present);
 		break;
 		
 		case FE_SAT_DVBS_FOUND:
@@ -2404,6 +2415,7 @@ fe_lla_error_t	fe_stid135_search(fe_stid135_handle_t handle, enum fe_stid135_dem
 		if(error1)
 			dprintk("error=%d\n", error1);
 		error |= (error1=ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG2_DEMODFLT_XXXMODE(demod), 0x15));
+		dprintk("XXXMODE set t0 0x15\n");
 		if(error1)
 			dprintk("error=%d\n", error1);
 	} else if((pSearch->symbol_rate >= pParams->master_clock >> 1) && (pSearch->symbol_rate < pParams->master_clock)) { /* if SR >= MST_CLK / 2 */
@@ -2412,6 +2424,7 @@ fe_lla_error_t	fe_stid135_search(fe_stid135_handle_t handle, enum fe_stid135_dem
 		if(error1)
 			dprintk("error=%d\n", error1);
 		error |= (error1=ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG2_DEMODFLT_XXXMODE(demod), 0x15));
+		dprintk("XXXMODE set t0 0x15\n");
 		if(error1)
 			dprintk("error=%d\n", error1);
 	} else {
@@ -3083,7 +3096,7 @@ fe_lla_error_t fe_stid135_get_signal_info(fe_stid135_handle_t Handle,
 	enum fe_sat_search_state demodState;
 	s32 pch_rf, pband_rf;
 	s32 fld_value[3];
-	u32 reg_value = 0;
+	//u32 reg_value = 0;
 	s32 symbolRateOffset = 0, carrier_frequency = 0;
 	
 	pParams = (struct fe_stid135_internal_param *) Handle;
@@ -3123,7 +3136,7 @@ fe_lla_error_t fe_stid135_get_signal_info(fe_stid135_handle_t Handle,
 			/* transponder_frequency = tuner +  demod carrier
 			frequency */
 			pInfo->frequency = pParams->lo_frequency / 1000;
-			dprintk("signal_info: freq=%ld\n", pInfo->frequency);
+			dprintk("signal_info: freq=%d\n", pInfo->frequency);
 			/* On auxiliary demod, frequency found is not true, we have to pick it on master demod  */
 			/* On auxiliary demod, SR found is not true, we have to pick it on master demod  */
 			if(Demod == FE_SAT_DEMOD_2) {
@@ -3266,7 +3279,19 @@ fe_lla_error_t fe_stid135_get_signal_info(fe_stid135_handle_t Handle,
 						
 				/*reset the error counter to PER*/
 				error |= ChipSetOneRegister(pParams->handle_demod, 
-				(u16)REG_RC8CODEW_DVBSX_HWARE_ERRCTRL1(Demod), 0x67);
+																		(u16)REG_RC8CODEW_DVBSX_HWARE_ERRCTRL1(Demod), 0x67);
+				dprintk("MIS: mis_mode=%d\n", pParams->mis_mode[Demod-1] );
+				if(pParams->mis_mode[Demod-1] /* &&
+					 (pParams->demod_search_algo[Demod-1] == FE_SAT_BLIND_SEARCH ||
+					 pParams->demod_search_algo[Demod-1] == FE_SAT_NEXT)*/) {
+					fe_lla_error_t error1 = FE_LLA_NO_ERROR;
+					error1 |=fe_stid135_isi_scan(pParams, Demod, &pInfo->isi_list);
+					if(error1)
+						dprintk("MIS DETECTION: error=%d nb_isi=%d\n", error1, pInfo->isi_list.nb_isi);
+					else
+						dprintk("MIS: num=%d\n", pInfo->isi_list.nb_isi);
+				}
+				
 			} else { /*DVBS1/DSS*/
 				error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_VITERBI_FECM_IQINV(Demod), &(fld_value[0]));
 				pInfo->spectrum = (enum fe_sat_iq_inversion)(fld_value[0]);
@@ -3539,7 +3564,7 @@ fe_lla_error_t fe_stid135_init(struct fe_sat_init_params *pInit,
 #endif
 				/*Read the current Mclk*/
 				error |= FE_STiD135_GetMclkFreq(pParams, &(pParams->master_clock));
-				dprintk("MASTER CLOCK freq==%ld\n", pParams->master_clock);
+				dprintk("MASTER CLOCK freq==%d\n", pParams->master_clock);
 				if(pParams->master_clock == 0)
 					return FE_LLA_INVALID_HANDLE;
 
@@ -3747,6 +3772,7 @@ fe_lla_error_t FE_STiD135_Algo(struct fe_stid135_internal_param *pParams,
 			range */
 			error |= FE_STiD135_GetSignalParams(pParams, Demod,
 																					satellitte_scan, signalType_p);
+				
 			/* Manage Matype Information if DVBS2 signal */
 			if (pParams->demod_results[Demod-1].standard == FE_SAT_DVBS2_STANDARD) {
 				/* Before reading MATYPE value, we need to wait for packet delin locked */
@@ -4923,7 +4949,7 @@ static fe_lla_error_t fe_stid135_read_hw_matype(stchip_handle_t hChip,
 --RETURN	::	Error (if any)
 --***************************************************/
 fe_lla_error_t fe_stid135_manage_matype_info(fe_stid135_handle_t handle,
-						enum fe_stid135_demod Demod)
+																						 enum fe_stid135_demod Demod)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	u8 matype_info, isi, genuine_matype;
@@ -4946,6 +4972,22 @@ fe_lla_error_t fe_stid135_manage_matype_info(fe_stid135_handle_t handle,
 
 			/* Chech if MIS stream (Multi Input Stream). If yes then set the MIS Filter to get the Min ISI */
  			if (!fe_stid135_check_sis_or_mis(matype_info)) {
+#if 0
+				if (pParams->demod_search_algo[Demod-1] == FE_SAT_BLIND_SEARCH ||
+						pParams->demod_search_algo[Demod-1] == FE_SAT_NEXT) {
+					fe_lla_error_t error1 = FE_LLA_NO_ERROR;
+					struct fe_sat_isi_struct_t isi;
+					int i;
+					error1 |=fe_stid135_isi_scan(handle, Demod, &isi);
+	
+					dprintk("MIS DETECTION: error=%d nb_isi=%d\n", error1, isi.nb_isi);
+					for(i=0;i< isi.nb_isi;++i) {
+						dprintk("MIS DETECTION: isi[%d]=%d\n", i, isi.isi[i]);
+					}
+				} else {
+					dprintk("MIS DETECTED algo=%d\n", pParams->demod_search_algo[Demod-1]);
+				}
+#endif
 				mis = TRUE;
 				pParams->mis_mode[Demod-1] = TRUE;
  				/* Get Min ISI and activate the MIS Filter */
@@ -5190,7 +5232,6 @@ fe_lla_error_t fe_stid135_get_matype_infos(fe_stid135_handle_t Handle,
 TUNER_Error_t FE_STiD135_TunerInit(struct fe_stid135_internal_param *pParams)
 {
 	TUNER_Error_t error = TUNER_NO_ERR;
-	s32 vco_cal=0, timeout=0;
 	int i;
 	
 	/* First, put in sleep mode all tuners if they were previously enabled 
@@ -5479,7 +5520,9 @@ fe_lla_error_t fe_stid135_diseqc_init(fe_stid135_handle_t handle,
 		error |= ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1000, &reg_value);
 		reg_value |= 0x00000100;
 		error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1000, reg_value);
-	break;
+		break;
+	default:
+		break;
 	}
 
 	error |= ChipSetField(pParams->handle_demod,
@@ -8389,7 +8432,7 @@ fe_lla_error_t get_soc_block_freq(internal_param_ptr Handle, u8 clkout_number, u
 	u32 Num, Den1, Den2, Den3, Den4, system_clock, reg_value;
 	struct fe_stid135_internal_param *pParams;
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
-	u32 reg_val;
+	//u32 reg_val;
 	
 	pParams = (struct fe_stid135_internal_param *) Handle;
 	
@@ -10512,7 +10555,9 @@ fe_lla_error_t fe_stid135_uninit_after_bb_flt_calib(fe_stid135_handle_t handle, 
 		case AFE_TUNER4:
 			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RSTID135_AFE_AFE_AGC4_CTRL, 0x00);
 			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RSTID135_AFE_AFE_AGC4_BB_PWM, 0x00);
-		break; 
+			break;
+	default:
+		break;
 	}
 	error |= Oxford_StopBBcal(pParams->handle_demod, tuner_nb);
 	
