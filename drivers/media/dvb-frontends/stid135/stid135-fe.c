@@ -1138,7 +1138,7 @@ static void spi_write(struct dvb_frontend *fe,struct ecp3_info *ecp3inf)
 
 static int stid135_get_spectrum_scan(struct dvb_frontend *fe, struct dvb_fe_spectrum_scan *s)
 {
-	s32 Reg[32];
+	s32 Reg[60];
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
 	struct stv *state = fe->demodulator_priv;
@@ -1155,6 +1155,7 @@ static int stid135_get_spectrum_scan(struct dvb_frontend *fe, struct dvb_fe_spec
 	s32* rf_level = s->rf_level;
 	u32 begin =0;
 	int i;
+	int step;
 	for(mode=1;mode<=5; ++mode) {
 		table_size >>=1;
 		if(table_size <= s->num_freq)
@@ -1179,16 +1180,16 @@ static int stid135_get_spectrum_scan(struct dvb_frontend *fe, struct dvb_fe_spec
 	error = fe_stid135_fft(state->base->handle, state->nr+1, mode, nb_acquisition,
 												 center_freq*1000 - lo_frequency, range, rf_level, &begin);
 	dprintk("begin=%d\n", begin);
-	int step = range/1000;
+	step = range/1000;
 	if(begin==1)
 		rf_level[0] = rf_level[1];
 	for(i=0; i< table_size; ++i) {
 		freqs[i]= center_freq  + ((i-(signed)table_size/2)*step)/(signed)table_size;
 	}
 	rf_level[table_size/2] = (rf_level[table_size/2-1] + rf_level[table_size/2+1])/2;
-	error |= fe_stid135_term_fft(state->base->handle, state->nr+1, Reg);
+	error |= fe_stid135_term_fft(state->base->handle, state->nr+1, state->rf_in+1, Reg);
 	if(error) {
-		dprintk("fe_stid135_init_fft FAILED: error=%d\n", error);
+		dprintk("fe_stid135_term_fft FAILED: error=%d\n", error);
 	}
 	return error;
 }

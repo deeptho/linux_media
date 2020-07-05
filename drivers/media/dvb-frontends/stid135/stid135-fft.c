@@ -1,35 +1,35 @@
 /*
-* This file is part of STiD135 OXFORD LLA 
+ * This file is part of STiD135 OXFORD LLA
  *
-* Copyright (c) <2014>-<2018>, STMicroelectronics - All Rights Reserved 
-* Author(s): Mathias Hilaire (mathias.hilaire@st.com), Thierry Delahaye (thierry.delahaye@st.com) for STMicroelectronics. 
+ * Copyright (c) <2014>-<2018>, STMicroelectronics - All Rights Reserved
+ * Author(s): Mathias Hilaire (mathias.hilaire@st.com), Thierry Delahaye (thierry.delahaye@st.com) for STMicroelectronics.
  *
-* License terms: BSD 3-clause "New" or "Revised" License. 
+ * License terms: BSD 3-clause "New" or "Revised" License.
  *
-* Redistribution and use in source and binary forms, with or without 
-* modification, are permitted provided that the following conditions are met: 
-* 
-* 1. Redistributions of source code must retain the above copyright notice, this 
-* list of conditions and the following disclaimer. 
-* 
-* 2. Redistributions in binary form must reproduce the above copyright notice, 
-* this list of conditions and the following disclaimer in the documentation 
-* and/or other materials provided with the distribution. 
-* 
-* 3. Neither the name of the copyright holder nor the names of its contributors 
-* may be used to endorse or promote products derived from this software 
-* without specific prior written permission. 
-* 
-* THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" 
-* AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE 
-* IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE 
-* DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE 
-* FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL 
-* DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR 
-* SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER 
-* CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, 
-* OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
-* OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice, this
+ * list of conditions and the following disclaimer.
+ *
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ * this list of conditions and the following disclaimer in the documentation
+ * and/or other materials provided with the distribution.
+ *
+ * 3. Neither the name of the copyright holder nor the names of its contributors
+ * may be used to endorse or promote products derived from this software
+ * without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+ * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
 
@@ -44,21 +44,21 @@
 #define DmdLock_TIMEOUT_LIMIT      5500  // Fixed issue BZ#86598
 //#define BLIND_SEARCH_AGC2BANDWIDTH  40
 #ifndef HOST_PC
-	#define DEMOD_IQPOWER_THRESHOLD     10
+#define DEMOD_IQPOWER_THRESHOLD     10
 #endif
 #define dprintk(fmt, arg...)																					\
 	printk(KERN_DEBUG pr_fmt("%s:%d " fmt),  __func__, __LINE__, ##arg)
- 
+
 /*****************************************************
---FUNCTION	::	fe_stid135_init_fft
---ACTION	::	Init demod for FFT and store registers states before modification
+--FUNCTION	::	fe_stid135_fft_save_registers
+--ACTION	::	save registers prior to callling FFT
 --PARAMS IN	::	Handle -> Front End Handle
 			Path -> number of the demod
 			Reg[] -> empty array of data
---PARAMS OUT	::	Reg[] -> table of stored registers	
---RETURN	::	Error (if any) 
+--PARAMS OUT	::	Reg[] -> table of stored registers
+--RETURN	::	Error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_init_fft(fe_stid135_handle_t handle, enum fe_stid135_demod path, FE_OXFORD_TunerPath_t tuner_nb, s32 Reg[60])
+static fe_lla_error_t fe_stid135_fft_save_registers(fe_stid135_handle_t handle, enum fe_stid135_demod path, FE_OXFORD_TunerPath_t tuner_nb, s32 Reg[60])
 {
 	u32 i=0, reg_value;
 	s32 fld_value;
@@ -67,8 +67,6 @@ fe_lla_error_t fe_stid135_init_fft(fe_stid135_handle_t handle, enum fe_stid135_d
 	pParams = (struct fe_stid135_internal_param *) handle;
 	dprintk("Starting to store params path=%d tuner_nb=%d\n", path, tuner_nb);
 	/* store param */
-	error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_GCTRL_UFBS_ENABLE(path), &fld_value);
-	Reg[i++] = fld_value;
 	error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG0_FIFO2_ULTRABS(path), &fld_value);
 	Reg[i++] = fld_value;
 	error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG2_MODE_HAUTDEBIT(path), &fld_value);
@@ -80,27 +78,25 @@ fe_lla_error_t fe_stid135_init_fft(fe_stid135_handle_t handle, enum fe_stid135_d
 
 	error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_AGC1ADJ_AGC1ADJ_MANUAL(path), &fld_value);
 	Reg[i++] = fld_value;
+	error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_AGC1ADJ_AGC1_ADJUSTED(path), &reg_value);
+	Reg[i++] = reg_value;
 	error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_AGC2ADJ_AGC2ADJ_MANUAL(path), &fld_value);
 	Reg[i++] = fld_value;
-	error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_AGC2O_AGC2_COEF(path), &fld_value);
-	Reg[i++] = fld_value;
+	error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_AGC2ADJ_AGC2REF_XXDB(path), &reg_value);
+	Reg[i++] = reg_value;
+
 
 	error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_FILTCFGM(path), &reg_value);
 	Reg[i++] = reg_value;
 	error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_FILTCFGL(path), &reg_value);
 	Reg[i++] = reg_value;
-	error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC2I1(path), &reg_value);
-	Reg[i++] = reg_value;
-	error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC2I0(path), &reg_value);
+
+	error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_GCTRL(path), &reg_value);
 	Reg[i++] = reg_value;
 
-	error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_GCTRL_INPUT_MODE(path), &fld_value);
-	Reg[i++] = fld_value;
-	error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_UPDCONT_UPD_CONTINUOUS(path), &fld_value);
-	Reg[i++] = fld_value;
-	error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_GCTRL_LOW_RATE(path), &fld_value);
-	Reg[i++] = fld_value;
 
+	error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_UPDCONT_UPD_CONTINUOUS(path), &reg_value);
+	Reg[i++] = reg_value;
 	error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_FFTCTRL(path), &reg_value);
 	Reg[i++] = reg_value;
 	error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_GAINCONT(path), &reg_value);
@@ -110,15 +106,107 @@ fe_lla_error_t fe_stid135_init_fft(fe_stid135_handle_t handle, enum fe_stid135_d
 	error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DEBUG1(path), &reg_value);
 	Reg[i++] = reg_value;
 
+	error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC2O(path), &reg_value);
+	Reg[i++] = reg_value;
+
+	error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC2I1(path), &reg_value);
+	Reg[i++] = reg_value;
+	error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC2I0(path), &reg_value);
+	Reg[i++] = reg_value;
+
+	error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_AGCRF_AGCRFCFG_AGCRF_BETA(tuner_nb), &reg_value);
+	Reg[i++] = reg_value;
+	error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_AGC1CFG_AMM_FROZEN(path), &reg_value);
+	Reg[i++] = reg_value;
+	error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_AGC1CFG_QUAD_FROZEN(path), &reg_value);
+	Reg[i++] = reg_value;
+
+	error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_AGCRF_AGCRFREF(tuner_nb), &reg_value);
+	Reg[i++] = reg_value;
+	error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_AGC1CN_AGCIQ_BETA(path), &reg_value);
+	Reg[i++] = reg_value;
+
+	error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC1AMM(path), &reg_value);
+	Reg[i++] = reg_value;
+	error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC1QUAD(path), &reg_value);
+	Reg[i++] = reg_value;
+	error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGCKS(path), &reg_value);
+	Reg[i++] = reg_value;
+
+	error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_ACLCNLK(path), &reg_value);
+	Reg[i++] = reg_value;
+	error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_BCLCLK(path), &reg_value);
+	Reg[i++] = reg_value;
+	error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_ACLCLK(path), &reg_value);
+	Reg[i++] = reg_value;
+
+	error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CARFREQ(path), &reg_value);
+	Reg[i++] = reg_value;
+	error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CARHDR(path), &reg_value);
+	Reg[i++] = reg_value;
+
+	error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFR1BCFG(path), &reg_value);
+	Reg[i++] = reg_value;
+	error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFR1B2(path), &reg_value);
+	Reg[i++] = reg_value;
+	error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFR1B1(path), &reg_value);
+	Reg[i++] = reg_value;
+	error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFR1B0(path), &reg_value);
+	Reg[i++] = reg_value;
+
+	error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_TMGCFG(path), &reg_value);
+	Reg[i++] = reg_value;
+#if 1
+	error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_RTCNLK(path), &reg_value);
+	Reg[i++] = reg_value;
+	error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_RTCLK(path), &reg_value);
+	Reg[i++] = reg_value;
+#endif
+	error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_TMGREG2(path), &reg_value);
+	Reg[i++] = reg_value;
+	error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_TMGREG1(path), &reg_value);
+	Reg[i++] = reg_value;
+	error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_TMGREG0(path), &reg_value);
+	Reg[i++] = reg_value;
+	error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFR2CFR1(path), &reg_value);
+	Reg[i++] = reg_value;
+
+	error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFR22(path), &reg_value);
+	Reg[i++] = reg_value;
+	error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFR21(path), &reg_value);
+	Reg[i++] = reg_value;
+	error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFR20(path), &reg_value);
+	Reg[i++] = reg_value;
+
+
+	dprintk("Saved %d registers\n", i);
+	return error;
+}
+
+/*****************************************************
+--FUNCTION	::	fe_stid135_init_fft
+--ACTION	::	Init demod for FFT and store registers states before modification
+--PARAMS IN	::	Handle -> Front End Handle
+			Path -> number of the demod
+			Reg[] -> empty array of data
+--PARAMS OUT	::	Reg[] -> table of stored registers
+--RETURN	::	Error (if any)
+--***************************************************/
+fe_lla_error_t fe_stid135_init_fft(fe_stid135_handle_t handle, enum fe_stid135_demod path, FE_OXFORD_TunerPath_t tuner_nb, s32 Reg[60])
+{
+	fe_lla_error_t error = FE_LLA_NO_ERROR;
+	struct fe_stid135_internal_param *pParams;
+	pParams = (struct fe_stid135_internal_param *) handle;
+	error |= fe_stid135_fft_save_registers(handle, path, tuner_nb, Reg);
 	/* ADJUSTEMENT REGISTERS BEFORE FFT  */
-	
+
 	/* Choix du mode de fonctionnement de la cellule FFT */
 	//allow ultra blind scan to use FIFO2 RAM
 	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG0_FIFO2_ULTRABS(path),  0x01);
 
 	//select narrow band setting, i.e, up to  Mclk/2, which is about 60Msamples/second
 	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG2_MODE_HAUTDEBIT(path), 0x01);
-	
+
 	// UFBS block only connected to narrow-band demod, not wideband, so HDEBITCFG2/MODE_HAUTDEBIT = 01
 	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DMDISTATE_I2C_DEMOD_MODE(path), 0x02); /* set PEA to UFBS mode  */
 	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_TNRCFG2_TUN_IQSWAP(path), 0x00);
@@ -133,16 +221,16 @@ fe_lla_error_t fe_stid135_init_fft(fe_stid135_handle_t handle, enum fe_stid135_d
 	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_FILTCFGM_FILTRE2_MANUEL(path), 1);
 	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_FILTCFGM_FILTRE3_MANUEL(path), 1);
 	error |= ChipSetRegisters(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_FILTCFGM(path),1);
-	
-	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_FILTCFGL_FILTRE1_AMPL(path), 0); 
-	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_FILTCFGL_FILTRE2_AMPL(path), 0); 
-	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_FILTCFGL_FILTRE3_AMPL(path), 0); 
-	error |= ChipSetRegisters(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_FILTCFGL(path),1); 
+
+	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_FILTCFGL_FILTRE1_AMPL(path), 0);
+	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_FILTCFGL_FILTRE2_AMPL(path), 0);
+	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_FILTCFGL_FILTRE3_AMPL(path), 0);
+	error |= ChipSetRegisters(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_FILTCFGL(path),1);
 
 	/* fft reading registers adjustment */
 	//request reading symbols/intersymbols
 	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_GCTRL_INPUT_MODE(path), 0);
-	//Low rate permits acquisition during computation, it is disabled; overwritten by next line?
+	//Low rate permits acquisition during computation, it is disabled;
 	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_GCTRL_LOW_RATE(path), 0);
 	//store the result
 	error |= ChipSetRegisters(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_GCTRL(path), 1);
@@ -160,24 +248,24 @@ fe_lla_error_t fe_stid135_init_fft(fe_stid135_handle_t handle, enum fe_stid135_d
 	//do not use "intersymbols", which limits fft size to 4096
 	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_FFTCTRL_MODE_INTERSYMBOL(path), 0);  // Off
 	//Store the result
-	error |= ChipSetRegisters(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_FFTCTRL(path),1); 
-	
+	error |= ChipSetRegisters(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_FFTCTRL(path),1);
+
 	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_GAINCONT_GAIN_CONTINUOUS(path), 2);
 	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_GAINCONT_MODE_CONTINUOUS(path), 0);	// Off
-	error |= ChipSetRegisters(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_GAINCONT(path),1); 	
+	error |= ChipSetRegisters(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_GAINCONT(path),1);
 
 	//set a threshold to detect "peak found"
 	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_THRESHOLD_MAX_THRESHOLD(path), 4);
 	//FFT continuous if a good peak was found, the alternative setting would be good for blindscan
 	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_THRESHOLD_NO_STOP(path), 0);		// Off
 	//Store the result
-	error |= ChipSetRegisters(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_THRESHOLD(path),1); 
+	error |= ChipSetRegisters(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_THRESHOLD(path),1);
 
 	//do not treat overflow specially
 	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEBUG1_DISABLE_RESCALE(path), 0);
 	//do not remove mean value to disable DC coefficient
 	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEBUG1_DISABLE_AVERAGE(path), 0);
-	
+
 	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEBUG1_DEBUG_INTERSYMBOL(path), 0);	// Off
 
 	//spectrum will be in log format: (PSD=val*3/64 dB) (unsigned)
@@ -196,12 +284,12 @@ fe_lla_error_t fe_stid135_init_fft(fe_stid135_handle_t handle, enum fe_stid135_d
 
 	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_AGC1ADJ_AGC1_ADJUSTED(path), 88);
 	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_AGC2ADJ_AGC2REF_XXDB(path), 56);
-	
+
 	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC2O(path), 0x0);
-	
+
 	if((path == FE_SAT_DEMOD_1) || (path == FE_SAT_DEMOD_3))
 		error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC2I1(path), 0x40);
-	else	
+	else
 		error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC2I1(path), 0x68);
 	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC2I0(path), 0x42);
 
@@ -219,7 +307,7 @@ fe_lla_error_t fe_stid135_init_fft(fe_stid135_handle_t handle, enum fe_stid135_d
 	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC1QUAD(path), 0x00);
 	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGCKS(path), 0x02);
 
-	
+
 	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_ACLCNLK(path), 0x00);
 	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_BCLCLK(path), 0x00);
 	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_ACLCLK(path), 0x00);
@@ -228,7 +316,7 @@ fe_lla_error_t fe_stid135_init_fft(fe_stid135_handle_t handle, enum fe_stid135_d
 	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CARFREQ(path), 0x00);
 	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CARHDR(path), 0x00);
 
-	//stop derotator 
+	//stop derotator
 	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFR1BCFG(path), 0x00);
 
 	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_CFR1B2_CFR1B_VALUE(path), 0x00);
@@ -239,6 +327,7 @@ fe_lla_error_t fe_stid135_init_fft(fe_stid135_handle_t handle, enum fe_stid135_d
 	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_TMGCFG(path), 0xc3);
 	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_RTCNLK(path), 0x00);
 	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_RTCLK(path), 0x00);
+
 	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_TMGREG2_TMGREG(path), 0x00);
 	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_TMGREG1_TMGREG(path), 0x00);
 	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_TMGREG0_TMGREG(path), 0x00);
@@ -261,46 +350,86 @@ fe_lla_error_t fe_stid135_init_fft(fe_stid135_handle_t handle, enum fe_stid135_d
 --ACTION	::	Reset demod as it was before fft
 --PARAMS IN	::	Handle -> Front End Handle
 			Path -> number of the demod
-			Reg[] -> table of stored registers	 
+			Reg[] -> table of stored registers
 --PARAMS OUT	::	NONE
---RETURN	::	Error (if any) 
+--RETURN	::	Error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_term_fft(fe_stid135_handle_t handle, enum fe_stid135_demod path, s32 Reg[60])
-{ 
+fe_lla_error_t fe_stid135_term_fft(fe_stid135_handle_t handle, enum fe_stid135_demod path, FE_OXFORD_TunerPath_t tuner_nb, s32 Reg[60])
+
+{
 	u32 i=0;
 
-	fe_lla_error_t error = FE_LLA_NO_ERROR; 
-	struct fe_stid135_internal_param *pParams; 
-	pParams = (struct fe_stid135_internal_param *) handle; 
+	fe_lla_error_t error = FE_LLA_NO_ERROR;
+	struct fe_stid135_internal_param *pParams;
+	pParams = (struct fe_stid135_internal_param *) handle;
 
 	/* Restore params */
-	error |= ChipSetField (pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_GCTRL_UFBS_ENABLE(path), Reg[i++]);
-	error |= ChipSetField (pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG0_FIFO2_ULTRABS(path), Reg[i++]); 
-	error |= ChipSetField (pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG2_MODE_HAUTDEBIT(path), Reg[i++]); 
+	error |= ChipSetField (pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG0_FIFO2_ULTRABS(path), Reg[i++]);
+	error |= ChipSetField (pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG2_MODE_HAUTDEBIT(path), Reg[i++]);
 	error |= ChipSetField (pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DMDISTATE_I2C_DEMOD_MODE(path), Reg[i++]);
 	error |= ChipSetField (pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_TNRCFG2_TUN_IQSWAP(path), Reg[i++]);
 
-	error |= ChipSetField (pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_AGC1ADJ_AGC1ADJ_MANUAL(path), Reg[i++]); 
-	error |= ChipSetField (pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_AGC2ADJ_AGC2ADJ_MANUAL(path), Reg[i++]); 
-	error |= ChipSetField (pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_AGC2O_AGC2_COEF(path), Reg[i++]);
+	error |= ChipSetField (pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_AGC1ADJ_AGC1ADJ_MANUAL(path), Reg[i++]);
+	error |= ChipSetField (pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_AGC2ADJ_AGC2ADJ_MANUAL(path), Reg[i++]);
+	error |= ChipSetField (pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_AGC1ADJ_AGC1_ADJUSTED(path), Reg[i++]);
+	error |= ChipSetField (pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_AGC2ADJ_AGC2REF_XXDB(path), Reg[i++]);
 
 	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_FILTCFGM(path), (u32)Reg[i++]);
 	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_FILTCFGL(path), (u32)Reg[i++]);
-	
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC2I1(path), (u32)Reg[i++]);
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC2I0(path), (u32)Reg[i++]);
-
-	error |= ChipSetField (pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_GCTRL_INPUT_MODE(path), Reg[i++]); 
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_GCTRL(path), (u32)Reg[i++]);
 	error |= ChipSetField (pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_UPDCONT_UPD_CONTINUOUS(path), Reg[i++]);
-	error |= ChipSetField (pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_GCTRL_LOW_RATE(path), Reg[i++]);	
-	
+
 	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_FFTCTRL(path), (u32)Reg[i++]);
 	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_GAINCONT(path), (u32)Reg[i++]);
 	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_THRESHOLD(path), (u32)Reg[i++]);
  	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DEBUG1(path), (u32)Reg[i++]);
 
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC2O(path), (u32)Reg[i++]);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC2I1(path), (u32)Reg[i++]);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC2I0(path), (u32)Reg[i++]);
+
+	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_AGCRF_AGCRFCFG_AGCRF_BETA(tuner_nb), (u32)Reg[i++]);
+	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_AGC1CFG_AMM_FROZEN(path), (u32)Reg[i++]);
+	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_AGC1CFG_QUAD_FROZEN(path), (u32)Reg[i++]);
+
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_AGCRF_AGCRFREF(tuner_nb), (u32)Reg[i++]);
+	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_AGC1CN_AGCIQ_BETA(path), (u32)Reg[i++]);
+
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC1AMM(path), (u32) Reg[i++]);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC1QUAD(path), (u32) Reg[i++]);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGCKS(path), (u32) Reg[i++]);
+
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_ACLCNLK(path), (u32) Reg[i++]);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_BCLCLK(path), (u32) Reg[i++]);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_ACLCLK(path), (u32) Reg[i++]);
+
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CARFREQ(path), (u32)Reg[i++]);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CARHDR(path), (u32)Reg[i++]);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFR1BCFG(path), (u32)Reg[i++]);
+
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFR1B2(path), (u32)Reg[i++]);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFR1B1(path), (u32)Reg[i++]);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFR1B0(path), (u32)Reg[i++]);
+
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_TMGCFG(path), (u32)Reg[i++]);
+
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_RTCNLK(path), (u32)Reg[i++]);
+
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_RTCLK(path), (u32)Reg[i++]);
+
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_TMGREG2(path), (u32)Reg[i++]);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_TMGREG1(path), (u32)Reg[i++]);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_TMGREG0(path), (u32)Reg[i++]);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFR2CFR1(path), (u32)Reg[i++]);
+
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFR22(path), (u32)Reg[i++]);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFR21(path), (u32)Reg[i++]);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFR20(path), (u32)Reg[i++]);
+
+
+	dprintk("Restored %d registers\n", i);
 	return error;
-} 
+}
 
 /*****************************************************
 --FUNCTION	::	fe_stid135_fft
@@ -311,31 +440,31 @@ fe_lla_error_t fe_stid135_term_fft(fe_stid135_handle_t handle, enum fe_stid135_d
 			Nb_acquisition -> number of acquisition for an fft ( modified the precision of the fft)
 			Frq -> frequency in Hz
 			Range (in Hz)
-			Tab[] -> empty table of data 
+			Tab[] -> empty table of data
 			Begin -> pointer on an empty u32
---PARAMS OUT	::	Tab[] -> table of fft return data 
+--PARAMS OUT	::	Tab[] -> table of fft return data
 			Begin -> first value on table of data
---RETURN	::	Error (if any) 
+--RETURN	::	Error (if any)
 --***************************************************/
 fe_lla_error_t fe_stid135_fft(fe_stid135_handle_t handle, enum fe_stid135_demod path, u32 mode, u32 nb_acquisition, s32 freq, u32 range, u32 *tab, u32* begin)
-{																		 
+{																	
 	u32 nb_words =0;
 	s32 val[4]= { 0 }, val_max;
 	u32 j=0, i=0, bin=0;
 	s32 f;
 	s32 memstat=0, contmode =0;
-	u32 nbr_pts =0; 
+	u32 nbr_pts =0;
 	u32 exp;
 	static u32 max_exponent[4] = {0,0,0,0};
 	s32 fld_value;
 	u8 timeout = 0;
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
-	struct fe_stid135_internal_param *pParams; 
+	struct fe_stid135_internal_param *pParams;
 	const u16 cfr_factor = 6711; // 6711 = 2^20/(10^6/2^6)*100
 
 	if(path > FE_SAT_DEMOD_4)
 		return(FE_LLA_BAD_PARAMETER);
-	
+
 	pParams = (struct fe_stid135_internal_param *) handle;
 	// Set the number of fft bins (4096 or lower)
 	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_FFTCTRL_FFT_MODE(path), (s32)mode);
@@ -343,49 +472,49 @@ fe_lla_error_t fe_stid135_fft(fe_stid135_handle_t handle, enum fe_stid135_demod 
 	//set number of fft acquisitions to accumulate
 	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_FFTACC_NB_ACC_FFT(path), (s32)nb_acquisition);
 
-	// Configure demodulator in ultra-fast blind scan 
+	// Configure demodulator in ultra-fast blind scan
 	error |= ChipSetField (pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_GCTRL_UFBS_ENABLE(path), 1);
-	
+
 	/* Set frequency, i.e., initial value for carrier offset;
-	cfr_init is in MHz = Mclk * cfr_init / 2^24 (signed)
-	
-	Hypothesis: master_clock=130MHz, frequency_hz=-550MHz..+650MHz
-	(-550=950-1500 and 650=2150-1500)
-	FVCO/4/12=6.2GHz/4/12=130MHz 
-	
+		 cfr_init is in MHz = Mclk * cfr_init / 2^24 (signed)
 
-	So:
-	frequency set in MHz
-   = Mclk * ((freq/PLL_FVCO_FREQUENCY)*cfr_factor)/100 /2^24
-	 =129.16 * ((freq/6200)*2^20/(10^6/2^6)*100)/100/2^24
-	 =129.16 * ((freq/6200)/(10^6/2^6))/2^4
-   =129.16 * ((freq/6200)/(10^6/2^2))
-   =129.16 * ((freq/6200)/(10^6/2^2))
+		 Hypothesis: master_clock=130MHz, frequency_hz=-550MHz..+650MHz
+		 (-550=950-1500 and 650=2150-1500)
+		 FVCO/4/12=6.2GHz/4/12=130MHz
 
-	 Does not makes sense: computatation yields freq/12....
+
+		 So:
+		 frequency set in MHz
+		 = Mclk * ((freq/PLL_FVCO_FREQUENCY)*cfr_factor)/100 /2^24
+		 =129.16 * ((freq/6200)*2^20/(10^6/2^6)*100)/100/2^24
+		 =129.16 * ((freq/6200)/(10^6/2^6))/2^4
+		 =129.16 * ((freq/6200)/(10^6/2^2))
+		 =129.16 * ((freq/6200)/(10^6/2^2))
+
+		 Does not makes sense: computatation yields freq/12....
 	*/
 	f = ((freq/PLL_FVCO_FREQUENCY)*cfr_factor)/100;
-	
+
 	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_CFRINIT2_CFR_INIT(path),
-	((u8)(f >> 16)));
+														 ((u8)(f >> 16)));
 	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_CFRINIT1_CFR_INIT(path),
-	((u8)(f >> 8)));
+														 ((u8)(f >> 8)));
 	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_CFRINIT0_CFR_INIT(path),
-	((u8)f));
+														 ((u8)f));
 	error |= ChipSetRegisters(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRINIT2(path),3);
 
 	// Set bandwidth (symbol rate)
 	error |= fe_stid135_set_symbol_rate(pParams->handle_demod, pParams->master_clock, range, path);
 
 
-	// start acquisition 
+	// start acquisition
 	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_GCTRL_UFBS_RESTART(path), 1);
 
 	WAIT_N_MS(5);
 
 	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_GCTRL_UFBS_RESTART(path), 0);
 
-	// wait for process done if not in continous mode 
+	// wait for process done if not in continous mode
 	error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_GAINCONT_MODE_CONTINUOUS(path), &fld_value);
 	if (!fld_value) {
 		error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_GSTAT_PSD_DONE(path), &contmode);
@@ -396,30 +525,30 @@ fe_lla_error_t fe_stid135_fft(fe_stid135_handle_t handle, enum fe_stid135_demod 
 		}
 	}
 
-	// calculate memory readout range 
+	// calculate memory readout range
 	nbr_pts = (u32)(8192 / XtoPowerY(2, (u32) mode));
 	error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEBUG1_MODE_FULL(path), &fld_value);
 	if(fld_value == 1) { // 32-bit mode
-		nb_words = ((u32)1<<(10-mode+1));     // memory size N/8 for memory readout 
+		nb_words = ((u32)1<<(10-mode+1));     // memory size N/8 for memory readout
 	} else if(fld_value == 0) { // 16-bit mode
-		nb_words = ((u32)1<<(10-mode));     // memory size N/8 for memory readout 
+		nb_words = ((u32)1<<(10-mode));     // memory size N/8 for memory readout
 	}
-	//nb_words = ((u32)1<<(10-mode));     // memory size N/8 for memory readout 
+	//nb_words = ((u32)1<<(10-mode));     // memory size N/8 for memory readout
 	error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_EXPMAX_EXP_MAX(path), &fld_value);
 	exp = (u32)fld_value;
 	switch(path) {
 	case FE_SAT_DEMOD_1:
 		if(exp > max_exponent[0])
 			max_exponent[0] = exp;
-	break;
+		break;
 	case FE_SAT_DEMOD_2:
 		if(exp > max_exponent[1])
 			max_exponent[1] = exp;
-	break;
+		break;
 	case FE_SAT_DEMOD_3:
 		if(exp > max_exponent[2])
 			max_exponent[2] = exp;
-	break;
+		break;
 	case FE_SAT_DEMOD_4:
 		if(exp > max_exponent[3])
 			max_exponent[3] = exp;
@@ -428,7 +557,7 @@ fe_lla_error_t fe_stid135_fft(fe_stid135_handle_t handle, enum fe_stid135_demod 
 		//Only first 4 demods supported by hardware
 		break;
 	}
-	
+
 	for (i=0; i<nb_words; i++)	{   // set the FFT memory address in multiples of words
 
 		WAIT_N_MS(5);
@@ -446,7 +575,7 @@ fe_lla_error_t fe_stid135_fft(fe_stid135_handle_t handle, enum fe_stid135_demod 
 		}
 		if(timeout == 50)
 			return(FE_LLA_NODATA);
-	
+
 		// read & store data to create an fft list
 
 		error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEBUG1_MODE_FULL(path), &fld_value);
@@ -461,8 +590,8 @@ fe_lla_error_t fe_stid135_fft(fe_stid135_handle_t handle, enum fe_stid135_demod 
 				bin = (u32)(i*4+j);
 				tab[nbr_pts-bin-1] = (u32)val_max; 	// fil the table back to front
 			}
-		} else if(fld_value == 0) { // 16-bit mode	
-			// read temporary memory 
+		} else if(fld_value == 0) { // 16-bit mode
+			// read temporary memory
 			for (j=0; j<8; j++) {
 				error |= ChipGetRegisters(pParams->handle_demod, (u16)(REG_RC8CODEW_DVBSX_DEMOD_MEMVA01(path) + (2 * j)), 2);
 				val[3] = ChipGetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMVA01_MEM_VAL0(path) + ((2 * j) << 16)); // 16 = address bus width for demod
@@ -470,20 +599,20 @@ fe_lla_error_t fe_stid135_fft(fe_stid135_handle_t handle, enum fe_stid135_demod 
 				val_max = ((val[3] << 8) + val[2]) * XtoPowerY(2, exp);
 				bin = (u32)(i*8+j);
 				tab[nbr_pts-bin-1] = (u32)val_max; 	// fil the table back to front
-			} 
+			}
 		}
 	}
- 
+
 	// Empty hardware fft
 	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMADDR1_MEM_ADDR(path), 0x00);
 	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMADDR0_MEM_ADDR(path), 0x00);
 	error |= ChipSetRegisters(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_MEMADDR1(path), 2);
 
-	// Sleep down hardware fft 
-	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_GCTRL_UFBS_RESTART(path), 1); 
+	// Sleep down hardware fft
+	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_GCTRL_UFBS_RESTART(path), 1);
 
 	// Calculate beginning of data table
 	*begin = (u32)(nbr_pts-1-bin);
-	
+
 	return(error);
 }
