@@ -301,6 +301,7 @@ struct dmx_exportbuffer {
 	__s32		fd;
 };
 
+#define DMX_SET_DATA_FILTER      _IO('o', 40)
 #define DMX_START                _IO('o', 41)
 #define DMX_STOP                 _IO('o', 42)
 #define DMX_SET_FILTER           _IOW('o', 43, struct dmx_sct_filter_params)

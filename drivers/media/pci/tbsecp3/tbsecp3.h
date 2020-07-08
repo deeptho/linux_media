@@ -176,6 +176,9 @@ struct tbsecp3_adapter {
 
 	/* ca interface */
 	struct tbsecp3_ca *tbsca;
+
+	/* enable returning raw (non dvb) data */
+	bool no_dvb;
 };
 
 struct tbsecp3_dev {

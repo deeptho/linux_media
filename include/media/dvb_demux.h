@@ -35,6 +35,7 @@
 enum dvb_dmx_filter_type {
 	DMX_TYPE_TS,
 	DMX_TYPE_SEC,
+	DMX_TYPE_DATA,
 };
 
 /**
@@ -276,6 +277,22 @@ int dvb_dmx_init(struct dvb_demux *demux);
  * released, as it can be embedded on other structs.
  */
 void dvb_dmx_release(struct dvb_demux *demux);
+
+/**
+ * dvb_dmx_copy_data - copy data for a buffer with
+ *	multiple data packets with a multuple of 188 bytes.
+ *
+ * @demux: pointer to &struct dvb_demux
+ * @buf: buffer with data to be copied
+ * @count: number of MPEG-TS packets with size of 188.
+ *
+ *
+ * Use this routine if the DVB demux fills MPEG-TS buffers that are
+ * already aligned.
+ *
+ * NOTE: The @buf size should have size equal to ``count * 188``.
+ */
+void dvb_dmx_copy_data(struct dvb_demux *demux, const u8 *buf, size_t count);
 
 /**
  * dvb_dmx_swfilter_packets - use dvb software filter for a buffer with

@@ -469,10 +469,10 @@ static void dvb_dmx_swfilter_packet(struct dvb_demux *demux, const u8 *buf)
 						demux->cnt_storage[pid] = (buf[3] & 0xf);
 						//dprintk("INIT CNT PID=%d cnt=%d\n", pid, demux->cnt_storage[pid]);
 					}
-					else 
+					else
 						demux->cnt_storage[pid] =
 							(demux->cnt_storage[pid] + 1) & 0xf;
-					
+
 					if (buf[3] & 0x20) {//if packet has adaption field
 						int adaption_field_length= buf[4];
 						//bool possible_duplicate = ((buf[3] & 0xf) == demux->cnt_storage[pid]);
@@ -548,6 +548,28 @@ void dvb_dmx_swfilter_packets(struct dvb_demux *demux, const u8 *buf,
 }
 
 EXPORT_SYMBOL(dvb_dmx_swfilter_packets);
+
+/*
+	copy data in the simplest possible way
+ */
+void dvb_dmx_copy_data(struct dvb_demux *demux, const u8 *buf, size_t count)
+{
+	unsigned long flags;
+	struct dvb_demux_feed *feed;
+
+	spin_lock_irqsave(&demux->lock, flags);
+
+	list_for_each_entry(feed, &demux->feed_list, list_head) {
+		if (feed->pid != 0x2000)
+			continue;
+		feed->cb.ts(buf, count, NULL, 0, &feed->feed.ts,
+								&feed->buffer_flags);
+	}
+
+	spin_unlock_irqrestore(&demux->lock, flags);
+}
+EXPORT_SYMBOL(dvb_dmx_copy_data);
+
 
 static inline int find_next_packet(const u8 *buf, int pos, size_t count,
 				   const int pktsize)
@@ -823,7 +845,7 @@ static int dmx_ts_feed_stop_filtering(struct dmx_ts_feed *ts_feed)
 	}
 
 	ret = demux->stop_feed(feed);
-		
+
 
 	spin_lock_irq(&demux->lock);
 	ts_feed->is_filtering = 0;
@@ -1309,7 +1331,7 @@ int dvb_dmx_init(struct dvb_demux *dvbdemux)
 	dvbdemux->cnt_storage = vmalloc(MAX_PID + 1);
 	if (!dvbdemux->cnt_storage)
 		pr_warn("Couldn't allocate memory for TS/TEI check. Disabling it\n");
-	
+
 	{
 		int i;
 		for(i=0; i<MAX_PID; ++i)

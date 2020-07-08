@@ -23,6 +23,8 @@ MODULE_PARM_DESC(dma_pkts, "DMA buffer size in TS packets (16-256), default 128"
 
 #define TS_PACKET_SIZE		188
 
+extern u32 tbsecp3_packets;
+
 static void tbsecp3_dma_tasklet(unsigned long adap)
 {
 	struct tbsecp3_adapter *adapter = (struct tbsecp3_adapter *) adap;
@@ -30,24 +32,30 @@ static void tbsecp3_dma_tasklet(unsigned long adap)
 	u32 read_buffer, next_buffer;
 	u8* data;
 	int i;
+	bool no_dvb;
 
 	spin_lock(&adapter->adap_lock);
+	no_dvb = adapter->no_dvb;
+
+	if(no_dvb)
+		adapter->dma.offset =0;
 
 	if (adapter->dma.cnt < TBSECP3_DMA_PRE_BUFFERS)
 	{
 		next_buffer = (tbs_read(adapter->dma.base, TBSECP3_DMA_STAT) - TBSECP3_DMA_PRE_BUFFERS + 1) & (TBSECP3_DMA_BUFFERS - 1);
 		adapter->dma.cnt++;
+		tbsecp3_packets +=adapter->dma.buffer_pkts;
 	}
-        else
-        {
-		next_buffer = (tbs_read(adapter->dma.base, TBSECP3_DMA_STAT) - TBSECP3_DMA_PRE_BUFFERS + 1) & (TBSECP3_DMA_BUFFERS - 1);
+	else
+		{
+			next_buffer = (tbs_read(adapter->dma.base, TBSECP3_DMA_STAT) - TBSECP3_DMA_PRE_BUFFERS + 1) & (TBSECP3_DMA_BUFFERS - 1);
 		read_buffer = (u32)adapter->dma.next_buffer;
 
 		while (read_buffer != next_buffer)
 		{
 			data = adapter->dma.buf[read_buffer];
 
-			if (data[adapter->dma.offset] != 0x47) {
+			if (!no_dvb && data[adapter->dma.offset] != 0x47) {
 			/* Find sync byte offset with crude force (this might fail!) */
 				for (i = 0; i < TS_PACKET_SIZE; i++)
 					if ((data[i] == 0x47) &&
@@ -67,7 +75,12 @@ static void tbsecp3_dma_tasklet(unsigned long adap)
 						adapter->dma.buf[0], adapter->dma.offset);
 				}
 			}
-			dvb_dmx_swfilter_packets(&adapter->demux, data, adapter->dma.buffer_pkts);
+			tbsecp3_packets +=adapter->dma.buffer_pkts;
+			if(no_dvb) {
+				dvb_dmx_copy_data(&adapter->demux, data, adapter->dma.buffer_pkts);
+			} else {
+				dvb_dmx_swfilter_packets(&adapter->demux, data, adapter->dma.buffer_pkts);
+			}
 			read_buffer = (read_buffer + 1) & (TBSECP3_DMA_BUFFERS - 1);
 		}
 	}

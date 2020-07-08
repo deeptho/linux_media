@@ -43,11 +43,13 @@
  * @DMXDEV_TYPE_NONE:	no filter set.
  * @DMXDEV_TYPE_SEC:	section filter.
  * @DMXDEV_TYPE_PES:	Program Elementary Stream (PES) filter.
+ * @DMXDEV_TYPE_DATA:	Raw data (do not check for 0x47 TS codes)
  */
 enum dmxdev_type {
 	DMXDEV_TYPE_NONE,
 	DMXDEV_TYPE_SEC,
 	DMXDEV_TYPE_PES,
+	DMXDEV_TYPE_DATA,
 };
 
 /**
