@@ -469,7 +469,8 @@ fe_lla_error_t  FE_STiD135_GetMclkFreq (fe_stid135_handle_t Handle, u32* MclkFre
 fe_lla_error_t  FE_STiD135_GetLoFreqHz (fe_stid135_handle_t Handle, u32* LoFreq_p);
 
 fe_lla_error_t FE_STiD135_WaitForLock(fe_stid135_handle_t Handle,enum fe_stid135_demod Demod,
-			u32 DemodTimeOut,u32 FecTimeOut,BOOL satellitte_scan, s32* lock_p);
+																			u32 DemodTimeOut,u32 FecTimeOut,BOOL satellitte_scan, s32* lock_p,
+																			BOOL* fec_lock_p);
 
 
 /* ---------------- Exported functions (API) ---------------------- */

@@ -1311,6 +1311,7 @@ fe_lla_error_t fe_stid135_get_lock_status(fe_stid135_handle_t handle, enum fe_st
 		if(error1)
 			dprintk("demodstate=%d error=%d\n", demodState, error1);
 		//dprintk("demodstate=%d error=%d\n", demodState, error1);
+#if 0
 		if(demodState>=1)
 						{
 				u8 p_mode;
@@ -1318,7 +1319,8 @@ fe_lla_error_t fe_stid135_get_lock_status(fe_stid135_handle_t handle, enum fe_st
 				
 				error1 = fe_stid135_get_pls(handle, Demod, &p_mode, &p_code);
 				//dprintk("GET_PLS: p_mode=%d p_code=%d error=%d\n", p_mode, p_code, error1);
-			}
+						}
+#endif
 		switch (demodState) {
 		case FE_SAT_SEARCH:
 		case FE_SAT_PLH_DETECTED :
@@ -1455,7 +1457,7 @@ fe_lla_error_t FE_STiD135_GetErrorCount(stchip_handle_t hChip,
 --RETURN	::	error
 --***************************************************/
 fe_lla_error_t FE_STiD135_WaitForLock(fe_stid135_handle_t Handle,enum fe_stid135_demod Demod,
-			u32 DemodTimeOut,u32 FecTimeOut,BOOL satellitte_scan, s32* lock_p)
+																			u32 DemodTimeOut,u32 FecTimeOut,BOOL satellitte_scan, s32* lock_p, BOOL* fec_lock_p)
 {
 
 	fe_lla_error_t error               = FE_LLA_NO_ERROR;
@@ -1472,6 +1474,8 @@ fe_lla_error_t FE_STiD135_WaitForLock(fe_stid135_handle_t Handle,enum fe_stid135
 	
 	if (*lock_p) {
 		error |= FE_STiD135_GetFECLock(pParams->handle_demod, Demod, FecTimeOut, &lock);
+		if(fec_lock_p)
+			*fec_lock_p = lock;
 		*lock_p = *lock_p &&  lock;
 	}
 
@@ -2002,7 +2006,7 @@ static fe_lla_error_t FE_STiD135_GetDemodLock (fe_stid135_handle_t handle,
 		case FE_SAT_DVBS2_FOUND: /* found a DVBS2 signal */ 
 		case FE_SAT_DVBS_FOUND:
 			error |= ChipGetField(pParams->handle_demod, lockField, &lock);
-			dprintk("PPP locked=%d\n", lock);
+			//dprintk("PPP locked=%d\n", lock);
 		break;
 		}
 		
@@ -2510,6 +2514,7 @@ fe_lla_error_t	fe_stid135_search(fe_stid135_handle_t handle, enum fe_stid135_dem
 		}
 
 		pResult->locked = pParams->demod_results[demod-1].locked;
+		pResult->has_carrier = pParams->demod_results[demod-1].has_carrier;
 
 		/* update results */
 		pResult->standard = pParams->demod_results[demod-1].standard;
@@ -2541,6 +2546,7 @@ fe_lla_error_t	fe_stid135_search(fe_stid135_handle_t handle, enum fe_stid135_dem
 
 	} else {
 		pResult->locked = FALSE;
+		pResult->has_carrier = FALSE;
 	
 		switch (pParams->demod_error[demod-1]) {
 			/*I2C error*/
@@ -3107,6 +3113,7 @@ fe_lla_error_t fe_stid135_get_signal_info(fe_stid135_handle_t Handle,
 				error = FE_LLA_I2C_ERROR; 
 		
 		else {
+#if 0 //same as fe_stid135_get_lock_status (but that one makes better sense of lock status)
 			dprintk("signal_info: here 2\n");
 			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DMDSTATE_HEADER_MODE(Demod), &(fld_value[0]));
 			demodState = (enum fe_sat_search_state)(fld_value[0]);
@@ -3132,7 +3139,16 @@ fe_lla_error_t fe_stid135_get_signal_info(fe_stid135_handle_t Handle,
 				pInfo->locked = fld_value[0] && fld_value[1] && fld_value[2];
 			break;
 			}
-		
+#else
+			{
+				BOOL carrier_lock, data_present;
+				
+				error |= fe_stid135_get_lock_status(Handle, Demod, &carrier_lock, &data_present);
+				
+				pInfo->locked = data_present;
+				pInfo->has_carrier = carrier_lock;
+			}
+#endif
 			/* transponder_frequency = tuner +  demod carrier
 			frequency */
 			pInfo->frequency = pParams->lo_frequency / 1000;
@@ -3280,7 +3296,7 @@ fe_lla_error_t fe_stid135_get_signal_info(fe_stid135_handle_t Handle,
 				/*reset the error counter to PER*/
 				error |= ChipSetOneRegister(pParams->handle_demod, 
 																		(u16)REG_RC8CODEW_DVBSX_HWARE_ERRCTRL1(Demod), 0x67);
-				dprintk("MIS: mis_mode=%d\n", pParams->mis_mode[Demod-1] );
+				//dprintk("MIS: mis_mode=%d\n", pParams->mis_mode[Demod-1] );
 				if(pParams->mis_mode[Demod-1] /* &&
 					 (pParams->demod_search_algo[Demod-1] == FE_SAT_BLIND_SEARCH ||
 					 pParams->demod_search_algo[Demod-1] == FE_SAT_NEXT)*/) {
@@ -3288,8 +3304,6 @@ fe_lla_error_t fe_stid135_get_signal_info(fe_stid135_handle_t Handle,
 					error1 |=fe_stid135_isi_scan(pParams, Demod, &pInfo->isi_list);
 					if(error1)
 						dprintk("MIS DETECTION: error=%d nb_isi=%d\n", error1, pInfo->isi_list.nb_isi);
-					else
-						dprintk("MIS: num=%d\n", pInfo->isi_list.nb_isi);
 				}
 				
 			} else { /*DVBS1/DSS*/
@@ -3725,9 +3739,8 @@ fe_lla_error_t FE_STiD135_Algo(struct fe_stid135_internal_param *pParams,
 		// We keep this if statement on embedded side
 		if ((agc1Power == 0) && (iqPower < powerThreshold)) {
 			/*If (AGC1=0 and iqPower<IQThreshold)  then no signal  */
-			pParams->demod_results[Demod-1].locked = FALSE; /*if AGC1 integrator ==0 
-			and iqPower < Threshold then NO signal*/
-			/* Jump of distance of the bandwith tuner */
+			pParams->demod_results[Demod-1].locked = FALSE;
+			pParams->demod_results[Demod-1].has_carrier = FALSE; 
 			*signalType_p = FE_SAT_TUNER_NOSIGNAL ;
 		} else
 #endif
@@ -3739,6 +3752,8 @@ fe_lla_error_t FE_STiD135_Algo(struct fe_stid135_internal_param *pParams,
 		iqPower = 0;
 		agc1Power = 0;
 		pParams->demod_results[Demod-1].locked = FALSE; /*if AGC1 integrator ==0
+																											and iqPower < Threshold then NO signal*/
+		pParams->demod_results[Demod-1].has_carrier = FALSE; /*if AGC1 integrator ==0
 																											and iqPower < Threshold then NO signal*/
 		/* No edge detected, jump tuner bandwidth */
 		*signalType_p = FE_SAT_TUNER_NOSIGNAL;
@@ -3797,7 +3812,8 @@ fe_lla_error_t FE_STiD135_Algo(struct fe_stid135_internal_param *pParams,
 	}
 	
 	
-	if ((lock == TRUE) && (*signalType_p==FE_SAT_RANGEOK)) {
+		if ((lock == TRUE) && (*signalType_p==FE_SAT_RANGEOK)) {
+			BOOL fec_lock;
 		/*The tracking optimization and the FEC lock check are 
 		perfomed only if:
 			demod is locked and signal type is RANGEOK i.e 
@@ -3814,7 +3830,8 @@ fe_lla_error_t FE_STiD135_Algo(struct fe_stid135_internal_param *pParams,
 		error |= ChipSetField(pParams->handle_demod, streamMergerField, 0);
 		// - end of new management of NCR
 		
-		error |= FE_STiD135_WaitForLock(pParams, Demod,demodTimeout, fecTimeout, satellitte_scan, &lockstatus);
+		error |= FE_STiD135_WaitForLock(pParams, Demod,demodTimeout, fecTimeout, satellitte_scan, &lockstatus, &fec_lock);
+		pParams->demod_results[Demod-1].has_carrier = fec_lock;
 		if (lockstatus == TRUE) {
 			lock = TRUE;
 

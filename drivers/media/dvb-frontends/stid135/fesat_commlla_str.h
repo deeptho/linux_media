@@ -310,7 +310,8 @@ struct fe_sat_search_params {
 	};
 	
 struct fe_sat_search_result {
-		BOOL 				locked;		/* Transponder found 			*/
+	  BOOL 				locked;		/* Transponder found 			*/
+	  BOOL        has_carrier;  /*Some signal was found*/
 		u32				frequency;	/* Found frequency	 		*/
 		u32 				symbol_rate;	/* Found Symbol rate			*/
 		enum fe_sat_tracking_standard	standard;	/* Found Standard DVBS1,DVBS2 or DSS	*/
@@ -337,7 +338,8 @@ typedef  struct fe_sat_isi_struct_t  fe_sat_isi_struct;
 
 struct fe_sat_signal_info {
   	BOOL        tuned;   /*tuning has finished*/
-  	BOOL        timedout;   /*tuning has timed out*/
+	  BOOL        timedout;   /*tuning has timed out*/
+	  BOOL        has_carrier;  /*Some signal was found*/
 		BOOL 				locked;		/* Transponder locked					*/
 		BOOL 				data_present;		/* Data found on Transponder*/
 		u32 				frequency;	/* Transponder frequency (in KHz)			*/
