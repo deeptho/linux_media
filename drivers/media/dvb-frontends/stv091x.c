@@ -1487,14 +1487,20 @@ static int pls_search_range(struct dvb_frontend *fe)
 	u32 pls_code = 0;
 	int locked = 0;
 	u8 timeout = p->pls_search_range_start & 0xff;
+	int count=0;
 	if(timeout==0)
 		timeout = 15;
-	int count=0;
+	atomic_set(&fe->algo_state.cur_index, 0);
+	atomic_set(&fe->algo_state.max_index, (p->pls_search_range_end - p->pls_search_range_start)>>8);
 	for(pls_code=p->pls_search_range_start; pls_code<p->pls_search_range_end; pls_code += 0xff, count++) {
 		u8 pktdelin;
-		if(count++%1000 ==0)
+		if(count++  ==100) {
 			dprintk("Trying scrambling mode=%d code %d timeout=%d ...\n",
 							(pls_code>>26) & 0x3, (pls_code>>8) & 0x3FFFF, timeout);
+			atomic_add(count, &fe->algo_state.cur_index);
+			count=0;
+			wake_up_interruptible(&fe->algo_state.wait_queue);
+		}
 		SetPLS(state,  (pls_code>>26) & 0x3, (pls_code>>8) & 0x3FFFF);
 		//write_reg(state, RSTV0910_P2_DMDISTATE + state->regoff, 0x15);
 		//write_reg(state, RSTV0910_P2_DMDISTATE + state->regoff, 0x18);

@@ -614,7 +614,7 @@ struct dtv_frontend_properties {
 	u32			search_range;
 	enum fe_algorithm algorithm;
 	enum fe_modulation	modulation;
-	
+
 	enum fe_sec_voltage	voltage;
 	enum fe_sec_tone_mode	sectone;
 	enum fe_spectral_inversion inversion;
@@ -700,6 +700,13 @@ struct dtv_frontend_properties {
 #define DVB_FE_DEVICE_REMOVED   2
 #define DVB_FE_DEVICE_RESUME    3
 
+struct dtv_fe_algo_state {
+	atomic_t task_should_stop;
+	atomic_t cur_index; //used to measure progress; should be updated from time to time
+	atomic_t max_index; //when cur_inde==max_index task is done
+	wait_queue_head_t wait_queue;
+};
+
 /**
  * struct dvb_frontend - Frontend structure to be used on drivers.
  *
@@ -719,8 +726,7 @@ struct dtv_frontend_properties {
  * @exit:		Used to inform the DVB core that the frontend
  *			thread should exit (usually, means that the hardware
  *			got disconnected.
- * @task_should_stop:		Used to inform the DVB core that the frontend
- *			thread should stop what it is doing now
+ * @algo_state:		Used for communication with long running task
  */
 
 struct dvb_frontend {
@@ -733,12 +739,12 @@ struct dvb_frontend {
 	void *sec_priv;
 	void *analog_demod_priv;
 	struct dtv_frontend_properties dtv_property_cache;
+	struct dtv_fe_algo_state algo_state;
 #define DVB_FRONTEND_COMPONENT_TUNER 0
 #define DVB_FRONTEND_COMPONENT_DEMOD 1
 	int (*callback)(void *adapter_priv, int component, int cmd, int arg);
 	int id;
 	unsigned int exit;
-	atomic_t task_should_stop;
 };
 
 /**

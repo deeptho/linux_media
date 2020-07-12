@@ -261,6 +261,7 @@ enum fe_sec_mini_cmd {
  * @FE_TIMEDOUT:	Fo lock within the last about 2 seconds.
  * @FE_REINIT:		Frontend was reinitialized, application is recommended
  *			to reset DiSEqC, tone and parameters.
+ *
  */
 enum fe_status {
 	FE_NONE			= 0x00,
@@ -587,12 +588,18 @@ enum fe_interleaving {
 #define DTV_FRAME_LEN                   72
 #define DTV_ENABLE_MODCOD		73
 #define DTV_ALGORITHM		74
-#define DTV_SEARCH_RANGE		75
-#define DTV_ISI_LIST		76
-#define DTV_PLS_SEARCH_LIST 77
-#define DTV_PLS_SEARCH_RANGE 78
+#define DTV_SEARCH_RANGE		75 //not needed? symbol rate could be reused
+#define DTV_ISI_LIST		76 //retrieve list of ISI codes (stream ids)
+#define DTV_PLS_SEARCH_LIST 77 //list of PLS scrambling modes/codes to test during scan
+#define DTV_PLS_SEARCH_RANGE 78 //Range of PLS scrambling modes/codes to test during scan
 
 #define DTV_MAX_COMMAND				DTV_PLS_SEARCH_RANGE
+
+//commands for controlling long running algorithms via FE_ALGO_CTRL ioctl
+#define DTV_ALGO_ABORT 1
+#define DTV_ALGO_GET_PROGRESS 2
+#define DTV_ALGO_WAIT_FOR_PROGRESS 3
+#define DTV_ALGO_MAX_COMMAND DTV_ALGO_WAIT_FOR_PROGRESS
 
 /**
  * enum fe_pilot - Type of pilot tone
@@ -949,6 +956,25 @@ struct dtv_properties {
 	struct dtv_property *props;
 };
 
+struct dtv_progress {
+	u32 cur_index;
+	u32 max_index;
+};
+
+
+/**
+ * struct dtv_algo_ctrl - control a long running algorithm and/or get its state.
+ *
+ */
+struct dtv_algo_ctrl {
+	__u32 cmd;
+	__u32 reserved[3];
+	union {
+		__u32 data;
+		struct dtv_progress progress;
+	} u;
+};
+
 /*
  * When set, this flag will disable any zigzagging or other "normal" tuning
  * behavior. Additionally, there will be no automatic monitoring of the lock
@@ -984,7 +1010,7 @@ struct dtv_properties {
 
 #define FE_SET_PROPERTY		   _IOW('o', 82, struct dtv_properties)
 #define FE_GET_PROPERTY		   _IOR('o', 83, struct dtv_properties)
-#define FE_ABORT		   _IO('o', 84)
+#define FE_ALGO_CTRL		     _IOW('o', 84) struct dtv_algo_ctrl)
 
 struct dvb_fe_constellation_sample {
         __s8           real;

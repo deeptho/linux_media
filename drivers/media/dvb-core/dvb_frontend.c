@@ -279,6 +279,21 @@ static int dvb_frontend_test_event(struct dvb_frontend_private *fepriv,
 	return ret;
 }
 
+
+static int dvb_frontend_algo_test_progress(struct dtv_progress* oldval, struct dtv_fe_algo_state* state)
+{
+	int ret;
+
+	u32 cur_index = atomic_read(&state->cur_index);
+
+	ret = (cur_index !=  oldval->cur_index);
+	if(ret) {
+		oldval->cur_index = cur_index;
+		oldval->max_index = atomic_read(&state->max_index);
+	}
+	return ret;
+}
+
 static int dvb_frontend_get_event(struct dvb_frontend *fe,
 					struct dvb_frontend_event *event, int flags)
 {
@@ -628,7 +643,7 @@ int dvb_frontend_task_should_stop(struct dvb_frontend *fe)
 {
 	if(dvb_frontend_is_exiting(fe))
 		return 1;
-	if(atomic_read(&fe->task_should_stop))
+	if(atomic_read(&fe->algo_state.task_should_stop))
 		return 1;
 	return 0;
 }
@@ -708,7 +723,7 @@ restart:
 				fe->ops.set_voltage(fe, fepriv->voltage);
 			fepriv->reinitialise = 0;
 		}
-		atomic_set(&fe->task_should_stop, false);
+
 		/* do an iteration of the tuning loop */
 		if (fe->ops.get_frontend_algo) {
 			algo = fe->ops.get_frontend_algo(fe);
@@ -734,6 +749,7 @@ restart:
 					dvb_frontend_add_event(fe, s);
 					fepriv->status = s;
 				}
+				atomic_set(&fe->algo_state.task_should_stop, false);
 				break;
 			case DVBFE_ALGO_SW:
 				dev_dbg(fe->dvb->device, "%s: Frontend ALGO = DVBFE_ALGO_SW\n", __func__);
@@ -1365,6 +1381,9 @@ static int dtv_get_frontend(struct dvb_frontend *fe,
 
 static int dvb_frontend_handle_ioctl(struct file *file,
 						 unsigned int cmd, void *parg);
+
+static int dvb_frontend_handle_algo_ctrl_ioctl(struct file *file,
+																							 unsigned int cmd, void *parg);
 
 
 static int dtv_property_process_get(struct dvb_frontend *fe,
@@ -2208,6 +2227,54 @@ static int dvb_frontend_ioctl_get_constellation_samples(struct file *file,
 	return err;
 }
 
+/*
+	This handles all ioctls which can access data without locking the fe_priv structure
+ */
+static int dvb_frontend_handle_algo_ctrl_ioctl(struct file *file,
+																							 unsigned int cmd, void *parg)
+{
+	struct dvb_device *dvbdev = file->private_data;
+	struct dvb_frontend *fe = dvbdev->priv;
+	struct dvb_frontend_private *fepriv = fe->frontend_priv;
+	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
+	int i, err = -ENOTSUPP;
+
+	dev_dbg(fe->dvb->device, "%s:\n", __func__);
+
+	switch (cmd) {
+	case DTV_ALGO_ABORT:
+		atomic_set(&fe->algo_state.task_should_stop, true);
+		return 0;
+		break;
+
+	case DTV_ALGO_GET_PROGRESS: {
+		struct dtv_algo_ctrl* p  = parg;
+		p->u.progress.cur_index = atomic_read(&fe->algo_state.cur_index);
+		p->u.progress.max_index = atomic_read(&fe->algo_state.max_index);
+	}
+		return 0;
+		break;
+	case DTV_ALGO_WAIT_FOR_PROGRESS: {
+		struct dtv_algo_ctrl* p  = parg;
+		int ret;
+
+		if (file->f_flags & O_NONBLOCK)
+			return -EWOULDBLOCK;
+
+		ret = wait_event_interruptible(fe->algo_state.wait_queue,
+																	 dvb_frontend_algo_test_progress(&p->u.progress, &fe->algo_state));
+		return ret;
+	}
+		break;
+
+	default:
+		return -ENOTSUPP;
+	} /* switch */
+
+	return err;
+}
+
+
 static int dvb_frontend_do_ioctl(struct file *file, unsigned int cmd,
 				 void *parg)
 {
@@ -2217,9 +2284,15 @@ static int dvb_frontend_do_ioctl(struct file *file, unsigned int cmd,
 	int err;
 	dev_dbg(fe->dvb->device, "%s: (%d)\n", __func__, _IOC_NR(cmd));
 
-	if(cmd==FE_ABORT) {
-		dprintk("exiting requested\n");
-		atomic_set(&fe->task_should_stop, true);
+	if(cmd==DTV_ALGO_ABORT) {
+		dprintk("algo_ctrl requested\n");
+		if ((file->f_flags & O_ACCMODE) == O_RDONLY
+				&& (_IOC_DIR(cmd) != _IOC_READ
+						|| cmd == DTV_ALGO_ABORT)) {
+		return -EPERM;
+		}
+		return 	dvb_frontend_handle_algo_ctrl_ioctl(file, cmd, parg);
+
 		return 0;
 	}
 
