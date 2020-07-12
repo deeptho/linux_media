@@ -651,14 +651,13 @@ struct dtv_frontend_properties {
 	/* Multistream specifics */
 	u32			stream_id;
 	u32			matype;
-	
+
 	u32			enable_modcod;
 	u32			frame_len;
 
 	/* Physical Layer Scrambling specifics */
 	u32			scrambling_sequence_index;
-	u32 pls_mode;
-	u32 pls_code;
+
 	/* ATSC-MH specifics */
 	u8			atscmh_fic_ver;
 	u8			atscmh_parade_id;
@@ -678,8 +677,12 @@ struct dtv_frontend_properties {
 	u8			atscmh_sccc_code_mode_d;
 
 	u32			lna;
-	u8		isi_list_len;
 	u8		isi[32];
+	u32		pls_search_codes[8];
+	u32		pls_search_range_start;
+	u32		pls_search_range_end;
+	u8		isi_list_len;
+	u8    pls_search_codes_len;
 
 	/* statistics data */
 	struct dtv_fe_stats	strength;
@@ -716,6 +719,8 @@ struct dtv_frontend_properties {
  * @exit:		Used to inform the DVB core that the frontend
  *			thread should exit (usually, means that the hardware
  *			got disconnected.
+ * @task_should_stop:		Used to inform the DVB core that the frontend
+ *			thread should stop what it is doing now
  */
 
 struct dvb_frontend {
@@ -733,6 +738,7 @@ struct dvb_frontend {
 	int (*callback)(void *adapter_priv, int component, int cmd, int arg);
 	int id;
 	unsigned int exit;
+	atomic_t task_should_stop;
 };
 
 /**
@@ -856,5 +862,5 @@ void dvb_frontend_reinitialise(struct dvb_frontend *fe);
  * calling this function directly.
  */
 void dvb_frontend_sleep_until(ktime_t *waketime, u32 add_usec);
-
+int dvb_frontend_task_should_stop(struct dvb_frontend *fe);
 #endif

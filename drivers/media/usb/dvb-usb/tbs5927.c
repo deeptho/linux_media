@@ -280,7 +280,7 @@ static int tbs5927_frontend_attach(struct dvb_usb_adapter *d)
 			buf, 2, TBS5927_WRITE_MSG);
 
 	if (tbs5927_properties.adapter->fe->tuner_attach == &tbs5927_tuner_attach) {
-		d->fe_adap->fe = dvb_attach(stv091x_attach, &d->dev->i2c_adap, 
+		d->fe_adap->fe = dvb_attach(stv091x_attach, &d->dev->i2c_adap,
 					    &tbs5927_stv0910_cfg, 1 );
 		if (d->fe_adap->fe != NULL) {
 			d->fe_adap->fe->ops.set_voltage = tbs5927_set_voltage;
@@ -294,7 +294,7 @@ static int tbs5927_frontend_attach(struct dvb_usb_adapter *d)
 			buf[1] = 1;
 			tbs5927_op_rw(d->dev->udev, 0x8a, 0, 0,
 					buf, 2, TBS5927_WRITE_MSG);
-			
+
 			strlcpy(d->fe_adap->fe->ops.info.name,u->props.devices[0].name,52);
 
 			return 0;

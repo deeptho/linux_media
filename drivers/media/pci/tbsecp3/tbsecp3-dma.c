@@ -23,7 +23,6 @@ MODULE_PARM_DESC(dma_pkts, "DMA buffer size in TS packets (16-256), default 128"
 
 #define TS_PACKET_SIZE		188
 
-extern u32 tbsecp3_packets;
 
 static void tbsecp3_dma_tasklet(unsigned long adap)
 {
@@ -44,7 +43,6 @@ static void tbsecp3_dma_tasklet(unsigned long adap)
 	{
 		next_buffer = (tbs_read(adapter->dma.base, TBSECP3_DMA_STAT) - TBSECP3_DMA_PRE_BUFFERS + 1) & (TBSECP3_DMA_BUFFERS - 1);
 		adapter->dma.cnt++;
-		tbsecp3_packets +=adapter->dma.buffer_pkts;
 	}
 	else
 		{
@@ -75,7 +73,6 @@ static void tbsecp3_dma_tasklet(unsigned long adap)
 						adapter->dma.buf[0], adapter->dma.offset);
 				}
 			}
-			tbsecp3_packets +=adapter->dma.buffer_pkts;
 			if(no_dvb) {
 				dvb_dmx_copy_data(&adapter->demux, data, adapter->dma.buffer_pkts);
 			} else {

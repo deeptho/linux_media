@@ -42,7 +42,7 @@ struct SLookup {
 	u16 RegValue;
 };
 
-static struct SLookup Gain_RFAGC_LookUp[] = {                
+static struct SLookup Gain_RFAGC_LookUp[] = {
 	/*Gain *100dB*/   /*reg*/
 	{	7429		,	0        },  /*	74.61 dB	*/
 	{	7368		,	18711	 },  /*	74.43 dB	*/
@@ -100,7 +100,7 @@ static struct SLookup Gain_RFAGC_LookUp[] = {
 	{	2900		,	39226	 },  /*	22.63 dB	*/
 	{	2792		,	39520	 },  /*	21.62 dB	*/
 	{	2692		,	39792	 },  /*	20.62 dB	*/
-	{	2592    	,	40064	 },  /*	19.62 dB	*/
+	{	2592			,	40064	 },  /*	19.62 dB	*/
 	{	2497		,	40351	 },  /*	18.62 dB	*/
 	{	2392		,	40640	 },  /*	17.62 dB	*/
 	{	2290		,	40976	 },  /*	16.62 dB	*/
@@ -108,17 +108,17 @@ static struct SLookup Gain_RFAGC_LookUp[] = {
 	{	2088		,	41631	 },  /*	14.62 dB	*/
 	{	1999		,	41934	 },  /*	13.62 dB	*/
 	{	1875		,	42354	 },  /*	12.62 dB	*/
-	{	1764	   	,	42815	 },  /*	11.62 dB	*/
-	{	1637	   	,	43263	 },  /*	10.62 dB	*/	
-	{	1537	   	,	43743    },  /*	9.62  dB	*/		
-	{	1412		,	44288    },  /*	8.62  dB	*/	
-	{	1291		,	44913    },  /*	7.62  dB	*/		
-	{	1188	  	,	45712    },  /*	6.62  dB	*/	
-	{	1080    	,	46720    },  /*	5.63  dB	*/	
-	{	976		,       48164	 },  /*	4.63  dB	*/	
-	{	930	    	,	50816    },  /*	3.63  dB	*/	
-	{	898	    	,	65534    },  /*	2.94  dB	*/	
-	{	880	    	,	65535    }  /*	2.95  dB	*/	
+	{	1764			,	42815	 },  /*	11.62 dB	*/
+	{	1637			,	43263	 },  /*	10.62 dB	*/
+	{	1537			,	43743    },  /*	9.62  dB	*/
+	{	1412		,	44288    },  /*	8.62  dB	*/
+	{	1291		,	44913    },  /*	7.62  dB	*/
+	{	1188			,	45712    },  /*	6.62  dB	*/
+	{	1080			,	46720    },  /*	5.63  dB	*/
+	{	976		,       48164	 },  /*	4.63  dB	*/
+	{	930				,	50816    },  /*	3.63  dB	*/
+	{	898				,	65534    },  /*	2.94  dB	*/
+	{	880				,	65535    }  /*	2.95  dB	*/
 };
 
 #ifndef ARRAY_SIZE
@@ -172,12 +172,12 @@ struct stv {
 };
 
 static int i2c_read(struct i2c_adapter *adap,
-		    u8 adr, u8 *msg, int len, u8 *answ, int alen)
+				u8 adr, u8 *msg, int len, u8 *answ, int alen)
 {
 	struct i2c_msg msgs[2] = { { .addr = adr, .flags = 0,
-				     .buf = msg, .len = len},
-				   { .addr = adr, .flags = I2C_M_RD,
-				     .buf = answ, .len = alen } };
+						 .buf = msg, .len = len},
+					 { .addr = adr, .flags = I2C_M_RD,
+						 .buf = answ, .len = alen } };
 	if (i2c_transfer(adap, msgs, 2) != 2) {
 		pr_err("stv6120: i2c_read error\n");
 		return -1;
@@ -188,7 +188,7 @@ static int i2c_read(struct i2c_adapter *adap,
 static int i2c_write(struct i2c_adapter *adap, u8 adr, u8 *data, int len)
 {
 	struct i2c_msg msg = {.addr = adr, .flags = 0,
-			      .buf = data, .len = len};
+						.buf = data, .len = len};
 
 	if (i2c_transfer(adap, &msg, 1) != 1) {
 		pr_err("stv6120: i2c_write error\n");
@@ -196,18 +196,18 @@ static int i2c_write(struct i2c_adapter *adap, u8 adr, u8 *data, int len)
 	}
 	return 0;
 }
-#if 0
+
 static int write_regs(struct stv *state, int reg, int len)
 {
 	u8 d[8];
 
-	u8 base = 0x02 + 0xa * state->nr;
+	//u8 base = 0x02 + 0xa * state->nr;
 
-	memcpy(&d[1], &state->base->reg[reg], len);
+	memcpy(&d[1], &state->reg[reg], len);
 	d[0] = reg;
 	return i2c_write(state->base->i2c, state->base->adr, d, len + 1);
 }
-#endif
+
 
 static int write_tuner_regs(struct stv *state)
 {
@@ -282,11 +282,11 @@ static int probe(struct stv *state)
 	case 1:
 		d[10] = 0xFA; /* RF C */
 		d[11] = 0x13; /* LNAC ON */
-		break;	    
+		break;
 	case 2:
 		d[10] = 0xF5; /* RF B */
 		d[11] = 0x0B; /* LNAB ON */
-		break;	    
+		break;
 	}
 	d[0] = 0;
 	ret = i2c_write(state->base->i2c, state->base->adr, d, 25 + 1);
@@ -333,7 +333,7 @@ static void release(struct dvb_frontend *fe)
 	fe->tuner_priv = NULL;
 }
 
-#if 0
+
 static int set_bandwidth(struct dvb_frontend *fe, u32 CutOffFrequency)
 {
 	struct stv *state = fe->tuner_priv;
@@ -343,11 +343,11 @@ static int set_bandwidth(struct dvb_frontend *fe, u32 CutOffFrequency)
 		index = 6;
 	if (index > 50)
 		index = 50;
-	if ((state->base->reg[0x08] & ~0xFC) == ((index-6) << 2))
+	if ((state->reg[0x08] & ~0xFC) == ((index-6) << 2))
 		return 0;
 
-	state->base->reg[0x08] = (state->base->reg[0x08] & ~0xFC) | ((index-6) << 2);
-	state->base->reg[0x09] = (state->base->reg[0x09] & ~0x0C) | 0x08;
+	state->reg[0x08] = (state->reg[0x08] & ~0xFC) | ((index-6) << 2);
+	state->reg[0x09] = (state->reg[0x09] & ~0x0C) | 0x08;
 	if (fe->ops.i2c_gate_ctrl)
 		fe->ops.i2c_gate_ctrl(fe, 1);
 	write_regs(state, 0x08, 2);
@@ -357,14 +357,14 @@ static int set_bandwidth(struct dvb_frontend *fe, u32 CutOffFrequency)
 	return 0;
 }
 
-#endif
+
 
 static int set_lof(struct stv *state, u32 LocalFrequency, u32 CutOffFrequency)
 {
 	int cf_index = (CutOffFrequency / 1000000) - 5;
 	u32 Frequency = (LocalFrequency + 500) / 1000; // Hz -> kHz
 	u32 fvco, div, frac;
-	u8 Icp, tmp;
+	u8 Icp;
 
 	u8 PDIV, P;
 
@@ -447,6 +447,24 @@ static int set_lof(struct stv *state, u32 LocalFrequency, u32 CutOffFrequency)
 	return 0;
 }
 
+static int set_frequency(struct dvb_frontend *fe, u32 frequency)
+{	u32 freq, cutoff, symbol_rate;
+	struct stv *state = fe->tuner_priv;
+	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
+	freq = frequency * 1000;
+	symbol_rate = (p->algorithm == ALGORITHM_BLIND ||
+								 p->algorithm == ALGORITHM_BLIND_BEST_GUESS)
+		? p->search_range : p->symbol_rate;
+
+	cutoff = 5000000 + MulDiv32(symbol_rate, p->rolloff, 200);
+	if (fe->ops.i2c_gate_ctrl)
+		fe->ops.i2c_gate_ctrl(fe, 1);
+	set_lof(state, freq, cutoff);
+	if (fe->ops.i2c_gate_ctrl)
+		fe->ops.i2c_gate_ctrl(fe, 0);
+	return 0;
+}
+
 static int set_params(struct dvb_frontend *fe)
 {
 	struct stv *state = fe->tuner_priv;
@@ -489,8 +507,8 @@ static s32 TableLookup(struct SLookup *Table, int TableSize, u16 RegValue)
 	int imin = 0;
 	int imax = TableSize - 1;
 	int i;
-	
-	// Assumes Table[0].RegValue < Table[imax].RegValue 
+
+	// Assumes Table[0].RegValue < Table[imax].RegValue
 	if( RegValue <= Table[0].RegValue )
 		Gain = Table[0].Value;
 	else if( RegValue >= Table[imax].RegValue )
@@ -499,7 +517,7 @@ static s32 TableLookup(struct SLookup *Table, int TableSize, u16 RegValue)
 		while(imax-imin > 1) {
 			i = (imax + imin) / 2;
 			if ((Table[imin].RegValue <= RegValue) &&
-			    (RegValue <= Table[i].RegValue) )
+					(RegValue <= Table[i].RegValue) )
 				imax = i;
 			else
 				imin = i;
@@ -508,7 +526,7 @@ static s32 TableLookup(struct SLookup *Table, int TableSize, u16 RegValue)
 		Gain = Table[imin].Value;
 		if (RegDiff != 0)
 			Gain += ((s32) (RegValue - Table[imin].RegValue) *
-			    (s32)(Table[imax].Value - Table[imin].Value))/(RegDiff);
+					(s32)(Table[imax].Value - Table[imin].Value))/(RegDiff);
 	}
 	return Gain;
 }
@@ -522,15 +540,15 @@ static int get_rf_strength(struct dvb_frontend *fe, u16 *agc)
 
 	gain = TableLookup(Gain_RFAGC_LookUp, ARRAY_SIZE(Gain_RFAGC_LookUp), *agc);
 
-	gain += 100 * (6 - ref_bbgain); 	
+	gain += 100 * (6 - ref_bbgain);
 
 	freq = p->frequency / 10000;
 
 	if (freq<159)
-		gain -= 200; /* HMR filter 2dB gain compensation below freq=1590MHz */	
-	
+		gain -= 200; /* HMR filter 2dB gain compensation below freq=1590MHz */
+
 	gain -= (((freq-155)*tilt)/12)*10;
-	
+
 	*agc = gain;
 
 	return 0;
@@ -547,6 +565,8 @@ static struct dvb_tuner_ops tuner_ops = {
 	.set_params        = set_params,
 	.release           = release,
 	.get_rf_strength   = get_rf_strength,
+	.set_bandwidth     = set_bandwidth,
+	.set_frequency     = set_frequency,
 };
 
 static struct stv_base *match_base(struct i2c_adapter  *i2c, u8 adr)
@@ -560,7 +580,7 @@ static struct stv_base *match_base(struct i2c_adapter  *i2c, u8 adr)
 }
 
 struct dvb_frontend *stv6120_attach(struct dvb_frontend *fe,
-		    struct i2c_adapter *i2c, struct stv6120_cfg *cfg, int nr)
+				struct i2c_adapter *i2c, struct stv6120_cfg *cfg, int nr)
 {
 	struct stv *state;
 	struct stv_base *base;
@@ -613,4 +633,3 @@ EXPORT_SYMBOL_GPL(stv6120_attach);
 MODULE_DESCRIPTION("STV6120 driver");
 MODULE_AUTHOR("Luis Alves");
 MODULE_LICENSE("GPL");
-

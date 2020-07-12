@@ -589,8 +589,10 @@ enum fe_interleaving {
 #define DTV_ALGORITHM		74
 #define DTV_SEARCH_RANGE		75
 #define DTV_ISI_LIST		76
+#define DTV_PLS_SEARCH_LIST 77
+#define DTV_PLS_SEARCH_RANGE 78
 
-#define DTV_MAX_COMMAND				DTV_ISI_LIST
+#define DTV_MAX_COMMAND				DTV_PLS_SEARCH_RANGE
 
 /**
  * enum fe_pilot - Type of pilot tone
@@ -982,6 +984,7 @@ struct dtv_properties {
 
 #define FE_SET_PROPERTY		   _IOW('o', 82, struct dtv_properties)
 #define FE_GET_PROPERTY		   _IOR('o', 83, struct dtv_properties)
+#define FE_ABORT		   _IO('o', 84)
 
 struct dvb_fe_constellation_sample {
         __s8           real;
