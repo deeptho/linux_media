@@ -461,7 +461,7 @@ fe_lla_error_t fe_stid135_fft(fe_stid135_handle_t handle, enum fe_stid135_demod 
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	struct fe_stid135_internal_param *pParams;
 	const u16 cfr_factor = 6711; // 6711 = 2^20/(10^6/2^6)*100
-
+	dprintk("FFT start\n");
 	if(path > FE_SAT_DEMOD_4)
 		return(FE_LLA_BAD_PARAMETER);
 
@@ -524,7 +524,7 @@ fe_lla_error_t fe_stid135_fft(fe_stid135_handle_t handle, enum fe_stid135_demod 
 			ChipWaitOrAbort(pParams->handle_demod, 1);
 		}
 	}
-
+	dprintk("FFT calculate memory readout range\n");
 	// calculate memory readout range
 	nbr_pts = (u32)(8192 / XtoPowerY(2, (u32) mode));
 	error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEBUG1_MODE_FULL(path), &fld_value);
@@ -565,7 +565,7 @@ fe_lla_error_t fe_stid135_fft(fe_stid135_handle_t handle, enum fe_stid135_demod 
 		error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMADDR1_MEM_ADDR(path), (i>>8) & 0x03);
 		error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMADDR0_MEM_ADDR(path), (i & 0xff));
 		error |= ChipSetRegisters(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_MEMADDR1(path), 2);
-
+		dprintk("FFT %d/%d\n", i, nb_words);
 		// wait for end of transfer
 		error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMSTAT_MEM_STAT(path), &memstat);
 		while ((!memstat) && (timeout < 50)) {
@@ -575,7 +575,7 @@ fe_lla_error_t fe_stid135_fft(fe_stid135_handle_t handle, enum fe_stid135_demod 
 		}
 		if(timeout == 50)
 			return(FE_LLA_NODATA);
-
+		dprintk("FFT %d/%d end of transfer\n", i, nb_words);
 		// read & store data to create an fft list
 
 		error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEBUG1_MODE_FULL(path), &fld_value);
@@ -602,12 +602,12 @@ fe_lla_error_t fe_stid135_fft(fe_stid135_handle_t handle, enum fe_stid135_demod 
 			}
 		}
 	}
-
+	dprintk("FFT empty hardware fft\n");
 	// Empty hardware fft
 	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMADDR1_MEM_ADDR(path), 0x00);
 	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMADDR0_MEM_ADDR(path), 0x00);
 	error |= ChipSetRegisters(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_MEMADDR1(path), 2);
-
+	dprintk("FFT sleep down fft\n");
 	// Sleep down hardware fft
 	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_GCTRL_UFBS_RESTART(path), 1);
 

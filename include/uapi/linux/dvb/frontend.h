@@ -329,7 +329,7 @@ enum fe_code_rate {
 	FEC_2_5,
 	FEC_5_11,
 	FEC_1_4,
-	FEC_1_3,  
+	FEC_1_3,
 };
 
 /**
@@ -720,7 +720,8 @@ enum fe_delivery_system {
  *	Scan full bandwith, optimized for low symbol rate
  */
 enum fe_algorithm {
-	ALGORITHM_WARM, 
+	ALGORITHM_NONE,
+	ALGORITHM_WARM,
 	ALGORITHM_COLD,
 	ALGORITHM_COLD_BEST_GUESS,
 	ALGORITHM_BLIND,

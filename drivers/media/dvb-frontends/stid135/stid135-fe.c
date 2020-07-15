@@ -520,8 +520,8 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 																	 ) ?    30000000/*to prevent error detected*/ : p->symbol_rate;
 	search_params.modulation	= FE_SAT_MOD_UNKNOWN;
 	search_params.modcode		= FE_SAT_DUMMY_PLF;
-	search_params.search_range	= p->search_range > 0 ? p->search_range : 10000000;
-	//dprintk("Search range set to %d\n", search_params.search_range);
+	search_params.search_range_hz	= p->search_range > 0 ? p->search_range : 10000000;
+	//dprintk("Search range set to %d\n", search_params.search_range_hz);
 
 	search_params.puncture_rate	= FE_SAT_PR_UNKNOWN;
 	if(	search_params.standard != FE_SAT_AUTO_SEARCH)
@@ -1162,7 +1162,7 @@ static int stid135_get_spectrum_scan(struct dvb_frontend *fe, struct dvb_fe_spec
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
 	struct stv *state = fe->demodulator_priv;
-
+	*s->type = SC_DBM;
 	s32 center_freq=   p->frequency; //in kHz
 	u32 range =    p->symbol_rate; //in Hz
 	u32 mode = 1; //table of 4096 samples

@@ -293,7 +293,7 @@ struct fe_sat_init_params {
 struct fe_sat_search_params {
 		u32 				frequency;		/* Transponder frequency (in KHz)				*/
 		u32 				symbol_rate;		/* Transponder symbol rate  (in bds)				*/
-		u32 				search_range;		/* Range of the search (in Hz)  				*/	
+		u32 				search_range_hz;		/* Range of the search (in Hz)  				*/	
 		enum fe_sat_search_standard	standard;		/* DVBS1,DVBS2, DSS or Turbo					*/
 		enum fe_sat_modulation		modulation;		/* modulation type use	FE_MOD_UNKNOWN for auto 		*/ 
 		enum fe_sat_rate		puncture_rate;		/* DVBS1,DSS and turbo puncture rate use FE_PR_UNKNOWN for auto	*/

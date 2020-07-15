@@ -55,6 +55,95 @@ static inline struct dvb_frontend *stv091x_attach(struct i2c_adapter *i2c,
 	return NULL;
 }
 
+
 #endif
+
+struct stv_base {
+	struct list_head     stvlist;
+
+	u8                   adr;
+	struct i2c_adapter  *i2c;
+	struct mutex         i2c_lock;
+	struct mutex         reg_lock;
+	int                  count;
+
+	u32                  extclk;
+	u32                  mclk;
+
+	u8                   dual_tuner;
+
+	/* Hook for Lock LED */
+	void (*set_lock_led) (struct dvb_frontend *fe, int offon);
+	void (*write_properties) (struct i2c_adapter *i2c,u8 reg, u32 buf);
+	void (*read_properties) (struct i2c_adapter *i2c,u8 reg, u32 *buf);
+
+};
+
+enum ReceiveMode { Mode_None, Mode_DVBS, Mode_DVBS2, Mode_Auto };
+
+enum DVBS2_FECType { DVBS2_64K, DVBS2_16K };
+
+enum DVBS2_ModCod {
+	DVBS2_DUMMY_PLF, DVBS2_QPSK_1_4, DVBS2_QPSK_1_3, DVBS2_QPSK_2_5,
+	DVBS2_QPSK_1_2, DVBS2_QPSK_3_5, DVBS2_QPSK_2_3,	DVBS2_QPSK_3_4,
+	DVBS2_QPSK_4_5,	DVBS2_QPSK_5_6,	DVBS2_QPSK_8_9,	DVBS2_QPSK_9_10,
+	DVBS2_8PSK_3_5,	DVBS2_8PSK_2_3,	DVBS2_8PSK_3_4,	DVBS2_8PSK_5_6,
+	DVBS2_8PSK_8_9,	DVBS2_8PSK_9_10, DVBS2_16APSK_2_3, DVBS2_16APSK_3_4,
+	DVBS2_16APSK_4_5, DVBS2_16APSK_5_6, DVBS2_16APSK_8_9, DVBS2_16APSK_9_10,
+	DVBS2_32APSK_3_4, DVBS2_32APSK_4_5, DVBS2_32APSK_5_6, DVBS2_32APSK_8_9,
+	DVBS2_32APSK_9_10
+};
+
+enum FE_STV0910_ModCod {
+	FE_DUMMY_PLF, FE_QPSK_14, FE_QPSK_13, FE_QPSK_25,
+	FE_QPSK_12, FE_QPSK_35, FE_QPSK_23, FE_QPSK_34,
+	FE_QPSK_45, FE_QPSK_56, FE_QPSK_89, FE_QPSK_910,
+	FE_8PSK_35, FE_8PSK_23, FE_8PSK_34, FE_8PSK_56,
+	FE_8PSK_89, FE_8PSK_910, FE_16APSK_23, FE_16APSK_34,
+	FE_16APSK_45, FE_16APSK_56, FE_16APSK_89, FE_16APSK_910,
+	FE_32APSK_34, FE_32APSK_45, FE_32APSK_56, FE_32APSK_89,
+	FE_32APSK_910
+};
+
+enum FE_STV0910_RollOff { FE_SAT_35, FE_SAT_25, FE_SAT_20, FE_SAT_15 };
+
+struct stv {
+	struct stv_base     *base;
+	struct dvb_frontend  fe;
+	int                  nr;
+	u16                  regoff;
+	u8                   i2crpt;
+	u8                   tscfgh;
+	u8                   tsgeneral;
+	unsigned long        tune_time;
+
+	s32		tuner_bw;
+	s32                  SearchRange;
+	u32                  Started;
+	u32                  DemodLockTime;
+	enum ReceiveMode     ReceiveMode;
+	u32                  DemodTimeout;
+	s32                  FecTimeout;
+	s32                  FirstTimeLock;
+	u8                   DEMOD;
+	u32                  SymbolRate;
+
+	u8                      LastViterbiRate;
+	enum fe_code_rate       PunctureRate;
+	enum FE_STV0910_ModCod  ModCod;
+	enum DVBS2_FECType      FECType;
+	u32                     Pilots;
+	enum FE_STV0910_RollOff FERollOff;
+
+	u32   LastBERNumerator;
+	u32   LastBERDenominator;
+	u8    BERScale;
+	bool timedout;
+};
+
+int write_reg(struct stv *state, u16 reg, u8 val);
+int read_regs(struct stv *state, u16 reg, u8 *val, int len);
+int read_reg(struct stv *state, u16 reg, u8 *val);
+int  write_reg_field(struct stv* state, u32 field_id, s32 val);
 
 #endif

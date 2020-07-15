@@ -173,7 +173,7 @@ static void tbs5927_led_ctrl(struct dvb_frontend *fe, int offon)
 
 	if (offon)
 		msg.buf = led_on;
-	
+
 	/* info("tbs5927_led_ctrl %d", msg.buf[0]); */
 	i2c_transfer(&udev_adap->dev->i2c_adap, &msg, 1);
 }
@@ -219,7 +219,7 @@ static int tbs5927_read_mac_address(struct dvb_usb_device *d, u8 mac[6])
 				eepromline[i%16] = ibuf[0];
 				eeprom[i] = ibuf[0];
 			}
-			
+
 			if ((i % 16) == 15) {
 				deb_xfer("%02x: ", i - 15);
 				debug_dump(eepromline, 16, deb_xfer);
@@ -229,16 +229,16 @@ static int tbs5927_read_mac_address(struct dvb_usb_device *d, u8 mac[6])
 	return 0;
 };
 
-static int tbs5927_set_voltage(struct dvb_frontend *fe, 
+static int tbs5927_set_voltage(struct dvb_frontend *fe,
 						enum fe_sec_voltage voltage)
 {
 	static u8 cmd[1] = {0x00};
- 
+
 	struct i2c_msg msg[] = {
 		{.addr = TBS5927_VOLTAGE_CTRL, .flags = 0,
 			.buf = cmd, .len = 1},
 	};
-	
+
 	struct dvb_usb_adapter *udev_adap =
 		(struct dvb_usb_adapter *)(fe->dvb->priv);
 	switch (voltage) {

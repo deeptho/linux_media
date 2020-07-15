@@ -42,6 +42,7 @@ struct SLookup {
 	u16 RegValue;
 };
 
+
 static struct SLookup Gain_RFAGC_LookUp[] = {
 	/*Gain *100dB*/   /*reg*/
 	{	7429		,	0        },  /*	74.61 dB	*/
@@ -168,7 +169,7 @@ struct stv {
 
 	struct stv6120_cfg *cfg;
 
-	u8 reg[7];
+	u8 reg[7]; //registers starting at reg[0]=CTRL3
 };
 
 static int i2c_read(struct i2c_adapter *adap,
@@ -208,7 +209,9 @@ static int write_regs(struct stv *state, int reg, int len)
 	return i2c_write(state->base->i2c, state->base->adr, d, len + 1);
 }
 
-
+/*
+	write CTRL3 ... CTRL10
+ */
 static int write_tuner_regs(struct stv *state)
 {
 	u8 d[8];
@@ -334,6 +337,7 @@ static void release(struct dvb_frontend *fe)
 }
 
 
+#if 0
 static int set_bandwidth(struct dvb_frontend *fe, u32 CutOffFrequency)
 {
 	struct stv *state = fe->tuner_priv;
@@ -356,6 +360,9 @@ static int set_bandwidth(struct dvb_frontend *fe, u32 CutOffFrequency)
 		fe->ops.i2c_gate_ctrl(fe, 0);
 	return 0;
 }
+#endif
+
+
 
 
 
@@ -415,18 +422,29 @@ static int set_lof(struct stv *state, u32 LocalFrequency, u32 CutOffFrequency)
 	frac = (fvco * state->cfg->Rdiv) % state->cfg->xtal;
 	frac = MulDiv32(frac, 0x40000, state->cfg->xtal);
 
-
+	/*START set carrier freq*/
+	//addr 0x2+0 = CTRL3
 	state->reg[REG_N0]    = div & 0xff;
+
+	//addr 0x2+1 = CTRL4
 	state->reg[REG_N1_F0] = (((div >> 8) & 0x01) | ((frac & 0x7f) << 1)) & 0xff;
+
+	//addr 0x2+2 = CTRL5
 	state->reg[REG_F1]    = (frac >> 7) & 0xff;
+
+	//addr 0x2+3 = CTRL6
 	state->reg[REG_F2_ICP] &= 0x88;
 	state->reg[REG_F2_ICP] |= (Icp << 4) | ((frac >> 15) & 0x07);
+
+	/*Last part of set carrier freq + bandwidth selection*/
+	//addr 0x2+4 = CTRL7
 	state->reg[REG_CF_PDIV] &= 0x9f;
 	state->reg[REG_CF_PDIV] |= ((PDIV << 5) | cf_index);
 
 	/* Start cal vco,CF */
+	//addr 0x2+6 =  STAT1
 	state->reg[REG_CAL] &= 0xf8;
-	state->reg[REG_CAL] |= 0x06;
+	state->reg[REG_CAL] |= 0x06;//bit[1] starts calibration
 
 	write_tuner_regs(state);
 
@@ -447,6 +465,7 @@ static int set_lof(struct stv *state, u32 LocalFrequency, u32 CutOffFrequency)
 	return 0;
 }
 
+#if 0
 static int set_frequency(struct dvb_frontend *fe, u32 frequency)
 {	u32 freq, cutoff, symbol_rate;
 	struct stv *state = fe->tuner_priv;
@@ -464,13 +483,13 @@ static int set_frequency(struct dvb_frontend *fe, u32 frequency)
 		fe->ops.i2c_gate_ctrl(fe, 0);
 	return 0;
 }
+#endif
 
 static int set_params(struct dvb_frontend *fe)
 {
 	struct stv *state = fe->tuner_priv;
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
-	int status;
-	u32 freq, symb, cutoff;
+	u32 freq, symbol_rate, cutoff;
 	u32 rolloff;
 
 	if (p->delivery_system != SYS_DVBS && p->delivery_system != SYS_DVBS2)
@@ -489,16 +508,35 @@ static int set_params(struct dvb_frontend *fe)
 	}
 
 	freq = p->frequency * 1000;
-	symb = p->symbol_rate;
-	cutoff = 5000000 + MulDiv32(p->symbol_rate, rolloff, 200);
+
+	symbol_rate = p->symbol_rate;
+
+	cutoff = 5000000 + MulDiv32(symbol_rate, rolloff, 200);
 
 	if (fe->ops.i2c_gate_ctrl)
 		fe->ops.i2c_gate_ctrl(fe, 1);
 	set_lof(state, freq, cutoff);
 	if (fe->ops.i2c_gate_ctrl)
 		fe->ops.i2c_gate_ctrl(fe, 0);
-	return status;
+	return 0;
 }
+
+
+/*
+	frequency in kHz, bandwidth in Hz
+ */
+static int set_frequency_and_bandwidth(struct dvb_frontend *fe, u32 frequency, u32 bandwidth)
+{
+	struct stv *state = fe->tuner_priv;
+
+	if (fe->ops.i2c_gate_ctrl)
+		fe->ops.i2c_gate_ctrl(fe, 1);
+	set_lof(state, frequency*1000, bandwidth);
+	if(fe->ops.i2c_gate_ctrl)
+		fe->ops.i2c_gate_ctrl(fe, 0);
+	return 0;
+}
+
 
 static s32 TableLookup(struct SLookup *Table, int TableSize, u16 RegValue)
 {
@@ -531,16 +569,17 @@ static s32 TableLookup(struct SLookup *Table, int TableSize, u16 RegValue)
 	return Gain;
 }
 
+
 static int get_rf_strength(struct dvb_frontend *fe, u16 *agc)
 {
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
-
+	s32 bbgain = 2*tuner_init[1]&0xf; //CTRL2; value is 6
 	s32 gain = 1, ref_bbgain = 12, tilt = 6;
 	s32 freq;
 
 	gain = TableLookup(Gain_RFAGC_LookUp, ARRAY_SIZE(Gain_RFAGC_LookUp), *agc);
 
-	gain += 100 * (6 - ref_bbgain);
+	gain += 100 * (bbgain - ref_bbgain);
 
 	freq = p->frequency / 10000;
 
@@ -565,8 +604,11 @@ static struct dvb_tuner_ops tuner_ops = {
 	.set_params        = set_params,
 	.release           = release,
 	.get_rf_strength   = get_rf_strength,
+	.set_frequency_and_bandwidth = set_frequency_and_bandwidth
+#if 0
 	.set_bandwidth     = set_bandwidth,
 	.set_frequency     = set_frequency,
+#endif
 };
 
 static struct stv_base *match_base(struct i2c_adapter  *i2c, u8 adr)

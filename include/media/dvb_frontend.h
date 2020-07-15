@@ -267,6 +267,7 @@ struct dvb_tuner_ops {
 	 */
 	int (*set_frequency)(struct dvb_frontend *fe, u32 frequency);
 	int (*set_bandwidth)(struct dvb_frontend *fe, u32 bandwidth);
+	int (*set_frequency_and_bandwidth)(struct dvb_frontend *fe, u32 frequency, u32 bandwidth);
 };
 
 /**

@@ -723,7 +723,8 @@ restart:
 				fe->ops.set_voltage(fe, fepriv->voltage);
 			fepriv->reinitialise = 0;
 		}
-
+		if(fepriv->state == FESTATE_IDLE)
+			continue;
 		/* do an iteration of the tuning loop */
 		if (fe->ops.get_frontend_algo) {
 			algo = fe->ops.get_frontend_algo(fe);
@@ -740,7 +741,7 @@ restart:
 				} else {
 					re_tune = false;
 				}
-
+				dprintk("calling tune state=%d\n", fepriv->state);
 				if (fe->ops.tune)
 					fe->ops.tune(fe, re_tune, fepriv->tune_mode_flags, &fepriv->delay, &s);
 				if (s != fepriv->status && !(fepriv->tune_mode_flags & FE_TUNE_MODE_ONESHOT)) {
@@ -2143,7 +2144,7 @@ static int dvb_frontend_ioctl_get_spectrum_scan(struct file *file,
 
 	struct dvb_fe_spectrum_scan *s_user = parg;
 	struct dvb_fe_spectrum_scan s_kernel;
-
+	struct dvb_frontend_private *fepriv = fe->frontend_priv;
 	int err = -EOPNOTSUPP;
 
 	if (fe->ops.get_spectrum_scan)
@@ -2177,7 +2178,6 @@ static int dvb_frontend_ioctl_get_spectrum_scan(struct file *file,
 		if (copy_to_user(s_user->type, s_kernel.type, sizeof(__u32))) {
 			err = -EFAULT;
 		}
-
 		// free kernel allocated memory
 		kfree(s_kernel.type);
 		kfree(s_kernel.rf_level);
