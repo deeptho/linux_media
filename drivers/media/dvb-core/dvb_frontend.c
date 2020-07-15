@@ -1038,7 +1038,7 @@ static int dvb_frontend_clear_cache(struct dvb_frontend *fe)
 
 	delsys = c->delivery_system;
 	memset(c, 0, offsetof(struct dtv_frontend_properties, strength));
-	c->delivery_system = delsys;
+	//c->delivery_system = delsys;
 
 	dev_dbg(fe->dvb->device, "%s: Clearing cache for delivery system %d\n",
 		__func__, c->delivery_system);

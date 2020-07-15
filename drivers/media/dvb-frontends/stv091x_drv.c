@@ -315,13 +315,13 @@ static u8 get_optim_cloop(struct stv *state,
 	else if (ModCod >= FE_QPSK_14)
 		i = ((int)ModCod - (int)FE_QPSK_14) * 10;
 
-	if (state->SymbolRate <= 3000000)
+	if (state->symbol_rate <= 3000000)
 		i += 0;
-	else if (state->SymbolRate <=  7000000)
+	else if (state->symbol_rate <=  7000000)
 		i += 2;
-	else if (state->SymbolRate <= 15000000)
+	else if (state->symbol_rate <= 15000000)
 		i += 4;
-	else if (state->SymbolRate <= 25000000)
+	else if (state->symbol_rate <= 25000000)
 		i += 6;
 	else
 		i += 8;
@@ -877,9 +877,11 @@ static int Stop(struct stv *state)
 #if 1
 		write_reg_field(state, FSTV0910_P2_ALGOSWRST,0); /*release reset DVBS2 packet delin*/
 #else
+		{u8 tmp;
 		read_reg(state, RSTV0910_P2_PDELCTRL1 + state->regoff, &tmp);
 		tmp &= ~0x01; /*release reset DVBS2 packet delin*/
 		write_reg(state, RSTV0910_P2_PDELCTRL1 + state->regoff, tmp);
+		}
 #endif
 
 #if 1 //the following not done in stv091x_Algo
@@ -1034,49 +1036,115 @@ int stv091x_set_frequency_symbol_rate_bandwidth(struct stv* state)
 	return 0;
 }
 
-static int Start(struct stv *state, struct dtv_frontend_properties *p)
+static int stv091x_set_search_range(struct stv *state, struct dtv_frontend_properties *p)
+{
+	s32 range;
+	if(p->algorithm == ALGORITHM_WARM) {
+		range = 1000;
+		range = (range<<16)/(state->base->mclk/1000); //1Mhz
+	} else if(p->algorithm == ALGORITHM_COLD) {
+		/* CFR min =- (search_range/2 + margin )
+			 CFR max = +(search_range/2 + margin)
+			 (80KHz margin if SR <=5Msps else margin =600KHz )*/
+
+		if(p->symbol_rate <=5000000)
+			range=(state->search_range/2000)+80;
+		else
+			range=(state->search_range/2000)+1600;
+		range = (range<<16)/(state->base->mclk/1000);
+	} else {
+		//set limits on how far we can search for a carrier
+		//default search_range=16 000 000; make it less for lower symbol rate
+		range = (state->search_range / 2000);
+		range = (range << 16) / (state->base->mclk / 1000);
+	}
+	write_reg(state, RSTV0910_P2_CFRUP1 + state->regoff,
+						(range >> 8) & 0xff);
+	write_reg(state, RSTV0910_P2_CFRUP0 + state->regoff, (range & 0xff));
+	/*CFR Low Setting*/
+	range = -range;
+	write_reg(state, RSTV0910_P2_CFRLOW1 + state->regoff,
+						(range >> 8) & 0xff);
+	write_reg(state, RSTV0910_P2_CFRLOW0 + state->regoff, (range & 0xff));
+
+	return 0;
+}
+
+static void stv091x_set_viterbi(struct stv* state, struct dtv_frontend_properties *p)
 {
 
-	s32 Freq;
+	s32 fecmReg,
+		prvitReg;
+	fecmReg=RSTV0910_P2_FECM;
+	prvitReg=RSTV0910_P2_PRVIT;
+	switch(p->delivery_system) {
+		case SYS_AUTO:
+			write_reg(state, fecmReg, 0x00);	/* Disable DSS  in auto mode search for DVBS1 and DVBS2 only , DSS search is on demande*/
+			write_reg(state, prvitReg, 0x2F);   /* Enable All PR exept 6/7 */
+			break;
+
+	case SYS_DVBS:
+		write_reg(state, fecmReg, 0x00);	/* Disable DSS */
+		switch(p->fec_inner) {
+		case FEC_NONE:
+		default:
+			write_reg(state, prvitReg, 0x2F);   /* Enable All PR exept 6/7 */
+			break;
+
+		case FEC_1_2:
+			write_reg(state, prvitReg, 0x01);   /* Enable 1/2 PR only */
+			break;
+
+		case FEC_2_3:
+			write_reg(state, prvitReg, 0x02);   /* Enable 2/3 PR only */
+			break;
+
+		case FEC_3_4:
+			write_reg(state, prvitReg, 0x04);   /* Enable 3/4 PR only */
+			break;
+
+		case FEC_5_6:
+			write_reg(state, prvitReg, 0x08);   /* Enable 5/6 PR only */
+			break;
+
+		case FEC_7_8:
+			write_reg(state, prvitReg, 0x20);   /* Enable 7/8 PR only */
+			break;
+		}
+
+		break;
+
+	case SYS_DSS:
+		write_reg(state, fecmReg, 0x80);	/* Disable DVBS1 */
+		switch(p->fec_inner) {
+		case FEC_NONE:
+		default:
+			write_reg(state, prvitReg, 0x13);   /* Enable 1/2, 2/3 and 6/7 PR */
+			break;
+
+		case FEC_1_2:
+			write_reg(state, prvitReg, 0x01);   /* Enable 1/2 PR only */
+			break;
+
+		case FEC_2_3:
+			write_reg(state, prvitReg, 0x02);   /* Enable 2/3 PR only */
+			break;
+
+		case FEC_6_7:
+			write_reg(state, prvitReg, 0x10);   /* Enable All 7/8 PR only */
+			break;
+		}
+
+		break;
+
+	default:
+		break;
+	}
+}
+
+static int stv091x_set_search_standard(struct stv *state, struct dtv_frontend_properties *p)
+{
 	u8  regDMDCFGMD;
-	int symbol_rate;
-
-	/* Set the Init Symbol rate*/
-
-	symbol_rate  = 	(p->algorithm == ALGORITHM_BLIND ||p->algorithm == ALGORITHM_BLIND_BEST_GUESS||
-									 p->algorithm == ALGORITHM_NEXT || p->algorithm == ALGORITHM_BANDWIDTH
-									 ) ?    30000000/*to prevent error detected*/ : p->symbol_rate;
-	state->SymbolRate = symbol_rate;
-	dprintk("set symbol_rate=%d\n", symbol_rate);
-
-
-	if (symbol_rate < 100000 || symbol_rate > 70000000)
-		return -EINVAL;
-	stv091x_compute_timeouts(&state->DemodTimeout, &state->FecTimeout, symbol_rate, p->algorithm);
-	stv091x_set_frequency_symbol_rate_bandwidth(state);
-
-	state->ReceiveMode = Mode_None;
-	state->DemodLockTime = 0;
-#if 0 //not needed if called properly after Stop
-	/* Demod Stop*/
-	if (state->Started)
-		write_reg(state, RSTV0910_P2_DMDISTATE + state->regoff, 0x5C);
-#endif
-
-	SetMIS(state, p->stream_id);
-
-	/* Set Gold code > 0 */
-	if (p->scrambling_sequence_index)
-	      SetPLS(state, 1, p->scrambling_sequence_index);
-
-
-	if(p->algorithm == ALGORITHM_WARM)
-		state->DEMOD |= 0x80; //manual mode for rolloff
-	else
-		state->DEMOD &= ~0x80; //automatic mode for rolloff
-	write_reg(state, RSTV0910_P2_DEMOD + state->regoff, state->DEMOD);
-
-	/* FE_STV0910_SetSearchStandard */
 	read_reg(state, RSTV0910_P2_DMDCFGMD + state->regoff, &regDMDCFGMD);
 	if(p->algorithm== ALGORITHM_BLIND || p->algorithm==ALGORITHM_BLIND_BEST_GUESS)
 		write_reg(state, RSTV0910_P2_DMDCFGMD + state->regoff,
@@ -1085,50 +1153,72 @@ static int Start(struct stv *state, struct dtv_frontend_properties *p)
 		write_reg(state, RSTV0910_P2_DMDCFGMD + state->regoff,
 							regDMDCFGMD |= 0xC0); 	//enable DVBS2 and  DVBS1  search
 
-#ifdef ENABLE_DSS //US transmissions by directv
-		/* Enable DSS search as well */
-	STV091X_WRITE_REG(state, FECM, 0x10); //automatic switching between dss and dvb-s1
-#else
-	/* Disable DSS */
-	write_reg(state, RSTV0910_P2_FECM  + state->regoff, 0x00); //dvb-s1; no dss
-#endif
-	write_reg(state, RSTV0910_P2_PRVIT + state->regoff, 0x7F); //allow all puncture rates, disable auto-adjustment of VTH
+	switch(p->delivery_system) {
+	case SYS_DVBS:
+		write_reg_fields(state, RSTV0910_P2_DMDCFGMD,
+										 {FSTV0910_P2_DVBS1_ENABLE, 1},
+										 {FSTV0910_P2_DVBS2_ENABLE, 0}
+										 );
+		write_reg_field(state,FSTV0910_TSTRS_DISRS2, 0); //Reed-solomon off
 
-	/* 8PSK 3/5, 8PSK 2/3 Poff tracking optimization WA*/
-	write_reg(state, RSTV0910_P2_ACLC2S2Q + state->regoff, 0x0B);
-	write_reg(state, RSTV0910_P2_ACLC2S28 + state->regoff, 0x0A);
-	write_reg(state, RSTV0910_P2_BCLC2S2Q + state->regoff, 0x84);
-	write_reg(state, RSTV0910_P2_BCLC2S28 + state->regoff, 0x84);
-	write_reg(state, RSTV0910_P2_CARHDR + state->regoff, 0x1C);
-	/* Reset demod */
-	write_reg(state, RSTV0910_P2_DMDISTATE + state->regoff, 0x1F);
+		stv091x_set_viterbi(state, p);
+		write_reg(state, RSTV0910_P2_SFDLYSET2, 0); /* Enable Super FEC */
+
+		break;
+	case SYS_DSS:
+		/*If DVBS1/DSS only disable DVBS2 search*/
+		write_reg_fields(state, RSTV0910_P2_DMDCFGMD,
+										 {FSTV0910_P2_DVBS1_ENABLE, 1},
+										 {FSTV0910_P2_DVBS2_ENABLE, 0}
+										 );
+
+		write_reg_field(state, FSTV0910_TSTRS_DISRS2, 0);  //Reed-solomon off
+
+		stv091x_set_viterbi(state, p);
+		write_reg(state, RSTV0910_P2_SFDLYSET2, 2); /* Stop Super FEC */
+
+		break;
+
+	case SYS_DVBS2:
+		/*If DVBS2 only activate the DVBS2 and stop the VITERBI*/
+		write_reg_fields(state, RSTV0910_P2_DMDCFGMD,
+										 {FSTV0910_P2_DVBS1_ENABLE, 0},
+										 {FSTV0910_P2_DVBS2_ENABLE, 1}
+										 );
+
+		write_reg_field(state, FSTV0910_TSTRS_DISRS2,1); //Reed-solomon on
+		break;
+
+		case SYS_AUTO: //auto search
+	default:
+		/*If automatic enable both DVBS1/DSS and DVBS2 search*/
+		write_reg_fields(state, RSTV0910_P2_DMDCFGMD,
+										 {FSTV0910_P2_DVBS1_ENABLE, 1},
+										 {FSTV0910_P2_DVBS2_ENABLE, 1}
+										 );
+		write_reg_field(state, FSTV0910_TSTRS_DISRS2, 1); //Reed-solomon on
+
+		stv091x_set_viterbi(state, p);
+		write_reg(state, RSTV0910_P2_SFDLYSET2, 0); /* Enable Super FEC */
+
+		break;
+	}
+	return 0;
+}
+
+static int stv091x_start_search(struct stv *state, struct dtv_frontend_properties *p)
+{
+
+	//force reset LDPC FEC; bug DVBS2->DVBS1 lock
+	write_reg_field(state, FSTV0910_FRESSYM2, 1);
+	write_reg_field(state, FSTV0910_FRESSYM2, 0);
+
+	write_reg(state, RSTV0910_P2_DMDISTATE,0x1F);	/*Reset the Demod*/
 
 	//set register to detault: citroen2 phase detection, open carrier1 loop (no derotator()
 	write_reg(state, RSTV0910_P2_CARCFG + state->regoff, 0x46);
 
-
-	if(p->algorithm == ALGORITHM_BLIND || p->algorithm == ALGORITHM_BLIND_BEST_GUESS) {
-		//set limits on how far we can search for a carrier
-		//default SearchRange=16 000 000; make it less for lower symbol rate
-		Freq = (state->SearchRange / 2000) + 600;
-		Freq = (Freq << 16) / (state->base->mclk / 1000);
-	} else {
-		//set limits on how far we can search for a carrier
-		//default SearchRange=16 000 000; make it less for lower symbol rate
-		Freq = (state->SearchRange / 2000) + 600;
-		if (symbol_rate <= 5000000)
-			Freq -= (600 + 80);
-		Freq = (Freq << 16) / (state->base->mclk / 1000);
-	}
-	write_reg(state, RSTV0910_P2_CFRUP1 + state->regoff,
-						(Freq >> 8) & 0xff);
-	write_reg(state, RSTV0910_P2_CFRUP0 + state->regoff, (Freq & 0xff));
-	/*CFR Low Setting*/
-	Freq = -Freq;
-	write_reg(state, RSTV0910_P2_CFRLOW1 + state->regoff,
-						(Freq >> 8) & 0xff);
-	write_reg(state, RSTV0910_P2_CFRLOW0 + state->regoff, (Freq & 0xff));
-
+	stv091x_set_search_range(state, p);
 
 	/* init the demod frequency offset to 0 */
 	write_reg(state, RSTV0910_P2_CFRINIT1 + state->regoff, 0);
@@ -1150,7 +1240,7 @@ static int Start(struct stv *state, struct dtv_frontend_properties *p)
 	case ALGORITHM_COLD_BEST_GUESS:
 		write_reg(state, RSTV0910_P2_DMDISTATE + state->regoff, 0x05);
 		break;
-	case ALGORITHM_NEXT:
+	case ALGORITHM_SEARCH_NEXT:
 		write_reg(state, RSTV0910_P2_DMDISTATE + state->regoff, 0x14);
 		break;
 	case ALGORITHM_BANDWIDTH:
@@ -1161,13 +1251,9 @@ static int Start(struct stv *state, struct dtv_frontend_properties *p)
 		write_reg(state, RSTV0910_P2_DMDISTATE + state->regoff, 0x18);
 		break;
 	}
-
-
-	state->DemodLockTime += TUNING_DELAY;
-	state->Started = 1;
-
 	return 0;
 }
+
 
 static int init_diseqc(struct stv *state)
 {
@@ -1380,7 +1466,7 @@ static bool stv091x_get_signal_info(struct dvb_frontend *fe)
 	u8 rolloff_status, rolloff;
 	bool blind =
 		(p->algorithm == ALGORITHM_BLIND ||p->algorithm == ALGORITHM_BLIND_BEST_GUESS||
-		 p->algorithm == ALGORITHM_NEXT || p->algorithm == ALGORITHM_BANDWIDTH);
+		 p->algorithm == ALGORITHM_SEARCH_NEXT || p->algorithm == ALGORITHM_BANDWIDTH);
 
 	read_regs(state, RSTV0910_P2_CFR2, regs, 2);
 	carrier_frequency_offset = (s16)((regs[0]<<8) | regs[1]);
@@ -1388,7 +1474,7 @@ static bool stv091x_get_signal_info(struct dvb_frontend *fe)
 	dprintk("freq: %d offset %d", p->frequency, carrier_frequency_offset);
 	p->frequency   += carrier_frequency_offset;
 	if (carrier_frequency_offset > 1000 || carrier_frequency_offset< -1000)
-		need_retune = !blind; // ask tuner to change its center frequency, except duting blind scan
+		need_retune = true;
 
 	GetCurSymbolRate(state, &p->symbol_rate);
 	read_reg(state, RSTV0910_P2_TMGOBS, &regs[0]);
@@ -1412,7 +1498,7 @@ static bool stv091x_get_signal_info(struct dvb_frontend *fe)
 		bandwidth_hz = (p->symbol_rate * rolloff) / 100;
 
 		if (p->bandwidth_hz > bandwidth_hz || p->bandwidth_hz < (bandwidth_hz*8)/10)
-			need_retune = 1; // ask tuner to change its bandwidth, except duting blind scan
+			need_retune = true; // ask tuner to change its bandwidth, except duting blind scan
 
 		dprintk("SR: %d, BW: %d need_retune=%d\n", p->symbol_rate, p->bandwidth_hz, need_retune);
 		stv091x_isi_scan(fe);
@@ -1507,38 +1593,7 @@ static int pls_search_range(struct dvb_frontend *fe)
 	return locked;
 }
 
-static int set_parameters(struct dvb_frontend *fe, bool* need_retune)
-{
-	int stat = 0;
-	bool locked;
 
-	struct stv *state = fe->demodulator_priv;
-	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
-	//u32 IF;
-	*need_retune = 0;
-
-	Stop(state);
-	//if (fe->ops.tuner_ops.get_if_frequency)
-	//	fe->ops.tuner_ops.get_if_frequency(fe, &IF);
-	state->SymbolRate = p->symbol_rate;
-	stat = Start(state, p);
-	locked = wait_for_dmdlock(fe, 0 /*require_data*/);
-	dprintk("lock=%d timedout=%d\n", locked, state->timedout);
-	if(!locked)
-		locked= pls_search_list(fe);
-	if(!locked)
-		locked= pls_search_range(fe);
-	//if(!locked)
-	//	locked = wait_for_dmdlock(fe, 1 /*require_data*/);
-	dprintk("setting timedout=%d\n", !locked);
-#ifdef TEST
-	state->timedout = !locked;
-#endif
-	if(locked && p->algorithm != ALGORITHM_WARM && p->algorithm != ALGORITHM_NONE) {
-		*need_retune = stv091x_get_signal_info(fe);
-	}
-	return stat;
-}
 
 static int get_frontend(struct dvb_frontend *fe, struct dtv_frontend_properties *p)
 {
@@ -1784,6 +1839,101 @@ static int read_status(struct dvb_frontend *fe, enum fe_status *status)
 	return 0;
 }
 
+
+static int tune_once(struct dvb_frontend *fe, bool* need_retune)
+{
+	int stat = 0;
+	bool locked;
+
+	struct stv *state = fe->demodulator_priv;
+	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
+
+	state->timedout=false;
+	//u32 IF;
+	*need_retune = 0;
+
+	Stop(state);
+	//if (fe->ops.tuner_ops.get_if_frequency)
+	//	fe->ops.tuner_ops.get_if_frequency(fe, &IF);
+		/* Set the Init Symbol rate*/
+
+	state->symbol_rate  = 	(p->algorithm == ALGORITHM_BLIND ||p->algorithm == ALGORITHM_BLIND_BEST_GUESS||
+									 p->algorithm == ALGORITHM_SEARCH_NEXT || p->algorithm == ALGORITHM_BANDWIDTH
+									 ) ?    30000000/*to prevent error detected*/ : p->symbol_rate;
+
+	dprintk("set symbol_rate=%d\n", state->symbol_rate);
+
+
+	if (state->symbol_rate < 100000 || state->symbol_rate > 70000000)
+		return -EINVAL;
+	stv091x_compute_timeouts(&state->DemodTimeout, &state->FecTimeout, state->symbol_rate, p->algorithm);
+	stv091x_set_frequency_symbol_rate_bandwidth(state);
+
+	state->ReceiveMode = Mode_None;
+	state->DemodLockTime = 0;
+
+	SetMIS(state, p->stream_id);
+
+	/* Set Gold code > 0 */
+	if (p->scrambling_sequence_index)
+	      SetPLS(state, 1, p->scrambling_sequence_index);
+
+
+	if(p->algorithm == ALGORITHM_WARM)
+		state->DEMOD |= 0x80; //manual mode for rolloff
+	else
+		state->DEMOD &= ~0x80; //automatic mode for rolloff
+	write_reg(state, RSTV0910_P2_DEMOD + state->regoff, state->DEMOD);
+
+	stv091x_set_search_standard(state, p);
+
+
+	/* 8PSK 3/5, 8PSK 2/3 Poff tracking optimization WA*/
+	write_reg(state, RSTV0910_P2_ACLC2S2Q + state->regoff, 0x0B);
+	write_reg(state, RSTV0910_P2_ACLC2S28 + state->regoff, 0x0A);
+	write_reg(state, RSTV0910_P2_BCLC2S2Q + state->regoff, 0x84);
+	write_reg(state, RSTV0910_P2_BCLC2S28 + state->regoff, 0x84);
+	write_reg(state, RSTV0910_P2_CARHDR + state->regoff, 0x1C);
+
+	switch(p->algorithm) {
+	case ALGORITHM_WARM:
+	case ALGORITHM_BLIND:
+	case ALGORITHM_BLIND_BEST_GUESS:
+		stv091x_start_search(state, p);
+		break;
+	case ALGORITHM_SEARCH:
+	case ALGORITHM_SEARCH_NEXT:
+		break;
+	default:
+		break;
+	}
+
+	state->DemodLockTime += TUNING_DELAY;
+	state->Started = 1;
+
+
+
+	locked = wait_for_dmdlock(fe, 1 /*require_data*/);
+	dprintk("lock=%d timedout=%d\n", locked, state->timedout);
+	if(p->algorithm != ALGORITHM_WARM) {
+		if(!locked)
+			locked = pls_search_list(fe);
+		if(!locked)
+			locked = pls_search_range(fe);
+	}
+	//if(!locked)
+	//	locked = wait_for_dmdlock(fe, 1 /*require_data*/);
+	dprintk("setting timedout=%d\n", !locked);
+	//#ifdef TEST
+	state->timedout = !locked;
+	//#endif
+	if(locked && p->algorithm != ALGORITHM_WARM && p->algorithm != ALGORITHM_NONE) {
+		*need_retune = stv091x_get_signal_info(fe);
+	}
+
+	return stat;
+}
+
 static int tune(struct dvb_frontend *fe, bool re_tune,
 		unsigned int mode_flags,
 		unsigned int *delay, enum fe_status *status)
@@ -1793,18 +1943,15 @@ static int tune(struct dvb_frontend *fe, bool re_tune,
 	int r;
 	bool need_retune = false;// could be set during blind search
 	bool blind = (p->algorithm == ALGORITHM_BLIND ||p->algorithm == ALGORITHM_BLIND_BEST_GUESS||
-								p->algorithm == ALGORITHM_NEXT || p->algorithm == ALGORITHM_BANDWIDTH);
+								p->algorithm == ALGORITHM_SEARCH_NEXT || p->algorithm == ALGORITHM_BANDWIDTH);
 	dprintk("tune called with re_tune=%d\n", re_tune);
 	if (re_tune) {
-		r = set_parameters(fe, &need_retune);
+		r = tune_once(fe, &need_retune);
 		if (r)
 			return r;
 
-		if(need_retune && !blind) {
-			//adjust tuner frequency and bandwidth if blind or cold search found it too much off spec
-			r = set_parameters(fe, &need_retune);
-			if (r)
-				return r;
+		if(need_retune) {
+			stv091x_set_frequency_symbol_rate_bandwidth(state);
 		}
 		state->tune_time = jiffies;
 	}
@@ -2174,7 +2321,7 @@ struct dvb_frontend *stv091x_attach(struct i2c_adapter *i2c,
 	state->i2crpt = 0x0A | ((cfg->rptlvl & 0x07) << 4);
 	state->nr = nr;
 	state->regoff = state->nr ? 0 : 0x200;
-	state->SearchRange = 16000000;
+	state->search_range = 16000000;
 	state->DEMOD = 0x10;     /* Inversion : Auto with reset to 0 */
 	state->ReceiveMode   = Mode_None;
 	state->Started = 0;

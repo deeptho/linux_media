@@ -699,6 +699,7 @@ enum fe_delivery_system {
 	SYS_DVBC_ANNEX_C,
 	SYS_DVBC2,
 	SYS_DCII,
+	SYS_AUTO
 };
 
 /**
@@ -714,19 +715,23 @@ enum fe_delivery_system {
  *	Blind scan starting with known symbol rate
  * @ALGORITHM_COLD_BEST_GUESS:
  *	Blind scan starting with known symbol rate and starting with a guessed frequency
- * @ALGORITHM_NEXT:
+ * @ALGORITHM_SEARCH:
+ *	Search a complete frequency range and stop at the first mux found
+ * @ALGORITHM_SEARCH_NEXT:
  *	Scan for the mux with the next higher frequency compared to the last one tuned
  * @ALGORITHM_BANDWITH:
  *	Scan full bandwith, optimized for low symbol rate
  */
 enum fe_algorithm {
 	ALGORITHM_NONE,
+
 	ALGORITHM_WARM,
 	ALGORITHM_COLD,
 	ALGORITHM_COLD_BEST_GUESS,
 	ALGORITHM_BLIND,
 	ALGORITHM_BLIND_BEST_GUESS,
-	ALGORITHM_NEXT,
+	ALGORITHM_SEARCH,
+	ALGORITHM_SEARCH_NEXT,
 	ALGORITHM_BANDWIDTH,
 };
 

@@ -26,6 +26,9 @@
 #include <media/dvb_frontend.h>
 #include "stv091x.h"
 
+#define dprintk(fmt, arg...)																					\
+	printk(KERN_DEBUG pr_fmt("%s:%d " fmt),  __func__, __LINE__, ##arg)
+
 static s32 field_position(u8 mask)
 {
 	s32 position=0, i=0;
@@ -113,6 +116,43 @@ int read_regs(struct stv *state, u16 reg, u8 *val, int len)
 			       reg, val, len);
 }
 
+
+
+
+int  write_reg_fields_(struct stv* state, u16 addr, struct reg_field* fields, int num_fields)
+{
+	int err=0;
+	u8 reg;
+	int i;
+	s32
+		mask,
+		is_signed,
+		bits,
+		pos;
+	s32 val;
+	for(i=0; i < num_fields; ++i) {
+		struct reg_field * field = &fields[i];
+		if(i==0) {
+			err |= read_reg(state, (field->field_id >> 16)&0xFFFF, &reg);
+			addr = (field->field_id >> 16)&0xffff;
+		} else {
+			BUG_ON(addr != ((field->field_id >> 16)&0xffff));
+		}
+		is_signed = (field->field_id>>8) & 0x01;
+		mask = field->field_id & 0xff;
+		pos = field_position(mask);
+		bits = field_bits(mask, pos);
+		val = field->val;
+		if(is_signed)
+			val = (val > 0 ) ? val : val + (bits);
+
+		val = mask & (val << pos);
+
+		reg =(reg & (~mask)) + val;
+	}
+	err |= write_reg(state, addr , reg);
+	return err;
+}
 
 
 

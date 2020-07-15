@@ -118,7 +118,7 @@ struct stv {
 	unsigned long        tune_time;
 
 	s32		tuner_bw;
-	s32                  SearchRange;
+	s32   search_range;
 	u32                  Started;
 	u32                  DemodLockTime;
 	enum ReceiveMode     ReceiveMode;
@@ -126,7 +126,7 @@ struct stv {
 	s32                  FecTimeout;
 	s32                  FirstTimeLock;
 	u8                   DEMOD;
-	u32                  SymbolRate;
+	u32                  symbol_rate;
 
 	u8                      LastViterbiRate;
 	enum fe_code_rate       PunctureRate;
@@ -140,6 +140,17 @@ struct stv {
 	u8    BERScale;
 	bool timedout;
 };
+
+struct reg_field {
+	u32 field_id;
+	s32 val;
+};
+
+int  write_reg_fields_(struct stv* state, u16 addr, struct reg_field* fields, int num_fields);
+
+#define write_reg_fields(state, addr, fields...)												\
+	({struct reg_field temp[] = {fields};																	\
+		write_reg_fields_(state, addr, &temp[0], sizeof(temp)/sizeof(temp[0]));})
 
 int write_reg(struct stv *state, u16 reg, u8 val);
 int read_regs(struct stv *state, u16 reg, u8 *val, int len);

@@ -503,7 +503,7 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 		search_params.puncture_rate = FE_SAT_PR_UNKNOWN;
 		satellitte_scan = 0;
 		break;
-	case ALGORITHM_NEXT:
+	case ALGORITHM_SEARCH_NEXT:
 		search_params.search_algo		= FE_SAT_NEXT;
 		search_params.standard = FE_SAT_AUTO_SEARCH;
 		search_params.puncture_rate = FE_SAT_PR_UNKNOWN;
