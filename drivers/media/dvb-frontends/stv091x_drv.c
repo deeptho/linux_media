@@ -871,7 +871,7 @@ static int Stop(struct stv *state)
 #if 1 //the following not done in stv091x_Algo
 		write_reg(state, RSTV0910_P2_TSCFGH + state->regoff,
 							state->tscfgh | 0x01); //reset hardware merger
-		write_reg(state, RSTV0910_P1_TSCFGH , state->tscfgh); // restore it to its normal state (see: probe)
+		write_reg(state, RSTV0910_P2_TSCFGH , state->tscfgh); // restore it to its normal state (see: probe)
 #endif
 
 #if 1
