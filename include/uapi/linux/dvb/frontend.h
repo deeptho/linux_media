@@ -593,7 +593,11 @@ enum fe_interleaving {
 #define DTV_PLS_SEARCH_LIST 77 //list of PLS scrambling modes/codes to test during scan
 #define DTV_PLS_SEARCH_RANGE 78 //Range of PLS scrambling modes/codes to test during scan
 
-#define DTV_MAX_COMMAND				DTV_PLS_SEARCH_RANGE
+#define DTV_SCAN_START_FREQUENCY 79
+#define DTV_SCAN_END_FREQUENCY 80
+#define DTV_SCAN 81
+
+#define DTV_MAX_COMMAND				DTV_SCAN
 
 //commands for controlling long running algorithms via FE_ALGO_CTRL ioctl
 #define DTV_ALGO_ABORT 1
@@ -723,8 +727,6 @@ enum fe_delivery_system {
  *	Scan full bandwith, optimized for low symbol rate
  */
 enum fe_algorithm {
-	ALGORITHM_NONE,
-
 	ALGORITHM_WARM,
 	ALGORITHM_COLD,
 	ALGORITHM_COLD_BEST_GUESS,

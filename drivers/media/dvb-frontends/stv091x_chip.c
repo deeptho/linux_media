@@ -93,7 +93,14 @@ static inline int i2c_read_reg16(struct i2c_adapter *adapter, u8 adr,
 	return (i2c_transfer(adapter, msgs, 2) == 2) ? 0 : -1;
 }
 
-int read_reg(struct stv *state, u16 reg, u8 *val)
+u8 read_reg(struct stv *state, u16 reg)
+{
+	u8 val;
+	i2c_read_reg16(state->base->i2c, state->base->adr, reg, &val);
+	return val;
+}
+
+int try_read_reg(struct stv *state, u16 reg, u8* val)
 {
 	return i2c_read_reg16(state->base->i2c, state->base->adr, reg, val);
 }
@@ -116,8 +123,56 @@ int read_regs(struct stv *state, u16 reg, u8 *val, int len)
 			       reg, val, len);
 }
 
+int try_read_reg_field(struct stv* state, u32 field_id, s32* val)
+{
+	int err=0;
+	u8 regval;
+	s32 mask, is_signed, bits, pos;
+	regval = read_reg(state, field_id>>16);
+	is_signed = (field_id>>8) & 0x01;
+	mask = field_id & 0xff;
+	pos = field_position(mask);
+	bits = field_bits(mask, pos);
 
+	*val = (regval & mask) >> pos;	/*	Extract field	*/
 
+	if((is_signed )&&(*val & (1<<(bits-1))))
+		*val -= (1<<bits);			/*	Compute signed value	*/
+	return err;
+}
+
+s32 read_reg_field(struct stv* state, u32 field_id)
+{
+	s32 val;
+	try_read_reg_field(state, field_id, &val);
+	return val;
+}
+
+int  write_reg_field(struct stv* state, u32 field_id, s32 val)
+{
+	int err=0;
+	u8 reg;
+	s32
+		mask,
+		is_signed,
+		bits,
+		pos;
+
+	err |= try_read_reg(state, (field_id >> 16)&0xFFFF, &reg);
+	is_signed = (field_id>>8) & 0x01;
+	mask = field_id & 0xff;
+	pos = field_position(mask);
+	bits = field_bits(mask, pos);
+
+	if(is_signed)
+		val = (val > 0 ) ? val : val + (bits);
+
+	val = mask & (val << pos);
+
+	reg =(reg & (~mask)) + val;
+	err |= write_reg(state, (field_id >> 16)&0xffff , reg);
+	return err;
+}
 
 int  write_reg_fields_(struct stv* state, u16 addr, struct reg_field* fields, int num_fields)
 {
@@ -133,7 +188,7 @@ int  write_reg_fields_(struct stv* state, u16 addr, struct reg_field* fields, in
 	for(i=0; i < num_fields; ++i) {
 		struct reg_field * field = &fields[i];
 		if(i==0) {
-			err |= read_reg(state, (field->field_id >> 16)&0xFFFF, &reg);
+			err |= try_read_reg(state, (field->field_id >> 16)&0xFFFF, &reg);
 			addr = (field->field_id >> 16)&0xffff;
 		} else {
 			BUG_ON(addr != ((field->field_id >> 16)&0xffff));
@@ -151,33 +206,5 @@ int  write_reg_fields_(struct stv* state, u16 addr, struct reg_field* fields, in
 		reg =(reg & (~mask)) + val;
 	}
 	err |= write_reg(state, addr , reg);
-	return err;
-}
-
-
-
-int  write_reg_field(struct stv* state, u32 field_id, s32 val)
-{
-	int err=0;
-	u8 reg;
-	s32
-		mask,
-		is_signed,
-		bits,
-		pos;
-
-	err |= read_reg(state, (field_id >> 16)&0xFFFF, &reg);
-	is_signed = (field_id>>8) & 0x01;
-	mask = field_id & 0xff;
-	pos = field_position(mask);
-	bits = field_bits(mask, pos);
-
-	if(is_signed)
-		val = (val > 0 ) ? val : val + (bits);
-
-	val = mask & (val << pos);
-
-	reg =(reg & (~mask)) + val;
-	err |= write_reg(state, (field_id >> 16)&0xffff , reg);
 	return err;
 }

@@ -139,6 +139,11 @@ struct stv {
 	u32   LastBERDenominator;
 	u8    BERScale;
 	bool timedout;
+	bool fec_locked;
+	bool demod_locked;
+	bool satellite_scan;
+	s32 scan_next_frequency;
+	s32 scan_end_frequency;
 };
 
 struct reg_field {
@@ -154,7 +159,10 @@ int  write_reg_fields_(struct stv* state, u16 addr, struct reg_field* fields, in
 
 int write_reg(struct stv *state, u16 reg, u8 val);
 int read_regs(struct stv *state, u16 reg, u8 *val, int len);
-int read_reg(struct stv *state, u16 reg, u8 *val);
+u8 read_reg(struct stv *state, u16 reg);
+int try_read_reg(struct stv *state, u16 reg, u8* val);
+s32 read_reg_field(struct stv* state, u32 field_id);
+
 int  write_reg_field(struct stv* state, u32 field_id, s32 val);
 
 #endif

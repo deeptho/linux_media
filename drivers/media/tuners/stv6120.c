@@ -45,7 +45,7 @@ struct SLookup {
 
 static struct SLookup Gain_RFAGC_LookUp[] = {
 	/*Gain *100dB*/   /*reg*/
-	{	7429		,	0        },  /*	74.61 dB	*/
+	{	7429		,	0        },  /*	74.61 dB	weakest signal*/
 	{	7368		,	18711	 },  /*	74.43 dB	*/
 	{	7214		,	23432	 },  /*	73.36 dB	*/
 	{	7090		,	25123	 },  /*	72.4  dB	*/
@@ -492,7 +492,7 @@ static int set_params(struct dvb_frontend *fe)
 	u32 freq, symbol_rate, cutoff;
 	u32 rolloff;
 
-	if (p->delivery_system != SYS_DVBS && p->delivery_system != SYS_DVBS2)
+	if (p->delivery_system != SYS_DVBS && p->delivery_system != SYS_DVBS2 && p->delivery_system != SYS_AUTO)
 		return -EINVAL;
 
 	switch (p->rolloff) {

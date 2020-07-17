@@ -57,7 +57,7 @@ module_param(dvb_mfe_wait_time, int, 0644);
 MODULE_PARM_DESC(dvb_mfe_wait_time, "Wait up to <mfe_wait_time> seconds on open() for multi-frontend to become available (default:5 seconds)");
 
 #define dprintk(fmt, arg...) \
-	printk(KERN_DEBUG pr_fmt("%s: " fmt), __func__, ##arg)
+	printk(KERN_DEBUG pr_fmt("%s:%d: " fmt), __func__, __LINE__, ##arg)
 
 #define FESTATE_IDLE 1
 #define FESTATE_RETUNE 2
@@ -68,11 +68,13 @@ MODULE_PARM_DESC(dvb_mfe_wait_time, "Wait up to <mfe_wait_time> seconds on open(
 #define FESTATE_ZIGZAG_SLOW 64
 #define FESTATE_DISEQC 128
 #define FESTATE_ERROR 256
+#define FESTATE_SCAN_FIRST 512
+#define FESTATE_SCAN_NEXT 1024
 #define FESTATE_WAITFORLOCK (FESTATE_TUNING_FAST | FESTATE_TUNING_SLOW | FESTATE_ZIGZAG_FAST | FESTATE_ZIGZAG_SLOW | FESTATE_DISEQC)
 #define FESTATE_SEARCHING_FAST (FESTATE_TUNING_FAST | FESTATE_ZIGZAG_FAST)
 #define FESTATE_SEARCHING_SLOW (FESTATE_TUNING_SLOW | FESTATE_ZIGZAG_SLOW)
 #define FESTATE_LOSTLOCK (FESTATE_ZIGZAG_FAST | FESTATE_ZIGZAG_SLOW)
-
+#define FESTATE_SCANNING (FESTATE_SCAN_FIRST|FESTATE_SCAN_NEXT)
 /*
  * FESTATE_IDLE. No tuning parameters have been supplied and the loop is idling.
  * FESTATE_RETUNE. Parameters have been supplied, but we have not yet performed the first tune.
@@ -205,6 +207,7 @@ static enum dvbv3_emulation_type dvbv3_type(u32 delivery_system)
 	case SYS_DVBC_ANNEX_C:
 		return DVBV3_QAM;
 	case SYS_DVBS:
+	case SYS_AUTO:
 	case SYS_DVBS2:
 	case SYS_TURBO:
 	case SYS_ISDBS:
@@ -734,16 +737,22 @@ restart:
 			case DVBFE_ALGO_HW:
 				dev_dbg(fe->dvb->device, "%s: Frontend ALGO = DVBFE_ALGO_HW\n", __func__);
 
-				if (fepriv->state & FESTATE_RETUNE) {
-					dev_dbg(fe->dvb->device, "%s: Retune requested, FESTATE_RETUNE\n", __func__);
-					re_tune = true;
-					fepriv->state = FESTATE_TUNED;
+				if (fepriv->state & FESTATE_SCANNING) {
+					dev_dbg(fe->dvb->device, "%s: Sscan requested, FESTATE_SCANNING\n", __func__);
+					if (fe->ops.scan)
+						fe->ops.scan(fe, fepriv->state & FESTATE_SCAN_NEXT , &fepriv->delay, &s);
 				} else {
-					re_tune = false;
+					if (fepriv->state & FESTATE_RETUNE) {
+						dev_dbg(fe->dvb->device, "%s: Retune requested, FESTATE_RETUNE\n", __func__);
+						re_tune = true;
+						fepriv->state = FESTATE_TUNED;
+					} else {
+						re_tune = false;
+					}
+					dprintk("calling tune state=%d\n", fepriv->state);
+					if (fe->ops.tune)
+						fe->ops.tune(fe, re_tune, fepriv->tune_mode_flags, &fepriv->delay, &s);
 				}
-				dprintk("calling tune state=%d\n", fepriv->state);
-				if (fe->ops.tune)
-					fe->ops.tune(fe, re_tune, fepriv->tune_mode_flags, &fepriv->delay, &s);
 				if (s != fepriv->status && !(fepriv->tune_mode_flags & FE_TUNE_MODE_ONESHOT)) {
 					dev_dbg(fe->dvb->device, "%s: state changed, adding current state\n", __func__);
 					printk("ADD_EVENT stat=%d s=%d\n",	fepriv->status, s);
@@ -1038,7 +1047,7 @@ static int dvb_frontend_clear_cache(struct dvb_frontend *fe)
 
 	delsys = c->delivery_system;
 	memset(c, 0, offsetof(struct dtv_frontend_properties, strength));
-	//c->delivery_system = delsys;
+	c->delivery_system = delsys;
 
 	dev_dbg(fe->dvb->device, "%s: Clearing cache for delivery system %d\n",
 		__func__, c->delivery_system);
@@ -1121,9 +1130,12 @@ struct dtv_cmds_h {
 
 static struct dtv_cmds_h dtv_cmds[DTV_MAX_COMMAND + 1] = {
 	_DTV_CMD(DTV_TUNE, 1, 0),
+	_DTV_CMD(DTV_SCAN, 1, 0),
 	_DTV_CMD(DTV_CLEAR, 1, 0),
 	/* Set */
 	_DTV_CMD(DTV_FREQUENCY, 1, 0),
+	_DTV_CMD(DTV_SCAN_START_FREQUENCY, 1, 0),
+	_DTV_CMD(DTV_SCAN_END_FREQUENCY, 1, 0),
 	_DTV_CMD(DTV_ISI_LIST, 0, 0),
 	_DTV_CMD(DTV_PLS_SEARCH_RANGE, 1, 0),
 	_DTV_CMD(DTV_PLS_SEARCH_LIST, 1, 0),
@@ -1408,6 +1420,12 @@ static int dtv_property_process_get(struct dvb_frontend *fe,
 	case DTV_FREQUENCY:
 		tvp->u.data = c->frequency;
 		break;
+	case DTV_SCAN_START_FREQUENCY:
+		tvp->u.data = c->scan_start_frequency;
+		break;
+	case DTV_SCAN_END_FREQUENCY:
+		tvp->u.data = c->scan_end_frequency;
+		break;
 	case DTV_SEARCH_RANGE:
 		tvp->u.data = c->search_range;
 		break;
@@ -1664,6 +1682,7 @@ static int dtv_property_process_get(struct dvb_frontend *fe,
 }
 
 static int dtv_set_frontend(struct dvb_frontend *fe);
+static int dtv_set_sat_scan(struct dvb_frontend *fe, bool scan_continue);
 
 static bool is_dvbv3_delsys(u32 delsys)
 {
@@ -1687,7 +1706,8 @@ static int emulate_delivery_system(struct dvb_frontend *fe, u32 delsys)
 	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
 
 	c->delivery_system = delsys;
-
+	if(delsys == SYS_AUTO)
+		return 0;
 	/*
 	 * If the call is for ISDB-T, put it into full-seg, auto mode, TV
 	 */
@@ -1742,7 +1762,7 @@ static int dvbv5_set_delivery_system(struct dvb_frontend *fe,
 	u32 delsys = SYS_UNDEFINED;
 	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
 	enum dvbv3_emulation_type type;
-
+	dprintk("desired_system=%d\n", desired_system);
 	/*
 	 * It was reported that some old DVBv5 applications were
 	 * filling delivery_system with SYS_UNDEFINED. If this happens,
@@ -1751,40 +1771,47 @@ static int dvbv5_set_delivery_system(struct dvb_frontend *fe,
 	 */
 	if (desired_system == SYS_UNDEFINED)
 		desired_system = fe->ops.delsys[0];
-
+	dprintk("desired_system=%d\n", desired_system);
 	/*
 	 * This is a DVBv5 call. So, it likely knows the supported
 	 * delivery systems. So, check if the desired delivery system is
 	 * supported
 	 */
 	ncaps = 0;
-	while (ncaps < MAX_DELSYS && fe->ops.delsys[ncaps]) {
-		if (fe->ops.delsys[ncaps] == desired_system) {
-			c->delivery_system = desired_system;
-			dev_dbg(fe->dvb->device,
-				"%s: Changing delivery system to %d\n",
-				__func__, desired_system);
-			return 0;
+	if(desired_system != SYS_AUTO) {
+		while (ncaps < MAX_DELSYS && fe->ops.delsys[ncaps]) {
+			dprintk("delsys [%d]=%d <> %d\n", ncaps, fe->ops.delsys[ncaps], desired_system);
+			if (fe->ops.delsys[ncaps] == desired_system) {
+				c->delivery_system = desired_system;
+				dev_dbg(fe->dvb->device,
+								"%s: Changing delivery system to %d\n",
+								__func__, desired_system);
+				return 0;
+			}
+			ncaps++;
 		}
-		ncaps++;
-	}
 
 	/*
-	 * The requested delivery system isn't supported. Maybe userspace
-	 * is requesting a DVBv3 compatible delivery system.
-	 *
-	 * The emulation only works if the desired system is one of the
-	 * delivery systems supported by DVBv3 API
-	 */
-	if (!is_dvbv3_delsys(desired_system)) {
-		dev_dbg(fe->dvb->device,
-			"%s: Delivery system %d not supported.\n",
-			__func__, desired_system);
-		return -EINVAL;
+		 * The requested delivery system isn't supported. Maybe userspace
+		 * is requesting a DVBv3 compatible delivery system.
+		 *
+		 * The emulation only works if the desired system is one of the
+			 * delivery systems supported by DVBv3 API
+			 */
+			if (!is_dvbv3_delsys(desired_system)) {
+				dev_dbg(fe->dvb->device,
+								"%s: Delivery system %d not supported.\n",
+								__func__, desired_system);
+				return -EINVAL;
+			}
+
+			type = dvbv3_type(desired_system);
+	} else {
+		delsys = desired_system;
+		c->delivery_system = desired_system;
+		type = dvbv3_type(SYS_DVBS2);
 	}
-
-	type = dvbv3_type(desired_system);
-
+	dprintk("c->delivery_system=%d\n", c->delivery_system);
 	/*
 	* Get the last non-DVBv3 delivery system that has the same type
 	* of the desired system
@@ -1799,14 +1826,15 @@ static int dvbv5_set_delivery_system(struct dvb_frontend *fe,
 	/* There's nothing compatible with the desired delivery system */
 	if (delsys == SYS_UNDEFINED) {
 		dev_dbg(fe->dvb->device,
-			"%s: Delivery system %d not supported on emulation mode.\n",
-			__func__, desired_system);
+						"%s: Delivery system %d not supported on emulation mode.\n",
+						__func__, desired_system);
+		dprintk("delsys=SYS_UNDEFINED");
 		return -EINVAL;
 	}
 
 	dev_dbg(fe->dvb->device,
-		"%s: Using delivery system %d emulated as if it were %d\n",
-		__func__, delsys, desired_system);
+					"%s: Using delivery system %d emulated as if it were %d\n",
+					__func__, delsys, desired_system);
 
 	return emulate_delivery_system(fe, desired_system);
 }
@@ -1902,6 +1930,12 @@ static int dtv_property_process_set_int(struct dvb_frontend *fe,
 		break;
 	case DTV_FREQUENCY:
 		c->frequency = data;
+		break;
+	case DTV_SCAN_START_FREQUENCY:
+		c->scan_start_frequency = data;
+		break;
+	case DTV_SCAN_END_FREQUENCY:
+		c->scan_end_frequency = data;
 		break;
 	case DTV_SEARCH_RANGE:
 		c->search_range = data;
@@ -2105,6 +2139,16 @@ static int dtv_property_process_set(struct dvb_frontend *fe,
 			__func__);
 
 		r = dtv_set_frontend(fe);
+		break;
+	case DTV_SCAN:
+		/*
+		 * Use the cached Digital TV properties to scan the
+		 * frontend
+		 */
+		dev_dbg(fe->dvb->device,
+			"%s: Setting the frontend from property cache\n",
+			__func__);
+		r = dtv_set_sat_scan(fe, tvp->u.data);
 		break;
 	case DTV_PLS_SEARCH_RANGE:
 		if(tvp->u.buffer.len == sizeof(c->pls_search_range_start) + sizeof(c->pls_search_range_start)) {
@@ -2608,6 +2652,26 @@ static int dtv_set_frontend(struct dvb_frontend *fe)
 	/* Request the search algorithm to search */
 	fepriv->algo_status |= DVBFE_ALGO_SEARCH_AGAIN;
 
+	dvb_frontend_clear_events(fe);
+	dvb_frontend_add_event(fe, 0);
+	dvb_frontend_wakeup(fe);
+	fepriv->status = 0;
+
+	return 0;
+}
+
+static int dtv_set_sat_scan(struct dvb_frontend *fe, bool scan_continue)
+{
+	struct dvb_frontend_private *fepriv = fe->frontend_priv;
+	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
+	struct dvb_frontend_tune_settings fetunesettings;
+
+	/* get frontend-specific tuning settings */
+	memset(&fetunesettings, 0, sizeof(struct dvb_frontend_tune_settings));
+
+
+ 	/* Request the search algorithm to search */
+	fepriv->state = scan_continue ? FESTATE_SCAN_NEXT : FESTATE_SCAN_FIRST;
 	dvb_frontend_clear_events(fe);
 	dvb_frontend_add_event(fe, 0);
 	dvb_frontend_wakeup(fe);

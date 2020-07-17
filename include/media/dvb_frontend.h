@@ -464,6 +464,10 @@ struct dvb_frontend_ops {
 		    unsigned int *delay,
 		    enum fe_status *status);
 
+	int (*scan)(struct dvb_frontend* fe,
+							bool init, unsigned int *delay,
+							enum fe_status *status);
+
 	/* get frontend tuning algorithm from the module */
 	enum dvbfe_algo (*get_frontend_algo)(struct dvb_frontend *fe);
 
@@ -694,6 +698,10 @@ struct dtv_frontend_properties {
 	struct dtv_fe_stats	post_bit_count;
 	struct dtv_fe_stats	block_error;
 	struct dtv_fe_stats	block_count;
+
+	/* for satellite_search */
+	s32 scan_start_frequency;
+	s32 scan_end_frequency;
 };
 
 #define DVB_FE_NO_EXIT  0
