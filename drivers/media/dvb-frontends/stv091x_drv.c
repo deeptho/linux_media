@@ -767,22 +767,22 @@ static int wait_for_dmdlock(struct dvb_frontend *fe, bool require_data)
 //	fprintk("demod: %d", state->nr);
 	if(p->algorithm != ALGORITHM_WARM)
 		timeout = 1000;
-	else if (p->symbol_rate <= 1000000) /* SR <= 1Msps */
+	else if (state->symbol_rate <= 1000000) /* SR <= 1Msps */
 		timeout = 1000;
-	else if (p->symbol_rate <= 5000000) /* 1Msps < SR <= 2Msps */
-		timeout = 1000/(p->symbol_rate/100000);
+	else if (state->symbol_rate <= 5000000) /* 1Msps < SR <= 2Msps */
+		timeout = 1000/(state->symbol_rate/100000);
 	else
 		timeout = 200;
 #else
-	if (p->symbol_rate <= 1000000) {         /*          SR <=  1Msps */
+	if (state->symbol_rate <= 1000000) {         /*          SR <=  1Msps */
 		timeout = 5000;
-	} else if (p->symbol_rate <= 2000000) {  /*  1Msps < SR <=  2Msps */
+	} else if (state->symbol_rate <= 2000000) {  /*  1Msps < SR <=  2Msps */
 		timeout = 4500;
-	} else if (p->symbol_rate <= 5000000) {  /*  2Msps < SR <=  5Msps */
+	} else if (state->symbol_rate <= 5000000) {  /*  2Msps < SR <=  5Msps */
 		timeout = 3500;
-	} else if (p->symbol_rate <= 10000000) { /*  5Msps < SR <= 10Msps */
+	} else if (state->symbol_rate <= 10000000) { /*  5Msps < SR <= 10Msps */
 		timeout = 2500;
-	} else if (p->symbol_rate < 20000000) {  /* 10Msps < SR <= 20Msps */
+	} else if (state->symbol_rate < 20000000) {  /* 10Msps < SR <= 20Msps */
 		timeout = 1500;
 	} else {                                 /*          SR >= 20Msps */
 		timeout = 1000;
@@ -1019,7 +1019,7 @@ static u32 stv091x_bandwidth(struct stv* state)
 		rolloff = 135;
 		break;
 	}
-	return MulDiv32(p->symbol_rate, rolloff, 200);
+	return MulDiv32(state->symbol_rate, rolloff, 200);
 }
 
 int stv091x_set_frequency_symbol_rate_bandwidth(struct stv* state)
@@ -1034,6 +1034,8 @@ int stv091x_set_frequency_symbol_rate_bandwidth(struct stv* state)
 	} else {
 		dprintk("symrate1=%d bw=%d\n", state->symbol_rate, state->tuner_bw);
 		state->tuner_bw = stv091x_bandwidth(state);
+		if(p->algorithm == ALGORITHM_BLIND || p->algorithm == ALGORITHM_BLIND_BEST_GUESS)
+			state->tuner_bw += state->search_range;
 		dprintk("symrate=%d bw=%d\n", state->symbol_rate, state->tuner_bw);
 		/*state->tuner_bw = state->tuner_bw*15/10;*/
 		if(state->fe.ops.tuner_ops.set_frequency_and_bandwidth)
@@ -1050,7 +1052,7 @@ static int stv091x_set_search_range(struct stv *state, struct dtv_frontend_prope
 	if(p->algorithm == ALGORITHM_WARM) {
 		range = 1000;
 		range = (range<<16)/(state->base->mclk/1000); //1Mhz
-	} else if(p->algorithm == ALGORITHM_COLD) {
+	} else if(p->algorithm == ALGORITHM_COLD || p->algorithm == ALGORITHM_COLD_BEST_GUESS) {
 		/* CFR min =- (search_range/2 + margin )
 			 CFR max = +(search_range/2 + margin)
 			 (80KHz margin if SR <=5Msps else margin =600KHz )*/
@@ -1060,7 +1062,18 @@ static int stv091x_set_search_range(struct stv *state, struct dtv_frontend_prope
 		else
 			range=(state->search_range/2000)+1600;
 		range = (range<<16)/(state->base->mclk/1000);
+	} else if(p->algorithm == ALGORITHM_BLIND ||
+						p->algorithm == ALGORITHM_BLIND_BEST_GUESS) {
+		if(state->satellite_scan) {
+		//set limits on how far we can search for a carrier
+		//default search_range=16 000 000; make it less for lower symbol rate
+			range = (state->search_range / 2000);
+			range = (range << 16) / (state->base->mclk / 1000);
+		} else {
+			range = state->search_range; //for regular blindscan
+		}
 	} else {
+		BUG_ON(1);
 		//set limits on how far we can search for a carrier
 		//default search_range=16 000 000; make it less for lower symbol rate
 		range = (state->search_range / 2000);
@@ -1558,7 +1571,7 @@ static bool stv091x_get_signal_info(struct dvb_frontend *fe)
 		if (p->bandwidth_hz > bandwidth_hz || p->bandwidth_hz < (bandwidth_hz*8)/10)
 			need_retune = true; // ask tuner to change its bandwidth, except duting blind scan
 
-		dprintk("SR: %d, BW: %d need_retune=%d\n", p->symbol_rate, p->bandwidth_hz, need_retune);
+		dprintk("SR: %d, BW: %d need_retune=%d\n", state->symbol_rate, p->bandwidth_hz, need_retune);
 		stv091x_isi_scan(fe);
 		return need_retune;
 }
@@ -2154,7 +2167,7 @@ static int stv091x_carrier_search(struct stv *state,  s32* frequency_jump)
 
 		}
 	}
-	state->scan_next_frequency += frequency_jump;
+	state->scan_next_frequency += *frequency_jump;
 	state->search_range =24000000 + *frequency_jump *1000;
 	if (state->search_range >40000000)
 		state->search_range = 40000000;
@@ -2170,7 +2183,7 @@ static int stv091x_carrier_search(struct stv *state,  s32* frequency_jump)
 static int scan_within_tuner_bw(struct dvb_frontend *fe, bool* locked_ret)
 {
 	//bool rising_edge_found = false;
-	bool locked;
+	bool locked=false;
 	int asperity = 0;
 	s32 frequency_jump=0;
 	struct stv *state = fe->demodulator_priv;
@@ -2280,7 +2293,7 @@ int stv091x_sat_scan(struct dvb_frontend *fe)
 	p->algorithm_none		= ALGORITHM_BLIND;				/*	Search mode = Blind */
 #endif
 	p->fec_inner = FEC_AUTO;
-	p->symbol_rate = 1000000;							/*	minimum symbol rate for scan = 1Msps	*/
+	state->symbol_rate = 1000000;							/*	minimum symbol rate for scan = 1Msps	*/
 	if(SCAN_MINSYMB<1000000) {
 		MinSymbolRate = 1000000;
 	} else {
@@ -2430,11 +2443,7 @@ static int tune_once(struct dvb_frontend *fe, bool* need_retune)
 	//	fe->ops.tuner_ops.get_if_frequency(fe, &IF);
 		/* Set the Init Symbol rate*/
 
-	state->symbol_rate = 	(p->algorithm == ALGORITHM_BLIND ||p->algorithm == ALGORITHM_BLIND_BEST_GUESS||
-									 p->algorithm == ALGORITHM_SEARCH_NEXT || p->algorithm == ALGORITHM_BANDWIDTH
-									 ) ? 60000000/*to prevent error detected*/ : p->symbol_rate;
-
-	dprintk("set symbol_rate=%d\n", state->symbol_rate);
+	dprintk("symbol_rate=%d\n", state->symbol_rate);
 
 
 	if (state->symbol_rate < 100000 || state->symbol_rate > 70000000)
@@ -2447,9 +2456,6 @@ static int tune_once(struct dvb_frontend *fe, bool* need_retune)
 	state->ReceiveMode = Mode_None;
 	state->DemodLockTime = 0;
 
-	/* Set Gold code > 0 */
-	if (p->scrambling_sequence_index)
-	 set_pls_mode_code(state, 1, p->scrambling_sequence_index);
 	BUG_ON(state->Started);
 
 	state->satellite_scan = false;
@@ -2462,6 +2468,7 @@ static int tune_once(struct dvb_frontend *fe, bool* need_retune)
 	dprintk("now symbol_rate=%d\n", state->symbol_rate);
 	if(p->algorithm == ALGORITHM_WARM || p->algorithm == ALGORITHM_COLD ||
 		 p->algorithm == ALGORITHM_BLIND_BEST_GUESS)
+		dprintk("SET_STREAM_INDEX: %d\n", p->stream_id);
 		set_stream_index(state, p->stream_id);
 	stv091x_start_scan(state, p);
 		break;
@@ -2503,13 +2510,22 @@ static int tune(struct dvb_frontend *fe, bool re_tune,
 	int r;
 	bool need_retune = false;// could be set during blind search
 #if 1
-	bool blind = (p->algorithm == ALGORITHM_BLIND ||p->algorithm == ALGORITHM_BLIND_BEST_GUESS||
-								p->algorithm == ALGORITHM_SEARCH_NEXT || p->algorithm == ALGORITHM_BANDWIDTH);
+	bool blind = (p->algorithm == ALGORITHM_BLIND ||p->algorithm == ALGORITHM_BLIND_BEST_GUESS);
 	if(blind) {
 		if(p->delivery_system== SYS_UNDEFINED)
 			p->delivery_system = SYS_AUTO;
+		//search_range is used during blind scan to determine how far frequency may shift
+		state->search_range =
+			(p->search_range==0) ? 2*30000000 :
+			(p->search_range< 1000000) ?  1000000 : p->search_range;
+	} else {
+		state->search_range = 16000000;
 	}
+
+		state->symbol_rate =
+			(p->symbol_rate==0) ? 60000000: p->symbol_rate; //determines tuner bandwidth set during blindscan
 #endif
+
 	state->satellite_scan = (p->algorithm == ALGORITHM_SEARCH
 													 ||p->algorithm == ALGORITHM_SEARCH_NEXT);
 	dprintk("tune called with re_tune=%d\n", re_tune);
@@ -2518,9 +2534,12 @@ static int tune(struct dvb_frontend *fe, bool re_tune,
 		r = tune_once(fe, &need_retune);
 		if (r)
 			return r;
-#if 1
-		//the following does not seem to work for a DVB-S2/QPSK transponder: 28.2E 11385H
-		if(need_retune && !satellite_scan) {
+#if 0
+		/*the following does not seem to work for a DVB-S2/QPSK transponder: 28.2E 11385H.
+			This TP also has a stream_id and m_type set
+			In this case read_status seems to fail; sometthing extra is needed.
+		 */
+		if(need_retune) {
 			dprintk("re setting frequency, symbol rate and bandwidth\n");
 			stv091x_set_frequency_symbol_rate_bandwidth(state);
 		}
@@ -2768,7 +2787,7 @@ static int stv091x_get_spectrum_scan(struct dvb_frontend *fe, struct dvb_fe_spec
 	u32 f0 = p->frequency - bandwidth/2;
 	int frequency_step = bandwidth/s->num_freq;//in kHz
 	//	p->algorithm = ALGORITHM_NONE;
-	p->symbol_rate = 3000000;//frequency_step*1000; //set bandwidth equal to frequency_step
+	p->symbol_rate = frequency_step*1000; //set bandwidth equal to frequency_step
 	dprintk("demod: %d; step=%d bw=%d n=%d", state->nr, frequency_step, bandwidth, s->num_freq);
 
 	write_reg(state, RSTV0910_P2_CFRUP1 + state->regoff, 0);
@@ -2810,7 +2829,7 @@ static int stv091x_get_spectrum_scan(struct dvb_frontend *fe, struct dvb_fe_spec
 #if 1
 	{
 
-	u16 symb = MulDiv32(p->symbol_rate, 65536, state->base->mclk);
+	u16 symb = MulDiv32(frequency_step, 65536, state->base->mclk);
 	write_reg(state, RSTV0910_P2_SFRINIT1 + state->regoff,
 						((symb >> 8) & 0x7F));
 	write_reg(state, RSTV0910_P2_SFRINIT0 + state->regoff, (symb & 0xFF));
@@ -2831,7 +2850,7 @@ static int stv091x_get_spectrum_scan(struct dvb_frontend *fe, struct dvb_fe_spec
 
 		//usleep_range(12000, 13000);
 
-		s->rf_level [i] = stv091x_signal_power_dbm(fe);
+		s->rf_level [i] = stv091x_signal_power_dbm(fe)/10;
 	}
 
 	return 0;
