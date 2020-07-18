@@ -2966,12 +2966,18 @@ static fe_lla_error_t estimate_band_power_demod_not_locked(stchip_handle_t Handl
 	pParams = (struct fe_stid135_internal_param*) Handle;
 
 	/* Read all needed registers before calculation*/
+
+	//AGC_RF = computed gain for analogue amplifier
 	error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_AGCRF_AGCRFIN1(TunerNb), &reg_value);
 	agcrfin1 = (u8)reg_value;
 	error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_AGCRF_AGCRFIN0(TunerNb), &reg_value);
+
+	//reference amplitude value for analogue amplifier
 	agcrfin0 = (u8)reg_value;
 	error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC1REF(Demod), &reg_value);
 	agc1ref = (u8)reg_value;
+
+	//measured wide band amplititude (power at output of analugue amplifier)
 	error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC1IQIN1(Demod), &reg_value);
 	agciqin1 = (u8)reg_value;
 	error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC1IQIN0(Demod), &reg_value);
@@ -2992,7 +2998,7 @@ static fe_lla_error_t estimate_band_power_demod_not_locked(stchip_handle_t Handl
 			gain_analogx1000 = LutGvanaIntegerTuner[agcrfin1];
 		break;
 	}
-	/* if VGLNA is inIP3 substract  6db gain*/
+	/* if VGLNA is inIP3 substract  6db gain (lowe power versus high power input configuration)*/
 	VGLNAgainMode = Oxford_GetVGLNAgainMode(pParams->handle_demod, TunerNb);
 	if (VGLNAgainMode != 1){
 		/* InterpolatedGvan always >0*/
@@ -3007,12 +3013,26 @@ static fe_lla_error_t estimate_band_power_demod_not_locked(stchip_handle_t Handl
 		error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DMDISTATE(Demod), 0x00);
 		WAIT_N_MS(100);
 	}
+
+	//reread AGC1IQINx
 	error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC1IQIN1(Demod), &reg_value);
 	agciqin1 = (u8)reg_value;
 	error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC1IQIN0(Demod), &reg_value);
 	agciqin0 = (u8)reg_value;
 	agciqin = (u32)((256 * agciqin1) + agciqin0);
-	*Pbandx1000 = (s32)(10 * (STLog10((u32)(3 * agciqin)) + STLog10((u32)(agc1ref * agc1ref)) -  STLog10((u32)(POWER_IREF * POWER_IREF))) - gain_analogx1000);
+
+	//
+	*Pbandx1000 = (s32)(10 * (
+														STLog10((u32)(3 * agciqin)) /*measured input power to digital frontend
+																													AGCIQIN * 3 almost = AGCPOWERI^2 + AGCPOWERQ^2
+																												*/
+														+ STLog10((u32)(agc1ref * agc1ref)) /* POWER_IREF/agc1ref is an extra
+																																	 amplification somwhere
+																																	 and should be subtracted
+																																*/
+														-  STLog10((u32)(POWER_IREF * POWER_IREF))
+														)
+											- gain_analogx1000);
 
 	/* Restore value of DMDISTATE */
 	if (savedmd != 0)
