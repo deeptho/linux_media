@@ -165,4 +165,6 @@ s32 read_reg_field(struct stv* state, u32 field_id);
 
 int  write_reg_field(struct stv* state, u32 field_id, s32 val);
 
+s32 STLog10(u32 value);
+
 #endif

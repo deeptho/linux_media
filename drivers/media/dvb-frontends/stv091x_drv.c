@@ -1750,7 +1750,7 @@ static s32 stv091x_agc1_power_gain_dbm(struct stv *state)
 {
 	u16 agc_gain = stv091x_agc1_power_gain(state); //u16 because of stv6120 interface (todo)
 	if (state->fe.ops.tuner_ops.get_rf_strength)
-		state->fe.ops.tuner_ops.get_rf_strength(&state->fe, &agc_gain);
+		state->fe.ops.tuner_ops.get_rf_strength(&state->fe, &agc_gain);//in units of 0.01dB
 	return agc_gain;
 }
 
@@ -1778,13 +1778,31 @@ static s32 stv091x_iq_power_dbm(struct stv *state)
 	return TableLookup(PADC_Lookup, ARRAY_SIZE(PADC_Lookup), iq_power) + 352;
 }
 
+/*
+	signal power in the stv6120 tuner bandwidth (not representative for narrow band signals)
+ */
 static s32 stv091x_signal_power_dbm(struct dvb_frontend *fe)
 {
 	struct stv *state = fe->demodulator_priv;
 	//todo: take into account agc2
-	return (-52 - stv091x_agc1_power_gain_dbm(state))/10 + stv091x_iq_power_dbm(state)*10; //in units of 0.1dB
-		/* -52 is the output level*/
+	return (-52 - stv091x_agc1_power_gain_dbm(state)); //unit is 0.01dB
+		/* -0.52 is the output level in dBm*/
 	}
+
+/*
+	signal power representative for narrow band signals
+ */
+static s32 stv091x_narrow_band_signal_power_dbm(struct dvb_frontend *fe)
+{
+	struct stv *state = fe->demodulator_priv;
+	//todo: take into account agc2
+	s32 agc2level = (read_reg_field(state, FSTV0910_P2_AGC2_INTEGRATOR1) <<8) |
+		read_reg_field(state, FSTV0910_P2_AGC2_INTEGRATOR0);
+	s32	agc2ref = read_reg(state, RSTV0910_P2_AGC2REF);
+	s32 x =  2*(s32)STLog10((u32)(agc2ref)); //unit is 0.01dB
+	s32 y =  2*(s32)STLog10(agc2level); //unit is 0.01dB
+	return (x-y) + (-52 - stv091x_agc1_power_gain_dbm(state)); //unit is 0.01dB
+}
 
 static int read_status(struct dvb_frontend *fe, enum fe_status *status)
 {
@@ -1796,13 +1814,13 @@ static int read_status(struct dvb_frontend *fe, enum fe_status *status)
 	u32 FECLock = 0;
 	s32 snr;
 	u32 n, d;
-	s32 signal_strength = stv091x_signal_power_dbm(fe);
+	s32 signal_strength = stv091x_signal_power_dbm(fe); //unit=0.01dB
 
 	/*pr_warn("%s: agc = %d iq_power = %d Padc = %d\n", __func__, agc, iq_power, Padc);*/
 
 	p->strength.len = 2;
 	p->strength.stat[0].scale = FE_SCALE_DECIBEL;
-	p->strength.stat[0].svalue = signal_strength;
+	p->strength.stat[0].svalue = signal_strength*10; //result in uints of 0.0001dB
 
 	p->strength.stat[1].scale = FE_SCALE_RELATIVE;
 	p->strength.stat[1].uvalue = (100 + signal_strength/100) * 656; //todo: check range
@@ -2783,12 +2801,15 @@ static int stv091x_get_spectrum_scan(struct dvb_frontend *fe, struct dvb_fe_spec
 	int i;
 	//s16 lvl;
 	u8 reg;
-	u32 bandwidth = p->symbol_rate/1000; //in kHz
-	u32 f0 = p->frequency - bandwidth/2;
+	u32 start_frequency = p->scan_start_frequency;
+	u32 end_frequency = p->scan_end_frequency;
+	u32 bandwidth = end_frequency-start_frequency; //in kHz
 	int frequency_step = bandwidth/s->num_freq;//in kHz
 	//	p->algorithm = ALGORITHM_NONE;
-	p->symbol_rate = frequency_step*1000; //set bandwidth equal to frequency_step
-	dprintk("demod: %d; step=%d bw=%d n=%d", state->nr, frequency_step, bandwidth, s->num_freq);
+	//p->symbol_rate = frequency_step; //set bandwidth equal to frequency_step
+	dprintk("demod: %d: range=[%d,%d] step=%d  n=%d bw=%d\n", state->nr,
+					start_frequency, end_frequency,
+					frequency_step, s->num_freq, p->symbol_rate/1000);
 
 	write_reg(state, RSTV0910_P2_CFRUP1 + state->regoff, 0);
 	write_reg(state, RSTV0910_P2_CFRUP0 + state->regoff, 0);
@@ -2796,25 +2817,26 @@ static int stv091x_get_spectrum_scan(struct dvb_frontend *fe, struct dvb_fe_spec
 
 	write_reg(state, RSTV0910_P2_DMDISTATE, 0x18); //warm start
 
-	write_reg(state, RSTV0910_P2_AGC2O + state->regoff, 0x5B); //reset
-
+	//write_reg(state, RSTV0910_P2_AGC2O + state->regoff, 0x5B); //reset
+#if 0
 	reg = read_reg(state, RSTV0910_P2_AGC1CN + state->regoff);
 	reg = (reg & ~0x7) | 1; //slows decrease of agciq_beta
 	write_reg(state, RSTV0910_P2_AGC1CN, reg);
-
+#endif
 
 	write_reg(state, RSTV0910_P2_DMDISTATE, 0x5C); /* Demod Stop */
 
+#if 0
 	reg = read_reg(state, RSTV0910_P2_DMDCFGMD + state->regoff);
-	reg &= ~0x18; //disable symbol rate scanning, and set autoscan
-
+	reg &= ~0x18; //disable symbol rate scanning, and disable autoscan
 	write_reg(state, RSTV0910_P2_DMDCFGMD + state->regoff, reg);
+#endif
 
 	//TODO: reset hardware
 
-	write_reg(state, RSTV0910_P2_DMDISTATE, 0x1F); //reset demod
+	///	write_reg(state, RSTV0910_P2_DMDISTATE, 0x1F); //reset demod
 
-	write_reg(state, RSTV0910_P2_AGC2REF + state->regoff, 0x38); //reset
+	//write_reg(state, RSTV0910_P2_AGC2REF + state->regoff, 0x38); //reset
 
 #if 0
 	if (fe->ops.tuner_ops.set_params)
@@ -2826,7 +2848,7 @@ static int stv091x_get_spectrum_scan(struct dvb_frontend *fe, struct dvb_fe_spec
 	*s->type = SC_DBM;
 
 
-#if 1
+#if 0
 	{
 
 	u16 symb = MulDiv32(frequency_step, 65536, state->base->mclk);
@@ -2835,22 +2857,25 @@ static int stv091x_get_spectrum_scan(struct dvb_frontend *fe, struct dvb_fe_spec
 	write_reg(state, RSTV0910_P2_SFRINIT0 + state->regoff, (symb & 0xFF));
 
 	}
+#else
+		stv091x_set_symbol_rate(state, p->symbol_rate);
 #endif
 
 	write_reg(state, RSTV0910_P2_DMDISTATE, 0x5C); //stop demod
 
 	for (i = 0; i < s->num_freq; i++) {
 
-	write_reg(state, RSTV0910_P2_DMDISTATE, 0x1C); //stop demod
+		write_reg(state, RSTV0910_P2_DMDISTATE, 0x1C); //stop demod
+		write_reg(state, RSTV0910_P2_DMDISTATE, 0x18); //warm
 
-		s->freq[i]= f0 +i*frequency_step;
+		s->freq[i]= start_frequency +i*frequency_step;
 		p->frequency = s->freq[i];
 		//todo: the following is perhaps needlessly slow
 		fe->ops.tuner_ops.set_params(fe); //todo: check that this sets the proper bandwidth
 
 		//usleep_range(12000, 13000);
 
-		s->rf_level [i] = stv091x_signal_power_dbm(fe)/10;
+		s->rf_level [i] = stv091x_narrow_band_signal_power_dbm(fe);
 	}
 
 	return 0;
@@ -3012,7 +3037,20 @@ Px_SFRUPRATIO and Px_SFRLOWRATIO. The scan mode (automatic/manual) is set
 in bit 7 of Px_SFRUP1 and Px_SFRLOW1. The boundary conditions depend on the
 => incorrect
 
+analogue_gain = tuner gain (stv6120)
 
+analogue power in band
+= log10 ( (agc2ref/constant)^2) - log10(agc2^2)) - analogue_gain_dbm + cst
 
+power_channel analogue power * GvDig^2
+digital_gain GDig is proportional to  agc2?
+
+	************ Power Channel ************
+		 PchAGC2 = agc2ref^2: power after AGC2 amplification?
+		 Pch(dBm) = 10xlog( PchAGC2 / GvDig^2) - GainAnalog
+		 GvDig: digital gain?
+		 GvDig= ((agc2/165.8) * (1550/12)); for demod 1,3
+		 log(a/b) = log(a) - log(b)
+		 10xlog( PchAGC2 / GvDig^2) =  10xlog( PchAGC2)-10xlog(GvDig^2)
 
 */
