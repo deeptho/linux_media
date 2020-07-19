@@ -1034,8 +1034,12 @@ int stv091x_set_frequency_symbol_rate_bandwidth(struct stv* state)
 	} else {
 		dprintk("symrate1=%d bw=%d\n", state->symbol_rate, state->tuner_bw);
 		state->tuner_bw = stv091x_bandwidth(state);
+		dprintk("symrate2=%d bw=%d\n", state->symbol_rate, state->tuner_bw);
+#if 0
+		//bug!
 		if(p->algorithm == ALGORITHM_BLIND || p->algorithm == ALGORITHM_BLIND_BEST_GUESS)
 			state->tuner_bw += state->search_range;
+#endif
 		dprintk("symrate=%d bw=%d\n", state->symbol_rate, state->tuner_bw);
 		/*state->tuner_bw = state->tuner_bw*15/10;*/
 		if(state->fe.ops.tuner_ops.set_frequency_and_bandwidth)
