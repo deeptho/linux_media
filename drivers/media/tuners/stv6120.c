@@ -28,6 +28,8 @@
 #include <asm/div64.h>
 
 #include "stv6120.h"
+#define dprintk(fmt, arg...)																					\
+	printk(KERN_DEBUG pr_fmt("%s:%d " fmt), __func__, __LINE__, ##arg)
 
 #define REG_N0		0
 #define REG_N1_F0	1
@@ -42,6 +44,14 @@ struct SLookup {
 	u16 RegValue;
 };
 
+
+static int cutoff_from_index(int idx) {
+	if(idx==0)
+		return 5;
+	if (idx >=0x1f)
+		return 36;
+	return 5+idx;
+}
 
 static struct SLookup Gain_RFAGC_LookUp[] = {
 	/*Gain *100dB*/   /*reg*/
@@ -375,7 +385,6 @@ static int set_lof(struct stv *state, u32 LocalFrequency, u32 CutOffFrequency)
 
 	u8 PDIV, P;
 
-	//pr_info("F = %u, CutOff = %u\n", Frequency, CutOffFrequency);
 
 
 	/* set PDIV and CF */
@@ -383,6 +392,8 @@ static int set_lof(struct stv *state, u32 LocalFrequency, u32 CutOffFrequency)
 		cf_index = 0;
 	if (cf_index > 31)
 		cf_index = 31;
+	dprintk("F = %u, CutOff = %u => %uMhz cf_index=%d\n", Frequency, CutOffFrequency,
+					cutoff_from_index(cf_index),  cf_index);
 
 	if (Frequency >= 1191000) {
 		PDIV = 0;

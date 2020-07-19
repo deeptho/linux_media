@@ -1009,6 +1009,9 @@ static int dvb_frontend_check_parameters(struct dvb_frontend *fe)
 			dev_warn(fe->dvb->device, "DVB: adapter %i frontend %i frequency %u out of range (%u..%u)\n",
 							 fe->dvb->num, fe->id, c->frequency,
 							 freq_min, freq_max);
+			dprintk( "DVB: adapter %i frontend %i frequency %u out of range (%u..%u)\n",
+							 fe->dvb->num, fe->id, c->frequency,
+							 freq_min, freq_max);
 			return -EINVAL;
 		}
 
@@ -1027,6 +1030,10 @@ static int dvb_frontend_check_parameters(struct dvb_frontend *fe)
 								 fe->dvb->num, fe->id, c->symbol_rate,
 								 fe->ops.info.symbol_rate_min,
 								 fe->ops.info.symbol_rate_max);
+				dprintk("DVB: adapter %i frontend %i symbol rate %u out of range (%u..%u)\n",
+								fe->dvb->num, fe->id, c->symbol_rate,
+								fe->ops.info.symbol_rate_min,
+								fe->ops.info.symbol_rate_max);
 				return -EINVAL;
 			}
 		default:
@@ -2145,6 +2152,7 @@ static int dtv_property_process_set(struct dvb_frontend *fe,
 		 * Use the cached Digital TV properties to scan the
 		 * frontend
 		 */
+		dprintk("sat scan called\n");
 		dev_dbg(fe->dvb->device,
 			"%s: Setting the frontend from property cache\n",
 			__func__);

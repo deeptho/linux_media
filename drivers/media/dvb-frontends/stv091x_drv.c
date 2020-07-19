@@ -1041,9 +1041,10 @@ int stv091x_set_frequency_symbol_rate_bandwidth(struct stv* state)
 			state->tuner_bw += state->search_range;
 #endif
 		dprintk("symrate=%d bw=%d\n", state->symbol_rate, state->tuner_bw);
-		/*state->tuner_bw = state->tuner_bw*15/10;*/
-		if(state->fe.ops.tuner_ops.set_frequency_and_bandwidth)
+		if(state->fe.ops.tuner_ops.set_frequency_and_bandwidth) {
+			dprintk("requesting stv6120 to set: freq=%d bw=%d\n", p->frequency, state->tuner_bw);
 			state->fe.ops.tuner_ops.set_frequency_and_bandwidth(&state->fe, p->frequency, state->tuner_bw);
+		}
 		stv091x_set_symbol_rate(state, state->symbol_rate);
 	}
 
@@ -1075,6 +1076,7 @@ static int stv091x_set_search_range(struct stv *state, struct dtv_frontend_prope
 			range = (range << 16) / (state->base->mclk / 1000);
 		} else {
 			range = state->search_range; //for regular blindscan
+			dprintk("RANGE=%d\n", range);
 		}
 	} else {
 		BUG_ON(1);
@@ -1511,7 +1513,7 @@ static int stv091x_isi_scan(struct dvb_frontend *fe)
 				ISIAlreadyFound = TRUE;
 			}
 		}
-		if (! ISIAlreadyFound) {
+		if (!ISIAlreadyFound) {
 			dprintk("MIS found matype=%d stream_id=%d\n", regs[0], CurrentISI);
 			n = p->isi_list_len++;
 			if(n>= max_num_isi)
@@ -1552,6 +1554,7 @@ static bool stv091x_get_signal_info(struct dvb_frontend *fe)
 
 	stv091x_symbol_rate(state, &state->symbol_rate, false);
 	p->symbol_rate = state->symbol_rate;
+	dprintk("retrieved symbol_rate=%d", p->symbol_rate);
 	regs[0] = read_reg(state, RSTV0910_P2_TMGOBS);
 	rolloff_status = (regs[0]>>6);
 	switch(rolloff_status) {
@@ -1572,10 +1575,10 @@ static bool stv091x_get_signal_info(struct dvb_frontend *fe)
 
 		bandwidth_hz = (state->symbol_rate * rolloff) / 100;
 
-		if (p->bandwidth_hz > bandwidth_hz || p->bandwidth_hz < (bandwidth_hz*8)/10)
+		if (state->tuner_bw > bandwidth_hz || state->tuner_bw < (bandwidth_hz*8)/10)
 			need_retune = true; // ask tuner to change its bandwidth, except duting blind scan
 
-		dprintk("SR: %d, BW: %d need_retune=%d\n", state->symbol_rate, p->bandwidth_hz, need_retune);
+		dprintk("SR: %d, BW: %d => %d need_retune=%d\n", state->symbol_rate, state->tuner_bw, bandwidth_hz, need_retune);
 		stv091x_isi_scan(fe);
 		return need_retune;
 }
@@ -2481,6 +2484,7 @@ static int tune_once(struct dvb_frontend *fe, bool* need_retune)
 	BUG_ON(state->Started);
 
 	state->satellite_scan = false;
+
 	switch(p->algorithm) {
 	case ALGORITHM_WARM:
 	case ALGORITHM_COLD:
@@ -2499,10 +2503,8 @@ static int tune_once(struct dvb_frontend *fe, bool* need_retune)
 		break;
 	}
 
-
-
-	state->DemodLockTime += TUNING_DELAY;
 	state->Started = 1;
+#if 0
 
 
 
@@ -2514,6 +2516,7 @@ static int tune_once(struct dvb_frontend *fe, bool* need_retune)
 		if(!locked)
 			locked = pls_search_range(fe);
 	}
+	state->DemodLockTime += TUNING_DELAY;
 
 	dprintk("setting timedout=%d\n", !locked);
 	state->timedout = !locked;
@@ -2531,7 +2534,7 @@ static int tune(struct dvb_frontend *fe, bool re_tune,
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
 	int r;
 	bool need_retune = false;// could be set during blind search
-#if 1
+
 	bool blind = (p->algorithm == ALGORITHM_BLIND ||p->algorithm == ALGORITHM_BLIND_BEST_GUESS);
 	if(blind) {
 		if(p->delivery_system== SYS_UNDEFINED)
@@ -2540,17 +2543,19 @@ static int tune(struct dvb_frontend *fe, bool re_tune,
 		state->search_range =
 			(p->search_range==0) ? 2*30000000 :
 			(p->search_range< 1000000) ?  1000000 : p->search_range;
+		dprintk("search range p=%d => s=%d\n", p->search_range, state->search_range);
 	} else {
 		state->search_range = 16000000;
 	}
 
 		state->symbol_rate =
 			(p->symbol_rate==0) ? 60000000: p->symbol_rate; //determines tuner bandwidth set during blindscan
-#endif
+
 
 	state->satellite_scan = (p->algorithm == ALGORITHM_SEARCH
 													 ||p->algorithm == ALGORITHM_SEARCH_NEXT);
-	dprintk("tune called with re_tune=%d\n", re_tune);
+	dprintk("tune called with freq=%d srate=%d => %d re_tune=%d\n", p->frequency, p->symbol_rate,
+					state->symbol_rate, re_tune);
 	if (re_tune) {
 		state->satellite_scan = false;
 		r = tune_once(fe, &need_retune);
@@ -2599,7 +2604,7 @@ static int sat_scan(struct dvb_frontend *fe, bool init,
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
 	int asperity;
 	bool locked = false;
-	int r;
+
 	state->satellite_scan = true;
 	if(init) {
 		p->frequency = p->scan_start_frequency;
@@ -2622,14 +2627,7 @@ static int sat_scan(struct dvb_frontend *fe, bool init,
 		state->tune_time = jiffies;
 	}
 
-	r =  read_status(fe, status);
-	if(state->timedout)
-		*status |= FE_TIMEDOUT;
-	if (r)
-		return r;
-
-	if (*status & FE_HAS_LOCK)
-		return 0;
+	*status = FE_HAS_SIGNAL|FE_HAS_CARRIER|FE_HAS_VITERBI|FE_HAS_SYNC|FE_HAS_LOCK;
 
 	*delay = HZ;
 
@@ -2804,7 +2802,7 @@ static int stv091x_get_spectrum_scan(struct dvb_frontend *fe, struct dvb_fe_spec
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
 	int i;
 	//s16 lvl;
-	u8 reg;
+
 	u32 start_frequency = p->scan_start_frequency;
 	u32 end_frequency = p->scan_end_frequency;
 	u32 bandwidth = end_frequency-start_frequency; //in kHz
