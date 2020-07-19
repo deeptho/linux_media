@@ -2701,8 +2701,8 @@ static fe_lla_error_t Estimate_Power_Int(stchip_handle_t Handle,
 					u8 *exp,
 					u32 *Agc2x1000,
 					u32*Gvanax1000,
-					s32*PchRFx1000,
-					s32*Pbandx1000)
+					s32*PchRFx1000, /*estimated narrow band input power measured at the rf input */
+		      s32*Pbandx1000) /*wide band input signal power measured at the rf input*/
 {
 	s32 exp_abs_s32=0, exp_s32=0;
 	u32 agc2x1000=0;
@@ -2892,7 +2892,7 @@ static fe_lla_error_t Estimate_Power_Int(stchip_handle_t Handle,
 
 /*****************************************************
 --FUNCTION	::	FE_STiD135_GetRFLevel
---ACTION	::	Returns the RF level of signal
+--ACTION	::	Returns the RF level of signal (in the band currently tuned to)
 --PARAMS IN	::	handle -> Frontend handle
 			Demod -> current demod 1..8
 --PARAMS OUT	::	pch_rf -> computed channel power
@@ -2964,7 +2964,28 @@ static fe_lla_error_t estimate_band_power_demod_not_locked(stchip_handle_t Handl
 	struct fe_stid135_internal_param *pParams;
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	pParams = (struct fe_stid135_internal_param*) Handle;
+	/*Fig. p. 87
+		AGC_RF = input to analogue amplifier -> controls vglna
 
+		BB_AGC = analogue base band gain -> also has chebychef antialiasing filter
+		The gain is applied at the input (before chebychef)
+
+		p. 89
+		VGLNA gain set by AFE_RF_CFG.VGLNAn_SELGAIN
+		VGLNA has two gain/pin curves depending on low/high power signals
+		VGLNA_SELGAIN=1 best for low signals
+
+		p. 91 AGC1IQ? AGC_IQRF controls AGC_RF?; target is to get IQ power close to AGCIQ_REF which
+		is the amplitude (sqrt of sum of squares). This is controlled by AGC1 which is part of RF digital
+		processing, i.e,, it is the wide band digital AGC
+
+		It seems that AGC1IQIN1 and GC1IQIN0 are undocumented registers, which contain the measured  wide band amplitude
+		The computed gain can be read from  AGCRFINx
+
+		p. 97: AGC2 is part of the demodulator and aims to set IQ power equal to AGCIQ_REF.
+		This gain is read fromm AGC2_INTEGRATOR
+
+	*/
 	/* Read all needed registers before calculation*/
 
 	//AGC_RF = computed gain for analogue amplifier

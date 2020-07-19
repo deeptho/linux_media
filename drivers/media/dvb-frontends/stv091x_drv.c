@@ -999,7 +999,32 @@ static void stv091x_set_symbol_rate(struct stv* state, u32 symbol_rate)
 	write_reg(state, RSTV0910_P2_SFRINIT1 + state->regoff,
 						((symb >> 8) & 0x7F));
 	write_reg(state, RSTV0910_P2_SFRINIT0 + state->regoff, (symb & 0xFF));
+}
 
+static void stv091x_set_cfrinc(struct stv* state, u32 cfr_increment, bool automatic)
+{
+	//0x1c71
+	u16	value;
+	if (automatic) {
+		value = 0x038e;
+		value = 0x1c71;
+	} else {
+		value = MulDiv32(cfr_increment, 1<<13, state->base->mclk);
+		if(value >= 1<<10) {
+			dprintk("cfrinc out of range: %d\n", value);
+			value = 1<<10;
+		}
+		value <<= 3;
+		value |= 0x80;
+	}
+	{
+	u16 old = read_reg(state, RSTV0910_P2_CFRINC1 + state->regoff) << 8 |
+		read_reg(state, RSTV0910_P2_CFRINC0 + state->regoff);
+	write_reg(state, RSTV0910_P2_CFRINC1 + state->regoff,
+						((value >> 8)));
+	write_reg(state, RSTV0910_P2_CFRINC0 + state->regoff, (value & 0xFF));
+	dprintk("CFR INC changed from 0x%x to 0x%x\n", old, value);
+	}
 }
 
 
@@ -1030,6 +1055,7 @@ int stv091x_set_frequency_symbol_rate_bandwidth(struct stv* state)
 		/* If Blind search set the init symbol rate to 1Msps*/
 		if(state->fe.ops.tuner_ops.set_frequency_and_bandwidth)
 			state->fe.ops.tuner_ops.set_frequency_and_bandwidth(&state->fe, p->frequency, state->tuner_bw);
+		dprintk("set symbol_rate to %d\n", state->symbol_rate);
 		stv091x_set_symbol_rate(state, state->symbol_rate);
 	} else {
 		dprintk("symrate1=%d bw=%d\n", state->symbol_rate, state->tuner_bw);
@@ -1067,7 +1093,7 @@ static int stv091x_set_search_range(struct stv *state, struct dtv_frontend_prope
 		else
 			range=(state->search_range/2000)+1600;
 		range = (range<<16)/(state->base->mclk/1000);
-	} else if(p->algorithm == ALGORITHM_BLIND ||
+	} else if(p->algorithm == ALGORITHM_BLIND || ALGORITHM_SEARCH_NEXT||
 						p->algorithm == ALGORITHM_BLIND_BEST_GUESS) {
 		if(state->satellite_scan) {
 		//set limits on how far we can search for a carrier
@@ -1271,7 +1297,7 @@ static int stv091x_set_search_standard(struct stv *state, struct dtv_frontend_pr
 
 static int stv091x_start_scan(struct stv *state, struct dtv_frontend_properties *p)
 {
-	dprintk("now symbol_rate=%d\n", state->symbol_rate);
+	dprintk("freq=%d symbol_rate=%d\n", p->frequency, state->symbol_rate);
 #if 0
 	//force reset LDPC FEC; bug DVBS2->DVBS1 lock
 	write_reg_field(state, FSTV0910_FRESSYM2, 1);
@@ -1554,7 +1580,6 @@ static bool stv091x_get_signal_info(struct dvb_frontend *fe)
 
 	stv091x_symbol_rate(state, &state->symbol_rate, false);
 	p->symbol_rate = state->symbol_rate;
-	dprintk("retrieved symbol_rate=%d", p->symbol_rate);
 	regs[0] = read_reg(state, RSTV0910_P2_TMGOBS);
 	rolloff_status = (regs[0]>>6);
 	switch(rolloff_status) {
@@ -1838,20 +1863,21 @@ static int read_status(struct dvb_frontend *fe, enum fe_status *status)
 	dprintk("DMDSTATE=0x%x\n", DmdState);
 	if (DmdState & 0x40) { //DVBS1 or DVBS2 found
 		DStatus = read_reg(state, RSTV0910_P2_DSTATUS + state->regoff);
+		dprintk("DStatus=%d\n", DStatus);
 		if (DStatus & 0x80)
 			*status |= FE_HAS_CARRIER;
 		if (DStatus & 0x08)
 			CurReceiveMode = (DmdState & 0x20) ?
 				Mode_DVBS : Mode_DVBS2;
 	}
-
+	dprintk("receive_mode =%d\n", CurReceiveMode);
 	if (CurReceiveMode == Mode_None)
 	{
  		if (state->base->set_lock_led)
 			state->base->set_lock_led(fe, 0);
 		return 0;
 	}
-
+	dprintk("state->receive_mode =%d\n", state->ReceiveMode);
 	if (state->ReceiveMode == Mode_None) {
 		state->ReceiveMode = CurReceiveMode;
 		state->DemodLockTime = jiffies;
@@ -1878,7 +1904,7 @@ static int read_status(struct dvb_frontend *fe, enum fe_status *status)
 			FECLock = (VStatus & 0x08) != 0;
 		}
 	}
-
+	dprintk("FECLock=%d\n", FECLock);
 	if (!FECLock)
 	{
 		if (state->base->set_lock_led)
@@ -1890,12 +1916,13 @@ static int read_status(struct dvb_frontend *fe, enum fe_status *status)
 		p->post_bit_count.stat[0].scale = FE_SCALE_NOT_AVAILABLE;
 		return 0;
 	}
-
+	dprintk("setting status ok\n");
 	*status |= FE_HAS_VITERBI | FE_HAS_SYNC | FE_HAS_LOCK;
 
 	if (state->base->set_lock_led)
 		state->base->set_lock_led(fe, *status & FE_HAS_LOCK);
 
+	dprintk("FirstTimeLock=%d\n", state->FirstTimeLock);
 	if (state->FirstTimeLock) {
 		u8 tmp;
 
@@ -2185,15 +2212,17 @@ static int stv091x_carrier_search(struct stv *state,  s32* frequency_jump)
 			/* No edge detected, jump tuner bandwidth */
 			//signalType = FE_SAT_TUNER_NOSIGNAL;
 
-			dprintk("Rien dans la bande, saut de BW/2 ");
+			//TODO: falling edge detected or direct blind to be done:
+			//dprintk("unimplemented?\n");
+			dprintk("Rien dans la bande, saut de BW/2;  asperity=%d jump=%d\n", asperity, *frequency_jump);
 		} else { // asperity==1; rising edge detected, perform blind search at next step */
 			//signalType = FE_SAT_TUNER_JUMP;
-			dprintk("Saut 4 or more steps");
+			dprintk("Saut 4 or more steps; asperity=%d jump=%d\n", asperity, *frequency_jump);
 
 		}
 	}
 	state->scan_next_frequency += *frequency_jump;
-	state->search_range =24000000 + *frequency_jump *1000;
+	state->search_range = 24000000 + *frequency_jump *1000;
 	if (state->search_range >40000000)
 		state->search_range = 40000000;
 
@@ -2201,6 +2230,8 @@ static int stv091x_carrier_search(struct stv *state,  s32* frequency_jump)
 
 	return asperity;
 }
+
+static int tune_once(struct dvb_frontend *fe, bool* need_retune);
 
 /*returns true 1 if a rising edge in spectrum was found, 2 for falling edge, 0 for nothing found
  *locked_ret indicates if a asignal could be locked
@@ -2223,27 +2254,24 @@ static int scan_within_tuner_bw(struct dvb_frontend *fe, bool* locked_ret)
 	//	fe->ops.tuner_ops.get_if_frequency(fe, &IF);
 		/* Set the Init Symbol rate*/
 
-	state->symbol_rate = 	p->symbol_rate;
-
-	dprintk("set symbol_rate=%d\n", state->symbol_rate);
-
 
 	if (state->symbol_rate < 100000 || state->symbol_rate > 70000000)
 		return -EINVAL;
 	stv091x_compute_timeouts(&state->DemodTimeout, &state->FecTimeout, state->symbol_rate, p->algorithm);
 	stv091x_set_frequency_symbol_rate_bandwidth(state);
 
+
 	state->ReceiveMode = Mode_None;
 	state->DemodLockTime = 0;
-
+#if 0 //LAST
 	/* 8PSK 3/5, 8PSK 2/3 Poff tracking optimization WA*/
 	write_reg(state, RSTV0910_P2_ACLC2S2Q + state->regoff, 0x0B);
 	write_reg(state, RSTV0910_P2_ACLC2S28 + state->regoff, 0x0A);
 	write_reg(state, RSTV0910_P2_BCLC2S2Q + state->regoff, 0x84);
 	write_reg(state, RSTV0910_P2_BCLC2S28 + state->regoff, 0x84);
 	write_reg(state, RSTV0910_P2_CARHDR + state->regoff, 0x1C);
+#endif
 
-	state->satellite_scan = false;
 	switch(p->algorithm) {
 	case ALGORITHM_SEARCH_NEXT:
 		break;
@@ -2253,212 +2281,68 @@ static int scan_within_tuner_bw(struct dvb_frontend *fe, bool* locked_ret)
 	}
 
 	asperity = stv091x_carrier_search(state, &frequency_jump);
-	if(asperity==1) { //rising edge found
+	dprintk("asperity=%d frequency=%d jump=%d\n", asperity, p->frequency, frequency_jump);
+	if(asperity==1 ||asperity==2) { //rising or falling edge found
+#if 0 //LAST
 		write_reg_field(state, FSTV0910_P2_DIS_RSFLOCK, 1);	/* open the Reed-Solomon to viterbi feedback until demod lock*/
 		write_reg_field(state, FSTV0910_P2_DIS_VITLOCK, 1);	/* open Viterbi feedback until demod lock*/
+#endif
 		p->frequency += frequency_jump;
+#if 0 //lAST
 
+		stv091x_set_search_standard(state, p);
+		state->Started = 1;
 		stv091x_start_scan(state, p);
 		state->DemodLockTime += TUNING_DELAY;
-		state->Started = 1;
 
 		locked = wait_for_dmdlock(fe, 1 /*require_data*/);
-		dprintk("lock=%d timedout=%d\n", locked, state->timedout);
+		dprintk("lock=%d timedout=%d freq=%d\n", locked, state->timedout, p->frequency);
 		if(!locked)
 			locked = pls_search_list(fe);
 		if(!locked)
 			locked = pls_search_range(fe);
-
 		dprintk("setting timedout=%d\n", !locked);
 		state->timedout = !locked;
-		if(locked) {
-			stv091x_get_signal_info(fe);
+#else
+
+		{ bool need_retune;
+			int ret;
+			int old = p->algorithm;
+			p->algorithm = ALGORITHM_BLIND;
+			ret = tune_once(fe, &need_retune);
+			dprintk("tune_once returned stat=%d\n", ret);
+			p->algorithm = old;
+			locked= !state->timedout;
 		}
+
+#endif
+		if(locked) {
+			//stv091x_get_signal_info(fe); already done in tune_once
+			state->Started = 0;
+		}
+#if 0 //LAST
 		write_reg_field(state, FSTV0910_P2_DIS_RSFLOCK, 0);	/* close the Reed-Solomon to viterbi feedback after lock*/
 		write_reg_field(state, FSTV0910_P2_DIS_VITLOCK, 0);	/* open Viterbi feedback after lock*/
+#endif
 	} else {
 		p->frequency += ((state->tuner_bw / 3000) - 1000);
+		dprintk("frequency=%d\n", p->frequency);
 	}
 	*locked_ret = locked;
 	return asperity;
 }
 
 
-#if 0
-#define SCAN_STEP 5000000  /*Scan Step in Hz*/
-#define SCAN_MINSYMB 1000000  /*Scan minimum sybol rate in Symbol/s  1000000*/
-int stv091x_sat_scan(struct dvb_frontend *fe)
-{
-	struct stv *state = fe->demodulator_priv;
-	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
-	bool signal_found = false;
-	bool locked = false;
-	int error=0;
-	s32 frequency_jump = 0;
-
-	u32 Directblind=1,MinSymbolRate;
-
-	s32 offset=0;
-
-	/*
-		0: single blind search
-		1: edge detection
-		2: launch immediatly a blind without edge detection*/
-	bool Doublefail=0; /* pass to 1 if the first blind attempt is failed after a falling edge detected */
-	u32 TunerIndexJump,TunerBW;
-
-	//	double time1;
-
-	int count;
-	count=0;
-	/* Search parameters */
-	p->delivery_system = SYS_AUTO;
-	p->inversion = INVERSION_AUTO;
-#if 0
-	p->algorithm_none		= ALGORITHM_BLIND;				/*	Search mode = Blind */
-#endif
-	p->fec_inner = FEC_AUTO;
-	state->symbol_rate = 1000000;							/*	minimum symbol rate for scan = 1Msps	*/
-	if(SCAN_MINSYMB<1000000) {
-		MinSymbolRate = 1000000;
-	} else {
-		MinSymbolRate=SCAN_MINSYMB;
-	}
-
-	if(SCAN_MINSYMB<20000000) {
-		state->search_range = 500000;
-	} else {
-		state->search_range = MinSymbolRate/2;	/* range of the search (in Hz) */
-	}
-
-	p->frequency		= p->scan_start_frequency; /* (in KHz)	*/
-
-	dprintk("sat search %d-%d KHZ \n", p->scan_start_frequency, p->scan_end_frequency);
-
-	//(*Transponders)=0;
-	do {
-		if (kthread_should_stop() || dvb_frontend_task_should_stop(fe)) {
-			dprintk("exiting on should stop\n");
-			break;
-		}
-		dprintk("Frequency %d (MHz) :\t",(p->frequency)/1000);
-
-		asperity = scan_within_tuner_bw(fe, &frequency_jump, &locked);
-		if(asperity == 1) {		/*rising edge found, jump*/
-			dprintk("Rising edge: move to next step\n");
-			p->frequency += frequency_jump; //TunerIndexJumo is set by search code
-			frequency_jump = 16000;
-			Directblind=2; /* Blind search will be launch at next step */
-			Doublefail=2;
-		} else if (asperity == 0) { /*no any edge found*/
-			dprintk("No edge : large jump\n");
-			p->frequency += ((state->tuner_bw / 3000) - 1000);
-			Directblind=1; /* Blind search will be launch at next step */
-			Doublefail=0;
-		} else  { //falling edge in spectrum
-			if(state->fec_locked) {
-				dprintk("count: %d; search Freq:%d;Result Freq : %d ",count,
-								SearchResults.Frequency,m_BlindScanData.ScanResult[count-1].Frequency);
-
-				//Not a duplicate for sure
-				if(ABS(SearchResults.Frequency-m_BlindScanData.ScanResult[count-1].Frequency)>2000) {
-					m_BlindScanData.ScanResult[count].Frequency =SearchResults.Frequency;// SearchResults.Frequency;
-					m_BlindScanData.ScanResult[count].SymbolRate = SearchResults.SymbolRate;
-					m_BlindScanData.ScanResult[count].Standard= SearchResults.Standard;
-					m_BlindScanData.ScanResult[count].ModCode = SearchResults.ModCode;
-					m_BlindScanData.ScanResult[count].PunctureRate= SearchResults.PunctureRate;
-					count++;
-					dprintk("count: %d ",count);
-				}
-			}
-
-
-			if(ScanListcheckDuplication(SearchResults.Frequency,ScanResult,*Transponders) == FALSE) {
-
-				//			ScanResult[(*Transponders)] = (FE_Sat_SearchResult_t*)calloc1(1,sizeof(FE_Sat_SearchResult_t));
-				//			ScanResult[(*Transponders)]->Frequency = SearchResults.Frequency;
-				//			ScanResult[(*Transponders)]->SymbolRate = SearchResults.SymbolRate;
-				//			ScanResult[(*Transponders)]->Standard = SearchResults.Standard;
-				//			ScanResult[(*Transponders)]->PunctureRate = SearchResults.PunctureRate;
-				//			ScanResult[(*Transponders)]->ModCode = SearchResults.ModCode;
-				//			ScanResult[(*Transponders)]->Pilots = SearchResults.Pilots;
-				//			ScanResult[(*Transponders)]->FrameLength = SearchResults.FrameLength;
-				//			ScanResult[(*Transponders)]->Spectrum = SearchResults.Spectrum;
-				//			ScanResult[(*Transponders)]->RollOff = SearchResults.RollOff;
-				//			ScanResult[(*Transponders)]->Modulation =	SearchResults.Modulation;
-
-
-				//				m_BlindScanData.ScanResult[(*Transponders)].Frequency =SearchResults.Frequency;// SearchResults.Frequency;
-				//				m_BlindScanData.ScanResult[(*Transponders)].SymbolRate =SearchResults.SymbolRate;
-				//				m_BlindScanData.ScanResult[(*Transponders)].Standard= SearchResults.Standard;
-				//				m_BlindScanData.ScanResult[(*Transponders)].ModCode = SearchResults.ModCode;
-				//				m_BlindScanData.ScanResult[(*Transponders)].PunctureRate= SearchResults.PunctureRate;
-
-
-				(*Transponders)++;
-				//				 count++;
-				dprintk("(*Transponders)= %d",(*Transponders));
-				dprintk("---- DIGITAL TP FOUND at %d (kHz) ----\n",SearchResults.Frequency);
-				p->frequency = SearchResults.Frequency + 135*((SearchResults.SymbolRate/1000) / (2*100));
-				Directblind=1;
-			}
-
-			else /* TP already found */
-			{
-				dprintk("TP already found\n");
-				p->frequency+=(SearchParams.SearchRange / 1000);
-				Directblind = 1;
-			}
-			Doublefail=0;
-
-		}
-		else /* blind failed */
-		{
-			dprintk("Acquisition failed ");
-			if (Doublefail==0)
-			{
-				dprintk("ONCE after falling edge detection\n");
-				/* This is a first time that a blind scan is failed at the left side of the falling edge.
-				Lauch a new blind search scan at the current frequency position + the *frequency_jump/2 */
-				p->frequency+= *frequency_jump/2;
-				Doublefail=1;
-				Directblind=2;
-				/* The search range at next step will be [-i/4;+i/4] */
-
-				frequency_jump = frequency_jump/2;
-			}
-			else if(Doublefail==1)
-			{
-				dprintk("TWICE after falling edge detection\n");
-				/* This is the second time a blind scan is failed at the left side of the falling edge */
-				p->frequency+= *frequency_jump;
-				Doublefail=0;
-				Directblind=1;
-			}
-			else
-			{ //DoubleFail==2, meaing that we are starting a new search (so there was no real failure)
-				dprintk(" after direct acquisition\n");
-				/* A blind scan without edge detection has failed */
-				p->frequency+=0;
-				Doublefail=0;
-				Directblind=1;
-			}
-		}
-		m_BlindScanData.channel_count = count;
-		}
-	return FE_Error;
-}
-#endif
 
 
 static int tune_once(struct dvb_frontend *fe, bool* need_retune)
 {
-	int stat = 0;
+
 	bool locked;
 
 	struct stv *state = fe->demodulator_priv;
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
-	BUG_ON(state->satellite_scan);
+	//	BUG_ON(state->satellite_scan);
 	state->timedout=false;
 	//u32 IF;
 	*need_retune = 0;
@@ -2483,8 +2367,6 @@ static int tune_once(struct dvb_frontend *fe, bool* need_retune)
 
 	BUG_ON(state->Started);
 
-	state->satellite_scan = false;
-
 	switch(p->algorithm) {
 	case ALGORITHM_WARM:
 	case ALGORITHM_COLD:
@@ -2505,6 +2387,17 @@ static int tune_once(struct dvb_frontend *fe, bool* need_retune)
 
 	state->Started = 1;
 #if 0
+	switch(p->algorithm) {
+	case ALGORITHM_WARM:
+	case ALGORITHM_COLD:
+	case ALGORITHM_BLIND:
+	case ALGORITHM_BLIND_BEST_GUESS:
+		stv091x_set_cfrinc(state, 100000, 0);
+		break;
+	default:
+		stv091x_set_cfrinc(state, 0, 0);
+	};
+#endif
 
 
 
@@ -2523,7 +2416,7 @@ static int tune_once(struct dvb_frontend *fe, bool* need_retune)
 	if(locked && p->algorithm != ALGORITHM_WARM ) {
 		*need_retune = stv091x_get_signal_info(fe);
 	}
-	return stat;
+	return 0;
 }
 
 static int tune(struct dvb_frontend *fe, bool re_tune,
@@ -2548,16 +2441,17 @@ static int tune(struct dvb_frontend *fe, bool re_tune,
 		state->search_range = 16000000;
 	}
 
-		state->symbol_rate =
-			(p->symbol_rate==0) ? 60000000: p->symbol_rate; //determines tuner bandwidth set during blindscan
+	state->symbol_rate =
+		(p->symbol_rate==0) ? 60000000: p->symbol_rate; //determines tuner bandwidth set during blindscan
 
 
-	state->satellite_scan = (p->algorithm == ALGORITHM_SEARCH
+	state->satellite_scan = false;
+		/*= (p->algorithm == ALGORITHM_SEARCH
 													 ||p->algorithm == ALGORITHM_SEARCH_NEXT);
+		*/
 	dprintk("tune called with freq=%d srate=%d => %d re_tune=%d\n", p->frequency, p->symbol_rate,
 					state->symbol_rate, re_tune);
 	if (re_tune) {
-		state->satellite_scan = false;
 		r = tune_once(fe, &need_retune);
 		if (r)
 			return r;
@@ -2597,40 +2491,73 @@ static int tune(struct dvb_frontend *fe, bool re_tune,
 	init = 1: start the scan at the search range specified by the user
 	init = 0: start the scan just beyond the last found frequency
  */
-static int sat_scan(struct dvb_frontend *fe, bool init,
+static int scan_sat(struct dvb_frontend *fe, bool init,
  										unsigned int *delay,  enum fe_status *status)
 {
 	struct stv *state = fe->demodulator_priv;
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
 	int asperity;
 	bool locked = false;
-
+	state->Started = 0;
 	state->satellite_scan = true;
+	//todo: 	MinSymbolRate
+	state->search_range =  500000;
+	state->symbol_rate =  1000000;							/*	minimum symbol rate for scan = 1Msps	*/
+	dprintk("set symbol_rate=%d\n", state->symbol_rate);
+
 	if(init) {
-		p->frequency = p->scan_start_frequency;
 		state->scan_next_frequency = p->scan_start_frequency;
 		state->scan_end_frequency = p->scan_end_frequency;
-	} else  {
+	}
+
+	while(state->scan_next_frequency < state->scan_end_frequency) {
+		if (kthread_should_stop() || dvb_frontend_task_should_stop(fe)) {
+			dprintk("exiting on should stop\n");
+			*status =0;
+			return 0;
+		}
 		p->frequency = state->scan_next_frequency;
-	}
-	if(p->frequency >= state->scan_end_frequency) {
-		dprintk("Invalid ranged");
-		return -1;
-	}
-	dprintk("sat_scan called with init=%d\n", init);
-	p->algorithm = ALGORITHM_BLIND;
-	asperity = scan_within_tuner_bw(fe, &locked);
-	dprintk("asperity=%d locked=%d\n", asperity, locked);
-	if(locked) {
-		state->scan_end_frequency =p->frequency;
-		stv091x_set_frequency_symbol_rate_bandwidth(state);
-		state->tune_time = jiffies;
-	}
+		int old = state->scan_next_frequency;
+		dprintk("start=%d end=%d init=%d\n",
+						state->scan_next_frequency, state->scan_end_frequency,  init);
 
-	*status = FE_HAS_SIGNAL|FE_HAS_CARRIER|FE_HAS_VITERBI|FE_HAS_SYNC|FE_HAS_LOCK;
+		if(p->frequency >= state->scan_end_frequency) {
+			dprintk("Invalid ranged");
+			return -1;
+		}
 
-	*delay = HZ;
+		p->algorithm = ALGORITHM_SEARCH_NEXT;
+		asperity = scan_within_tuner_bw(fe, &locked);
+		dprintk("asperity=%d locked=%d freq=%d start=%d end=%d\n", asperity, locked,
+						p->frequency, state->scan_next_frequency, state->scan_end_frequency);
+		if(locked) {
+			//state->scan_end_frequency = p->frequency;
+			//stv091x_set_frequency_symbol_rate_bandwidth(state);
+			uint32_t step = 135*((state->symbol_rate/1000) / (2*100));
+			uint32_t next = p->frequency + step;
+			dprintk("symbol_rate=%d step=%d next-%d\n", state->symbol_rate, step, next);
+			if(next < state->scan_next_frequency) {
+				next += state->search_range/1000;
+				dprintk ("Adjusting next to prevent going backwards: new next=%d\n", next);
+			}
+			state->tune_time = jiffies;
 
+			state->scan_next_frequency = next;
+
+			*status = FE_HAS_SIGNAL|FE_HAS_CARRIER|FE_HAS_VITERBI|FE_HAS_SYNC|FE_HAS_LOCK;
+			*delay = HZ;
+
+			return 0;
+		}
+		if(state->scan_next_frequency == old) {
+			dprintk("ERROR: nex==old=%d\n", old);
+			state->scan_next_frequency = old+1000000;
+		}
+	}
+	if(state->scan_next_frequency >= state->scan_end_frequency) {
+		dprintk("Signaling DONE\n");
+		*status |= FE_TIMEDOUT;
+	}
 	return 0;
 }
 
@@ -2939,7 +2866,7 @@ static struct dvb_frontend_ops stv091x_ops = {
 	.read_ucblocks			= read_ucblocks,
 	.spi_read			= spi_read,
 	.spi_write			= spi_write,
-	.scan =  sat_scan,
+	.scan =  scan_sat,
 	.get_spectrum_scan		= stv091x_get_spectrum_scan,
 	.get_constellation_samples	= stv091x_get_consellation_samples,
 };
