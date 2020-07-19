@@ -79,8 +79,7 @@ struct stv_base {
 	u32  (*set_TSparam)(struct i2c_adapter *i2c,int tuner,int time,bool flag);
 	//end
 
-	//for stvvglna
-	bool vglna;
+	int vglna;
 };
 
 /*for debugging only: assumes only a single card is in use; otherwise wrong debug output
@@ -255,14 +254,12 @@ static int stid135_probe(struct stv *state)
 
 	strcpy(init_params.demod_name,"STiD135");
 	init_params.pI2CHost		=	state->base;
-	init_params.demod_i2c_adr			=	state->base->adr ? state->base->adr<<1 : 0xd0;
-	init_params.demod_ref_clk		=		state->base->extclk ? state->base->extclk : 27;
-	init_params.internal_dcdc	=	0;
-	init_params.internal_ldo	=	1; // LDO supply is internal on Oxford valid board
-#if 1 //main driver has value 0xf
-	init_params.rf_input_type	=	0x0; // Single ended RF input on Oxford valid board rev2
-#endif
-	init_params.roll_off		=		FE_SAT_35; // NYQUIST Filter value (used for DVBS1/DSS, DVBS2 is automatic)
+	init_params.demod_i2c_adr   	=	state->base->adr ? state->base->adr<<1 : 0xd0;
+	init_params.demod_ref_clk  	= 	state->base->extclk ? state->base->extclk : 27;
+	init_params.internal_dcdc	=	FALSE;
+	init_params.internal_ldo	=	TRUE; // LDO supply is internal on Oxford valid board
+	init_params.rf_input_type	=	0xF; // Single ended RF input on Oxford valid board rev2
+	init_params.roll_off		=  	FE_SAT_35; // NYQUIST Filter value (used for DVBS1/DSS, DVBS2 is automatic)
 	init_params.tuner_iq_inversion	=	FE_SAT_IQ_NORMAL;
 
 	err = fe_stid135_init(&init_params,&state->base->handle);
@@ -357,14 +354,14 @@ static int stid135_probe(struct stv *state)
 		dev_err(&state->base->i2c->dev, "%s: setup error %d !\n", __func__, err);
 
 
-/*///////////////////init stvvglna/////////////////////////////////////*/
-	if(state->base->vglna){
-	printk("__Initialized STVVGLNA__\n");
+///////////////////init stvvglna/////////////////////////////////////
+	if(state->base->vglna){ //for 909x v2 version
+			dev_warn(&state->base->i2c->dev, "%s:Init STVVGLNA \n", __func__);
 	VglnaIdString = "STVVGLNA";
 		/* Init the VGLNA */
 	pVGLNAInit.Chip = &VGLNAChip;
 
-	pVGLNAInit.Chip->pI2CHost		=	state->base;
+	pVGLNAInit.Chip->pI2CHost	  =	state->base;
 	pVGLNAInit.Chip->RepeaterHost = NULL;
 	pVGLNAInit.Chip->Repeater     = FALSE;
 	pVGLNAInit.Chip->I2cAddr      = 0xc8;
@@ -373,46 +370,49 @@ static int stid135_probe(struct stv *state)
 	stvvglna_init(&pVGLNAInit, &vglna_handle);
 	printk("Initialized STVVGLNA  0 device\n");
 	stvvglna_set_standby(vglna_handle,1);
-
+	dev_warn(&state->base->i2c->dev, "Initialized STVVGLNA 0 device\n");
 
 	VglnaIdString = "STVVGLNA1";
 	pVGLNAInit1.Chip = &VGLNAChip;
 
-	pVGLNAInit1.Chip->pI2CHost		=	state->base;
+	pVGLNAInit1.Chip->pI2CHost	  =	state->base;
 	pVGLNAInit1.Chip->RepeaterHost = NULL;
 	pVGLNAInit1.Chip->Repeater     = FALSE;
 	pVGLNAInit1.Chip->I2cAddr      = 0xce;
 	pVGLNAInit1.NbDefVal = STVVGLNA_NBREGS;
 	strcpy((char *)pVGLNAInit1.Chip->Name, VglnaIdString);
 	stvvglna_init(&pVGLNAInit1, &vglna_handle1);
-	printk("Initialized STVVGLNA  1 device\n");
 	stvvglna_set_standby(vglna_handle1,1);
+	dev_warn(&state->base->i2c->dev, "Initialized STVVGLNA 1 device\n");
 
 	VglnaIdString = "STVVGLNA2";
 	pVGLNAInit2.Chip = &VGLNAChip;
-
-	pVGLNAInit2.Chip->pI2CHost		=	state->base;
+	pVGLNAInit2.Chip->pI2CHost	  =	state->base;
 	pVGLNAInit2.Chip->RepeaterHost = NULL;
 	pVGLNAInit2.Chip->Repeater     = FALSE;
 	pVGLNAInit2.Chip->I2cAddr      = 0xcc;
 	pVGLNAInit2.NbDefVal = STVVGLNA_NBREGS;
 	strcpy((char *)pVGLNAInit2.Chip->Name, VglnaIdString);
 	stvvglna_init(&pVGLNAInit2, &vglna_handle2);
-	printk("Initialized STVVGLNA  2 device\n");
 	stvvglna_set_standby(vglna_handle2,1);
+	dev_warn(&state->base->i2c->dev, "Initialized STVVGLNA 2 device\n");
 
 	VglnaIdString = "STVVGLNA3";
 	pVGLNAInit3.Chip = &VGLNAChip;
-	pVGLNAInit3.Chip->pI2CHost		=	state->base;
+	pVGLNAInit3.Chip->pI2CHost	  =	state->base;
 	pVGLNAInit3.Chip->RepeaterHost = NULL;
 	pVGLNAInit3.Chip->Repeater     = FALSE;
 	pVGLNAInit3.Chip->I2cAddr      = 0xca;
 	pVGLNAInit3.NbDefVal = STVVGLNA_NBREGS;
 	strcpy((char *)pVGLNAInit3.Chip->Name, VglnaIdString);
 	stvvglna_init(&pVGLNAInit3, &vglna_handle3);
-	printk("Initialized STVVGLNA  3 device\n");
 	stvvglna_set_standby(vglna_handle3,1);
+	dev_warn(&state->base->i2c->dev, "Initialized STVVGLNA 3 device\n");
+
 	}
+	if (err != FE_LLA_NO_ERROR)
+		dev_err(&state->base->i2c->dev, "%s: setup error %d !\n", __func__, err);
+
 	return err != FE_LLA_NO_ERROR ? -1 : 0;
 }
 
@@ -473,8 +473,7 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 	//BOOL lock_stat=0;
 	struct fe_sat_signal_info* signal_info = &state->signal_info;
 
-
-	dev_warn(&state->base->i2c->dev,
+	dev_dbg(&state->base->i2c->dev,
 			"delivery_system=%u modulation=%u frequency=%u symbol_rate=%u inversion=%u stream_id=%d\n",
 			p->delivery_system, p->modulation, p->frequency,
 					 p->symbol_rate, p->inversion, p->stream_id);
@@ -871,9 +870,6 @@ static int stid135_read_status(struct dvb_frontend *fe, enum fe_status *status)
 			return -EIO;
 		}
 
-	//ss	state->signal_info.power = 800;
-	//	state->signal_info.C_N =909;
-
 		p->strength.len = 2;
 		p->strength.stat[0].scale = FE_SCALE_DECIBEL;
 		p->strength.stat[0].svalue = state->signal_info.power;
@@ -894,10 +890,11 @@ static int stid135_read_status(struct dvb_frontend *fe, enum fe_status *status)
 		p->post_bit_error.stat[0].scale = FE_SCALE_COUNTER;
 		p->post_bit_error.stat[0].uvalue = state->signal_info.ber;
 
+			if (err != FE_LLA_NO_ERROR)
+				dev_warn(&state->base->i2c->dev, "%s: fe_stid135_filter_forbidden_modcodes error %d !\n", __func__, err);
 	}
-	//dprintk("read status=%d\n", *status);
 
-		//for the tbs6912 ts setting
+	//for the tbs6912 ts setting
 	if((state->base->set_TSparam)&&(state->newTP)) {
 		speed = state->base->set_TSparam(state->base->i2c,state->nr/2,4,0);
 		if(!state->bit_rate)
@@ -944,6 +941,7 @@ static int stid135_tune(struct dvb_frontend *fe, bool re_tune,
 #endif
 
 	}
+
 	r = stid135_read_status(fe, status);
 	if (r)
 		return r;
@@ -965,6 +963,7 @@ static enum dvbfe_algo stid135_get_algo(struct dvb_frontend *fe)
 static int stid135_set_voltage(struct dvb_frontend *fe, enum fe_sec_voltage voltage)
 {
 	struct stv *state = fe->demodulator_priv;
+
 	if (state->base->mode == 0)
 	{
 		if (voltage == SEC_VOLTAGE_18)
@@ -1296,7 +1295,7 @@ struct dvb_frontend *stid135_attach(struct i2c_adapter *i2c,
 		base->read_properties = cfg->read_properties;
 		base->set_TSsampling = cfg->set_TSsampling;
 		base->set_TSparam  = cfg->set_TSparam;
-		base->vglna = cfg->vglna;
+		base->vglna		=	cfg->vglna;    //for stvvglna 6909x v2 6903x v2
 
 		mutex_init(&base->status_lock);
 

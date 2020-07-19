@@ -389,14 +389,14 @@ typedef enum
 	VGLNA_RFAGC_HIGH,
 	VGLNA_RFAGC_LOW,
 	VGLNA_RFAGC_NORMAL
-
 } SAT_VGLNA_STATUS;
 
 typedef struct
 {
 	STCHIP_Info_t	*Chip;		/* pointer to parameters to pass to the CHIP API */
-	u32		NbDefVal;		/* number of default values (must match number of STC registers) */
+	u32 	NbDefVal;		/* number of default values (must match number of STC registers) */
 }
+
 SAT_VGLNA_InitParams_t;
 
 typedef SAT_VGLNA_InitParams_t SAT_VGLNA_Params_t;

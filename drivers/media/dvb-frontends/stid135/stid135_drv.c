@@ -3140,7 +3140,6 @@ fe_lla_error_t fe_stid135_get_signal_info(fe_stid135_handle_t Handle,
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	struct fe_stid135_internal_param *pParams;
-	enum fe_sat_search_state demodState;
 	s32 pch_rf, pband_rf;
 	s32 fld_value[3];
 	//u32 reg_value = 0;
@@ -11653,9 +11652,6 @@ STCHIP_Error_t stvvglna_init(SAT_VGLNA_Params_t *InitParams, STCHIP_Handle_t *hC
 		(*hChipHandle) = ChipOpen(InitParams->Chip);
 
 		hChip=(*hChipHandle);
-
-		if(hChip==NULL)
-			printk("hChip =NULL\n");
 
 		if(hChip != NULL)
 		{

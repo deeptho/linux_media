@@ -1319,7 +1319,7 @@ int tbs_video_register(struct tbs_pcie_dev *dev)
 			goto fail;
 		}
 
-		err = video_register_device(vdev, VFL_TYPE_GRABBER,-1);
+		err = video_register_device(vdev, VFL_TYPE_VIDEO,-1);
 		if(err!=0){
 			printk(KERN_ERR " v4l2_device_register failed!\n");
 			goto fail;

@@ -39,10 +39,9 @@ struct stid135_cfg {
 	void (*write_properties) (struct i2c_adapter *i2c,u8 reg, u32 buf);
 	void (*read_properties) (struct i2c_adapter *i2c,u8 reg, u32 *buf);
 	//for tbs6912
-	void (*set_TSsampling)(struct i2c_adapter *i2c,int tuner,int time);  
+	void (*set_TSsampling)(struct i2c_adapter *i2c,int tuner,int time);
 	u32  (*set_TSparam)(struct i2c_adapter *i2c,int tuner,int time,bool  flag);
-	bool vglna;
-
+	int vglna;
 };
 
 #if IS_REACHABLE(CONFIG_DVB_STID135)

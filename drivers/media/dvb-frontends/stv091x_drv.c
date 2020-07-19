@@ -2263,14 +2263,6 @@ static int scan_within_tuner_bw(struct dvb_frontend *fe, bool* locked_ret)
 
 	state->ReceiveMode = Mode_None;
 	state->DemodLockTime = 0;
-#if 0 //LAST
-	/* 8PSK 3/5, 8PSK 2/3 Poff tracking optimization WA*/
-	write_reg(state, RSTV0910_P2_ACLC2S2Q + state->regoff, 0x0B);
-	write_reg(state, RSTV0910_P2_ACLC2S28 + state->regoff, 0x0A);
-	write_reg(state, RSTV0910_P2_BCLC2S2Q + state->regoff, 0x84);
-	write_reg(state, RSTV0910_P2_BCLC2S28 + state->regoff, 0x84);
-	write_reg(state, RSTV0910_P2_CARHDR + state->regoff, 0x1C);
-#endif
 
 	switch(p->algorithm) {
 	case ALGORITHM_SEARCH_NEXT:
@@ -2283,28 +2275,9 @@ static int scan_within_tuner_bw(struct dvb_frontend *fe, bool* locked_ret)
 	asperity = stv091x_carrier_search(state, &frequency_jump);
 	dprintk("asperity=%d frequency=%d jump=%d\n", asperity, p->frequency, frequency_jump);
 	if(asperity==1 ||asperity==2) { //rising or falling edge found
-#if 0 //LAST
-		write_reg_field(state, FSTV0910_P2_DIS_RSFLOCK, 1);	/* open the Reed-Solomon to viterbi feedback until demod lock*/
-		write_reg_field(state, FSTV0910_P2_DIS_VITLOCK, 1);	/* open Viterbi feedback until demod lock*/
-#endif
 		p->frequency += frequency_jump;
-#if 0 //lAST
 
-		stv091x_set_search_standard(state, p);
 		state->Started = 1;
-		stv091x_start_scan(state, p);
-		state->DemodLockTime += TUNING_DELAY;
-
-		locked = wait_for_dmdlock(fe, 1 /*require_data*/);
-		dprintk("lock=%d timedout=%d freq=%d\n", locked, state->timedout, p->frequency);
-		if(!locked)
-			locked = pls_search_list(fe);
-		if(!locked)
-			locked = pls_search_range(fe);
-		dprintk("setting timedout=%d\n", !locked);
-		state->timedout = !locked;
-#else
-
 		{ bool need_retune;
 			int ret;
 			int old = p->algorithm;
@@ -2315,15 +2288,12 @@ static int scan_within_tuner_bw(struct dvb_frontend *fe, bool* locked_ret)
 			locked= !state->timedout;
 		}
 
-#endif
+
 		if(locked) {
 			//stv091x_get_signal_info(fe); already done in tune_once
+		} else {
 			state->Started = 0;
 		}
-#if 0 //LAST
-		write_reg_field(state, FSTV0910_P2_DIS_RSFLOCK, 0);	/* close the Reed-Solomon to viterbi feedback after lock*/
-		write_reg_field(state, FSTV0910_P2_DIS_VITLOCK, 0);	/* open Viterbi feedback after lock*/
-#endif
 	} else {
 		p->frequency += ((state->tuner_bw / 3000) - 1000);
 		dprintk("frequency=%d\n", p->frequency);
