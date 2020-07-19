@@ -2069,7 +2069,7 @@ static int stv091x_carrier_check(struct stv* state, s32 *FinalFreq, s32* frequen
 	for(i=0;i<nbSteps;i++)
 	{
 		/* Scan on the positive part of the tuner Bw */
-		dprintk("freq=%d\n", init_freq);
+		//dprintk("freq=%d\n", init_freq);
 		write_reg(state, RSTV0910_P2_DMDISTATE, 0x1C);
 		write_reg(state, RSTV0910_P2_CFRINIT1, (init_freq >>8) & 0xff);
 		write_reg(state, RSTV0910_P2_CFRINIT0, init_freq & 0xff);
@@ -2481,6 +2481,7 @@ static int scan_sat(struct dvb_frontend *fe, bool init,
 	}
 
 	while(state->scan_next_frequency < state->scan_end_frequency) {
+		*status = 0;
 		if (kthread_should_stop() || dvb_frontend_task_should_stop(fe)) {
 			dprintk("exiting on should stop\n");
 			*status =0;
@@ -2518,6 +2519,8 @@ static int scan_sat(struct dvb_frontend *fe, bool init,
 			*delay = HZ;
 
 			return 0;
+		} else {
+			*status = 0;
 		}
 		if(state->scan_next_frequency == old) {
 			dprintk("ERROR: nex==old=%d\n", old);
