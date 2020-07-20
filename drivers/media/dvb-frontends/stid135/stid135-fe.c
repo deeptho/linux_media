@@ -1155,7 +1155,9 @@ static void spi_write(struct dvb_frontend *fe,struct ecp3_info *ecp3inf)
 }
 
 
-static int stid135_get_spectrum_scan(struct dvb_frontend *fe, struct dvb_fe_spectrum_scan *s)
+#if 0
+static int stid135_get_spectrum_scan(struct dvb_frontend *fe, unsigned int *delay,
+																		 enum fe_status *status)
 {
 	s32 Reg[60];
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
@@ -1211,7 +1213,7 @@ static int stid135_get_spectrum_scan(struct dvb_frontend *fe, struct dvb_fe_spec
 	}
 	return error;
 }
-
+#endif
 
 static struct dvb_frontend_ops stid135_ops = {
 	.delsys = { SYS_DVBS, SYS_DVBS2, SYS_DSS },
@@ -1247,7 +1249,7 @@ static struct dvb_frontend_ops stid135_ops = {
 	.read_ucblocks			= stid135_read_ucblocks,
 	.spi_read			= spi_read,
 	.spi_write			= spi_write,
-	.get_spectrum_scan		= stid135_get_spectrum_scan,
+	/*	.get_spectrum_scan		= stid135_get_spectrum_scan,*/
 	.extended_info = {
 		.extended_caps          = FE_CAN_SPECTRUMSCAN	|
 		FE_CAN_IQ

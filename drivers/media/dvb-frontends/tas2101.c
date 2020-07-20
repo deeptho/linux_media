@@ -345,7 +345,7 @@ static int tas2101_set_voltage(struct dvb_frontend *fe,
 {
 	struct tas2101_priv *priv = fe->demodulator_priv;
 	int ret = 0;
-	
+
 	dev_dbg(&priv->i2c->dev, "%s() %s\n", __func__,
 		voltage == SEC_VOLTAGE_13 ? "SEC_VOLTAGE_13" :
 		voltage == SEC_VOLTAGE_18 ? "SEC_VOLTAGE_18" :
@@ -937,7 +937,7 @@ error:
 	return DVBFE_ALGO_SEARCH_ERROR;
 }
 
- static int tas2101_get_spectrum_scan(struct dvb_frontend *fe, struct dvb_fe_spectrum_scan *s)
+ static int tas2101_get_spectrum_scan(struct dvb_frontend *fe, struct dtv_fe_spectrum *s)
 {
 	struct tas2101_priv *priv = fe->demodulator_priv;
 	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
@@ -992,7 +992,7 @@ error:
 	return 0;
 }
 
- 
+
 #ifndef TAS2101_USE_I2C_MUX
 static int tas2101_i2c_gate_ctrl(struct dvb_frontend* fe, int enable)
 {
@@ -1056,12 +1056,12 @@ static struct dvb_frontend_ops tas2101_ops = {
 
 	.search = tas2101_search,
 	.dtv_tune = tas2101_dtv_tune,
+#if 0
 	.get_spectrum_scan = tas2101_get_spectrum_scan,
-	
+#endif
 };
 
 MODULE_DESCRIPTION("DVB Frontend module for Tmax TAS2101");
 MODULE_AUTHOR("Luis Alves (ljalvs@gmail.com)");
 MODULE_LICENSE("GPL");
 MODULE_VERSION("1.0");
-

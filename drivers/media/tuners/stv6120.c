@@ -392,9 +392,10 @@ static int set_lof(struct stv *state, u32 LocalFrequency, u32 CutOffFrequency)
 		cf_index = 0;
 	if (cf_index > 31)
 		cf_index = 31;
+#if 0
 	dprintk("F = %u, CutOff = %u => %uMhz cf_index=%d\n", Frequency, CutOffFrequency,
 					cutoff_from_index(cf_index),  cf_index);
-
+#endif
 	if (Frequency >= 1191000) {
 		PDIV = 0;
 		P    = 2;
@@ -449,19 +450,27 @@ static int set_lof(struct stv *state, u32 LocalFrequency, u32 CutOffFrequency)
 
 	/*Last part of set carrier freq + bandwidth selection*/
 	//addr 0x2+4 = CTRL7
-	state->reg[REG_CF_PDIV] &= 0x9f;
-	state->reg[REG_CF_PDIV] |= ((PDIV << 5) | cf_index);
 
-	/* Start cal vco,CF */
-	//addr 0x2+6 =  STAT1
-	state->reg[REG_CAL] &= 0xf8;
-	state->reg[REG_CAL] |= 0x06;//bit[1] starts calibration
+	{
+		u8 newval = state->reg[REG_CF_PDIV];
+		newval &= 0x9f;
+		newval |= ((PDIV << 5) | cf_index);
+		if(newval != 	state->reg[REG_CF_PDIV]) {
+			state->reg[REG_CF_PDIV] = newval;
+			/* Start cal vco,CF */
+			//addr 0x2+6 =  STAT1
+			state->reg[REG_CAL] &= 0xf8;
+			state->reg[REG_CAL] |= 0x06;//bit[1] starts calibration
 
-	write_tuner_regs(state);
+			write_tuner_regs(state);
+			wait_for_call_done(state, 0x06);
 
-	wait_for_call_done(state, 0x06);
-
-	usleep_range(10000, 12000);
+			usleep_range(10000, 12000);
+		} else {
+			write_tuner_regs(state);
+			wait_for_call_done(state, 0x06);
+		}
+	}
 
 #if 0
 	read_reg(state, 0x03, &tmp);
@@ -476,25 +485,8 @@ static int set_lof(struct stv *state, u32 LocalFrequency, u32 CutOffFrequency)
 	return 0;
 }
 
-#if 0
-static int set_frequency(struct dvb_frontend *fe, u32 frequency)
-{	u32 freq, cutoff, symbol_rate;
-	struct stv *state = fe->tuner_priv;
-	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
-	freq = frequency * 1000;
-	symbol_rate = (p->algorithm == ALGORITHM_BLIND ||
-								 p->algorithm == ALGORITHM_BLIND_BEST_GUESS)
-		? p->search_range : p->symbol_rate;
 
-	cutoff = 5000000 + MulDiv32(symbol_rate, p->rolloff, 200);
-	if (fe->ops.i2c_gate_ctrl)
-		fe->ops.i2c_gate_ctrl(fe, 1);
-	set_lof(state, freq, cutoff);
-	if (fe->ops.i2c_gate_ctrl)
-		fe->ops.i2c_gate_ctrl(fe, 0);
-	return 0;
-}
-#endif
+
 
 static int set_params(struct dvb_frontend *fe)
 {

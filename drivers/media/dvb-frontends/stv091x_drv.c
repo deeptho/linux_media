@@ -1028,12 +1028,9 @@ static void stv091x_set_cfrinc(struct stv* state, u32 cfr_increment, bool automa
 }
 
 
-static u32 stv091x_bandwidth(struct stv* state)
+static u32 stv091x_bandwidth(u32 rolloff, uint32_t symbol_rate)
 {
-
-	struct dtv_frontend_properties *p = &state->fe.dtv_property_cache;
-	u32 rolloff;
-	switch (p->rolloff) {
+	switch (rolloff) {
 	case ROLLOFF_20:
 		rolloff = 120;
 		break;
@@ -1044,7 +1041,7 @@ static u32 stv091x_bandwidth(struct stv* state)
 		rolloff = 135;
 		break;
 	}
-	return MulDiv32(state->symbol_rate, rolloff, 200);
+	return MulDiv32(symbol_rate, rolloff, 200);
 }
 
 int stv091x_set_frequency_symbol_rate_bandwidth(struct stv* state)
@@ -1059,7 +1056,7 @@ int stv091x_set_frequency_symbol_rate_bandwidth(struct stv* state)
 		stv091x_set_symbol_rate(state, state->symbol_rate);
 	} else {
 		dprintk("symrate1=%d bw=%d\n", state->symbol_rate, state->tuner_bw);
-		state->tuner_bw = stv091x_bandwidth(state);
+		state->tuner_bw = stv091x_bandwidth(p->rolloff, state->symbol_rate);
 		dprintk("symrate2=%d bw=%d\n", state->symbol_rate, state->tuner_bw);
 #if 0
 		//bug!
@@ -2461,8 +2458,8 @@ static int tune(struct dvb_frontend *fe, bool re_tune,
 	init = 1: start the scan at the search range specified by the user
 	init = 0: start the scan just beyond the last found frequency
  */
-static int scan_sat(struct dvb_frontend *fe, bool init,
- 										unsigned int *delay,  enum fe_status *status)
+static int stv091x_sat_scan(struct dvb_frontend *fe, bool init,
+														unsigned int *delay,  enum fe_status *status)
 {
 	struct stv *state = fe->demodulator_priv;
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
@@ -2488,7 +2485,6 @@ static int scan_sat(struct dvb_frontend *fe, bool init,
 			return 0;
 		}
 		p->frequency = state->scan_next_frequency;
-		int old = state->scan_next_frequency;
 		dprintk("start=%d end=%d init=%d\n",
 						state->scan_next_frequency, state->scan_end_frequency,  init);
 
@@ -2521,10 +2517,6 @@ static int scan_sat(struct dvb_frontend *fe, bool init,
 			return 0;
 		} else {
 			*status = 0;
-		}
-		if(state->scan_next_frequency == old) {
-			dprintk("ERROR: nex==old=%d\n", old);
-			state->scan_next_frequency = old+1000000;
 		}
 	}
 	if(state->scan_next_frequency >= state->scan_end_frequency) {
@@ -2693,25 +2685,30 @@ static void spi_write(struct dvb_frontend *fe,struct ecp3_info *ecp3inf)
 
 
 
-
-
-
-static int stv091x_get_spectrum_scan(struct dvb_frontend *fe, struct dvb_fe_spectrum_scan *s)
+static int stv091x_get_spectrum_scan(struct dvb_frontend *fe,
+																		 struct dtv_fe_spectrum* s,
+																		 unsigned int *delay,  enum fe_status *status)
 {
 	struct stv *state = fe->demodulator_priv;
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
-	int i;
-	//s16 lvl;
 
+	int i;
 	u32 start_frequency = p->scan_start_frequency;
 	u32 end_frequency = p->scan_end_frequency;
-	u32 bandwidth = end_frequency-start_frequency; //in kHz
-	int frequency_step = bandwidth/s->num_freq;//in kHz
+	//u32 bandwidth = end_frequency-start_frequency; //in kHz
+	u32 num_freq =	s->num_freq;
+	uint32_t frequency;
+	uint32_t resolution =  (p->scan_resolution>0) ? p->scan_resolution : p->symbol_rate/1000; //in kHz
+	uint32_t bandwidth =  (p->symbol_rate>0) ? p->symbol_rate : p->scan_resolution*1000; //in Hz
+
+	state->tuner_bw = stv091x_bandwidth(ROLLOFF_AUTO, bandwidth);
+	s->scale =  FE_SCALE_DECIBEL; //in units of 0.001dB
+
 	//	p->algorithm = ALGORITHM_NONE;
 	//p->symbol_rate = frequency_step; //set bandwidth equal to frequency_step
-	dprintk("demod: %d: range=[%d,%d] step=%d  n=%d bw=%d\n", state->nr,
+	dprintk("demod: %d: range=[%d,%d]kHz num_freq=%d resolution=%dkHz bw=%dkHz\n", state->nr,
 					start_frequency, end_frequency,
-					frequency_step, s->num_freq, p->symbol_rate/1000);
+					num_freq, resolution, bandwidth/1000);
 
 	write_reg(state, RSTV0910_P2_CFRUP1 + state->regoff, 0);
 	write_reg(state, RSTV0910_P2_CFRUP0 + state->regoff, 0);
@@ -2740,46 +2737,32 @@ static int stv091x_get_spectrum_scan(struct dvb_frontend *fe, struct dvb_fe_spec
 
 	//write_reg(state, RSTV0910_P2_AGC2REF + state->regoff, 0x38); //reset
 
-#if 0
-	if (fe->ops.tuner_ops.set_params)
-		fe->ops.tuner_ops.set_params(fe); //todo: check that this sets the proper bandwidth
-#endif
-
-
-
-	*s->type = SC_DBM;
-
-
-#if 0
-	{
-
-	u16 symb = MulDiv32(frequency_step, 65536, state->base->mclk);
-	write_reg(state, RSTV0910_P2_SFRINIT1 + state->regoff,
-						((symb >> 8) & 0x7F));
-	write_reg(state, RSTV0910_P2_SFRINIT0 + state->regoff, (symb & 0xFF));
-
-	}
-#else
-		stv091x_set_symbol_rate(state, p->symbol_rate);
-#endif
+	stv091x_set_symbol_rate(state, resolution*1000);
 
 	write_reg(state, RSTV0910_P2_DMDISTATE, 0x5C); //stop demod
 
-	for (i = 0; i < s->num_freq; i++) {
+	for (i = 0; i < num_freq; i++) {
+		if ((i% 20==19) &&  (kthread_should_stop() || dvb_frontend_task_should_stop(fe))) {
+			dprintk("exiting on should stop\n");
+			break;
+		}
 
 		write_reg(state, RSTV0910_P2_DMDISTATE, 0x1C); //stop demod
 		write_reg(state, RSTV0910_P2_DMDISTATE, 0x18); //warm
 
-		s->freq[i]= start_frequency +i*frequency_step;
-		p->frequency = s->freq[i];
-		//todo: the following is perhaps needlessly slow
-		fe->ops.tuner_ops.set_params(fe); //todo: check that this sets the proper bandwidth
-
+		s->freq[i]= start_frequency +i*resolution;
+		frequency = s->freq[i];
+#if 1
+		p->frequency = frequency;
+		if(fe->ops.tuner_ops.set_frequency_and_bandwidth)
+			fe->ops.tuner_ops.set_frequency_and_bandwidth(fe, frequency, bandwidth); //todo: check that this sets the proper bandwidth
+#else
+			fe->ops.tuner_ops.set_params(fe); //todo: check that this sets the proper bandwidth
+#endif
 		//usleep_range(12000, 13000);
-
-		s->rf_level [i] = stv091x_narrow_band_signal_power_dbm(fe);
+		s->rf_level[i] = stv091x_narrow_band_signal_power_dbm(fe);
 	}
-
+	*status =  FE_HAS_SIGNAL|FE_HAS_CARRIER|FE_HAS_VITERBI|FE_HAS_SYNC|FE_HAS_LOCK;
 	return 0;
 }
 
@@ -2839,8 +2822,8 @@ static struct dvb_frontend_ops stv091x_ops = {
 	.read_ucblocks			= read_ucblocks,
 	.spi_read			= spi_read,
 	.spi_write			= spi_write,
-	.scan =  scan_sat,
-	.get_spectrum_scan		= stv091x_get_spectrum_scan,
+	.scan =  stv091x_sat_scan,
+	.get_spectrum = stv091x_get_spectrum_scan,
 	.get_constellation_samples	= stv091x_get_consellation_samples,
 };
 
@@ -2915,7 +2898,7 @@ fail:
 EXPORT_SYMBOL_GPL(stv091x_attach);
 
 MODULE_DESCRIPTION("STV091x driver");
-MODULE_AUTHOR("Ralph Metzler, Manfred Voelkel");
+MODULE_AUTHOR("Ralph Metzler, Manfred Voelkel, Deep Thought");
 MODULE_LICENSE("GPL");
 
 /*

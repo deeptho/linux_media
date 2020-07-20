@@ -468,6 +468,10 @@ struct dvb_frontend_ops {
 							bool init, unsigned int *delay,
 							enum fe_status *status);
 
+	int (*get_spectrum)(struct dvb_frontend *fe,
+											struct dtv_fe_spectrum* s,
+											unsigned int *delay,  enum fe_status *status);
+
 	/* get frontend tuning algorithm from the module */
 	enum dvbfe_algo (*get_frontend_algo)(struct dvb_frontend *fe);
 
@@ -509,7 +513,7 @@ struct dvb_frontend_ops {
 
 	int (*set_property)(struct dvb_frontend* fe, u32 cmd, u32 data);
 	int (*get_constellation_samples)(struct dvb_frontend* fe, struct dvb_fe_constellation_samples* s);
-	int (*get_spectrum_scan)(struct dvb_frontend* fe, struct dvb_fe_spectrum_scan* s);
+
 	int (*set_frame_ops)(struct dvb_frontend* fe, struct dvb_frame frame_ops);
 	int (*dtv_tune)(struct dvb_frontend* fe);
 
@@ -699,9 +703,10 @@ struct dtv_frontend_properties {
 	struct dtv_fe_stats	block_error;
 	struct dtv_fe_stats	block_count;
 
-	/* for satellite_search */
+	/* for satellite_search and get_spectrum */
 	s32 scan_start_frequency;
 	s32 scan_end_frequency;
+	s32 scan_resolution;
 };
 
 #define DVB_FE_NO_EXIT  0

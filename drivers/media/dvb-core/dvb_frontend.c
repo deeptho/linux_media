@@ -70,6 +70,7 @@ MODULE_PARM_DESC(dvb_mfe_wait_time, "Wait up to <mfe_wait_time> seconds on open(
 #define FESTATE_ERROR 256
 #define FESTATE_SCAN_FIRST 512
 #define FESTATE_SCAN_NEXT 1024
+#define FESTATE_GETTING_SPECTRUM 2048
 #define FESTATE_WAITFORLOCK (FESTATE_TUNING_FAST | FESTATE_TUNING_SLOW | FESTATE_ZIGZAG_FAST | FESTATE_ZIGZAG_SLOW | FESTATE_DISEQC)
 #define FESTATE_SEARCHING_FAST (FESTATE_TUNING_FAST | FESTATE_ZIGZAG_FAST)
 #define FESTATE_SEARCHING_SLOW (FESTATE_TUNING_SLOW | FESTATE_ZIGZAG_SLOW)
@@ -124,7 +125,7 @@ struct dvb_frontend_private {
 	int quality;
 	unsigned int check_wrapped;
 	enum dvbfe_search algo_status;
-
+	struct dtv_fe_spectrum spectrum;
 #if defined(CONFIG_MEDIA_CONTROLLER_DVB)
 	struct media_pipeline pipe;
 #endif
@@ -132,6 +133,21 @@ struct dvb_frontend_private {
 
 static void dvb_frontend_invoke_release(struct dvb_frontend *fe,
 					void (*release)(struct dvb_frontend *fe));
+
+
+static void release_dtv_fe_spectrum_scan(struct dtv_fe_spectrum* s)
+{
+	dprintk("releasing memory\n");
+	if (s->freq) {
+		kfree(s->freq);
+	}
+	if (s->rf_level) {
+		kfree(s->rf_level);
+	}
+	s->freq = NULL;
+	s->rf_level = NULL;
+	s->num_freq =0;
+}
 
 static void __dvb_frontend_free(struct dvb_frontend *fe)
 {
@@ -141,6 +157,7 @@ static void __dvb_frontend_free(struct dvb_frontend *fe)
 		dvb_free_device(fepriv->dvbdev);
 
 	dvb_frontend_invoke_release(fe, fe->ops.release);
+	release_dtv_fe_spectrum_scan(&fepriv->spectrum);
 
 	kfree(fepriv);
 }
@@ -741,6 +758,13 @@ restart:
 					dev_dbg(fe->dvb->device, "%s: Sscan requested, FESTATE_SCANNING\n", __func__);
 					if (fe->ops.scan)
 						fe->ops.scan(fe, fepriv->state & FESTATE_SCAN_NEXT , &fepriv->delay, &s);
+				}	 else if (fepriv->state & FESTATE_GETTING_SPECTRUM) {
+					dev_dbg(fe->dvb->device, "%s: Spectrum requested, DTV_SPECTRUM\n", __func__);
+					dprintk("starting spectrum scan\n");
+					if (fe->ops.get_spectrum)
+						fe->ops.get_spectrum(fe, &fepriv->spectrum, &fepriv->delay, &s);
+					dprintk("spectrum scan ended\n");
+					fepriv->state = FESTATE_IDLE;
 				} else {
 					if (fepriv->state & FESTATE_RETUNE) {
 						dev_dbg(fe->dvb->device, "%s: Retune requested, FESTATE_RETUNE\n", __func__);
@@ -755,7 +779,6 @@ restart:
 				}
 				if (s != fepriv->status && !(fepriv->tune_mode_flags & FE_TUNE_MODE_ONESHOT)) {
 					dev_dbg(fe->dvb->device, "%s: state changed, adding current state\n", __func__);
-					printk("ADD_EVENT stat=%d s=%d\n",	fepriv->status, s);
 					dvb_frontend_add_event(fe, s);
 					fepriv->status = s;
 				}
@@ -1138,11 +1161,13 @@ struct dtv_cmds_h {
 static struct dtv_cmds_h dtv_cmds[DTV_MAX_COMMAND + 1] = {
 	_DTV_CMD(DTV_TUNE, 1, 0),
 	_DTV_CMD(DTV_SCAN, 1, 0),
+	_DTV_CMD(DTV_SPECTRUM, 1, 0),
 	_DTV_CMD(DTV_CLEAR, 1, 0),
 	/* Set */
 	_DTV_CMD(DTV_FREQUENCY, 1, 0),
 	_DTV_CMD(DTV_SCAN_START_FREQUENCY, 1, 0),
 	_DTV_CMD(DTV_SCAN_END_FREQUENCY, 1, 0),
+	_DTV_CMD(DTV_SCAN_RESOLUTION, 1, 0),
 	_DTV_CMD(DTV_ISI_LIST, 0, 0),
 	_DTV_CMD(DTV_PLS_SEARCH_RANGE, 1, 0),
 	_DTV_CMD(DTV_PLS_SEARCH_LIST, 1, 0),
@@ -1405,6 +1430,9 @@ static int dvb_frontend_handle_ioctl(struct file *file,
 static int dvb_frontend_handle_algo_ctrl_ioctl(struct file *file,
 																							 unsigned int cmd, void *parg);
 
+static int dtv_set_sat_scan(struct dvb_frontend *fe, bool scan_continue);
+static int dtv_set_spectrum(struct dvb_frontend *fe, int type);
+static int dtv_get_spectrum(struct dvb_frontend *fe, struct dtv_fe_spectrum*user);
 
 static int dtv_property_process_get(struct dvb_frontend *fe,
 						const struct dtv_frontend_properties *c,
@@ -1432,6 +1460,12 @@ static int dtv_property_process_get(struct dvb_frontend *fe,
 		break;
 	case DTV_SCAN_END_FREQUENCY:
 		tvp->u.data = c->scan_end_frequency;
+		break;
+	case DTV_SCAN_RESOLUTION:
+		tvp->u.data = c->scan_resolution;
+		break;
+	case DTV_SPECTRUM:
+		dtv_get_spectrum(fe, &tvp->u.spectrum);
 		break;
 	case DTV_SEARCH_RANGE:
 		tvp->u.data = c->search_range;
@@ -1689,7 +1723,6 @@ static int dtv_property_process_get(struct dvb_frontend *fe,
 }
 
 static int dtv_set_frontend(struct dvb_frontend *fe);
-static int dtv_set_sat_scan(struct dvb_frontend *fe, bool scan_continue);
 
 static bool is_dvbv3_delsys(u32 delsys)
 {
@@ -1944,6 +1977,10 @@ static int dtv_property_process_set_int(struct dvb_frontend *fe,
 	case DTV_SCAN_END_FREQUENCY:
 		c->scan_end_frequency = data;
 		break;
+	case DTV_SCAN_RESOLUTION:
+		c->scan_resolution = data;
+		break;
+
 	case DTV_SEARCH_RANGE:
 		c->search_range = data;
 		break;
@@ -2158,6 +2195,17 @@ static int dtv_property_process_set(struct dvb_frontend *fe,
 			__func__);
 		r = dtv_set_sat_scan(fe, tvp->u.data);
 		break;
+	case DTV_SPECTRUM:
+		/*
+		 * Use the cached Digital TV properties to scan the
+		 * frontend
+		 */
+		dprintk("get spectrum scan called\n");
+		dev_dbg(fe->dvb->device,
+			"%s: Setting the frontend from property cache\n",
+			__func__);
+		r = dtv_set_spectrum(fe, tvp->u.data);
+		break;
 	case DTV_PLS_SEARCH_RANGE:
 		if(tvp->u.buffer.len == sizeof(c->pls_search_range_start) + sizeof(c->pls_search_range_start)) {
 			int i= 0;
@@ -2188,55 +2236,37 @@ static int dtv_property_process_set(struct dvb_frontend *fe,
 	return r;
 }
 
-static int dvb_frontend_ioctl_get_spectrum_scan(struct file *file,
-			unsigned int cmd, void *parg)
+
+static int init_dtv_fe_spectrum_scan(struct dtv_fe_spectrum* s, struct dtv_frontend_properties *p)
 {
-	struct dvb_device *dvbdev = file->private_data;
-	struct dvb_frontend *fe = dvbdev->priv;
-
-	struct dvb_fe_spectrum_scan *s_user = parg;
-	struct dvb_fe_spectrum_scan s_kernel;
-	struct dvb_frontend_private *fepriv = fe->frontend_priv;
-	int err = -EOPNOTSUPP;
-
-	if (fe->ops.get_spectrum_scan)
-	{
-		// make sure samples are within range
-		if ((s_user->num_freq == 0) || (s_user->num_freq > DTV_MAX_SPECTRUM_SCAN_STEPS))
-			return -EINVAL;
-
-		// create kernel memory structure
-								s_kernel.type = NULL;
-								s_kernel.type = kmalloc(sizeof(__u32), GFP_KERNEL);
-		s_kernel.freq = memdup_user(s_user->freq, s_user->num_freq * sizeof(__u32));
-		s_kernel.num_freq = s_user->num_freq;
-		s_kernel.rf_level = NULL;
-		s_kernel.rf_level = kmalloc(s_user->num_freq * sizeof(__s32), GFP_KERNEL);
-
-		if (!s_kernel.rf_level || !s_kernel.type) {
-			return -ENOMEM;
-		}
-
-		// call user function
-		err = fe->ops.get_spectrum_scan(fe, &s_kernel);
-
-								// copy results to userspace
-		if (copy_to_user(s_user->rf_level, s_kernel.rf_level, s_kernel.num_freq * sizeof(__s32))) {
-												err = -EFAULT;
-		}
-		if (copy_to_user(s_user->freq, s_kernel.freq, s_kernel.num_freq * sizeof(__s32))) {
-												err = -EFAULT;
-		}
-		if (copy_to_user(s_user->type, s_kernel.type, sizeof(__u32))) {
-			err = -EFAULT;
-		}
-		// free kernel allocated memory
-		kfree(s_kernel.type);
-		kfree(s_kernel.rf_level);
+	u32 start_frequency = p->scan_start_frequency;
+	u32 end_frequency = p->scan_end_frequency;
+	u32 frequency_step = p->scan_resolution;
+	u32 bandwidth = end_frequency-start_frequency; //in kHz
+	s->num_freq =	 bandwidth/(frequency_step>0 ?frequency_step: 1);
+	if(s->num_freq >= 65536*2)
+		s->num_freq = 65536;
+	if(s->num_freq <1)
+		s->num_freq =1;
+	s->freq= kzalloc(s->num_freq * (sizeof(s->freq[0])), GFP_KERNEL);
+	s->rf_level= kzalloc(s->num_freq * (sizeof(s->rf_level[0])), GFP_KERNEL);
+	if (!s->freq || !s->rf_level) {
+		if(s->freq)
+			kfree(s->freq);
+		if(s->rf_level)
+			kfree(s->rf_level);
+		s->num_freq = 0;
+		s->rf_level= NULL;
+		s->freq = NULL;
+		return -ENOMEM;
 	}
+	dprintk("spectrum: start=%dMhz end=%dMhz resolution=%dkHz points=%d\n",
+					start_frequency/1000, end_frequency/1000, frequency_step, s->num_freq);
 
-	return err;
+	return 0;
 }
+
+
 
 static int dvb_frontend_ioctl_get_constellation_samples(struct file *file,
 			unsigned int cmd, void *parg)
@@ -2287,14 +2317,12 @@ static int dvb_frontend_handle_algo_ctrl_ioctl(struct file *file,
 {
 	struct dvb_device *dvbdev = file->private_data;
 	struct dvb_frontend *fe = dvbdev->priv;
-	struct dvb_frontend_private *fepriv = fe->frontend_priv;
-	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
-	int i, err = -ENOTSUPP;
+	int err = -ENOTSUPP;
 
 	dev_dbg(fe->dvb->device, "%s:\n", __func__);
 
 	switch (cmd) {
-	case DTV_ALGO_ABORT:
+	case DTV_STOP:
 		atomic_set(&fe->algo_state.task_should_stop, true);
 		return 0;
 		break;
@@ -2336,11 +2364,11 @@ static int dvb_frontend_do_ioctl(struct file *file, unsigned int cmd,
 	int err;
 	dev_dbg(fe->dvb->device, "%s: (%d)\n", __func__, _IOC_NR(cmd));
 
-	if(cmd==DTV_ALGO_ABORT) {
+	if(cmd==DTV_STOP) {
 		dprintk("algo_ctrl requested\n");
 		if ((file->f_flags & O_ACCMODE) == O_RDONLY
 				&& (_IOC_DIR(cmd) != _IOC_READ
-						|| cmd == DTV_ALGO_ABORT)) {
+						|| cmd == DTV_STOP)) {
 		return -EPERM;
 		}
 		return 	dvb_frontend_handle_algo_ctrl_ioctl(file, cmd, parg);
@@ -2671,12 +2699,6 @@ static int dtv_set_frontend(struct dvb_frontend *fe)
 static int dtv_set_sat_scan(struct dvb_frontend *fe, bool scan_continue)
 {
 	struct dvb_frontend_private *fepriv = fe->frontend_priv;
-	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
-	struct dvb_frontend_tune_settings fetunesettings;
-
-	/* get frontend-specific tuning settings */
-	memset(&fetunesettings, 0, sizeof(struct dvb_frontend_tune_settings));
-
 
  	/* Request the search algorithm to search */
 	fepriv->state = scan_continue ? FESTATE_SCAN_NEXT : FESTATE_SCAN_FIRST;
@@ -2686,6 +2708,57 @@ static int dtv_set_sat_scan(struct dvb_frontend *fe, bool scan_continue)
 	fepriv->status = 0;
 
 	return 0;
+}
+
+
+static int dtv_set_spectrum(struct dvb_frontend *fe, int type)
+{
+	struct dvb_frontend_private *fepriv = fe->frontend_priv;
+	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
+	if (!fe->ops.get_spectrum)
+		return  -ENOTSUPP;
+	int ret = init_dtv_fe_spectrum_scan(&fepriv->spectrum, c);
+	if(ret<0)
+		return ret;
+ 	/* Request the search algorithm to search */
+	fepriv->state = FESTATE_GETTING_SPECTRUM;
+	dvb_frontend_clear_events(fe);
+	dvb_frontend_add_event(fe, 0);
+	dvb_frontend_wakeup(fe);
+	fepriv->status = 0;
+
+	return 0;
+}
+
+static int dtv_get_spectrum(struct dvb_frontend *fe, struct dtv_fe_spectrum* user)
+{
+	int err = 0;
+	struct dvb_frontend_private *fepriv = fe->frontend_priv;
+	struct dtv_fe_spectrum* kernel = &fepriv->spectrum;
+	u32 num_freq = kernel->num_freq;
+	if(num_freq > user->num_freq)
+		num_freq = user->num_freq;
+	//copy all data (freq and rf_level, stored in the same buffer)
+	if(user->freq == NULL || user->rf_level==0) {
+		dev_err(fe->dvb->device,
+						"%s: called without allocated memory\n",
+						__func__);
+		user->num_freq = 0;
+	}
+	user->num_freq = num_freq;
+	dprintk("spectrum retrieved user: n=%d kernel: n=%d => n=%d\n", user->num_freq, kernel->num_freq, num_freq);
+
+	if (copy_to_user((void __user*) user->freq, kernel->freq, num_freq * sizeof(__u32))) {
+		err = -EFAULT;
+	}
+	if (copy_to_user((void __user*) user->rf_level, kernel->rf_level, num_freq * sizeof(__s32))) {
+		err = -EFAULT;
+	}
+
+
+	release_dtv_fe_spectrum_scan(kernel);
+
+	return err;
 }
 
 static int dvb_get_property(struct dvb_frontend *fe, struct file *file,
@@ -2721,9 +2794,11 @@ static int dvb_get_property(struct dvb_frontend *fe, struct file *file,
 	 * before updating the properties cache.
 	 */
 	if (fepriv->state != FESTATE_IDLE) {
-		err = dtv_get_frontend(fe, &getp, NULL);
-		if (err < 0)
-			goto out;
+		if(tvps->num > 1 || tvp[0].cmd != DTV_SPECTRUM) {
+			err = dtv_get_frontend(fe, &getp, NULL);
+			if (err < 0)
+				goto out;
+		}
 	}
 	for (i = 0; i < tvps->num; i++) {
 		err = dtv_property_process_get(fe, &getp,
@@ -2774,9 +2849,6 @@ static int dvb_frontend_handle_ioctl(struct file *file,
 	switch (cmd) {
 	case FE_GET_CONSTELLATION_SAMPLES:
 		err = dvb_frontend_ioctl_get_constellation_samples(file, cmd, parg);
-		break;
-	case FE_GET_SPECTRUM_SCAN:
-		err = dvb_frontend_ioctl_get_spectrum_scan(file, cmd, parg);
 		break;
 	case FE_GET_EXTENDED_INFO: {
 		struct dvb_frontend_extended_info* extended_info = parg;
