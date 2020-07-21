@@ -2834,7 +2834,7 @@ static fe_lla_error_t Estimate_Power_Int(stchip_handle_t Handle,
 			mult = 607;
 		else
 			mult = 232;
-
+#if 0
 		x = (s32)STLog10((u32)(2 * agc2ref * agc2ref));
 		if (agc2x1000 > 18809) // Avoid (2 x agc2x1000^2 x 607) > Integer size
 			y = (s32)STLog10(2 * agc2x1000 * (agc2x1000/1000) * mult) - 6000;
@@ -2844,18 +2844,27 @@ static fe_lla_error_t Estimate_Power_Int(stchip_handle_t Handle,
 			y = (s32)STLog10(2 * agc2x1000 * (agc2x1000/10) * mult) - 8000;
 		else
 			y = (s32)STLog10(2 * agc2x1000 * agc2x1000 * mult) - 9000 ;
-
+#else
+		//The old code was wrong an suffered from overflow errors!
+		x = 2*(s32)STLog10((u32)(agc2ref));
+		y = (s32)STLog10(mult) + 2*(s32)STLog10(agc2x1000) - 9000;
+#endif
 		*PchRFx1000 = (s32)(10 * (x - y) - (s32)gain_analogx1000 + 3000); // + 3000 agc2x1000
-
 		/************ Power Band ***************/
 		/* PBand =  10log ((AGC1REF/POWERIREF)^2 * AGC1IQIN * 3) - Gvana and log(a/b) = log(a) - log(b)*/
 		/* And AGCIQIN * 3 almost = AGCPOWERI^2 + AGCPOWERQ^2 */
 		agciqin = (u32)((256 * agciqin1) + agciqin0);
+#if 0
 		*Pbandx1000 = (s32)(10 * (STLog10((u32)(3 * agciqin)) + STLog10((u32)(agc1ref * agc1ref)) -  STLog10((u32)(POWER_IREF * POWER_IREF))) - gain_analogx1000);
-
+#else
+		*Pbandx1000 = (s32)(10 * (STLog10((u32)(3 * agciqin))
+															+ 2*STLog10((u32)(agc1ref))
+															-  STLog10((u32)(POWER_IREF * POWER_IREF))
+															)
+												- gain_analogx1000);
+#endif
 		/************ Correction ***************/
 		agc1 = (u32)((256 * agcrfin1) + agcrfin0);
-
 		f = (u32) pParams->demod_results[Demod-1].frequency;
 		correction1000 = (s32)(f/1000  - 1550);
 		correction1000 = (s32)(correction1000*1000/600);
@@ -3043,6 +3052,7 @@ static fe_lla_error_t estimate_band_power_demod_not_locked(stchip_handle_t Handl
 	agciqin = (u32)((256 * agciqin1) + agciqin0);
 
 	//
+#if 0
 	*Pbandx1000 = (s32)(10 * (
 														STLog10((u32)(3 * agciqin)) /*measured input power to digital frontend
 																													AGCIQIN * 3 almost = AGCPOWERI^2 + AGCPOWERQ^2
@@ -3054,7 +3064,20 @@ static fe_lla_error_t estimate_band_power_demod_not_locked(stchip_handle_t Handl
 														-  STLog10((u32)(POWER_IREF * POWER_IREF))
 														)
 											- gain_analogx1000);
-
+#else
+	//avoid overflow!
+	*Pbandx1000 = (s32)(10 * (
+														STLog10((u32)(3 * agciqin)) /*measured input power to digital frontend
+																													AGCIQIN * 3 almost = AGCPOWERI^2 + AGCPOWERQ^2
+																												*/
+														+ 2*STLog10((u32)(agc1ref)) /* POWER_IREF/agc1ref is an extra
+																																	 amplification somwhere
+																																	 and should be subtracted
+																																*/
+														-  STLog10((u32)(POWER_IREF * POWER_IREF))
+													)
+											- gain_analogx1000);
+#endif
 	/* Restore value of DMDISTATE */
 	if (savedmd != 0)
 		error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DMDISTATE(Demod), savedmd);
