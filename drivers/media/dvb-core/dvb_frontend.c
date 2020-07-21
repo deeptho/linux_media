@@ -137,7 +137,8 @@ static void dvb_frontend_invoke_release(struct dvb_frontend *fe,
 
 static void release_dtv_fe_spectrum_scan(struct dtv_fe_spectrum* s)
 {
-	dprintk("releasing memory\n");
+	if(s->freq || s->rf_level)
+		dprintk("releasing memory\n");
 	if (s->freq) {
 		kfree(s->freq);
 	}
