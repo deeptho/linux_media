@@ -828,12 +828,13 @@ fe_lla_error_t fe_stid135_set_carrier_frequency_init(fe_stid135_handle_t Handle,
 	reg_low = (freq_low / 1000) * (1 << 11);
 	reg_low = reg_low / (((s32)pParams->master_clock / 1000) * 3);
 	reg_low = reg_low * (1 << 11);
-
+#if 0
 	printk("Initial Freq: blind=%d next=%d freq=%d up=%d low=%d range=%d\n",
 				 pParams->demod_search_algo[demod-1]==FE_SAT_BLIND_SEARCH,
 				 pParams->demod_search_algo[demod-1]==FE_SAT_NEXT,
 				 pParams->tuner_frequency[demod-1],
 				 freq_up, freq_low, (s32)(pParams->demod_search_range_hz[demod-1] / 2));
+#endif
 	if(pParams->demod_search_algo[demod-1] != FE_SAT_NEXT) {
 		/* Search range definition */
 		error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CARCFG(demod), 0x46);
@@ -883,6 +884,9 @@ fe_lla_error_t fe_stid135_set_carrier_frequency_init(fe_stid135_handle_t Handle,
 	}
 	return error;
 }
+
+
+
 
 /*****************************************************
 --FUNCTION	::	FE_STiD135_TimingGetOffset
@@ -2586,6 +2590,8 @@ fe_lla_error_t	fe_stid135_search(fe_stid135_handle_t handle, enum fe_stid135_dem
 	return error;
 }
 
+
+
 /*****************************************************
 --FUNCTION	::	FE_STiD135_GetLockTimeout
 --ACTION	::	Returns the demod and fec lock timeout in function
@@ -2655,6 +2661,7 @@ static void FE_STiD135_GetLockTimeout(u32 *DemodTimeout,u32 *FecTimeout,
 
 }
 
+
 /**********************************************************************************
 FUNCTION   : Estimate_Power_Int
 ACTION     : basic function to verify channel power estimation (PchRF) and
@@ -2702,7 +2709,7 @@ static fe_lla_error_t Estimate_Power_Int(stchip_handle_t Handle,
 					u32 *Agc2x1000,
 					u32*Gvanax1000,
 					s32*PchRFx1000, /*estimated narrow band input power measured at the rf input */
-		      s32*Pbandx1000) /*wide band input signal power measured at the rf input*/
+					s32*Pbandx1000) /*wide band input signal power measured at the rf input*/
 {
 	s32 exp_abs_s32=0, exp_s32=0;
 	u32 agc2x1000=0;
@@ -2721,7 +2728,6 @@ static fe_lla_error_t Estimate_Power_Int(stchip_handle_t Handle,
 	u32 f;
 	s32 x,y;
 	u32 mult;
-
 	struct fe_stid135_internal_param *pParams;
 	fe_lla_error_t error=FE_LLA_NO_ERROR;
 	pParams = (struct fe_stid135_internal_param*) Handle;
@@ -2774,7 +2780,6 @@ static fe_lla_error_t Estimate_Power_Int(stchip_handle_t Handle,
 
 		/*evaluate exp-9 */
 		exp_s32 = (s32)(exponant - 9);
-
 		if (exp_s32<= -32) {
 			agc2x1000 = 0;
 		}else if(exp_s32<0){
@@ -2786,7 +2791,6 @@ static fe_lla_error_t Estimate_Power_Int(stchip_handle_t Handle,
 			exp_abs_s32= XtoPowerY(2,(u32)(exp_s32));
 			agc2x1000 = (u32)((1000 * mantisse) * exp_abs_s32);
 		}
-
 		/******** interpolate Gvana ************/
 		/* interpolate Gvana from LUT LutGvana */
 		//agc1 = (u32)((256 * agcrfin1) + agcrfin0);
@@ -2819,7 +2823,6 @@ static fe_lla_error_t Estimate_Power_Int(stchip_handle_t Handle,
 			/* InterpolatedGvan always >0*/
 			gain_analogx1000 = gain_analogx1000 - 6000;
 		}
-
 		/************ Power Channel ************/
 		/* PchAGC2 = agc2ref^2 */
 		/* Pch(dBm) = 10xlog( PchAGC2 / GvDig^2) - GainAnalog */
@@ -2869,11 +2872,9 @@ static fe_lla_error_t Estimate_Power_Int(stchip_handle_t Handle,
 		correction1000 = (s32)(f/1000  - 1550);
 		correction1000 = (s32)(correction1000*1000/600);
 		correction1000 = (s32) (correction1000 * correction1000/1000);
-
 		if ((agc1 > 0) && (agcrfpwm >= 128)) {
 			correction1000 += correction1000;
 		}
-
 		*PchRFx1000 += correction1000;
 		*Pbandx1000 += correction1000;
 	} else {
@@ -11789,6 +11790,7 @@ STCHIP_Error_t stvvglna_get_gain(STCHIP_Handle_t hChip,S32 *Gain)
 
 	return error;
 }
+
 
 STCHIP_Error_t stvvglna_term(STCHIP_Handle_t hChip)
 {
