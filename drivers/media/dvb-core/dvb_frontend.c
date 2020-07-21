@@ -773,7 +773,6 @@ restart:
 					} else {
 						re_tune = false;
 					}
-					dprintk("calling tune state=%d\n", fepriv->state);
 					if (fe->ops.tune)
 						fe->ops.tune(fe, re_tune, fepriv->tune_mode_flags, &fepriv->delay, &s);
 				}
