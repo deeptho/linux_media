@@ -4076,8 +4076,16 @@ static fe_lla_error_t FE_STiD135_StartSearch(struct fe_stid135_internal_param *p
 		/*The symbol rate and the exact
 		carrier frequency are known */
 		/*Trig an acquisition (start the search)*/
+#if 0
 		error |= ChipSetOneRegister(pParams->handle_demod,
-		(u16)REG_RC8CODEW_DVBSX_DEMOD_DMDISTATE(Demod), 0x18);
+																(u16)REG_RC8CODEW_DVBSX_DEMOD_DMDISTATE(Demod), 0x18);
+#else
+		/*better for low symbol rate - only choice which allows tuning to symbolrate 667
+			Note that tuner bandwith still takes into account known symbol rate
+		*/
+		error |= ChipSetOneRegister(pParams->handle_demod,
+																(u16)REG_RC8CODEW_DVBSX_DEMOD_DMDISTATE(Demod), 0x01);
+#endif
 		break;
 
 	case FE_SAT_COLD_START:
