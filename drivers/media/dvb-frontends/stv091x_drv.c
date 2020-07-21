@@ -1342,7 +1342,7 @@ static int stv091x_start_scan(struct stv *state, struct dtv_frontend_properties 
 		write_reg(state, RSTV0910_P2_DMDISTATE + state->regoff, 0x01);
 		break;
 	default:
-		write_reg(state, RSTV0910_P2_DMDISTATE + state->regoff, 0x18); //everything knowm zero foffset
+		write_reg(state, RSTV0910_P2_DMDISTATE + state->regoff, 0x18); //everything known zero foffset
 		break;
 	}
 #if 0
@@ -2766,7 +2766,7 @@ static int stv091x_get_spectrum_scan(struct dvb_frontend *fe,
 	return 0;
 }
 
-static int stv091x_get_consellation_samples(struct dvb_frontend *fe, struct dvb_fe_constellation_samples *s)
+static int stv091x_get_constellation_samples(struct dvb_frontend *fe, struct dvb_fe_constellation_samples *s)
 {
 #if 0
 	struct stv *state = fe->demodulator_priv;
@@ -2824,7 +2824,7 @@ static struct dvb_frontend_ops stv091x_ops = {
 	.spi_write			= spi_write,
 	.scan =  stv091x_sat_scan,
 	.get_spectrum = stv091x_get_spectrum_scan,
-	.get_constellation_samples	= stv091x_get_consellation_samples,
+	.get_constellation_samples	= stv091x_get_constellation_samples,
 };
 
 static struct stv_base *match_base(struct i2c_adapter *i2c, u8 adr)
