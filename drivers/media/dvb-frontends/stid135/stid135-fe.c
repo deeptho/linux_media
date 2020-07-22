@@ -1169,7 +1169,7 @@ static int stid135_get_spectrum_scan_fft_one_band(struct stv *state,
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	u32 mode = 1; //table of 4096 samples
 	//u32 mode = 5; //table of 256 samples
-
+	s32 Pbandx1000;
 	u32 nb_acquisition = 255; //average 1 samples
 	u32 table_size = 8192;
 	s32 lo_frequency;
@@ -1197,13 +1197,20 @@ static int stid135_get_spectrum_scan_fft_one_band(struct stv *state,
 
 	error = fe_stid135_fft(state->base->handle, state->nr+1, mode, nb_acquisition,
 												 center_freq*1000 - lo_frequency, range, rf_level, &begin);
-	if(begin==1)
-		rf_level[0] = rf_level[1];
+
+	error |= estimate_band_power_demod_for_fft(state->base->handle,
+																						 state->nr+1,
+																						 state->rf_in+1,
+																						 &Pbandx1000, center_freq);
+	dprintk("Pbandx1000=%d error=%d\n", Pbandx1000, error);
 	for(i=0; i< table_size; ++i) {
 		s32 f = ((i-(signed)table_size/2)*step)/(signed)table_size; //in kHz
 		freq[i]= center_freq + f;
+		rf_level[i] += Pbandx1000;
 	}
 
+	if(begin==1)
+		rf_level[0] = rf_level[1];
 	for(i=-a+1; i<a; ++i)
 		rf_level[table_size/2+i] = (rf_level[table_size/2-a] + rf_level[table_size/2+a])/2;
 	return error;

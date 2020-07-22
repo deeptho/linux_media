@@ -478,7 +478,7 @@ fe_lla_error_t fe_stid135_fft(fe_stid135_handle_t handle, enum fe_stid135_demod 
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	struct fe_stid135_internal_param *pParams;
 	const u16 cfr_factor = 6711; // 6711 = 2^20/(10^6/2^6)*100
-	dprintk("FFT start\n");
+	//dprintk("FFT start\n");
 	if(path > FE_SAT_DEMOD_4)
 		return(FE_LLA_BAD_PARAMETER);
 
@@ -541,7 +541,7 @@ fe_lla_error_t fe_stid135_fft(fe_stid135_handle_t handle, enum fe_stid135_demod 
 			ChipWaitOrAbort(pParams->handle_demod, 1);
 		}
 	}
-	dprintk("FFT calculate memory readout range\n");
+	//dprintk("FFT calculate memory readout range\n");
 	// calculate memory readout range
 	nbr_pts = (u32)(8192 / XtoPowerY(2, (u32) mode));
 	error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEBUG1_MODE_FULL(path), &fld_value);
@@ -609,7 +609,7 @@ fe_lla_error_t fe_stid135_fft(fe_stid135_handle_t handle, enum fe_stid135_demod 
 				val_max = STLog10(((val[3] & 0x7) << 24) + (val[2] << 16) + (val[1] << 8) + val[0])
 					+693* exp;
 				bin = (u32)(i*4+j);
-				tab[nbr_pts-bin-1] = (u32)val_max; 	// fill the table back to front
+				tab[nbr_pts-bin-1] = 10*(u32)val_max; 	// fill the table back to front
 			}
 		} else if(fld_value == 0) { // 16-bit mode
 			// read temporary memory
@@ -623,12 +623,12 @@ fe_lla_error_t fe_stid135_fft(fe_stid135_handle_t handle, enum fe_stid135_demod 
 			}
 		}
 	}
-	dprintk("FFT empty hardware fft\n");
+	//dprintk("FFT empty hardware fft\n");
 	// Empty hardware fft
 	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMADDR1_MEM_ADDR(path), 0x00);
 	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMADDR0_MEM_ADDR(path), 0x00);
 	error |= ChipSetRegisters(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_MEMADDR1(path), 2);
-	dprintk("FFT sleep down fft\n");
+	//dprintk("FFT sleep down fft\n");
 	// Sleep down hardware fft
 	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_GCTRL_UFBS_RESTART(path), 1);
 

@@ -629,6 +629,11 @@ fe_lla_error_t FE_STiD135_TunerStandby(stchip_handle_t TunerHandle, FE_OXFORD_Tu
 fe_lla_error_t fe_stid135_get_band_power_demod_not_locked(fe_stid135_handle_t handle,
 			enum fe_stid135_demod Demod, s32 *pband_rf);
 
+fe_lla_error_t estimate_band_power_demod_for_fft(fe_stid135_handle_t handle,
+																								 enum fe_stid135_demod Demod,
+																								 u8 TunerNb,
+																								 s32 *Pbandx1000, s32 frequency);
+
 fe_lla_error_t fe_stid135_get_cut_id(fe_stid135_handle_t Handle, enum device_cut_id *cut_id);
 
 fe_lla_error_t fe_stid135_apply_custom_qef_for_modcod_filter(fe_stid135_handle_t handle, struct mc_array_customer *mc_flt);

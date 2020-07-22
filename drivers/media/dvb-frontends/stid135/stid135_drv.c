@@ -3079,6 +3079,7 @@ static fe_lla_error_t estimate_band_power_demod_not_locked(stchip_handle_t Handl
 													)
 											- gain_analogx1000);
 #endif
+
 	/* Restore value of DMDISTATE */
 	if (savedmd != 0)
 		error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DMDISTATE(Demod), savedmd);
@@ -3090,6 +3091,7 @@ static fe_lla_error_t estimate_band_power_demod_not_locked(stchip_handle_t Handl
 	}
 	return error;
 }
+
 
 
 /*****************************************************
@@ -3120,6 +3122,56 @@ fe_lla_error_t fe_stid135_get_band_power_demod_not_locked(fe_stid135_handle_t ha
 	*pband_rf = Pbandx1000;
 
 	return(error);
+}
+
+fe_lla_error_t estimate_band_power_demod_for_fft(fe_stid135_handle_t handle,
+																								 enum fe_stid135_demod Demod,
+																								 u8 TunerNb,
+																								 s32 *Pbandx1000, s32 frequency)
+{
+	u8 agcrfin1;
+	u8 agcrfin0;
+	u8 AGC1REF;
+	s32 reg_value=0;
+	s32 correction1000=0;
+	u8 agcrfpwm=0;
+	u32 agc1;
+	struct fe_stid135_internal_param* pParams = (struct fe_stid135_internal_param*) handle;
+
+	fe_lla_error_t err= estimate_band_power_demod_not_locked(handle, Demod, TunerNb,
+																													 &agcrfin1, &agcrfin0, &AGC1REF, Pbandx1000);
+
+
+	switch(TunerNb) {
+	case AFE_TUNER1 :
+		err |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RSTID135_AFE_AFE_AGC1_RF_PWM, &reg_value);
+		agcrfpwm = (u8)reg_value;
+		break;
+	case AFE_TUNER2 :
+		err |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RSTID135_AFE_AFE_AGC2_RF_PWM, &reg_value);
+		agcrfpwm = (u8)reg_value;
+		break;
+	case AFE_TUNER3 :
+		err |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RSTID135_AFE_AFE_AGC3_RF_PWM, &reg_value);
+		agcrfpwm = (u8)reg_value;
+		break;
+	case AFE_TUNER4 :
+	default:
+		err |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RSTID135_AFE_AFE_AGC4_RF_PWM, &reg_value);
+		agcrfpwm = (u8)reg_value;
+		break;
+	}
+	agc1 = (u32)((256 * agcrfin1) + agcrfin0);
+	correction1000 = (s32)(frequency/1000  - 1550);
+	correction1000 = (s32)(correction1000*1000/600);
+	correction1000 = (s32) (correction1000 * correction1000/1000);
+	if ((agc1 > 0) && (agcrfpwm >= 128)) {
+			correction1000 += correction1000;
+		}
+	dprintk("correction1000=%d\n", correction1000);
+	*Pbandx1000 += correction1000;
+	*Pbandx1000 -= 65248;
+	return err;
 }
 
 
