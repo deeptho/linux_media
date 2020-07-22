@@ -1781,7 +1781,7 @@ static s32 stv091x_agc1_power_gain_dbm(struct stv *state)
 	u16 agc_gain = stv091x_agc1_power_gain(state); //u16 because of stv6120 interface (todo)
 	if (state->fe.ops.tuner_ops.get_rf_strength)
 		state->fe.ops.tuner_ops.get_rf_strength(&state->fe, &agc_gain);//in units of 0.01dB
-	return 10*agc_gain;
+	return 10*(s32)agc_gain;
 }
 
 
@@ -1806,7 +1806,7 @@ static s32 stv091x_iq_power(struct stv *state)
 static s32 stv091x_iq_power_dbm(struct stv *state)
 {
 	s32 iq_power = stv091x_iq_power(state);
-	return 10*(TableLookup(PADC_Lookup, ARRAY_SIZE(PADC_Lookup), iq_power) + 352);
+	return 10*(s32)(TableLookup(PADC_Lookup, ARRAY_SIZE(PADC_Lookup), iq_power) + 352);
 }
 
 /*
@@ -1832,9 +1832,9 @@ static s32 stv091x_narrow_band_signal_power_dbm(struct dvb_frontend *fe)
 	s32 agc2level = (read_reg_field(state, FSTV0910_P2_AGC2_INTEGRATOR1) <<8) |
 		read_reg_field(state, FSTV0910_P2_AGC2_INTEGRATOR0);
 	s32	agc2ref = read_reg(state, RSTV0910_P2_AGC2REF);
-	s32 x =  20*(s32)STLog10((u32)(agc2ref)); //unit is 0.01dB
-	s32 y =  20*(s32)STLog10(agc2level); //unit is 0.01dB
-	return (x-y) + (-520 - stv091x_agc1_power_gain_dbm(state)); //unit is 0.01dB
+	s32 x =  20*(s32)STLog10((u32)(agc2ref)); //unit is 0.001dB
+	s32 y =  20*(s32)STLog10(agc2level); //unit is 0.001dB
+	return (x-y) + (-520 - stv091x_agc1_power_gain_dbm(state)) +17991; //unit is 0.001dB
 }
 
 static int read_status(struct dvb_frontend *fe, enum fe_status *status)
