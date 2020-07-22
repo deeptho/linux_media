@@ -41,9 +41,6 @@
 
 #define DmdLock_TIMEOUT_LIMIT      5500  // Fixed issue BZ#86598
 //#define BLIND_SEARCH_AGC2BANDWIDTH  40
-#ifndef HOST_PC
-	#define DEMOD_IQPOWER_THRESHOLD     10
-#endif
 #define dprintk(fmt, arg...)																					\
 	printk(KERN_DEBUG pr_fmt("%s:%d " fmt),  __func__, __LINE__, ##arg)
 
@@ -546,12 +543,12 @@ static fe_lla_error_t FE_STiD135_StartSearch     (struct fe_stid135_internal_par
 					enum fe_stid135_demod Demod);
 static fe_lla_error_t FE_STiD135_GetSignalParams(
 		struct fe_stid135_internal_param *pParams, enum fe_stid135_demod Demod,
-		BOOL satellitte_scan, enum fe_sat_signal_type *range_p);
+		BOOL satellite_scan, enum fe_sat_signal_type *range_p);
 
 static fe_lla_error_t FE_STiD135_TrackingOptimization(
 		struct fe_stid135_internal_param *pParams, enum fe_stid135_demod Demod);
 static fe_lla_error_t FE_STiD135_BlindSearchAlgo(struct fe_stid135_internal_param *pParams,
-		u32 demodTimeout, BOOL satellitte_scan, enum fe_stid135_demod Demod, BOOL* lock_p);
+		u32 demodTimeout, BOOL satellite_scan, enum fe_stid135_demod Demod, BOOL* lock_p);
 static fe_lla_error_t fe_stid135_get_agcrf_path(stchip_handle_t hChip,
 			enum fe_stid135_demod demod, s32* agcrf_path_p);
 static fe_lla_error_t FE_STiD135_GetFECLock (stchip_handle_t hChip, enum fe_stid135_demod Demod,
@@ -1456,12 +1453,12 @@ fe_lla_error_t FE_STiD135_GetErrorCount(stchip_handle_t hChip,
 			Demod -> current demod 1 ... 8
 			DemodTimeOut -> Time out in ms for demod
 			FecTimeOut -> Time out in ms for FEC
-			satellitte_scan -> scan or acquisition
+			satellite_scan -> scan or acquisition
 --PARAMS OUT	::	lock_p -> Lock status true or false
 --RETURN	::	error
 --***************************************************/
 fe_lla_error_t FE_STiD135_WaitForLock(fe_stid135_handle_t Handle,enum fe_stid135_demod Demod,
-																			u32 DemodTimeOut,u32 FecTimeOut,BOOL satellitte_scan, s32* lock_p, BOOL* fec_lock_p)
+																			u32 DemodTimeOut,u32 FecTimeOut,BOOL satellite_scan, s32* lock_p, BOOL* fec_lock_p)
 {
 
 	fe_lla_error_t error               = FE_LLA_NO_ERROR;
@@ -1486,7 +1483,7 @@ fe_lla_error_t FE_STiD135_WaitForLock(fe_stid135_handle_t Handle,enum fe_stid135
 
 
 	/* LINEOK check is not performed during Satellite Scan */
-	if (satellitte_scan == FALSE) {
+	if (satellite_scan == FALSE) {
 		if (*lock_p) {
 			*lock_p = 0;
 
@@ -2321,13 +2318,13 @@ static fe_lla_error_t fe_stid135_manage_manual_rolloff(fe_stid135_handle_t handl
 			pSearch -> Search parameters
 			pResult -> Result of the search
 			demod -> current demod 1..8
-			satellitte_scan ==> scan scope
+			satellite_scan ==> scan scope
 --PARAMS OUT	::	NONE
 --RETURN	::	Error (if any)
 --***************************************************/
 fe_lla_error_t	fe_stid135_search(fe_stid135_handle_t handle, enum fe_stid135_demod demod,
 	struct fe_sat_search_params *pSearch, struct fe_sat_search_result *pResult,
-	BOOL satellitte_scan)
+	BOOL satellite_scan)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	fe_lla_error_t error1 = FE_LLA_NO_ERROR;
@@ -2488,7 +2485,7 @@ fe_lla_error_t	fe_stid135_search(fe_stid135_handle_t handle, enum fe_stid135_dem
 			}
 	}
 
-	error |= (error1=FE_STiD135_Algo(pParams, demod, satellitte_scan, &signalType));
+	error |= (error1=FE_STiD135_Algo(pParams, demod, satellite_scan, &signalType));
 	if(error1)
 		dprintk("error=%d\n", error1);
 
@@ -2504,11 +2501,11 @@ fe_lla_error_t	fe_stid135_search(fe_stid135_handle_t handle, enum fe_stid135_dem
 		dprintk("error=%d\n", error);
 	}
 	else if (((signalType == FE_SAT_RANGEOK)
-						 || ((satellitte_scan > 0)
+						 || ((satellite_scan > 0)
 						 && (signalType == FE_SAT_NODATA)))
 						&& (pParams->handle_demod->Error == CHIPERR_NO_ERROR))
 	{
-		if ((satellitte_scan > 0) && (signalType == FE_SAT_NODATA)) {
+		if ((satellite_scan > 0) && (signalType == FE_SAT_NODATA)) {
 			/* TPs with demod lock only are logged as well */
 			error = FE_LLA_NODATA;
 			dprintk("error=%d\n", error);
@@ -3205,14 +3202,14 @@ fe_lla_error_t fe_stid135_get_signal_quality(fe_stid135_handle_t Handle,
 --ACTION	::	Return informations on the locked transponder
 --PARAMS IN	::	Handle -> Front End Handle
 			Demod -> Current demod 1 .. 8
-			satellitte_scan -> scan or acquisition context
+			satellite_scan -> scan or acquisition context
 --PARAMS OUT	::	pInfo -> Informations (BER,C/N,power ...)
 --RETURN	::	Error (if any)
 --***************************************************/
 fe_lla_error_t fe_stid135_get_signal_info(fe_stid135_handle_t Handle,
 					enum fe_stid135_demod Demod,
 					struct fe_sat_signal_info *pInfo,
-					u32 satellitte_scan)
+					u32 satellite_scan)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	struct fe_stid135_internal_param *pParams;
@@ -3329,7 +3326,7 @@ fe_lla_error_t fe_stid135_get_signal_info(fe_stid135_handle_t Handle,
 			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_TMGOBS_ROLLOFF_STATUS(Demod), &(fld_value[0]));
 			pInfo->roll_off = (enum fe_sat_rolloff)(fld_value[0]);
 
-			if (satellitte_scan == FALSE) {
+			if (satellite_scan == FALSE) {
 				error |= FE_STiD135_GetBer(pParams->handle_demod,Demod, &(pInfo->ber));
 				error |= FE_STiD135_GetRFLevel(pParams, Demod, &pch_rf, &pband_rf);
 				pInfo->power = pch_rf;
@@ -3600,11 +3597,10 @@ fe_lla_error_t fe_stid135_init(struct fe_sat_init_params *pInit,
 	STCHIP_Info_t SocChip;
 
 	/* Internal params structure allocation */
-	#ifdef HOST_PC
-		STCHIP_Info_t DemodChip;
-		pParams = kzalloc(sizeof(struct fe_stid135_internal_param), GFP_KERNEL);
-		(*handle) = (fe_stid135_handle_t) pParams;
-	#endif
+
+	STCHIP_Info_t DemodChip;
+	pParams = kzalloc(sizeof(struct fe_stid135_internal_param), GFP_KERNEL);
+	(*handle) = (fe_stid135_handle_t) pParams;
 
 	if (pParams != NULL) {
 		/* Chip initialisation */
@@ -3756,12 +3752,12 @@ static fe_lla_error_t fe_stid135_manage_LNF_IP3 (stchip_handle_t demod_handle, F
 			transponder
 --PARAMS IN	::	pParams -> Pointer to fe_stid135_internal_param structure
 			Demod -> current demod 1 .. 8
-			satellitte_scan -> scan scope
+			satellite_scan -> scan scope
 --PARAMS OUT	::	signalType_p -> result of algo computation
 --RETURN	::	error
 --***************************************************/
 fe_lla_error_t FE_STiD135_Algo(struct fe_stid135_internal_param *pParams,
-		enum fe_stid135_demod Demod, BOOL satellitte_scan, enum fe_sat_signal_type *signalType_p)
+		enum fe_stid135_demod Demod, BOOL satellite_scan, enum fe_sat_signal_type *signalType_p)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	u32 demodTimeout = 4500;
@@ -3771,9 +3767,6 @@ fe_lla_error_t FE_STiD135_Algo(struct fe_stid135_internal_param *pParams,
 		i,
 		fld_value;
 
-	#ifndef HOST_PC
-		s32 powerThreshold = DEMOD_IQPOWER_THRESHOLD;
-	#endif
 	u32 streamMergerField;
 	u16 pdel_status_timeout = 0;
 	s32 AgcrfPath;
@@ -3849,7 +3842,7 @@ fe_lla_error_t FE_STiD135_Algo(struct fe_stid135_internal_param *pParams,
 	}
 
 
-	#ifndef HOST_PC
+#if 0
 		// In lab conditions (1 channel), for sensitivity autotest, we have to avoid
 		// this condition otherwise we are not able to lock on low RF levels
 		// We keep this if statement on embedded side
@@ -3860,11 +3853,11 @@ fe_lla_error_t FE_STiD135_Algo(struct fe_stid135_internal_param *pParams,
 			*signalType_p = FE_SAT_TUNER_NOSIGNAL ;
 		} else
 #endif
-			dprintk("XXX blind=%d satellitte_scan=%d\n", pParams->demod_search_algo[Demod-1] == FE_SAT_BLIND_SEARCH,
-							satellitte_scan);
+			dprintk("XXX blind=%d satellite_scan=%d\n", pParams->demod_search_algo[Demod-1] == FE_SAT_BLIND_SEARCH,
+							satellite_scan);
 		if ((pParams->demod_search_algo[Demod-1] == FE_SAT_BLIND_SEARCH ||
 				 pParams->demod_search_algo[Demod-1] == FE_SAT_NEXT)
-				&& (satellitte_scan == TRUE)) {
+				&& (satellite_scan == TRUE)) {
 		iqPower = 0;
 		agc1Power = 0;
 		pParams->demod_results[Demod-1].locked = FALSE; /*if AGC1 integrator ==0
@@ -3890,7 +3883,7 @@ fe_lla_error_t FE_STiD135_Algo(struct fe_stid135_internal_param *pParams,
 		if (pParams->demod_search_algo[Demod-1] == FE_SAT_BLIND_SEARCH ||
 				pParams->demod_search_algo[Demod-1] == FE_SAT_NEXT) {
 			error |= FE_STiD135_BlindSearchAlgo(pParams, demodTimeout,
-																					satellitte_scan, Demod, &lock);
+																					satellite_scan, Demod, &lock);
 			dprintk("BLIND SEARCH: timeout=%d lock=%d\n", demodTimeout, lock);
 		} else {
 			/* case warm or cold start wait for demod lock */
@@ -3902,7 +3895,7 @@ fe_lla_error_t FE_STiD135_Algo(struct fe_stid135_internal_param *pParams,
 			/* Read signal caracteristics and check the lock
 			range */
 			error |= FE_STiD135_GetSignalParams(pParams, Demod,
-																					satellitte_scan, signalType_p);
+																					satellite_scan, signalType_p);
 
 			/* Manage Matype Information if DVBS2 signal */
 			if (pParams->demod_results[Demod-1].standard == FE_SAT_DVBS2_STANDARD) {
@@ -3946,7 +3939,7 @@ fe_lla_error_t FE_STiD135_Algo(struct fe_stid135_internal_param *pParams,
 		error |= ChipSetField(pParams->handle_demod, streamMergerField, 0);
 		// - end of new management of NCR
 
-		error |= FE_STiD135_WaitForLock(pParams, Demod,demodTimeout, fecTimeout, satellitte_scan, &lockstatus, &fec_lock);
+		error |= FE_STiD135_WaitForLock(pParams, Demod,demodTimeout, fecTimeout, satellite_scan, &lockstatus, &fec_lock);
 		pParams->demod_results[Demod-1].has_carrier = fec_lock;
 		if (lockstatus == TRUE) {
 			lock = TRUE;
@@ -4199,17 +4192,17 @@ static fe_lla_error_t FE_STiD135_StartSearch(struct fe_stid135_internal_param *p
 --PARAMS IN	::	pParams -> Pointer to fe_stid135_internal_param structure
 			Demod -> demod 1 .. 8
 			demodTimeout -> timeout of the demod part
-			satellitte_scan -> scan or acquisition context
+			satellite_scan -> scan or acquisition context
 --PARAMS OUT	::	lock_p -> demod lock status
 --RETURN	::	error
 --***************************************************/
 static fe_lla_error_t FE_STiD135_BlindSearchAlgo(struct fe_stid135_internal_param *pParams,
-	u32 demodTimeout, BOOL satellitte_scan, enum fe_stid135_demod Demod, BOOL* lock_p)
+	u32 demodTimeout, BOOL satellite_scan, enum fe_stid135_demod Demod, BOOL* lock_p)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	fe_lla_error_t error1 = FE_LLA_NO_ERROR;
 	*lock_p = TRUE;
-	if (satellitte_scan == FALSE) {
+	if (satellite_scan == FALSE) {
 	} else {
 		pParams->demod_search_range_hz[Demod-1] = (u32)(24000000 +
 			pParams->tuner_index_jump[Demod-1] * 1000);
@@ -4217,7 +4210,7 @@ static fe_lla_error_t FE_STiD135_BlindSearchAlgo(struct fe_stid135_internal_para
 			pParams->demod_search_range_hz[Demod-1] = 40000000;
 		}
 	}
-	dprintk("Starting blindsearch satellitte_scan=%d jump=%d freq=%d+%d\n", satellitte_scan,
+	dprintk("Starting blindsearch satellite_scan=%d jump=%d freq=%d+%d\n", satellite_scan,
 					pParams->tuner_index_jump[Demod-1],		pParams->tuner_frequency[Demod-1],
 					pParams->demod_search_range_hz[Demod-1]);
 	error |= (error1=ChipSetOneRegister(pParams->handle_demod,
@@ -4246,13 +4239,13 @@ static fe_lla_error_t FE_STiD135_BlindSearchAlgo(struct fe_stid135_internal_para
 --ACTION	::	Read signal caracteristics
 --PARAMS IN	::	pParams -> Pointer to fe_stid135_internal_param structure
 			Demod -> current demod 1 .. 8
-			satellitte_scan -> scan scope
+			satellite_scan -> scan scope
 --PARAMS OUT	::	range_p -> RANGE Ok or not
 --RETURN	::	error
 --***************************************************/
 static  fe_lla_error_t FE_STiD135_GetSignalParams(
 	struct fe_stid135_internal_param *pParams, enum fe_stid135_demod Demod,
-	BOOL satellitte_scan, enum fe_sat_signal_type *range_p)
+	BOOL satellite_scan, enum fe_sat_signal_type *range_p)
 
 {
 
@@ -4434,7 +4427,7 @@ static  fe_lla_error_t FE_STiD135_GetSignalParams(
 	|| (pParams->demod_symbol_rate[Demod-1] < (u32)10000000)) {
 		if ((pParams->demod_search_algo[Demod-1] == FE_SAT_BLIND_SEARCH ||
 				 pParams->demod_search_algo[Demod-1] == FE_SAT_NEXT)
-		&& (satellitte_scan == TRUE)) {
+		&& (satellite_scan == TRUE)) {
 			*range_p = FE_SAT_RANGEOK;
 		} else if ((u32)(ABS(offsetFreq)) <= ((
 			pParams->demod_search_range_hz[Demod-1] / 2)))
@@ -5034,13 +5027,12 @@ fe_lla_error_t FE_STiD135_Term(fe_stid135_handle_t Handle)
 	pParams = (struct fe_stid135_internal_param *) Handle;
 
 	if (pParams != NULL) {
-		#ifdef HOST_PC
+
 			ChipClose(pParams->handle_demod);
 			ChipClose(pParams->handle_soc);
 
 			if(Handle)
 				kfree(pParams);
-		#endif
 
 	} else
 		error = FE_LLA_INVALID_HANDLE;

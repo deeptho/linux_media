@@ -455,7 +455,6 @@ int direct_search(STCHIP_Register_t tab[], s32 nbVal, u16 val)
 	BOOL found; // equals false while "val" is not yet found
 	u32 start_index;  // start index
 	u32 end_index;  // end index
-	u32 middle_index;  // middle index
 	int i;
 	/* Initialisation of these variables before search loop */
 	found = FALSE;  // value is not yet found
@@ -1126,7 +1125,7 @@ s32 ChipGetFieldImage(STCHIP_Handle_t hChip,u32 FieldId)
 	return value;
 }
 
-#ifdef HOST_PC
+
 /*****************************************************
 **FUNCTION	::	ChipGetField
 **ACTION	::	get the value of a field from the chip
@@ -1206,7 +1205,7 @@ int ChipCheckAck(STCHIP_Handle_t hChip)
 	}
 	return status;
 }
-#endif
+
 
 /*****************************************************
 **FUNCTION	::	ChipWait_Or_Abort
@@ -1222,12 +1221,12 @@ void ChipWaitOrAbort(STCHIP_Handle_t hChip,u32 delay_ms)
  	i=0;
  	while((hChip->Abort==FALSE)&&(i++<(delay_ms%10))) WAIT_N_MS(1);
 }
-#ifdef HOST_PC
+
 void ChipAbort(STCHIP_Handle_t hChip, BOOL Abort)
 {
     hChip->Abort = Abort;
 }
-#endif
+
 /*****************************************************
 **FUNCTION	::	Chip_368dvbt2_WaitMailboxComplete
 *****************************************************/

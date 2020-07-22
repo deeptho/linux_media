@@ -319,6 +319,7 @@ struct status_bit_fields {
 	u32 errcnt2 : 24;
 };
 
+
 extern u32 C8CODEW_TOP_CTRL[1];
 extern u32 DVBSX_AGCRF[4];
 extern u32 C8CODEW_RFMUX[1];
@@ -347,6 +348,7 @@ extern u32 SYSCONFIGN[1];
 extern u32 X5BANKPIONORTH[5];
 extern u32 X5BANKPIOSOUTH[5];
 extern u32 DVBSX_LNBCTRL[1];
+
 
 //////////////////LNA////////////////////////////////////////
 /*REG0*/
@@ -406,7 +408,7 @@ typedef SAT_VGLNA_InitParams_t SAT_VGLNA_Params_t;
 fe_lla_error_t  FE_STiD135_CarrierGetQuality(stchip_handle_t hChip, enum fe_stid135_demod Demod, s32* c_n_p,
 				enum fe_sat_tracking_standard* foundStandard);
 
-#ifdef HOST_PC
+
 	fe_lla_error_t FE_STiD135_GetErrors(fe_stid135_handle_t Handle, enum fe_stid135_demod Demod,
 		double *Errors, double *bits, double *Packets, double *Ber);
 	fe_lla_error_t fe_stid135_start_per(fe_stid135_handle_t handle, enum fe_stid135_demod demod, u8 Mode);
@@ -441,7 +443,6 @@ fe_lla_error_t  FE_STiD135_CarrierGetQuality(stchip_handle_t hChip, enum fe_stid
 					double *NbErrors,
 					unsigned char *Status,
 							BOOL fer_dvbs2x);
-#endif
 
 fe_lla_error_t fe_stid135_get_lock_status(fe_stid135_handle_t Handle, enum fe_stid135_demod Demod,
 																								BOOL* carrier_lock, BOOL *data);
@@ -452,7 +453,7 @@ fe_lla_error_t  FE_STiD135_GetErrorCount(stchip_handle_t hChip,
 	enum fe_stid135_error_counter Counter, enum fe_stid135_demod Demod, u32* ber_p);
 
 fe_lla_error_t FE_STiD135_Algo(struct fe_stid135_internal_param *pParams,
-	enum fe_stid135_demod Demod, BOOL satellitte_scan, enum fe_sat_signal_type *signalType_p);
+	enum fe_stid135_demod Demod, BOOL satellite_scan, enum fe_sat_signal_type *signalType_p);
 
 fe_lla_error_t FE_STiD135_GetStandard(stchip_handle_t hChip,
 	enum fe_stid135_demod Demod, enum fe_sat_tracking_standard *foundStandard_p);
@@ -469,7 +470,7 @@ fe_lla_error_t  FE_STiD135_GetMclkFreq (fe_stid135_handle_t Handle, u32* MclkFre
 fe_lla_error_t  FE_STiD135_GetLoFreqHz (fe_stid135_handle_t Handle, u32* LoFreq_p);
 
 fe_lla_error_t FE_STiD135_WaitForLock(fe_stid135_handle_t Handle,enum fe_stid135_demod Demod,
-																			u32 DemodTimeOut,u32 FecTimeOut,BOOL satellitte_scan, s32* lock_p,
+																			u32 DemodTimeOut,u32 FecTimeOut,BOOL satellite_scan, s32* lock_p,
 																			BOOL* fec_lock_p);
 
 
@@ -481,7 +482,7 @@ fe_lla_error_t fe_stid135_get_signal_quality(fe_stid135_handle_t Handle,
 
 fe_lla_error_t fe_stid135_get_signal_info(fe_stid135_handle_t Handle,
 	enum fe_stid135_demod Demod, struct fe_sat_signal_info *pInfo,
-	u32 satellitte_scan);
+	u32 satellite_scan);
 
 fe_lla_error_t fe_stid135_tracking(fe_stid135_handle_t Handle, enum fe_stid135_demod Demod,
 							 struct fe_sat_tracking_info *pTrackingInfo)  ;
@@ -490,7 +491,7 @@ fe_lla_error_t FE_STiD135_Term(fe_stid135_handle_t Handle);
 
 fe_lla_error_t	fe_stid135_search  (fe_stid135_handle_t handle, enum fe_stid135_demod demod,
 	struct fe_sat_search_params *pSearch, struct fe_sat_search_result *pResult,
-	BOOL satellitte_scan);
+	BOOL satellite_scan);
 
 fe_lla_error_t  fe_stid135_init    (struct fe_sat_init_params *pInit,
 	fe_stid135_handle_t *Handle);
