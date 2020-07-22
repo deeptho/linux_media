@@ -31,7 +31,6 @@
 #include <linux/i2c.h>
 #include <linux/version.h>
 #include <asm/div64.h>
-
 #include <media/dvb_frontend.h>
 #include "stid135.h"
 #include "i2c.h"
@@ -508,6 +507,9 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 		search_params.standard = FE_SAT_AUTO_SEARCH;
 		search_params.puncture_rate = FE_SAT_PR_UNKNOWN;
 		satellitte_scan = 0;
+		break;
+	case ALGORITHM_SEARCH:
+		//todo
 		break;
 	}
 
@@ -1156,33 +1158,32 @@ static void spi_write(struct dvb_frontend *fe,struct ecp3_info *ecp3inf)
 }
 
 
-#if 0
-static int stid135_get_spectrum_scan_fft(struct dvb_frontend *fe, unsigned int *delay,
-																		 enum fe_status *status)
+
+static int stid135_get_spectrum_scan_fft_one_band(struct stv *state,
+																									struct dtv_fe_spectrum* s,
+																									s32 center_freq, u32 range,
+																									u32* freq,
+																									s32* rf_level,
+																									int num_freq)
 {
-	s32 Reg[60];
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
-	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
-	struct stv *state = fe->demodulator_priv;
-	*s->type = SC_DBM;
-	s32 center_freq=   p->frequency; //in kHz
-	u32 range =    p->symbol_rate; //in Hz
 	u32 mode = 1; //table of 4096 samples
 	//u32 mode = 5; //table of 256 samples
 
 	u32 nb_acquisition = 255; //average 1 samples
 	u32 table_size = 8192;
 	s32 lo_frequency;
-	u32* freqs = s->freq;
-	s32* rf_level = s->rf_level;
 	u32 begin =0;
 	int i;
-	int step;
+	int step = range/1000;
+	int a=3;
 	for(mode=1;mode<=5; ++mode) {
 		table_size >>=1;
-		if(table_size <= s->num_freq)
+		if(table_size <= num_freq)
 			break;
 	}
+	if (num_freq != table_size)
+		dprintk("Error: num_freq should be power of 2\n");
 	dprintk("Start of spectrum scan\n");
 	error = FE_STiD135_GetLoFreqHz(state->base->handle, &lo_frequency);
 	if(error) {
@@ -1192,35 +1193,117 @@ static int stid135_get_spectrum_scan_fft(struct dvb_frontend *fe, unsigned int *
 	lo_frequency *=  1000000; //now in Hz
 
 
+	dprintk("center_freq=%d lo=%d range=%d mode=%d table_size=%d\n", center_freq, lo_frequency, range, mode, table_size);
+
+	error = fe_stid135_fft(state->base->handle, state->nr+1, mode, nb_acquisition,
+												 center_freq*1000 - lo_frequency, range, rf_level, &begin);
+	if(begin==1)
+		rf_level[0] = rf_level[1];
+	for(i=0; i< table_size; ++i) {
+		s32 f = ((i-(signed)table_size/2)*step)/(signed)table_size; //in kHz
+		freq[i]= center_freq + f;
+	}
+
+	for(i=-a+1; i<a; ++i)
+		rf_level[table_size/2+i] = (rf_level[table_size/2-a] + rf_level[table_size/2+a])/2;
+	return error;
+}
+
+static int stid135_get_spectrum_scan_fft(struct dvb_frontend *fe,
+																				 struct dtv_fe_spectrum* s,
+																				 unsigned int *delay,  enum fe_status *status
+																				 )
+{
+	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
+	struct stv *state = fe->demodulator_priv;
+	s32 Reg[60];
+	//	s32 center_freq; //in kHz
+	fe_lla_error_t error = FE_LLA_NO_ERROR;
+	fe_lla_error_t error1 = FE_LLA_NO_ERROR;
+	u32 idx=0;
+	int i;
+	u32* temp_freq = NULL;
+	u32* temp_rf_level = NULL;
+	s32 fft_size = 256;
+	s32 max_range= 96800;
+	s32 start_frequency = p->scan_start_frequency;
+	s32 end_frequency = p->scan_end_frequency;
+	//uint32_t resolution =  p->scan_resolution>0 ? p->scan_resolution : 100; //in kHz
+	s32 sample_step = (end_frequency - start_frequency +s->num_freq-1)/s->num_freq;
+	u32 range = sample_step * fft_size; //in kHz
+	int useable_samples2 = ((fft_size*6)/10+1)/2;
+	int lost_samples2 = fft_size/2 - useable_samples2;
+	int subsample_factor =1;
+	if(range >= max_range) {
+		subsample_factor = (range+ max_range-1)/max_range;
+		dprintk("resolution must be lower! Will subsample\n");
+		//error= -EINVAL;
+		//goto _end;
+	}
+
+	dprintk("demod: %d: tuner:%d range=[%d,%d]kHz resolution=%dkHz num_freq=%d range=%dkHz\n",
+					state->nr, state->rf_in,
+					start_frequency, end_frequency, sample_step,
+					s->num_freq, range/1000);
+	s->scale = FE_SCALE_RELATIVE;
+
+	temp_freq = kzalloc(8192 * (sizeof(temp_freq[0])), GFP_KERNEL);
+	temp_rf_level = kzalloc(8192 * (sizeof(temp_rf_level[0])), GFP_KERNEL);
+	if (!temp_rf_level || !temp_freq) {
+		error = -ENOMEM;
+		goto _end;
+	}
+
+
 	error = fe_stid135_init_fft(state->base->handle, state->nr+1, state->rf_in+1, Reg);
 	if(error) {
 		dprintk("fe_stid135_init_fft FAILED: error=%d\n", error);
 		return error;
 	}
-	dprintk("freq=%d lo=%d range=%d mode=%d table_size=%d\n", center_freq, lo_frequency, range, mode, table_size);
 
-	error = fe_stid135_fft(state->base->handle, state->nr+1, mode, nb_acquisition,
-												 center_freq*1000 - lo_frequency, range, rf_level, &begin);
-	step = range/1000;
-	if(begin==1)
-		rf_level[0] = rf_level[1];
-	for(i=0; i< table_size; ++i) {
-		freqs[i]= center_freq  + ((i-(signed)table_size/2)*step)/(signed)table_size;
+	for(idx=0; idx < s->num_freq;) {
+		s32 center_freq = start_frequency + (idx + useable_samples2)* sample_step;
+		if (kthread_should_stop() || dvb_frontend_task_should_stop(fe)) {
+			//@todo:  should this be moved into  stid135_get_spectrum_scan_fft_one_band?
+			dprintk("exiting on should stop\n");
+			break;
+		}
+
+		error = stid135_get_spectrum_scan_fft_one_band(state, s, center_freq, range*1000,
+																									 temp_freq, temp_rf_level, fft_size);
+		if(error) {
+			dprintk("Error=%d\n", error);
+			goto _end;
+		}
+		for(i= lost_samples2; i<fft_size-lost_samples2 && idx<s->num_freq; ++idx, ++i) {
+				s->freq[idx]= temp_freq[i];
+				s->rf_level[idx]= temp_rf_level[i];
+			}
 	}
-	rf_level[table_size/2] = (rf_level[table_size/2-1] + rf_level[table_size/2+1])/2;
-	error |= fe_stid135_term_fft(state->base->handle, state->nr+1, state->rf_in+1, Reg);
+
+ _end:
+	dprintk("ending\n");
+	if(temp_freq)
+		kfree(temp_freq);
+	if(temp_rf_level)
+		kfree(temp_rf_level);
+	error |= (error1=fe_stid135_term_fft(state->base->handle, state->nr+1, state->rf_in+1, Reg));
 	if(error) {
 		dprintk("fe_stid135_term_fft FAILED: error=%d\n", error);
 	}
+	*status =  FE_HAS_SIGNAL|FE_HAS_CARRIER|FE_HAS_VITERBI|FE_HAS_SYNC|FE_HAS_LOCK;
+	return 0;
+	dprintk("encountered error\n");
+	*status =  FE_TIMEDOUT|FE_HAS_SIGNAL|FE_HAS_CARRIER|FE_HAS_VITERBI|FE_HAS_SYNC|FE_HAS_LOCK;
 	return error;
 }
-#endif
 
 
 
-static int stid135_get_spectrum_scan(struct dvb_frontend *fe,
-																struct dtv_fe_spectrum* s,
-																unsigned int *delay,  enum fe_status *status)
+
+static int stid135_get_spectrum_scan_regular(struct dvb_frontend *fe,
+																						 struct dtv_fe_spectrum* s,
+																						 unsigned int *delay,  enum fe_status *status)
 {
 	struct stv *state = fe->demodulator_priv;
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
@@ -1230,7 +1313,7 @@ static int stid135_get_spectrum_scan(struct dvb_frontend *fe,
 	fe_lla_error_t error1 = FE_LLA_NO_ERROR;
 	s32 pband_rf;
 	s32 pch_rf;
-	int i;
+	int i = 0;
 	u32 start_frequency = p->scan_start_frequency;
 	u32 end_frequency = p->scan_end_frequency;
 	//u32 bandwidth = end_frequency-start_frequency; //in kHz
@@ -1303,57 +1386,57 @@ static int stid135_get_spectrum_scan(struct dvb_frontend *fe,
 			dprintk("exiting on should stop\n");
 			break;
 		}
-	//stop demod
+		//stop demod
 		error |= (error1=ChipSetOneRegister(pParams->handle_demod,
 																				(u16)REG_RC8CODEW_DVBSX_DEMOD_DMDISTATE(state->nr+1), 0x1C));
 		if(error1) {
-		dprintk("Failed: err=%d\n", error1);
-		goto __onerror;
-	}
+			dprintk("Failed: err=%d\n", error1);
+			goto __onerror;
+		}
 
-	//warm start @todo: needed?
-	error |= (error1=ChipSetOneRegister(pParams->handle_demod,
-																			(u16)REG_RC8CODEW_DVBSX_DEMOD_DMDISTATE(state->nr+1), 0x18));
-	if(error1) {
-		dprintk("Failed: err=%d\n", error1);
-		goto __onerror;
-	}
-	s->freq[i]= start_frequency +i*resolution;
-	frequency = s->freq[i];
+		//warm start @todo: needed?
+		error |= (error1=ChipSetOneRegister(pParams->handle_demod,
+																				(u16)REG_RC8CODEW_DVBSX_DEMOD_DMDISTATE(state->nr+1), 0x18));
+		if(error1) {
+			dprintk("Failed: err=%d\n", error1);
+			goto __onerror;
+		}
+		s->freq[i]= start_frequency +i*resolution;
+		frequency = s->freq[i];
 
-	//Set frequency with minimal register changes
-	{
-		s32 frequency_hz =  (s32)frequency*1000 -  lo_frequency;
-		s32 si_register;
-		int demod = state->nr +1;
-		const u16 cfr_factor = 6711; // 6711 = 2^20/(10^6/2^6)*100
+		//Set frequency with minimal register changes
+		{
+			s32 frequency_hz =  (s32)frequency*1000 -  lo_frequency;
+			s32 si_register;
+			int demod = state->nr +1;
+			const u16 cfr_factor = 6711; // 6711 = 2^20/(10^6/2^6)*100
 
-	 /* Search range definition */
-		si_register = ((frequency_hz/PLL_FVCO_FREQUENCY)*cfr_factor)/100;
-	 error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_CFRINIT2_CFR_INIT(demod),
-															((u8)(si_register >> 16)));
-	 error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_CFRINIT1_CFR_INIT(demod),
-															((u8)(si_register >> 8)));
-	 error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_CFRINIT0_CFR_INIT(demod),
-															((u8)(si_register)));
-	 error |= ChipSetRegisters(pParams->handle_demod,REG_RC8CODEW_DVBSX_DEMOD_CFRINIT2(demod),3);
-	 if(error)
-		 goto __onerror;
-	 //msleep(10);
+			/* Search range definition */
+			si_register = ((frequency_hz/PLL_FVCO_FREQUENCY)*cfr_factor)/100;
+			error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_CFRINIT2_CFR_INIT(demod),
+																 ((u8)(si_register >> 16)));
+			error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_CFRINIT1_CFR_INIT(demod),
+																 ((u8)(si_register >> 8)));
+			error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_CFRINIT0_CFR_INIT(demod),
+																 ((u8)(si_register)));
+			error |= ChipSetRegisters(pParams->handle_demod,REG_RC8CODEW_DVBSX_DEMOD_CFRINIT2(demod),3);
+			if(error)
+				goto __onerror;
+			//msleep(10);
 
-	}
+		}
 
 
-	error |= (error1=FE_STiD135_GetRFLevel(pParams, state->nr+1, &pch_rf, &pband_rf));
-	s->rf_level[i] = pch_rf;
-	if(error1) {
-		dprintk("Failed: err=%d\n", error1);
-		goto __onerror;
-	}
-	if(error)
-		goto __onerror;
+		error |= (error1=FE_STiD135_GetRFLevel(pParams, state->nr+1, &pch_rf, &pband_rf));
+		s->rf_level[i] = pch_rf;
+		if(error1) {
+			dprintk("Failed: err=%d\n", error1);
+			goto __onerror;
+		}
+		if(error)
+			goto __onerror;
 
-	usleep_range(12000, 13000);
+		usleep_range(12000, 13000);
 
 	}
 	*status =  FE_HAS_SIGNAL|FE_HAS_CARRIER|FE_HAS_VITERBI|FE_HAS_SYNC|FE_HAS_LOCK;
@@ -1364,6 +1447,22 @@ static int stid135_get_spectrum_scan(struct dvb_frontend *fe,
 	return 0;
 }
 
+
+static int stid135_get_spectrum_scan(struct dvb_frontend *fe,
+																		 struct dtv_fe_spectrum* s,
+																		 unsigned int *delay,  enum fe_status *status)
+{
+	switch(s->spectrum_method) {
+	case SPECTRUM_METHOD_SWEEP:
+	default:
+		return stid135_get_spectrum_scan_regular(fe, s, delay,  status);
+		break;
+	case SPECTRUM_METHOD_FFT:
+		return stid135_get_spectrum_scan_fft(fe, s, delay,  status);
+		break;
+	}
+	return -1;
+}
 
 static struct dvb_frontend_ops stid135_ops = {
 	.delsys = { SYS_DVBS, SYS_DVBS2, SYS_DSS },
@@ -1423,7 +1522,7 @@ struct dvb_frontend *stid135_attach(struct i2c_adapter *i2c,
 {
 	struct stv *state;
 	struct stv_base *base;
-
+	dprintk("ATTACH nr=%d rf_in=%d\n", nr, rf_in);
 	state = kzalloc(sizeof(struct stv), GFP_KERNEL);
 	if (!state)
 		return NULL;

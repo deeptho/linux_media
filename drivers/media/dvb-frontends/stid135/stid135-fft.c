@@ -192,7 +192,8 @@ static fe_lla_error_t fe_stid135_fft_save_registers(fe_stid135_handle_t handle, 
 --PARAMS OUT	::	Reg[] -> table of stored registers
 --RETURN	::	Error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_init_fft(fe_stid135_handle_t handle, enum fe_stid135_demod path, FE_OXFORD_TunerPath_t tuner_nb, s32 Reg[60])
+fe_lla_error_t fe_stid135_init_fft(fe_stid135_handle_t handle, enum fe_stid135_demod path,
+																	 FE_OXFORD_TunerPath_t tuner_nb, s32 Reg[60])
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	struct fe_stid135_internal_param *pParams;
@@ -235,9 +236,13 @@ fe_lla_error_t fe_stid135_init_fft(fe_stid135_handle_t handle, enum fe_stid135_d
 	//store the result
 	error |= ChipSetRegisters(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_GCTRL(path), 1);
 
+#if 0
 	//select continuous update of spectrum after 2 scans
 	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_UPDCONT_UPD_CONTINUOUS(path), 2);
-
+#else
+		//select continuous update of spectrum after 2 scans
+	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_UPDCONT_UPD_CONTINUOUS(path), 0);
+#endif
 	// Request 256 samples; max would be 4096 samples
 	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_FFTCTRL_FFT_MODE(path), 5);
 
@@ -257,20 +262,32 @@ fe_lla_error_t fe_stid135_init_fft(fe_stid135_handle_t handle, enum fe_stid135_d
 	//set a threshold to detect "peak found"
 	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_THRESHOLD_MAX_THRESHOLD(path), 4);
 	//FFT continuous if a good peak was found, the alternative setting would be good for blindscan
+#if 0
 	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_THRESHOLD_NO_STOP(path), 0);		// Off
+#else
+		error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_THRESHOLD_NO_STOP(path), 1);		// Off
+#endif
 	//Store the result
 	error |= ChipSetRegisters(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_THRESHOLD(path),1);
 
+#if 1 //LATEST
 	//do not treat overflow specially
 	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEBUG1_DISABLE_RESCALE(path), 0);
 	//do not remove mean value to disable DC coefficient
 	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEBUG1_DISABLE_AVERAGE(path), 0);
+#else
+		error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEBUG1_DISABLE_RESCALE(path), 1);
+	//do not remove mean value to disable DC coefficient
+	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEBUG1_DISABLE_AVERAGE(path), 1);
+	#endif
 
 	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEBUG1_DEBUG_INTERSYMBOL(path), 0);	// Off
-
+#if 0
 	//spectrum will be in log format: (PSD=val*3/64 dB) (unsigned)
 	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEBUG1_MODE_DB(path), 1);
-
+#else
+	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEBUG1_MODE_DB(path), 0);
+#endif
 	//read power spectral density instead of fft result
 	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEBUG1_SEL_MEM(path), 0);
 
@@ -447,7 +464,7 @@ fe_lla_error_t fe_stid135_term_fft(fe_stid135_handle_t handle, enum fe_stid135_d
 --RETURN	::	Error (if any)
 --***************************************************/
 fe_lla_error_t fe_stid135_fft(fe_stid135_handle_t handle, enum fe_stid135_demod path, u32 mode, u32 nb_acquisition, s32 freq, u32 range, u32 *tab, u32* begin)
-{																	
+{
 	u32 nb_words =0;
 	s32 val[4]= { 0 }, val_max;
 	u32 j=0, i=0, bin=0;
@@ -501,7 +518,7 @@ fe_lla_error_t fe_stid135_fft(fe_stid135_handle_t handle, enum fe_stid135_demod 
 														 ((u8)(f >> 8)));
 	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_CFRINIT0_CFR_INIT(path),
 														 ((u8)f));
-	error |= ChipSetRegisters(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRINIT2(path),3);
+	error |= ChipSetRegisters(pParams->handle_demod, REG_RC8CODEW_DVBSX_DEMOD_CFRINIT2(path),3);
 
 	// Set bandwidth (symbol rate)
 	error |= fe_stid135_set_symbol_rate(pParams->handle_demod, pParams->master_clock, range, path);
@@ -559,13 +576,16 @@ fe_lla_error_t fe_stid135_fft(fe_stid135_handle_t handle, enum fe_stid135_demod 
 	}
 
 	for (i=0; i<nb_words; i++)	{   // set the FFT memory address in multiples of words
-
+#if 0
 		WAIT_N_MS(5);
+#else
+		WAIT_N_MS(1);
+#endif
 
 		error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMADDR1_MEM_ADDR(path), (i>>8) & 0x03);
 		error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMADDR0_MEM_ADDR(path), (i & 0xff));
 		error |= ChipSetRegisters(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_MEMADDR1(path), 2);
-		dprintk("FFT %d/%d\n", i, nb_words);
+		//dprintk("FFT %d/%d\n", i, nb_words);
 		// wait for end of transfer
 		error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMSTAT_MEM_STAT(path), &memstat);
 		while ((!memstat) && (timeout < 50)) {
@@ -575,7 +595,7 @@ fe_lla_error_t fe_stid135_fft(fe_stid135_handle_t handle, enum fe_stid135_demod 
 		}
 		if(timeout == 50)
 			return(FE_LLA_NODATA);
-		dprintk("FFT %d/%d end of transfer\n", i, nb_words);
+		//dprintk("FFT %d/%d end of transfer\n", i, nb_words);
 		// read & store data to create an fft list
 
 		error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEBUG1_MODE_FULL(path), &fld_value);
@@ -586,9 +606,10 @@ fe_lla_error_t fe_stid135_fft(fe_stid135_handle_t handle, enum fe_stid135_demod 
 				val[2] = ChipGetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMVA00_MEM_VAL0(path) + ((4 * j) << 16));
 				val[1] = ChipGetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMVA11_MEM_VAL1(path) + ((4 * j) << 16));
 				val[0] = ChipGetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMVA10_MEM_VAL1(path) + ((4 * j) << 16));
-				val_max = (((val[3] & 0x7) << 24) + (val[2] << 16) + (val[1] << 8) + val[0]) * XtoPowerY(2, exp);
+				val_max = STLog10(((val[3] & 0x7) << 24) + (val[2] << 16) + (val[1] << 8) + val[0])
+					+693* exp;
 				bin = (u32)(i*4+j);
-				tab[nbr_pts-bin-1] = (u32)val_max; 	// fil the table back to front
+				tab[nbr_pts-bin-1] = (u32)val_max; 	// fill the table back to front
 			}
 		} else if(fld_value == 0) { // 16-bit mode
 			// read temporary memory
@@ -596,9 +617,9 @@ fe_lla_error_t fe_stid135_fft(fe_stid135_handle_t handle, enum fe_stid135_demod 
 				error |= ChipGetRegisters(pParams->handle_demod, (u16)(REG_RC8CODEW_DVBSX_DEMOD_MEMVA01(path) + (2 * j)), 2);
 				val[3] = ChipGetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMVA01_MEM_VAL0(path) + ((2 * j) << 16)); // 16 = address bus width for demod
 				val[2] = ChipGetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMVA00_MEM_VAL0(path) + ((2 * j) << 16));
-				val_max = ((val[3] << 8) + val[2]) * XtoPowerY(2, exp);
+				val_max = STLog10((val[3] << 8) + val[2]) + 693*exp;
 				bin = (u32)(i*8+j);
-				tab[nbr_pts-bin-1] = (u32)val_max; 	// fil the table back to front
+				tab[nbr_pts-bin-1] = 10*(u32)val_max; 	// fil the table back to front; unit is 0.001dB
 			}
 		}
 	}

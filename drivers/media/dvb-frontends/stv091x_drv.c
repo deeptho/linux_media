@@ -1775,12 +1775,13 @@ static s32 stv091x_agc1_power_gain(struct stv *state)
 	//todo: Py_AGC, AGC2_INTEGRATOR
 }
 
+//units of 0.001dB
 static s32 stv091x_agc1_power_gain_dbm(struct stv *state)
 {
 	u16 agc_gain = stv091x_agc1_power_gain(state); //u16 because of stv6120 interface (todo)
 	if (state->fe.ops.tuner_ops.get_rf_strength)
 		state->fe.ops.tuner_ops.get_rf_strength(&state->fe, &agc_gain);//in units of 0.01dB
-	return agc_gain;
+	return 10*agc_gain;
 }
 
 
@@ -1801,25 +1802,28 @@ static s32 stv091x_iq_power(struct stv *state)
 	//todo: Py_AGC, AGC2_INTEGRATOR
 }
 
+//unit 0.001dB
 static s32 stv091x_iq_power_dbm(struct stv *state)
 {
 	s32 iq_power = stv091x_iq_power(state);
-	return TableLookup(PADC_Lookup, ARRAY_SIZE(PADC_Lookup), iq_power) + 352;
+	return 10*(TableLookup(PADC_Lookup, ARRAY_SIZE(PADC_Lookup), iq_power) + 352);
 }
 
 /*
 	signal power in the stv6120 tuner bandwidth (not representative for narrow band signals)
+	unit: 0.001dB
  */
 static s32 stv091x_signal_power_dbm(struct dvb_frontend *fe)
 {
 	struct stv *state = fe->demodulator_priv;
 	//todo: take into account agc2
-	return (-52 - stv091x_agc1_power_gain_dbm(state)); //unit is 0.01dB
+	return (-520 - stv091x_agc1_power_gain_dbm(state)); //unit is 0.01dB
 		/* -0.52 is the output level in dBm*/
 	}
 
 /*
 	signal power representative for narrow band signals
+	unit: 0.001dB
  */
 static s32 stv091x_narrow_band_signal_power_dbm(struct dvb_frontend *fe)
 {
@@ -1828,9 +1832,9 @@ static s32 stv091x_narrow_band_signal_power_dbm(struct dvb_frontend *fe)
 	s32 agc2level = (read_reg_field(state, FSTV0910_P2_AGC2_INTEGRATOR1) <<8) |
 		read_reg_field(state, FSTV0910_P2_AGC2_INTEGRATOR0);
 	s32	agc2ref = read_reg(state, RSTV0910_P2_AGC2REF);
-	s32 x =  2*(s32)STLog10((u32)(agc2ref)); //unit is 0.01dB
-	s32 y =  2*(s32)STLog10(agc2level); //unit is 0.01dB
-	return (x-y) + (-52 - stv091x_agc1_power_gain_dbm(state)); //unit is 0.01dB
+	s32 x =  20*(s32)STLog10((u32)(agc2ref)); //unit is 0.01dB
+	s32 y =  20*(s32)STLog10(agc2level); //unit is 0.01dB
+	return (x-y) + (-520 - stv091x_agc1_power_gain_dbm(state)); //unit is 0.01dB
 }
 
 static int read_status(struct dvb_frontend *fe, enum fe_status *status)
@@ -1843,16 +1847,16 @@ static int read_status(struct dvb_frontend *fe, enum fe_status *status)
 	u32 FECLock = 0;
 	s32 snr;
 	u32 n, d;
-	s32 signal_strength = stv091x_signal_power_dbm(fe); //unit=0.01dB
+	s32 signal_strength = stv091x_signal_power_dbm(fe); //unit=0.001dB
 
 	/*pr_warn("%s: agc = %d iq_power = %d Padc = %d\n", __func__, agc, iq_power, Padc);*/
 
 	p->strength.len = 2;
 	p->strength.stat[0].scale = FE_SCALE_DECIBEL;
-	p->strength.stat[0].svalue = signal_strength*10; //result in uints of 0.0001dB
+	p->strength.stat[0].svalue = signal_strength; //result in uints of 0.0001dB
 
 	p->strength.stat[1].scale = FE_SCALE_RELATIVE;
-	p->strength.stat[1].uvalue = (100 + signal_strength/100) * 656; //todo: check range
+	p->strength.stat[1].uvalue = (100 + signal_strength/1000) * 656; //todo: check range
 	//todo: if not locked, and signal is too low FE_HAS_SIGNAL should be removed
 	*status = FE_HAS_SIGNAL;
 

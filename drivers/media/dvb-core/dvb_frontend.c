@@ -138,7 +138,7 @@ static void dvb_frontend_invoke_release(struct dvb_frontend *fe,
 static void release_dtv_fe_spectrum_scan(struct dtv_fe_spectrum* s)
 {
 	if(s->freq || s->rf_level)
-		dprintk("releasing memory\n");
+			dprintk("releasing memory\n");
 	if (s->freq) {
 		kfree(s->freq);
 	}
@@ -1431,7 +1431,7 @@ static int dvb_frontend_handle_algo_ctrl_ioctl(struct file *file,
 																							 unsigned int cmd, void *parg);
 
 static int dtv_set_sat_scan(struct dvb_frontend *fe, bool scan_continue);
-static int dtv_set_spectrum(struct dvb_frontend *fe, int type);
+static int dtv_set_spectrum(struct dvb_frontend *fe, enum dtv_fe_spectrum_method method);
 static int dtv_get_spectrum(struct dvb_frontend *fe, struct dtv_fe_spectrum*user);
 
 static int dtv_property_process_get(struct dvb_frontend *fe,
@@ -2237,12 +2237,24 @@ static int dtv_property_process_set(struct dvb_frontend *fe,
 }
 
 
-static int init_dtv_fe_spectrum_scan(struct dtv_fe_spectrum* s, struct dtv_frontend_properties *p)
+static int init_dtv_fe_spectrum_scan(struct dtv_fe_spectrum* s, struct dtv_frontend_properties *p,
+																		 enum dtv_fe_spectrum_method method)
 {
 	u32 start_frequency = p->scan_start_frequency;
 	u32 end_frequency = p->scan_end_frequency;
 	u32 frequency_step = p->scan_resolution;
 	u32 bandwidth = end_frequency-start_frequency; //in kHz
+
+	switch(method) {
+	case SPECTRUM_METHOD_SWEEP:
+	case SPECTRUM_METHOD_FFT:
+		s->spectrum_method = method;
+		break;
+	default:
+		return -EINVAL;
+		break;
+	}
+
 	s->num_freq =	 bandwidth/(frequency_step>0 ?frequency_step: 1);
 	if(s->num_freq >= 65536*2)
 		s->num_freq = 65536;
@@ -2711,13 +2723,13 @@ static int dtv_set_sat_scan(struct dvb_frontend *fe, bool scan_continue)
 }
 
 
-static int dtv_set_spectrum(struct dvb_frontend *fe, int type)
+static int dtv_set_spectrum(struct dvb_frontend *fe, enum dtv_fe_spectrum_method method)
 {
 	struct dvb_frontend_private *fepriv = fe->frontend_priv;
 	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
 	if (!fe->ops.get_spectrum)
 		return  -ENOTSUPP;
-	int ret = init_dtv_fe_spectrum_scan(&fepriv->spectrum, c);
+	int ret = init_dtv_fe_spectrum_scan(&fepriv->spectrum, c, method);
 	if(ret<0)
 		return ret;
  	/* Request the search algorithm to search */
