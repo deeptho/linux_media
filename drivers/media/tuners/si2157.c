@@ -7,6 +7,9 @@
 
 #include "si2157_priv.h"
 
+#define dprintk(fmt, arg...)																					\
+	printk(KERN_DEBUG pr_fmt("%s:%d " fmt),  __func__, __LINE__, ##arg)
+
 static const struct dvb_tuner_ops si2157_ops;
 
 static int tuner_lock_debug;
@@ -915,17 +918,22 @@ static int si2157_remove(struct i2c_client *client)
 
 	dev_dbg(&client->dev, "\n");
 
-	/* stop statistics polling */
-	cancel_delayed_work_sync(&dev->stat_work);
+	if(dev) {
+		/* stop statistics polling */
+		cancel_delayed_work_sync(&dev->stat_work);
+	} else {
+		dprintk("dev==NULL\n");
+	}
 
 #ifdef CONFIG_MEDIA_CONTROLLER_DVB
-	if (dev->mdev)
+	if (dev && dev->mdev)
 		media_device_unregister_entity(&dev->ent);
 #endif
+	if(dev)
+		kfree(dev);
 
 	memset(&fe->ops.tuner_ops, 0, sizeof(struct dvb_tuner_ops));
 	fe->tuner_priv = NULL;
-	kfree(dev);
 
 	return 0;
 }

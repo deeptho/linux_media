@@ -52,7 +52,7 @@ typedef enum
 
 typedef struct node
 {
-	STCHIP_Handle_t hChip;
+	STCHIP_Info_t* hChip;
 	struct node *pNextNode;
 }NODE;
 
@@ -75,7 +75,7 @@ static u8 ChipMapRegisterSize = STCHIP_REGSIZE_8;   // regsize defaults for a ma
 	return i;
 }*/
 
-static NODE *AppendNode(STCHIP_Handle_t hChip)
+static NODE *AppendNode(STCHIP_Info_t* hChip)
 {
 	NODE *pNode = pFirstNode;
 
@@ -140,9 +140,9 @@ static void DeleteNode(NODE *pNode)
 **ACTION	::	Retrieve the first chip handle
 **PARAMS IN	::	NONE
 **PARAMS OUT::	NONE
-**RETURN	::	STCHIP_Handle_t if ok, NULL otherwise
+**RETURN	::	STCHIP_Info_t* if ok, NULL otherwise
 *****************************************************/
-STCHIP_Handle_t	ChipGetFirst(void)
+STCHIP_Info_t*	ChipGetFirst(void)
 {
 	if((pFirstNode != NULL) && (pFirstNode->hChip != NULL))
 		return pFirstNode->hChip;
@@ -155,9 +155,9 @@ STCHIP_Handle_t	ChipGetFirst(void)
 **ACTION	::	Find that node that contains the chip
 **PARAMS IN	::	NONE
 **PARAMS OUT::	NONE
-**RETURN	::	STCHIP_Handle_t if ok, NULL otherwise
+**RETURN	::	STCHIP_Info_t* if ok, NULL otherwise
 *****************************************************/
-NODE *ChipFindNode(STCHIP_Handle_t hChip)
+NODE *ChipFindNode(STCHIP_Info_t* hChip)
 {
 	NODE *pNode = pFirstNode;
 
@@ -179,9 +179,9 @@ NODE *ChipFindNode(STCHIP_Handle_t hChip)
 **ACTION	::	Retrieve the handle of the next chip
 **PARAMS IN	::	hPrevChip	==> handle of the previous chip
 **PARAMS OUT::	NONE
-**RETURN	::	STCHIP_Handle_t if ok, NULL otherwise
+**RETURN	::	STCHIP_Info_t* if ok, NULL otherwise
 *****************************************************/
-STCHIP_Handle_t	ChipGetNext(STCHIP_Handle_t hPrevChip)
+STCHIP_Info_t*	ChipGetNext(STCHIP_Info_t* hPrevChip)
 {
 	NODE *pNode;
 
@@ -197,11 +197,11 @@ STCHIP_Handle_t	ChipGetNext(STCHIP_Handle_t hPrevChip)
 **ACTION	::	Retrieve the handle of chip with its name
 **PARAMS IN	::	Name	==> name of the chip
 **PARAMS OUT::	NONE
-**RETURN	::	STCHIP_Handle_t if ok, NULL otherwise
+**RETURN	::	STCHIP_Info_t* if ok, NULL otherwise
 *****************************************************/
-STCHIP_Handle_t ChipGetHandleFromName(char *Name)
+STCHIP_Info_t* ChipGetHandleFromName(char *Name)
 {
-	STCHIP_Handle_t hChip;
+	STCHIP_Info_t* hChip;
 
 	hChip = ChipGetFirst();
 	while((hChip != NULL) && (strcmp(hChip->Name,Name) != 0))
@@ -222,9 +222,9 @@ STCHIP_Handle_t ChipGetHandleFromName(char *Name)
 **PARAMS OUT	::	NONE
 **RETURN	::	Handle to the chip, NULL if an error occur
 *****************************************************/
-STCHIP_Handle_t ChipOpen(STCHIP_Info_t *hChipOpenParams)
+STCHIP_Info_t* ChipOpen(STCHIP_Info_t *hChipOpenParams)
 {
-	STCHIP_Handle_t hChip;
+	STCHIP_Info_t* hChip;
 	s32 reg/*, field*/;
 	u32 field;
 
@@ -318,7 +318,7 @@ STCHIP_Handle_t ChipOpen(STCHIP_Info_t *hChipOpenParams)
 **PARAMS OUT::	NONE
 **RETURN	::	CHIPERR_NO_ERROR if ok, CHIPERR_INVALID_HANDLE otherwise
 *****************************************************/
-STCHIP_Error_t	ChipClose(STCHIP_Handle_t hChip)
+STCHIP_Error_t	ChipClose(STCHIP_Info_t* hChip)
 {
 	STCHIP_Error_t error = CHIPERR_NO_ERROR;
 	NODE *node = NULL;
@@ -375,7 +375,7 @@ u32 CreateMask(char NbBits, char Pos)
 **PARAMS OUT::	NONE
 **RETURN	::	Error
 *****************************************************/
-STCHIP_Error_t ChipAddField(STCHIP_Handle_t hChip,u16 RegId, u32 FieldId,char * Name, char Pos, char NbBits, STCHIP_FieldType_t Type)
+STCHIP_Error_t ChipAddField(STCHIP_Info_t* hChip,u16 RegId, u32 FieldId,char * Name, char Pos, char NbBits, STCHIP_FieldType_t Type)
 {
 	STCHIP_Field_t *pField;
 
@@ -440,7 +440,7 @@ int dichotomy_search(STCHIP_Register_t tab[], s32 nbVal, u16 val)
 }
 
 
-void dump(STCHIP_Handle_t hChip) {
+void dump(STCHIP_Info_t* hChip) {
 	int i;
 	STCHIP_Register_t *tab=hChip->pRegMapImage;
 	for(i=0; i<hChip->NbRegs; ++i) {
@@ -480,7 +480,7 @@ int direct_search(STCHIP_Register_t tab[], s32 nbVal, u16 val)
 **PARAMS OUT::	None
 **RETURN	::	Index of the register in the register map image
 *****************************************************/
-s32 ChipGetRegisterIndex(STCHIP_Handle_t hChip, u16 RegId)
+s32 ChipGetRegisterIndex(STCHIP_Info_t* hChip, u16 RegId)
 {
 	s32 regIndex=-1;
 
@@ -517,7 +517,7 @@ s32 ChipGetRegisterIndex(STCHIP_Handle_t hChip, u16 RegId)
 **PARAMS OUT::	None
 **RETURN	::	Index of the register in the register map image
 *****************************************************/
-s32 ChipGetFieldIndex(STCHIP_Handle_t hChip, u32 FieldId)
+s32 ChipGetFieldIndex(STCHIP_Info_t* hChip, u32 FieldId)
 {
 	s32 regIndex=-1;
 	u16 regAddress;
@@ -561,7 +561,7 @@ s32 ChipGetFieldIndex(STCHIP_Handle_t hChip, u32 FieldId)
 **PARAMS OUT::	NONE
 **RETURN	::	Error
 *****************************************************/
-STCHIP_Error_t ChipSetOneRegister(STCHIP_Handle_t hChip,u16 RegAddr,u32 Data)
+STCHIP_Error_t ChipSetOneRegister(STCHIP_Info_t* hChip,u16 RegAddr,u32 Data)
 {
 	s32 regIndex;
 
@@ -589,7 +589,7 @@ STCHIP_Error_t ChipSetOneRegister(STCHIP_Handle_t hChip,u16 RegAddr,u32 Data)
 **PARAMS OUT	::	Register's value
 **RETURN	:: fe_lla_error_t
 *****************************************************/
-STCHIP_Error_t ChipGetOneRegister(STCHIP_Handle_t hChip, u16 RegAddr, u32* data_p )
+STCHIP_Error_t ChipGetOneRegister(STCHIP_Info_t* hChip, u16 RegAddr, u32* data_p )
 {
 	s32 regIndex;
 
@@ -634,7 +634,7 @@ STCHIP_Error_t ChipGetOneRegister(STCHIP_Handle_t hChip, u16 RegAddr, u32* data_
 **PARAMS OUT::	NONE
 **RETURN	::	Error
 *****************************************************/
-STCHIP_Error_t  ChipSetRegisters(STCHIP_Handle_t hChip, u16 FirstReg, s32 NbRegs)
+STCHIP_Error_t  ChipSetRegisters(STCHIP_Info_t* hChip, u16 FirstReg, s32 NbRegs)
 {
 	u8 data[100],nbdata = 0;
 	s32 i, j, firstRegIndex;
@@ -715,7 +715,7 @@ STCHIP_Error_t  ChipSetRegisters(STCHIP_Handle_t hChip, u16 FirstReg, s32 NbRegs
 **PARAMS OUT::	NONE
 **RETURN	::	Error
 *****************************************************/
-STCHIP_Error_t ChipGetRegisters(STCHIP_Handle_t hChip, u16 FirstReg, s32 NbRegs)
+STCHIP_Error_t ChipGetRegisters(STCHIP_Info_t* hChip, u16 FirstReg, s32 NbRegs)
 {
 	u8 data[100] = {0},nbdata =0;
 	s32 i, j, firstRegIndex;
@@ -826,7 +826,7 @@ STCHIP_Error_t ChipGetRegisters(STCHIP_Handle_t hChip, u16 FirstReg, s32 NbRegs)
 **PARAMS OUT::	NONE
 **RETURN	::	CHIPERR_NO_ERROR if ok, CHIPERR_INVALID_HANDLE otherwise
 *****************************************************/
-STCHIP_Error_t  ChipUpdateDefaultValues(STCHIP_Handle_t hChip,STCHIP_Register_t  *pRegMap)
+STCHIP_Error_t  ChipUpdateDefaultValues(STCHIP_Info_t* hChip,STCHIP_Register_t  *pRegMap)
 {
 	STCHIP_Error_t error = CHIPERR_NO_ERROR;
 	s32 reg;
@@ -852,7 +852,7 @@ STCHIP_Error_t  ChipUpdateDefaultValues(STCHIP_Handle_t hChip,STCHIP_Register_t 
 **PARAMS OUT::	NONE
 **RETURN	::	Error
 *****************************************************/
-STCHIP_Error_t ChipApplyDefaultValues(STCHIP_Handle_t hChip, u16 RegAddr, u8 RegsVal)
+STCHIP_Error_t ChipApplyDefaultValues(STCHIP_Info_t* hChip, u16 RegAddr, u8 RegsVal)
 {
 	if(hChip != NULL)
 	{
@@ -879,7 +879,7 @@ STCHIP_Error_t ChipApplyDefaultValues(STCHIP_Handle_t hChip, u16 RegAddr, u8 Reg
 **PARAMS OUT::	NONE
 **RETURN	::	Current error, CHIPERR_INVALID_HANDLE otherwise
 *****************************************************/
-STCHIP_Error_t ChipGetError(STCHIP_Handle_t hChip)
+STCHIP_Error_t ChipGetError(STCHIP_Info_t* hChip)
 {
 	if(hChip != NULL)
 		return hChip->Error;
@@ -894,7 +894,7 @@ STCHIP_Error_t ChipGetError(STCHIP_Handle_t hChip)
 **PARAMS OUT::	NONE
 **RETURN	::	Error
 *****************************************************/
-STCHIP_Error_t ChipResetError(STCHIP_Handle_t hChip)
+STCHIP_Error_t ChipResetError(STCHIP_Info_t* hChip)
 {
 	if(hChip != NULL)
 		hChip->Error = CHIPERR_NO_ERROR;
@@ -986,7 +986,7 @@ s32 ChipGetFieldBits(s32 mask, s32 Position)
 **PARAMS OUT::	NONE
 **RETURN	::	Error
 *****************************************************/
-STCHIP_Error_t ChipSetFieldImage(STCHIP_Handle_t hChip,u32 FieldId, s32 Value)
+STCHIP_Error_t ChipSetFieldImage(STCHIP_Info_t* hChip,u32 FieldId, s32 Value)
 {
 	s32 regIndex,
 		mask,
@@ -1039,7 +1039,7 @@ STCHIP_Error_t ChipSetFieldImage(STCHIP_Handle_t hChip,u32 FieldId, s32 Value)
 **PARAMS OUT::	NONE
 **RETURN	::	Error
 *****************************************************/
-STCHIP_Error_t ChipSetField(STCHIP_Handle_t hChip,u32 FieldId,s32 Value)
+STCHIP_Error_t ChipSetField(STCHIP_Info_t* hChip,u32 FieldId,s32 Value)
 {
 	s32 regValue,
 		mask,
@@ -1087,7 +1087,7 @@ STCHIP_Error_t ChipSetField(STCHIP_Handle_t hChip,u32 FieldId,s32 Value)
 **PARAMS OUT::	NONE
 **RETURN	::	field's value
 *****************************************************/
-s32 ChipGetFieldImage(STCHIP_Handle_t hChip,u32 FieldId)
+s32 ChipGetFieldImage(STCHIP_Info_t* hChip,u32 FieldId)
 {
 	s32 value = 0xFF;
 	s32 regIndex,
@@ -1137,7 +1137,7 @@ s32 ChipGetFieldImage(STCHIP_Handle_t hChip,u32 FieldId)
 **PARAMS OUT	::	NONE
 **RETURN	::	error
 *****************************************************/
-STCHIP_Error_t ChipGetField(STCHIP_Handle_t hChip,u32 FieldId, s32* value_p )
+STCHIP_Error_t ChipGetField(STCHIP_Info_t* hChip,u32 FieldId, s32* value_p )
 {
 
 	s32 sign, mask, pos, bits;
@@ -1176,7 +1176,7 @@ STCHIP_Error_t ChipGetField(STCHIP_Handle_t hChip,u32 FieldId, s32* value_p )
 **PARAMS OUT::	NONE
 **RETURN	::	ACK if acknowledge is OK, NOACK otherwise
 *****************************************************/
-int ChipCheckAck(STCHIP_Handle_t hChip)
+int ChipCheckAck(STCHIP_Info_t* hChip)
 {
 	I2C_RESULT status = I2C_ERR_ACK;
 	u8 data = 0;
@@ -1214,7 +1214,7 @@ int ChipCheckAck(STCHIP_Handle_t hChip)
 **PARAMS OUT::	NONE
 **RETURN	::	NONE
 *****************************************************/
-void ChipWaitOrAbort(STCHIP_Handle_t hChip,u32 delay_ms)
+void ChipWaitOrAbort(STCHIP_Info_t* hChip,u32 delay_ms)
 {
  	u32 i=0;
  	while((hChip->Abort==FALSE)&&(i++<(delay_ms/10))) WAIT_N_MS(10);
@@ -1222,7 +1222,7 @@ void ChipWaitOrAbort(STCHIP_Handle_t hChip,u32 delay_ms)
  	while((hChip->Abort==FALSE)&&(i++<(delay_ms%10))) WAIT_N_MS(1);
 }
 
-void ChipAbort(STCHIP_Handle_t hChip, BOOL Abort)
+void ChipAbort(STCHIP_Info_t* hChip, BOOL Abort)
 {
     hChip->Abort = Abort;
 }

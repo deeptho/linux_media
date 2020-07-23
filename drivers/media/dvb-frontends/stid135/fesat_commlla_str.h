@@ -337,19 +337,25 @@ typedef  struct fe_sat_isi_struct_t  fe_sat_isi_struct;
 
 
 struct fe_sat_signal_info {
-  	BOOL        tuned;   /*tuning has finished*/
-	  BOOL        timedout;   /*tuning has timed out*/
-	  BOOL        has_carrier;  /*Some signal was found*/
-		BOOL 				locked;		/* Transponder locked					*/
-		BOOL 				data_present;		/* Data found on Transponder*/
-		u32 				frequency;	/* Transponder frequency (in KHz)			*/
-		u32 				symbol_rate;	/* Transponder symbol rate  (in Mbds)			*/
-		enum fe_sat_tracking_standard	standard;	/* Found Standard DVBS1,DVBS2 or DSS or Turbo		*/
-		enum fe_sat_rate 		puncture_rate;	/* Puncture rate 			 		*/
-		enum fe_sat_modcode		modcode;	/* MODCODE Only for DVBS2				*/ 
-		enum fe_sat_modulation		modulation;	/* Modulation type					*/
-		enum fe_sat_pilots		pilots;		/* pilots on,off only for DVB-S2			*/
-		enum fe_sat_frame		frame_length;	/* Found frame length only for DVB-S2			*/
+	bool timedout; /*tuning has timed out*/
+	bool fec_locked;
+	bool demod_locked;
+	bool satellite_scan;
+	///existing data
+	BOOL        tuned;   /*tuning has finished*/
+	//BOOL        timedout;
+	BOOL        has_carrier;  /*Some signal was found*/
+	BOOL 				locked;		/* Transponder locked					*/
+	BOOL 				data_present;		/* Data found on Transponder*/
+	u32 				frequency;	/* Transponder frequency (in KHz)			*/
+	u32 				symbol_rate;	/* Transponder symbol rate  (in Mbds)			*/
+
+	enum fe_sat_tracking_standard	standard;	/* Found Standard DVBS1,DVBS2 or DSS or Turbo		*/
+	enum fe_sat_rate 		puncture_rate;	/* Puncture rate 			 		*/
+	enum fe_sat_modcode		modcode;	/* MODCODE Only for DVBS2				*/
+	enum fe_sat_modulation		modulation;	/* Modulation type					*/
+	enum fe_sat_pilots		pilots;		/* pilots on,off only for DVB-S2			*/
+	enum fe_sat_frame		frame_length;	/* Found frame length only for DVB-S2			*/
 		enum fe_sat_rolloff		roll_off;	/* Rolloff factor (0.2, 0.25 or 0.35)			*/
 		s32 				power;		/* Power of the RF signal (dBm x1000)			*/
 		s32 				powerdBmx10;	/* Power of the RF signal (dBm x10000)			*/

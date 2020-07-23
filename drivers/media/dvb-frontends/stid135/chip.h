@@ -278,10 +278,10 @@ typedef enum
 	STCHIP_Info_t;
 
 
-	typedef STCHIP_Info_t *STCHIP_Handle_t;  /* Handle to a chip */
-	typedef STCHIP_Info_t *tuner_handle;   /* ?? */
+	 //typedef STCHIP_Info_t* STCHIP_Handle_t;  /* Handle to a chip */
+	typedef STCHIP_Info_t* tuner_handle;   /* ?? */
 
-	typedef STCHIP_Error_t (*STCHIP_RepeaterFn_t)(STCHIP_Handle_t hChip,BOOL State);    /* Pointer to repeater routine */
+	typedef STCHIP_Error_t (*STCHIP_RepeaterFn_t)(STCHIP_Info_t* hChip,BOOL State);    /* Pointer to repeater routine */
 
 	typedef struct
 	{
@@ -294,85 +294,85 @@ typedef enum
 /* functions --------------------------------------------------------------- */
 
 /* Creation and destruction routines */
-STCHIP_Handle_t	ChipOpen(STCHIP_Info_t *hChipOpenParams);
-STCHIP_Error_t  ChipAddRegDescription  (STCHIP_Handle_t hChip, u16 RegId, char *Description);
-STCHIP_Error_t  ChipAddReg             (STCHIP_Handle_t hChip, u16 RegId, char *Name, u16 Address, u32 Default, STCHIP_Access_t Access, ...);
+STCHIP_Info_t*	ChipOpen(STCHIP_Info_t *hChipOpenParams);
+STCHIP_Error_t  ChipAddRegDescription  (STCHIP_Info_t* hChip, u16 RegId, char *Description);
+STCHIP_Error_t  ChipAddReg             (STCHIP_Info_t* hChip, u16 RegId, char *Name, u16 Address, u32 Default, STCHIP_Access_t Access, ...);
 
-STCHIP_Error_t	ChipAddField    (STCHIP_Handle_t hChip, u16 RegId, u32 FieldId, char *Name,   char Pos, char NbBits, STCHIP_FieldType_t Type);
-STCHIP_Error_t	ChipClose       (STCHIP_Handle_t hChip);
+STCHIP_Error_t	ChipAddField    (STCHIP_Info_t* hChip, u16 RegId, u32 FieldId, char *Name,   char Pos, char NbBits, STCHIP_FieldType_t Type);
+STCHIP_Error_t	ChipClose       (STCHIP_Info_t* hChip);
 
 /* Utility routines */
-STCHIP_Handle_t	ChipGetFirst(void);
-STCHIP_Handle_t	ChipGetNext(STCHIP_Handle_t hPrevChip);
-STCHIP_Handle_t	ChipGetHandleFromName(char *Name);
-s32 ChipGetRegisterIndex(STCHIP_Handle_t hChip, u16 RegId);
-s32 ChipGetFieldIndex(STCHIP_Handle_t hChip, u32 FieldId);
+STCHIP_Info_t*	ChipGetFirst(void);
+STCHIP_Info_t*	ChipGetNext(STCHIP_Info_t* hPrevChip);
+STCHIP_Info_t*	ChipGetHandleFromName(char *Name);
+s32 ChipGetRegisterIndex(STCHIP_Info_t* hChip, u16 RegId);
+s32 ChipGetFieldIndex(STCHIP_Info_t* hChip, u32 FieldId);
 
-STCHIP_Error_t	ChipChangeAddress(STCHIP_Handle_t hChip, unsigned char I2cAddr);
-STCHIP_Error_t	ChipSetRepeater(STCHIP_Handle_t hChip,BOOL Repeater);
+STCHIP_Error_t	ChipChangeAddress(STCHIP_Info_t* hChip, unsigned char I2cAddr);
+STCHIP_Error_t	ChipSetRepeater(STCHIP_Info_t* hChip,BOOL Repeater);
 
-STCHIP_Error_t  ChipUpdateDefaultValues(STCHIP_Handle_t hChip,STCHIP_Register_t  *pRegMap);
-STCHIP_Error_t	ChipApplyDefaultValues(STCHIP_Handle_t hChip, u16 RegAddr, u8 RegsVal);  /* reset */
+STCHIP_Error_t  ChipUpdateDefaultValues(STCHIP_Info_t* hChip,STCHIP_Register_t  *pRegMap);
+STCHIP_Error_t	ChipApplyDefaultValues(STCHIP_Info_t* hChip, u16 RegAddr, u8 RegsVal);  /* reset */
 
-int	ChipCheckAck(STCHIP_Handle_t hChip);
+int	ChipCheckAck(STCHIP_Info_t* hChip);
 
 
-STCHIP_Error_t	ChipGetError(STCHIP_Handle_t hChip);
-STCHIP_Error_t	ChipResetError(STCHIP_Handle_t hChip);
+STCHIP_Error_t	ChipGetError(STCHIP_Info_t* hChip);
+STCHIP_Error_t	ChipResetError(STCHIP_Info_t* hChip);
 
-int		ChipGetFieldIdFromName(STCHIP_Handle_t hChip, char *FieldName);
-u16		ChipGetRegIdFromName(STCHIP_Handle_t hChip, char *RegName);
-u16		ChipGetRegIdFromAdd(STCHIP_Handle_t hChip,u16 Add);
-unsigned char	ChipGetFieldBitsFromId(STCHIP_Handle_t hChip, u32 FieldId);
-char *		ChipGetFieldNameFromId(STCHIP_Handle_t hChip, u32 FieldId);
-u16 		ChipGetFieldRegisterAddrFromId(STCHIP_Handle_t hChip, u16 FieldId);
-u16		ChipGetRegisterAddrFromId(STCHIP_Handle_t hChip, u16 RegId);
+int		ChipGetFieldIdFromName(STCHIP_Info_t* hChip, char *FieldName);
+u16		ChipGetRegIdFromName(STCHIP_Info_t* hChip, char *RegName);
+u16		ChipGetRegIdFromAdd(STCHIP_Info_t* hChip,u16 Add);
+unsigned char	ChipGetFieldBitsFromId(STCHIP_Info_t* hChip, u32 FieldId);
+char *		ChipGetFieldNameFromId(STCHIP_Info_t* hChip, u32 FieldId);
+u16 		ChipGetFieldRegisterAddrFromId(STCHIP_Info_t* hChip, u16 FieldId);
+u16		ChipGetRegisterAddrFromId(STCHIP_Info_t* hChip, u16 RegId);
 
 
 	/* Access routines */
 	/* FIXME: new for 32-bit access */
-	STCHIP_Error_t ChipSetOneRegister(STCHIP_Handle_t hChip,u16 RegAddr,u32 Data);
-	STCHIP_Error_t ChipGetOneRegister(STCHIP_Handle_t hChip, u16 RegAddr, u32* data_p );
+	STCHIP_Error_t ChipSetOneRegister(STCHIP_Info_t* hChip,u16 RegAddr,u32 Data);
+	STCHIP_Error_t ChipGetOneRegister(STCHIP_Info_t* hChip, u16 RegAddr, u32* data_p );
 
 
-	STCHIP_Error_t	ChipSetRegisters(STCHIP_Handle_t hChip, u16 FirstReg, s32 NbRegs);
-	STCHIP_Error_t	ChipGetRegisters(STCHIP_Handle_t hChip, u16 FirstReg, s32 NbRegs);
+	STCHIP_Error_t	ChipSetRegisters(STCHIP_Info_t* hChip, u16 FirstReg, s32 NbRegs);
+	STCHIP_Error_t	ChipGetRegisters(STCHIP_Info_t* hChip, u16 FirstReg, s32 NbRegs);
 
 
-STCHIP_Error_t	ChipSetField(STCHIP_Handle_t hChip, u32 FieldId, s32 Value);
+STCHIP_Error_t	ChipSetField(STCHIP_Info_t* hChip, u32 FieldId, s32 Value);
 
 
-	STCHIP_Error_t	ChipGetField(STCHIP_Handle_t hChip, u32 FieldId, s32* value_p);
+	STCHIP_Error_t	ChipGetField(STCHIP_Info_t* hChip, u32 FieldId, s32* value_p);
 
 
-STCHIP_Error_t	ChipSetFieldImage(STCHIP_Handle_t hChip, u32 FieldId, s32 Value);
-s32				ChipGetFieldImage(STCHIP_Handle_t hChip, u32 FieldId);
+STCHIP_Error_t	ChipSetFieldImage(STCHIP_Info_t* hChip, u32 FieldId, s32 Value);
+s32				ChipGetFieldImage(STCHIP_Info_t* hChip, u32 FieldId);
 
-STCHIP_Error_t	ChipSetRegDefault(STCHIP_Handle_t hChip, u16 RegId, u32 Default);
-u32				ChipGetRegDefault(STCHIP_Handle_t hChip, u16 RegId);
+STCHIP_Error_t	ChipSetRegDefault(STCHIP_Info_t* hChip, u16 RegId, u32 Default);
+u32				ChipGetRegDefault(STCHIP_Info_t* hChip, u16 RegId);
 
-STCHIP_Error_t	ChipSetFieldDefault(STCHIP_Handle_t hChip, u16 FieldId,s32 DefValue);
-s32				ChipGetFieldDefault(STCHIP_Handle_t hChip, u16 FieldId);
+STCHIP_Error_t	ChipSetFieldDefault(STCHIP_Info_t* hChip, u16 FieldId,s32 DefValue);
+s32				ChipGetFieldDefault(STCHIP_Info_t* hChip, u16 FieldId);
 
-void	ChipWaitOrAbort(STCHIP_Handle_t hChip,u32 delay_ms);
+void	ChipWaitOrAbort(STCHIP_Info_t* hChip,u32 delay_ms);
 
-	void	ChipAbort(STCHIP_Handle_t hChip,BOOL Abort);
+	void	ChipAbort(STCHIP_Info_t* hChip,BOOL Abort);
 
 
 /* Added for slice management */
-// STCHIP_Error_t  ChipAddParent (STCHIP_Handle_t hChip,u16 RegId, char *Name, u16 Addr, u8 Default, STCHIP_Access_t Access);
-STCHIP_Error_t  ChipExpandRegister(STCHIP_Handle_t hChip, u16 RegId, char *Name, u16 BaseAddr,u8 Default, STCHIP_Access_t Access, u16 Fields, char *InstanceName);
-STCHIP_Error_t  ChipExpandField   (STCHIP_Handle_t hChip, u16 RegId, u32 FieldId, char * Name, char Pos, char NbBits, STCHIP_FieldType_t Type);
+// STCHIP_Error_t  ChipAddParent (STCHIP_Info_t* hChip,u16 RegId, char *Name, u16 Addr, u8 Default, STCHIP_Access_t Access);
+STCHIP_Error_t  ChipExpandRegister(STCHIP_Info_t* hChip, u16 RegId, char *Name, u16 BaseAddr,u8 Default, STCHIP_Access_t Access, u16 Fields, char *InstanceName);
+STCHIP_Error_t  ChipExpandField   (STCHIP_Info_t* hChip, u16 RegId, u32 FieldId, char * Name, char Pos, char NbBits, STCHIP_FieldType_t Type);
 
-STCHIP_Error_t	ChipSetPagedRegister(STCHIP_Handle_t hChip,u16 RegId, u32 Value, u16 Slice);
-STCHIP_Error_t  ChipSetPagedField   (STCHIP_Handle_t hChip,u32 FieldId,int Value, u8 Slice);
+STCHIP_Error_t	ChipSetPagedRegister(STCHIP_Info_t* hChip,u16 RegId, u32 Value, u16 Slice);
+STCHIP_Error_t  ChipSetPagedField   (STCHIP_Info_t* hChip,u32 FieldId,int Value, u8 Slice);
 
 u32 CreateMask(char NbBits, char Pos);
 
-u8  ChipGetPagedRegister(STCHIP_Handle_t hChip, u16 RegId, u8 Slice);
-int ChipGetPagedFieldImage(STCHIP_Handle_t hChip,u32 FieldId, u16 Slice);
-//u16	ChipGetBaseId(STCHIP_Handle_t hChip, u16 RegId, u8 Slice);
-int  ChipGetRegType(STCHIP_Handle_t hChip, int RegId);      	/* slices, used in regmap to distinguish parent, mirror, reg ... */
+u8  ChipGetPagedRegister(STCHIP_Info_t* hChip, u16 RegId, u8 Slice);
+int ChipGetPagedFieldImage(STCHIP_Info_t* hChip,u32 FieldId, u16 Slice);
+//u16	ChipGetBaseId(STCHIP_Info_t* hChip, u16 RegId, u8 Slice);
+int  ChipGetRegType(STCHIP_Info_t* hChip, int RegId);      	/* slices, used in regmap to distinguish parent, mirror, reg ... */
 void ChipSetHierarchyMap   (BOOL Flag);  /* helper function used in _init.c     							 */
 void ChipSetMapRegisterSize(STCHIP_RegSize_t Regsize); 			/* helper function to set the registersize w/o the hchip handle  */
 

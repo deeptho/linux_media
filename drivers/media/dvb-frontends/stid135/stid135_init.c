@@ -1,35 +1,35 @@
 /*
-* This file is part of STiD135 OXFORD LLA 
+* This file is part of STiD135 OXFORD LLA
  *
-* Copyright (c) <2014>-<2018>, STMicroelectronics - All Rights Reserved 
-* Author(s): Mathias Hilaire (mathias.hilaire@st.com), Thierry Delahaye (thierry.delahaye@st.com) for STMicroelectronics. 
+* Copyright (c) <2014>-<2018>, STMicroelectronics - All Rights Reserved
+* Author(s): Mathias Hilaire (mathias.hilaire@st.com), Thierry Delahaye (thierry.delahaye@st.com) for STMicroelectronics.
  *
-* License terms: BSD 3-clause "New" or "Revised" License. 
+* License terms: BSD 3-clause "New" or "Revised" License.
  *
-* Redistribution and use in source and binary forms, with or without 
-* modification, are permitted provided that the following conditions are met: 
-* 
-* 1. Redistributions of source code must retain the above copyright notice, this 
-* list of conditions and the following disclaimer. 
-* 
-* 2. Redistributions in binary form must reproduce the above copyright notice, 
-* this list of conditions and the following disclaimer in the documentation 
-* and/or other materials provided with the distribution. 
-* 
-* 3. Neither the name of the copyright holder nor the names of its contributors 
-* may be used to endorse or promote products derived from this software 
-* without specific prior written permission. 
-* 
-* THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" 
-* AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE 
-* IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE 
-* DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE 
-* FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL 
-* DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR 
-* SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER 
-* CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, 
-* OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
-* OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
+* Redistribution and use in source and binary forms, with or without
+* modification, are permitted provided that the following conditions are met:
+*
+* 1. Redistributions of source code must retain the above copyright notice, this
+* list of conditions and the following disclaimer.
+*
+* 2. Redistributions in binary form must reproduce the above copyright notice,
+* this list of conditions and the following disclaimer in the documentation
+* and/or other materials provided with the distribution.
+*
+* 3. Neither the name of the copyright holder nor the names of its contributors
+* may be used to endorse or promote products derived from this software
+* without specific prior written permission.
+*
+* THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+* AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+* IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+* DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+* FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+* DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+* SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+* CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+* OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+* OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
 
@@ -42,7 +42,7 @@
 #include "stid135_initLLA_cut2.h"
 #include "stid135_init.h"
 
-	
+
 u32 C8CODEW_TOP_CTRL[1] = { C8CODEW_TOP_CTRL_ADDR(unit) };
 u32 DVBSX_AGCRF[4] = { A1_DVBSX_AGCRF_ADDR(unit), A2_DVBSX_AGCRF_ADDR(unit), A3_DVBSX_AGCRF_ADDR(unit), A4_DVBSX_AGCRF_ADDR(unit) };
 u32 C8CODEW_RFMUX[1] = { C8CODEW_RFMUX_ADDR(unit) };
@@ -85,7 +85,7 @@ struct InstReg
 {
 	u16 Instance;
 	u32 AddressRegister;
-};		
+};
 
 static STCHIP_Register_t STiD135DefVal[]={
 	{0x100,    0x10,    STCHIP_REGSIZE_8},	/* REG_RC8CODEW_C8CODEW_TOP_CTRL_MID */
@@ -8293,7 +8293,7 @@ static STCHIP_Register_t STiD135SocDefVal[]={
 	{0x8a04,    0x00,    STCHIP_REGSIZE_32},	/* REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1129 */
 	{0x8a08,    0x00,    STCHIP_REGSIZE_32},	/* REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1130 */
 	{0x8a0c,    0x00,    STCHIP_REGSIZE_32},	/* REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1131 */
-	
+
 	{0x9200,    0x00,    STCHIP_REGSIZE_32},	/* REG_RSTID135_C9THS_GLUE_TOP_TSENSOR_CONFIG */
 	{0x9204,    0x00,    STCHIP_REGSIZE_32},	/* REG_RSTID135_C9THS_GLUE_TOP_TSENSOR_STATUS */
 	{0x9208,    0x00,    STCHIP_REGSIZE_32},	/* REG_RSTID135_C9THS_GLUE_TOP_TSENSOR_INT_THRESH */
@@ -8701,7 +8701,7 @@ static STCHIP_Register_t STiD135SocDefVal[]={
 	{0xaff4,    0x00,    STCHIP_REGSIZE_32},	/* REG_RSTID135_OXFORD_FLEXCLKGEN_A_EXT_CONFIG5 */
 	{0xaff8,    0x00,    STCHIP_REGSIZE_32},	/* REG_RSTID135_OXFORD_FLEXCLKGEN_A_EXT_CONFIG6 */
 	{0xaffc,    0x00,    STCHIP_REGSIZE_32},	/* REG_RSTID135_OXFORD_FLEXCLKGEN_A_EXT_CONFIG7 */
-	
+
 	{0xc000,    0x00,    STCHIP_REGSIZE_32},	/* REG_RSTID135_C8SECTPFE_SYS_C8SECTPFE_SYS_INPUT_ERR_STATUS */
 	{0xc008,    0x00,    STCHIP_REGSIZE_32},	/* REG_RSTID135_C8SECTPFE_SYS_C8SECTPFE_SYS_OTHER_ERR_STATUS */
 	{0xc010,    0x00,    STCHIP_REGSIZE_32},	/* REG_RSTID135_C8SECTPFE_SYS_C8SECTPFE_SYS_INPUT_ERR_MASK */
@@ -8896,49 +8896,49 @@ static STCHIP_Register_t STiD135SocDefVal[]={
 };
 
 STCHIP_Error_t STiD135_Init(Demod_InitParams_t *InitParams,
-				STCHIP_Handle_t *hChipHandle)
+				STCHIP_Info_t** hChipHandle)
 {
-	STCHIP_Handle_t hChip = NULL;
+	STCHIP_Info_t* hChip = NULL;
 	STCHIP_Error_t error = CHIPERR_NO_ERROR;
 	u32 reg_value;
 	int i,j;
 	u32 real_STiD135_NBREGS;
 	s32 regIndex;
-    
+
 	/* NTC: Some important sanity checks */
 	real_STiD135_NBREGS = sizeof(STiD135DefVal) / sizeof(STCHIP_Register_t);
 	if (real_STiD135_NBREGS != STiD135_NBREGS) {
 		return(CHIPERR_CONFIG_ERR);
 	}
 
-	
-	
+
+
 	/* fill elements of external chip data structure */
 	InitParams->Chip->NbInsts  = DEMOD_NBINSTANCES;
 	InitParams->Chip->NbRegs   = STiD135_NBREGS;
-	InitParams->Chip->NbFields = STiD135_NBFIELDS;										  
+	InitParams->Chip->NbFields = STiD135_NBFIELDS;
 	InitParams->Chip->ChipMode = STCHIP_MODE_I2C2STBUS;
 	InitParams->Chip->pData = NULL;
-	
+
 	InitParams->Chip->WrStart  = STCHIP_MODE_STBUS_A2D1S0;  // Default mode for STBus interface A2D1S1 : many issues such as: bad accuracy of SR and freq, not possible to lock demods#5 to #8 if blind search and SR>20MS/s
 	ChipSetMapRegisterSize(STCHIP_REGSIZE_8);
-	
-	ChipSetHierarchyMap (TRUE); 
-	
+
+	ChipSetHierarchyMap (TRUE);
+
 	(*hChipHandle) = ChipOpen(InitParams->Chip);
 
 	ChipSetHierarchyMap (FALSE);
-	
+
 	hChip=(*hChipHandle);
 
 	if(hChip != NULL) {
-			
+
 		/*******************************
 		**   CHIP REGISTER MAP IMAGE INITIALIZATION
 		**     ----------------------
 		********************************/
 		ChipUpdateDefaultValues(hChip,STiD135DefVal);
-		
+
 		/*Read the ID*/
 		regIndex = ChipGetRegisterIndex(hChip, (u16)REG_RSTID135_AFE_AFE_ID);
 		hChip->pRegMapImage[regIndex].Size = STCHIP_REGSIZE_8;
@@ -8947,13 +8947,13 @@ STCHIP_Error_t STiD135_Init(Demod_InitParams_t *InitParams,
 		if((hChip->ChipID & FSTID135_AFE_AFE_ID_CUT_ID__MASK) != 0x08) {
 			return(CHIPERR_INVALID_HANDLE);
 		}
-		
+
 		if(hChip->Error == CHIPERR_NO_ERROR) {
 			/*******************************
 			**   REGISTER CONFIGURATION
 			**     ----------------------
 			********************************/
-	
+
 			for(i=0;i<DEMOD_NBREGS;i++)
 				hChip->pRegMapImage[i].Size = STCHIP_REGSIZE_8;
 
@@ -8973,28 +8973,28 @@ STCHIP_Error_t STiD135_Init(Demod_InitParams_t *InitParams,
 		error=hChip->Error;
 	} else
 		error=CHIPERR_INVALID_HANDLE;
-		
+
 	return error;
 }
 
 
-void dttst(STCHIP_Handle_t *hChipHandle) 
+void dttst(STCHIP_Info_t* *hChipHandle)
 {
-	STCHIP_Handle_t hChip; 
-	//	STCHIP_Error_t error = 0;  
-	
+	STCHIP_Info_t* hChip;
+	//	STCHIP_Error_t error = 0;
+
 	hChip=(*hChipHandle);
-	
+
 	if(hChip != NULL) {
 		printk("RESETTING DEFAULTS\n");
 		ChipUpdateDefaultValues(hChip,STiD135SocDefVal);
 	}
 }
-		
-STCHIP_Error_t STiD135_SOC_Init(Demod_InitParams_t *InitParams, STCHIP_Handle_t *hChipHandle) 
+
+STCHIP_Error_t STiD135_SOC_Init(Demod_InitParams_t *InitParams, STCHIP_Info_t* *hChipHandle)
 {
-	STCHIP_Handle_t hChip; 
-	STCHIP_Error_t error = 0;  
+	STCHIP_Info_t* hChip;
+	STCHIP_Error_t error = 0;
 	int i;
 	u32 real_STiD135_NBSOCREGS;
 
@@ -9003,22 +9003,22 @@ STCHIP_Error_t STiD135_SOC_Init(Demod_InitParams_t *InitParams, STCHIP_Handle_t 
 	if (real_STiD135_NBSOCREGS != STiD135_NBSOCREGS) {
 		return(CHIPERR_CONFIG_ERR);
 	}
-	
+
 	InitParams->Chip->ChipMode  = STCHIP_MODE_I2C2STBUS;
 	ChipSetMapRegisterSize(STCHIP_REGSIZE_32);	         // pass regsizes in this mode
 	InitParams->Chip->WrStart   = STCHIP_MODE_STBUS_A2D4S1;  // Default mode for STBus interface
-	
+
 	InitParams->Chip->NbInsts  = 1;
 	InitParams->Chip->NbRegs   = STiD135_NBSOCREGS;
 	InitParams->Chip->NbFields = 1764;
 	InitParams->Chip->pData    = NULL;
-	
+
 	(*hChipHandle) = ChipOpen(InitParams->Chip);
 	hChip=(*hChipHandle);
-	
+
 	if(hChip != NULL) {
 		ChipUpdateDefaultValues(hChip,STiD135SocDefVal);
-		
+
 		for(i=0;i<STiD135_NBSOCREGS;i++) { /* 735 SOC regs, excluding AFE regs */
 			hChip->pRegMapImage[i].Size = STCHIP_REGSIZE_32;
 			/* FIXME: new for 32-bit access */
@@ -9031,9 +9031,9 @@ STCHIP_Error_t STiD135_SOC_Init(Demod_InitParams_t *InitParams, STCHIP_Handle_t 
 			if we want to make it work */
 		}
 		error=hChip->Error;
-			
+
 	}  else
 		error=CHIPERR_INVALID_HANDLE;
 
-	return error; 
+	return error;
 }

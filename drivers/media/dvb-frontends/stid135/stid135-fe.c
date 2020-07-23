@@ -55,52 +55,12 @@ static unsigned int mc_auto;
 module_param(mc_auto, int, 0644);
 MODULE_PARM_DESC(mc_auto, "Enable auto modcode filtering depend from current C/N (default:0 - disabled)");
 
-struct stv_base {
-	struct list_head     stvlist;
-
-	u8                   adr;
-	struct i2c_adapter  *i2c;
-	struct mutex         status_lock;
-	int                  count;
-	u32                  extclk;
-	u8                   ts_mode;
-
-	int (*set_voltage)(struct i2c_adapter *i2c,
-		enum fe_sec_voltage voltage, u8 rf_in);
-	u8                   mode;
-
-	fe_stid135_handle_t  handle;
-	u8 tuner_use_count[4];
-	void (*write_properties) (struct i2c_adapter *i2c,u8 reg, u32 buf);
-	void (*read_properties) (struct i2c_adapter *i2c,u8 reg, u32 *buf);
-
-	//for tbs6912
-	void (*set_TSsampling)(struct i2c_adapter *i2c,int tuner,int time);
-	u32  (*set_TSparam)(struct i2c_adapter *i2c,int tuner,int time,bool flag);
-	//end
-
-	int vglna;
-};
 
 /*for debugging only: assumes only a single card is in use; otherwise wrong debug output
 	will be printed, but apart from that behaviour will still be correct
 */
 static atomic_t llr_rate_sum;
 
-struct stv {
-	struct stv_base     *base;
-	struct dvb_frontend  fe;
-	int                  nr;     //DT: adapter aka demod: 0-7
-	int                  rf_in;  //DT  tuner frontend: 0-3
-	unsigned long        tune_time;
-	int current_llr_rate;  //Remember the current reconfiguration to avoid calling hardware needlessly
-	int current_max_llr_rate;  //Remember the current reconfiguration to avoid calling hardware needlessly
-	struct fe_sat_signal_info signal_info;
-
-	bool newTP; //for tbs6912
-	u32  bit_rate; //for tbs6912;
-	int loops ;//for tbs6912
-};
 
 static int stid135_compute_best_max_llr_rate(struct fe_sat_signal_info* signal_info, int* llr_rate)
 {
@@ -179,15 +139,15 @@ fe_lla_error_t set_maxllr_rate(int line, struct stv *state,	struct fe_sat_signal
 	}
 	if (state->current_max_llr_rate != max_llr_rate) {
 		if(max_llr_rate == 0) {
-			err |= fe_stid135_set_maxllr_rate(state->base->handle, state->nr +1, 90);
+			err |= fe_stid135_set_maxllr_rate(state, state->nr +1, 90);
 		} else
 			if (max_llr_rate == 90) {
 			if(state->current_max_llr_rate ==0) {
 				//
 			} else
-				err |= fe_stid135_set_maxllr_rate(state->base->handle, state->nr +1, 90);
+				err |= fe_stid135_set_maxllr_rate(state, state->nr +1, 90);
 		} else {
-			err |= fe_stid135_set_maxllr_rate(state->base->handle, state->nr +1, max_llr_rate);
+			err |= fe_stid135_set_maxllr_rate(state, state->nr +1, max_llr_rate);
 		}
 		dev_warn(&state->base->i2c->dev, "line %d: demod %d: set_maxllr_rate=%d (was %d tot=%d) "
 						 "mod=%d symbol_rate=%d\n",
@@ -232,7 +192,8 @@ I2C_RESULT I2cReadWrite(void *pI2CHost, I2C_MODE mode, u8 ChipAddress, u8 *Data,
 	return (ret == 1) ? I2C_ERR_NONE : I2C_ERR_ACK;
 }
 
-static int stid135_probe(struct stv *state)
+//called once per chip
+static int stid135_probe(struct stv *state_demod1)
 {
 	struct fe_stid135_init_param init_params;
 	fe_lla_error_t err = FE_LLA_NO_ERROR;
@@ -241,127 +202,136 @@ static int stid135_probe(struct stv *state)
 	int i;
 	char *VglnaIdString = NULL;
 	STCHIP_Info_t VGLNAChip;
-	STCHIP_Handle_t vglna_handle;
-	STCHIP_Handle_t vglna_handle1;
-	STCHIP_Handle_t vglna_handle2;
-	STCHIP_Handle_t vglna_handle3;
+	STCHIP_Info_t* vglna_handle;
+	STCHIP_Info_t* vglna_handle1;
+	STCHIP_Info_t* vglna_handle2;
+	STCHIP_Info_t* vglna_handle3;
 	SAT_VGLNA_InitParams_t pVGLNAInit;
 	SAT_VGLNA_InitParams_t pVGLNAInit1;
 	SAT_VGLNA_InitParams_t pVGLNAInit2;
 	SAT_VGLNA_InitParams_t pVGLNAInit3;
-
-	dev_warn(&state->base->i2c->dev, "%s\n", FE_STiD135_GetRevision());
-
+	dprintk("HERE state_demod1=%p\n", state_demod1);
+	dprintk("HERE state->base=%p\n", state_demod1->base);
+	dprintk("HERE state->base=%p\n", state_demod1->base->i2c);
+	p_params = &state_demod1->base->ip;
+	dev_warn(&state_demod1->base->i2c->dev, "%s\n", FE_STiD135_GetRevision());
+	dprintk("here\n");
 	strcpy(init_params.demod_name,"STiD135");
-	init_params.pI2CHost		=	state->base;
-	init_params.demod_i2c_adr   	=	state->base->adr ? state->base->adr<<1 : 0xd0;
-	init_params.demod_ref_clk  	= 	state->base->extclk ? state->base->extclk : 27;
+	init_params.pI2CHost		=	state_demod1->base;
+	init_params.demod_i2c_adr   	=	state_demod1->base->adr ? state_demod1->base->adr<<1 : 0xd0;
+	init_params.demod_ref_clk  	= 	state_demod1->base->extclk ? state_demod1->base->extclk : 27;
 	init_params.internal_dcdc	=	FALSE;
 	init_params.internal_ldo	=	TRUE; // LDO supply is internal on Oxford valid board
 	init_params.rf_input_type	=	0xF; // Single ended RF input on Oxford valid board rev2
 	init_params.roll_off		=  	FE_SAT_35; // NYQUIST Filter value (used for DVBS1/DSS, DVBS2 is automatic)
 	init_params.tuner_iq_inversion	=	FE_SAT_IQ_NORMAL;
-
-	err = fe_stid135_init(&init_params,&state->base->handle);
-
+#if 0
+	err |= fe_stid135_apply_custom_qef_for_modcod_filter(state_demod1, 12, NULL, 115);
+	dprintk("here\n");
+#endif
+	err = fe_stid135_init(&init_params, &state_demod1->base->ip, state_demod1);
+	dprintk("here err=%d\n", err);
 	if (err != FE_LLA_NO_ERROR) {
-		dev_err(&state->base->i2c->dev, "%s: fe_stid135_init error %d !\n", __func__, err);
+		dev_err(&state_demod1->base->i2c->dev, "%s: fe_stid135_init error %d !\n", __func__, err);
 		return -EINVAL;
 	}
 
-	p_params = state->base->handle;
-	p_params->master_lock = &state->base->status_lock;
-
-	err = fe_stid135_get_cut_id(state->base->handle,&cut_id);
+	//p_params = state_demod1->base->handle;
+	p_params->master_lock = &state_demod1->base->status_lock;
+	dprintk("here state_demod1=%p\n", state_demod1);
+	dprintk("here state_demod1->base=%p\n", state_demod1->base);
+	dprintk("here state_demod1->base=%p\n", state_demod1->base);
+	err = fe_stid135_get_cut_id(&state_demod1->base->ip,&cut_id);
+	dprintk("here\n");
 	switch(cut_id)
 	{
 	case STID135_CUT1_0:
-		dev_warn(&state->base->i2c->dev, "%s: cut 1.0\n", __func__);
+		dev_warn(&state_demod1->base->i2c->dev, "%s: cut 1.0\n", __func__);
 		break;
 	case STID135_CUT1_1:
-		dev_warn(&state->base->i2c->dev, "%s: cut 1.1\n", __func__);
+		dev_warn(&state_demod1->base->i2c->dev, "%s: cut 1.1\n", __func__);
 		break;
 	case STID135_CUT1_X:
-		dev_warn(&state->base->i2c->dev, "%s: cut 1.x\n", __func__);
+		dev_warn(&state_demod1->base->i2c->dev, "%s: cut 1.x\n", __func__);
 		break;
 	case STID135_CUT2_0:
-		dev_warn(&state->base->i2c->dev, "%s: cut 2.0 \n", __func__);
+		dev_warn(&state_demod1->base->i2c->dev, "%s: cut 2.0 \n", __func__);
 		break;
 	case STID135_CUT2_1:
-		dev_warn(&state->base->i2c->dev, "%s: cut 2.1 \n", __func__);
+		dev_warn(&state_demod1->base->i2c->dev, "%s: cut 2.1 \n", __func__);
 		break;
 	case STID135_CUT2_X_UNFUSED:
-		dev_warn(&state->base->i2c->dev, "%s: cut 2.x \n", __func__);
+		dev_warn(&state_demod1->base->i2c->dev, "%s: cut 2.x \n", __func__);
 		break;
 	default:
-		dev_warn(&state->base->i2c->dev, "%s: cut ? \n", __func__);
+		dev_warn(&state_demod1->base->i2c->dev, "%s: cut ? \n", __func__);
 		return -EINVAL;
 	}
-
-	if (state->base->ts_mode == TS_STFE) { //DT: This code is called
-		dev_warn(&state->base->i2c->dev, "%s: 8xTS to STFE mode init.\n", __func__);
+	dprintk("here\n");
+	if (state_demod1->base->ts_mode == TS_STFE) { //DT: This code is called
+		dev_warn(&state_demod1->base->i2c->dev, "%s: 8xTS to STFE mode init.\n", __func__);
 #if 1
 		for(i=0;i<8;i++) {
-			err |= fe_stid135_set_ts_parallel_serial(state->base->handle, i+1, FE_TS_PARALLEL_ON_TSOUT_0);
+			err |= fe_stid135_set_ts_parallel_serial(state_demod1, i+1, FE_TS_PARALLEL_ON_TSOUT_0);
 		}
 #else // this is code from main driver
 		//	for(i=0;i<8;i++) {
-		err |= fe_stid135_set_ts_parallel_serial(state->base->handle, FE_SAT_DEMOD_1, FE_TS_PARALLEL_ON_TSOUT_0);
-		//	err |= fe_stid135_set_maxllr_rate(state->base->handle, i+1, 260);
+		err |= fe_stid135_set_ts_parallel_serial(state_demod1, FE_SAT_DEMOD_1, FE_TS_PARALLEL_ON_TSOUT_0);
+		//	err |= fe_stid135_set_maxllr_rate(state_demod1->base->handle, i+1, 260);
 		//	}
 #endif
-		err |= fe_stid135_enable_stfe(state->base->handle,FE_STFE_OUTPUT0);
-		err |= fe_stid135_set_stfe(state->base->handle, FE_STFE_TAGGING_MERGING_MODE, FE_STFE_INPUT1 |
+		err |= fe_stid135_enable_stfe(&state_demod1->base->ip,FE_STFE_OUTPUT0);
+		err |= fe_stid135_set_stfe(&state_demod1->base->ip, FE_STFE_TAGGING_MERGING_MODE, FE_STFE_INPUT1 |
 						FE_STFE_INPUT2 |FE_STFE_INPUT3 |FE_STFE_INPUT4| FE_STFE_INPUT5 |
 						FE_STFE_INPUT6 |FE_STFE_INPUT7 |FE_STFE_INPUT8 ,FE_STFE_OUTPUT0, 0xDE);
-	} else if (state->base->ts_mode == TS_8SER) { //DT: This code is not called
-		dev_warn(&state->base->i2c->dev, "%s: 8xTS serial mode init.\n", __func__);
+	} else if (state_demod1->base->ts_mode == TS_8SER) { //DT: This code is not called
+		dev_warn(&state_demod1->base->i2c->dev, "%s: 8xTS serial mode init.\n", __func__);
 		for(i=0;i<8;i++) {
-			err |= fe_stid135_set_ts_parallel_serial(state->base->handle, i+1, FE_TS_SERIAL_CONT_CLOCK);
-			err |= fe_stid135_set_maxllr_rate(state->base->handle, i+1, 90);
+			err |= fe_stid135_set_ts_parallel_serial(state_demod1, i+1, FE_TS_SERIAL_CONT_CLOCK);
+			err |= fe_stid135_set_maxllr_rate(state_demod1, i+1, 90);
 		}
 	} else { //DT: This code is not called
-		dev_warn(&state->base->i2c->dev, "%s: 2xTS parallel mode init.\n", __func__);
-		err |= fe_stid135_set_ts_parallel_serial(state->base->handle, FE_SAT_DEMOD_3, FE_TS_PARALLEL_PUNCT_CLOCK);
+		dev_warn(&state_demod1->base->i2c->dev, "%s: 2xTS parallel mode init.\n", __func__);
+		err |= fe_stid135_set_ts_parallel_serial(state_demod1, FE_SAT_DEMOD_3, FE_TS_PARALLEL_PUNCT_CLOCK);
 #if 1
-		err |= fe_stid135_set_maxllr_rate(state->base->handle, FE_SAT_DEMOD_3, 180);
+		err |= fe_stid135_set_maxllr_rate(state_demod1, FE_SAT_DEMOD_3, 180);
 #endif
-		err |= fe_stid135_set_ts_parallel_serial(state->base->handle, FE_SAT_DEMOD_1, FE_TS_PARALLEL_PUNCT_CLOCK);
+		err |= fe_stid135_set_ts_parallel_serial(state_demod1, FE_SAT_DEMOD_1, FE_TS_PARALLEL_PUNCT_CLOCK);
 #if 1
-		err |= fe_stid135_set_maxllr_rate(state->base->handle, FE_SAT_DEMOD_1, 180);
+		err |= fe_stid135_set_maxllr_rate(state_demod1, FE_SAT_DEMOD_1, 180);
 #endif
 	}
-
-	if (state->base->mode == 0) {
-		dev_warn(&state->base->i2c->dev, "%s: multiswitch mode init.\n", __func__);
+	dprintk("here\n");
+	if (state_demod1->base->mode == 0) {
+		dev_warn(&state_demod1->base->i2c->dev, "%s: multiswitch mode init.\n", __func__);
 		err |= fe_stid135_tuner_enable(p_params->handle_demod, AFE_TUNER1);
 		err |= fe_stid135_tuner_enable(p_params->handle_demod, AFE_TUNER2);
 		err |= fe_stid135_tuner_enable(p_params->handle_demod, AFE_TUNER3);
 		err |= fe_stid135_tuner_enable(p_params->handle_demod, AFE_TUNER4);
-		err |= fe_stid135_diseqc_init(state->base->handle,AFE_TUNER1, FE_SAT_DISEQC_2_3_PWM);
-		err |= fe_stid135_diseqc_init(state->base->handle,AFE_TUNER2, FE_SAT_22KHZ_Continues);
-		err |= fe_stid135_diseqc_init(state->base->handle,AFE_TUNER3, FE_SAT_DISEQC_2_3_PWM);
-		err |= fe_stid135_diseqc_init(state->base->handle,AFE_TUNER4, FE_SAT_22KHZ_Continues);
-		if (state->base->set_voltage) {
-			state->base->set_voltage(state->base->i2c, SEC_VOLTAGE_13, 0);
-			state->base->set_voltage(state->base->i2c, SEC_VOLTAGE_13, 1);
-			state->base->set_voltage(state->base->i2c, SEC_VOLTAGE_18, 2);
-			state->base->set_voltage(state->base->i2c, SEC_VOLTAGE_18, 3);
+		err |= fe_stid135_diseqc_init(&state_demod1->base->ip,AFE_TUNER1, FE_SAT_DISEQC_2_3_PWM);
+		err |= fe_stid135_diseqc_init(&state_demod1->base->ip,AFE_TUNER2, FE_SAT_22KHZ_Continues);
+		err |= fe_stid135_diseqc_init(&state_demod1->base->ip,AFE_TUNER3, FE_SAT_DISEQC_2_3_PWM);
+		err |= fe_stid135_diseqc_init(&state_demod1->base->ip,AFE_TUNER4, FE_SAT_22KHZ_Continues);
+		if (state_demod1->base->set_voltage) {
+			state_demod1->base->set_voltage(state_demod1->base->i2c, SEC_VOLTAGE_13, 0);
+			state_demod1->base->set_voltage(state_demod1->base->i2c, SEC_VOLTAGE_13, 1);
+			state_demod1->base->set_voltage(state_demod1->base->i2c, SEC_VOLTAGE_18, 2);
+			state_demod1->base->set_voltage(state_demod1->base->i2c, SEC_VOLTAGE_18, 3);
 		}
 	}
-
+	dprintk("here\n");
 	if (err != FE_LLA_NO_ERROR)
-		dev_err(&state->base->i2c->dev, "%s: setup error %d !\n", __func__, err);
+		dev_err(&state_demod1->base->i2c->dev, "%s: setup error %d !\n", __func__, err);
 
 
 ///////////////////init stvvglna/////////////////////////////////////
-	if(state->base->vglna){ //for 909x v2 version
-			dev_warn(&state->base->i2c->dev, "%s:Init STVVGLNA \n", __func__);
+	if(state_demod1->base->vglna){ //for 909x v2 version
+			dev_warn(&state_demod1->base->i2c->dev, "%s:Init STVVGLNA \n", __func__);
 	VglnaIdString = "STVVGLNA";
 		/* Init the VGLNA */
 	pVGLNAInit.Chip = &VGLNAChip;
 
-	pVGLNAInit.Chip->pI2CHost	  =	state->base;
+	pVGLNAInit.Chip->pI2CHost	  =	state_demod1->base;
 	pVGLNAInit.Chip->RepeaterHost = NULL;
 	pVGLNAInit.Chip->Repeater     = FALSE;
 	pVGLNAInit.Chip->I2cAddr      = 0xc8;
@@ -370,12 +340,12 @@ static int stid135_probe(struct stv *state)
 	stvvglna_init(&pVGLNAInit, &vglna_handle);
 	printk("Initialized STVVGLNA  0 device\n");
 	stvvglna_set_standby(vglna_handle,1);
-	dev_warn(&state->base->i2c->dev, "Initialized STVVGLNA 0 device\n");
+	dev_warn(&state_demod1->base->i2c->dev, "Initialized STVVGLNA 0 device\n");
 
 	VglnaIdString = "STVVGLNA1";
 	pVGLNAInit1.Chip = &VGLNAChip;
 
-	pVGLNAInit1.Chip->pI2CHost	  =	state->base;
+	pVGLNAInit1.Chip->pI2CHost	  =	state_demod1->base;
 	pVGLNAInit1.Chip->RepeaterHost = NULL;
 	pVGLNAInit1.Chip->Repeater     = FALSE;
 	pVGLNAInit1.Chip->I2cAddr      = 0xce;
@@ -383,11 +353,11 @@ static int stid135_probe(struct stv *state)
 	strcpy((char *)pVGLNAInit1.Chip->Name, VglnaIdString);
 	stvvglna_init(&pVGLNAInit1, &vglna_handle1);
 	stvvglna_set_standby(vglna_handle1,1);
-	dev_warn(&state->base->i2c->dev, "Initialized STVVGLNA 1 device\n");
+	dev_warn(&state_demod1->base->i2c->dev, "Initialized STVVGLNA 1 device\n");
 
 	VglnaIdString = "STVVGLNA2";
 	pVGLNAInit2.Chip = &VGLNAChip;
-	pVGLNAInit2.Chip->pI2CHost	  =	state->base;
+	pVGLNAInit2.Chip->pI2CHost	  =	state_demod1->base;
 	pVGLNAInit2.Chip->RepeaterHost = NULL;
 	pVGLNAInit2.Chip->Repeater     = FALSE;
 	pVGLNAInit2.Chip->I2cAddr      = 0xcc;
@@ -395,11 +365,11 @@ static int stid135_probe(struct stv *state)
 	strcpy((char *)pVGLNAInit2.Chip->Name, VglnaIdString);
 	stvvglna_init(&pVGLNAInit2, &vglna_handle2);
 	stvvglna_set_standby(vglna_handle2,1);
-	dev_warn(&state->base->i2c->dev, "Initialized STVVGLNA 2 device\n");
+	dev_warn(&state_demod1->base->i2c->dev, "Initialized STVVGLNA 2 device\n");
 
 	VglnaIdString = "STVVGLNA3";
 	pVGLNAInit3.Chip = &VGLNAChip;
-	pVGLNAInit3.Chip->pI2CHost	  =	state->base;
+	pVGLNAInit3.Chip->pI2CHost	  =	state_demod1->base;
 	pVGLNAInit3.Chip->RepeaterHost = NULL;
 	pVGLNAInit3.Chip->Repeater     = FALSE;
 	pVGLNAInit3.Chip->I2cAddr      = 0xca;
@@ -407,12 +377,12 @@ static int stid135_probe(struct stv *state)
 	strcpy((char *)pVGLNAInit3.Chip->Name, VglnaIdString);
 	stvvglna_init(&pVGLNAInit3, &vglna_handle3);
 	stvvglna_set_standby(vglna_handle3,1);
-	dev_warn(&state->base->i2c->dev, "Initialized STVVGLNA 3 device\n");
-
+	dev_warn(&state_demod1->base->i2c->dev, "Initialized STVVGLNA 3 device\n");
+	dprintk("here\n");
 	}
 	if (err != FE_LLA_NO_ERROR)
-		dev_err(&state->base->i2c->dev, "%s: setup error %d !\n", __func__, err);
-
+		dev_err(&state_demod1->base->i2c->dev, "%s: setup error %d !\n", __func__, err);
+	dprintk("here\n");
 	return err != FE_LLA_NO_ERROR ? -1 : 0;
 }
 
@@ -420,7 +390,7 @@ static int stid135_init(struct dvb_frontend *fe)
 {
 	struct stv *state = fe->demodulator_priv;
 	fe_lla_error_t err = FE_LLA_NO_ERROR;
-	struct fe_stid135_internal_param *p_params = state->base->handle;
+	struct fe_stid135_internal_param *p_params = &state->base->ip;
 
 	if (state->base->mode == 0)
 		return 0;
@@ -432,9 +402,9 @@ static int stid135_init(struct dvb_frontend *fe)
 	BUG_ON(state->base->tuner_use_count[state->rf_in]>1);
 	if(state->base->tuner_use_count[state->rf_in]++ == 0) {
 	err |= fe_stid135_tuner_enable(p_params->handle_demod, state->rf_in + 1);
-	err |= fe_stid135_diseqc_init(state->base->handle, state->rf_in + 1, FE_SAT_DISEQC_2_3_PWM);
+	err |= fe_stid135_diseqc_init(&state->base->ip, state->rf_in + 1, FE_SAT_DISEQC_2_3_PWM);
 	}
-	err |= fe_stid135_set_rfmux_path(p_params->handle_demod, state->nr + 1, state->rf_in + 1);
+	err |= fe_stid135_set_rfmux_path(state, state->nr + 1, state->rf_in + 1);
 	mutex_unlock(&state->base->status_lock);
 
 	if (err != FE_LLA_NO_ERROR)
@@ -450,8 +420,8 @@ static void stid135_release(struct dvb_frontend *fe)
 
 	state->base->count--;
 	if (state->base->count == 0) {
-		if (state->base->handle)
-			FE_STiD135_Term (state->base->handle);
+		if (&state->base->ip)
+			FE_STiD135_Term (&state->base->ip);
 		list_del(&state->base->stvlist);
 		kfree(state->base);
 	}
@@ -464,12 +434,12 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
 	fe_lla_error_t err = FE_LLA_NO_ERROR;
 	fe_lla_error_t error1 = FE_LLA_NO_ERROR;
-	struct fe_stid135_internal_param *p_params = state->base->handle;
+	//struct fe_stid135_internal_param *p_params = &state->base->ip;
 	struct fe_sat_search_params search_params;
 	struct fe_sat_search_result search_results;
 	u32 pls_mode, pls_code;
 	s32 rf_power;
-	BOOL satellitte_scan =0;
+	BOOL satellite_scan =0;
 	//BOOL lock_stat=0;
 	struct fe_sat_signal_info* signal_info = &state->signal_info;
 
@@ -485,13 +455,13 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 	switch(p->algorithm) {
 	case ALGORITHM_WARM:
 		search_params.search_algo		= FE_SAT_WARM_START;
-		satellitte_scan = 0;
+		satellite_scan = 0;
 		break;
 
 	case ALGORITHM_COLD:
 	case ALGORITHM_COLD_BEST_GUESS:
 		search_params.search_algo		= FE_SAT_COLD_START;
-		satellitte_scan = 0;
+		satellite_scan = 0;
 		break;
 
 	case ALGORITHM_BLIND:
@@ -500,13 +470,13 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 		search_params.search_algo		= FE_SAT_BLIND_SEARCH;
 		search_params.standard = FE_SAT_AUTO_SEARCH;
 		search_params.puncture_rate = FE_SAT_PR_UNKNOWN;
-		satellitte_scan = 0;
+		satellite_scan = 0;
 		break;
 	case ALGORITHM_SEARCH_NEXT:
 		search_params.search_algo		= FE_SAT_NEXT;
 		search_params.standard = FE_SAT_AUTO_SEARCH;
 		search_params.puncture_rate = FE_SAT_PR_UNKNOWN;
-		satellitte_scan = 0;
+		satellite_scan = 0;
 		break;
 	case ALGORITHM_SEARCH:
 		//todo
@@ -545,7 +515,7 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 	search_params.iq_inversion	= FE_SAT_IQ_AUTO;
 	search_params.tuner_index_jump	= 0; // ok with narrow band signal
 
-	err = FE_STiD135_GetLoFreqHz(state->base->handle, &(search_params.lo_frequency));
+	err = FE_STiD135_GetLoFreqHz(&state->base->ip, &(search_params.lo_frequency));
 	//dprintk("lo_frequency = %d\n", search_params.lo_frequency);
 	search_params.lo_frequency *= 1000000;
 	if(search_params.search_algo == FE_SAT_BLIND_SEARCH ||
@@ -555,7 +525,7 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 	}
 
 	dev_dbg(&state->base->i2c->dev, "%s: demod %d + tuner %d\n", __func__, state->nr, state->rf_in);
-	err |= fe_stid135_set_rfmux_path(p_params->handle_demod, state->nr + 1, state->rf_in + 1);
+	err |= fe_stid135_set_rfmux_path(state, state->nr + 1, state->rf_in + 1);
 
 	if (p->stream_id == NO_STREAM_ID_FILTER) {
 		pls_mode = 0;
@@ -576,13 +546,13 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 #if 1 //Deep Thought: code must be moved outside of if test or multi-stream does not work
 		/* Set PLS before search */
 		dev_dbg(&state->base->i2c->dev, "%s: set pls_mode %d, pls_code %d !\n", __func__, pls_mode, pls_code);
-		err |= fe_stid135_set_pls(state->base->handle, state->nr + 1, pls_mode, pls_code);
+		err |= fe_stid135_set_pls(state, state->nr + 1, pls_mode, pls_code);
 #endif
 	}
 #if 1 //Deep Thought: code must be moved outside of if test or multi-stream does not work
 	/* Set PLS before search */
 	dev_dbg(&state->base->i2c->dev, "%s: set pls_mode %d, pls_code %d !\n", __func__, pls_mode, pls_code);
-	err |= fe_stid135_set_pls(state->base->handle, state->nr + 1, pls_mode, pls_code);
+	err |= fe_stid135_set_pls(state, state->nr + 1, pls_mode, pls_code);
 #endif
 
 
@@ -595,11 +565,11 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 				There could be reasons why  fe_stid135_reset_modcodes_filter is still needed, e.g., when  too strict filters
 				are left from an earlier tune?
 			*/
-	err |= fe_stid135_reset_modcodes_filter(state->base->handle, state->nr + 1);
+	err |= fe_stid135_reset_modcodes_filter(state, state->nr + 1);
 	if (err != FE_LLA_NO_ERROR)
 		dev_err(&state->base->i2c->dev, "%s: fe_stid135_reset_modcodes_filter error %d !\n", __func__, err);
 #endif
-	err |= (error1=fe_stid135_search(state->base->handle, state->nr + 1, &search_params, &search_results, satellitte_scan));
+	err |= (error1=fe_stid135_search(state, state->nr + 1, &search_params, &search_results, satellite_scan));
 	if(error1!=0)
 		dprintk("fe_stid135_search returned error=%d\n", error1);
 	if (err != FE_LLA_NO_ERROR)
@@ -618,7 +588,7 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 #if 1
 		dev_dbg(&state->base->i2c->dev, "%s: locked !\n", __func__);
 		//set maxllr,when the  demod locked ,allocation of resources
-		err |= fe_stid135_set_maxllr_rate(state->base->handle, state->nr +1, 180);
+		err |= fe_stid135_set_maxllr_rate(state, state->nr +1, 180);
 		//for tbs6912
 #else
 		dev_warn(&state->base->i2c->dev, "%s: locked ! demod=%d tuner=%d\n", __func__,  state->nr, state->rf_in);
@@ -632,7 +602,7 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 		state->signal_info.tuned = 1;
 		state->signal_info.timedout = 1;
 		state->signal_info.locked = 0;
-		err |= fe_stid135_get_band_power_demod_not_locked(state->base->handle, state->nr + 1, &rf_power);
+		err |= fe_stid135_get_band_power_demod_not_locked(state, state->nr + 1, &rf_power);
 		dev_dbg(&state->base->i2c->dev, "%s: not locked, band rf_power %d dBm ! demod=%d tuner=%d\n",
 						 __func__, rf_power / 1000, state->nr, state->rf_in);
 	}
@@ -641,11 +611,11 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 	if (p->stream_id != NO_STREAM_ID_FILTER) {
 		dev_warn(&state->base->i2c->dev, "%s: set ISI %d ! demod=%d tuner=%d\n", __func__, p->stream_id & 0xFF,
 						 state->nr, state->rf_in);
-		err |= fe_stid135_set_mis_filtering(state->base->handle, state->nr + 1, TRUE, p->stream_id & 0xFF, 0xFF);
+		err |= fe_stid135_set_mis_filtering(state, state->nr + 1, TRUE, p->stream_id & 0xFF, 0xFF);
 		signal_info->isi = p->stream_id &0xff;
 	} else {
 		dev_dbg(&state->base->i2c->dev, "%s: disable ISI filtering !\n", __func__);
-		err |= fe_stid135_set_mis_filtering(state->base->handle, state->nr + 1, FALSE, 0, 0xFF);
+		err |= fe_stid135_set_mis_filtering(state, state->nr + 1, FALSE, 0, 0xFF);
 		signal_info->isi = 0;
 	}
 	dprintk("set_parameters: error=%d locked=%d\n", err, state->signal_info.locked);
@@ -660,13 +630,13 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 static int stid135_get_frontend(struct dvb_frontend *fe, struct dtv_frontend_properties *p)
 {
 	struct stv *state = fe->demodulator_priv;
-	struct fe_stid135_internal_param *p_params = state->base->handle;
+	//struct fe_stid135_internal_param *p_params = &state->base->ip;
 	if (!state->signal_info.locked)
 		return 0;
-	if(p_params->demod_search_algo[state->nr] == FE_SAT_BLIND_SEARCH ||
-		 p_params->demod_search_algo[state->nr] == FE_SAT_NEXT) {
+	if(state->demod_search_algo == FE_SAT_BLIND_SEARCH ||
+		 state->demod_search_algo == FE_SAT_NEXT) {
 		int max_isi_len= sizeof(p-> isi)/sizeof(p->isi[0]);
-		fe_stid135_get_signal_info(p_params, state->nr + 1, &state->signal_info, 0);
+		fe_stid135_get_signal_info(state, state->nr + 1, &state->signal_info, 0);
 		//dprintk("MIS2: num=%d\n", state->signal_info.isi_list.nb_isi);
 		p-> isi_list_len = state->signal_info.isi_list.nb_isi;
 		if(p->isi_list_len>  max_isi_len)
@@ -823,7 +793,7 @@ static int stid135_read_status(struct dvb_frontend *fe, enum fe_status *status)
 	p->pre_bit_count.len =1;
 	p->pre_bit_count.stat[0].scale = FE_SCALE_NOT_AVAILABLE;
 
-	err = fe_stid135_get_lock_status(state->base->handle, state->nr + 1, &state->signal_info.locked, &state->signal_info.data_present);
+	err = fe_stid135_get_lock_status(state, state->nr + 1, &state->signal_info.locked, &state->signal_info.data_present);
 	if (err != FE_LLA_NO_ERROR) {
 		dev_err(&state->base->i2c->dev, "fe_stid135_get_lock_status error\n");
 		mutex_unlock(&state->base->status_lock);
@@ -846,7 +816,7 @@ static int stid135_read_status(struct dvb_frontend *fe, enum fe_status *status)
 		/* demod not locked */
 		*status |= FE_HAS_SIGNAL;
 		dprintk("HAS_SIGNAL AND TUNED locked=%d status=%d\n", state->signal_info.locked, *status);
-		err = fe_stid135_get_band_power_demod_not_locked(state->base->handle, state->nr + 1, &state->signal_info.power);
+		err = fe_stid135_get_band_power_demod_not_locked(state, state->nr + 1, &state->signal_info.power);
 		// if unlocked, set to lowest resource..
 		mutex_unlock(&state->base->status_lock);
 		if (err != FE_LLA_NO_ERROR) {
@@ -865,7 +835,7 @@ static int stid135_read_status(struct dvb_frontend *fe, enum fe_status *status)
 	} else {
 		/* demod has lock */
 
-		err = fe_stid135_get_signal_quality(state->base->handle, state->nr + 1, &state->signal_info, mc_auto);
+		err = fe_stid135_get_signal_quality(state, state->nr + 1, &state->signal_info, mc_auto);
 		mutex_unlock(&state->base->status_lock);
 		if (err != FE_LLA_NO_ERROR) {
 			dev_err(&state->base->i2c->dev, "fe_stid135_get_signal_quality error\n");
@@ -935,7 +905,7 @@ static int stid135_tune(struct dvb_frontend *fe, bool re_tune,
 #if 0
 		{
 			fe_lla_error_t error;
-			struct fe_stid135_internal_param *p_params = state->base->handle;
+			struct fe_stid135_internal_param *p_params = &state->base->ip;
 			error=fe_stid135_set_vtm(p_params, state->nr+1,
 															 state->signal_info.frequency, state->signal_info.symbol_rate,
 															 state->signal_info.roll_off);
@@ -1000,7 +970,7 @@ static int stid135_set_tone(struct dvb_frontend *fe, enum fe_sec_tone_mode tone)
 	}
 
 	mutex_lock(&state->base->status_lock);
-	err = fe_stid135_set_22khz_cont(state->base->handle,state->rf_in + 1, tone == SEC_TONE_ON);
+	err = fe_stid135_set_22khz_cont(&state->base->ip,state->rf_in + 1, tone == SEC_TONE_ON);
 	mutex_unlock(&state->base->status_lock);
 
 	if (err != FE_LLA_NO_ERROR)
@@ -1021,8 +991,8 @@ static int stid135_send_master_cmd(struct dvb_frontend *fe,
 #endif
 
 	mutex_lock(&state->base->status_lock);
-	err |= fe_stid135_diseqc_init(state->base->handle, state->rf_in + 1, FE_SAT_DISEQC_2_3_PWM);
-	err |= fe_stid135_diseqc_send(state->base->handle, state->rf_in + 1, cmd->msg, cmd->msg_len);
+	err |= fe_stid135_diseqc_init(&state->base->ip, state->rf_in + 1, FE_SAT_DISEQC_2_3_PWM);
+	err |= fe_stid135_diseqc_send(&state->base->ip, state->rf_in + 1, cmd->msg, cmd->msg_len);
 	mutex_unlock(&state->base->status_lock);
 
 	if (err != FE_LLA_NO_ERROR)
@@ -1043,7 +1013,7 @@ static int stid135_recv_slave_reply(struct dvb_frontend *fe,
 #endif
 
 	mutex_lock(&state->base->status_lock);
-	err = fe_stid135_diseqc_receive(state->base->handle, reply->msg, &reply->msg_len);
+	err = fe_stid135_diseqc_receive(&state->base->ip, reply->msg, &reply->msg_len);
 	mutex_unlock(&state->base->status_lock);
 
 	if (err != FE_LLA_NO_ERROR)
@@ -1067,7 +1037,7 @@ static int stid135_sleep(struct dvb_frontend *fe)
 {
 	struct stv *state = fe->demodulator_priv;
 	fe_lla_error_t err = FE_LLA_NO_ERROR;
-	struct fe_stid135_internal_param *p_params = state->base->handle;
+	struct fe_stid135_internal_param *p_params = &state->base->ip;
 	err |= release_maxllr_rate(__LINE__, state);
 
 	if (state->base->mode == 0)
@@ -1185,7 +1155,7 @@ static int stid135_get_spectrum_scan_fft_one_band(struct stv *state,
 	if (num_freq != table_size)
 		dprintk("Error: num_freq should be power of 2\n");
 	dprintk("Start of spectrum scan\n");
-	error = FE_STiD135_GetLoFreqHz(state->base->handle, &lo_frequency);
+	error = FE_STiD135_GetLoFreqHz(&state->base->ip, &lo_frequency);
 	if(error) {
 		dprintk("FE_STiD135_GetLoFreqHz FAILED: error=%d\n", error);
 		return error;
@@ -1195,10 +1165,10 @@ static int stid135_get_spectrum_scan_fft_one_band(struct stv *state,
 
 	dprintk("center_freq=%d lo=%d range=%d mode=%d table_size=%d\n", center_freq, lo_frequency, range, mode, table_size);
 
-	error = fe_stid135_fft(state->base->handle, state->nr+1, mode, nb_acquisition,
+	error = fe_stid135_fft(state, state->nr+1, mode, nb_acquisition,
 												 center_freq*1000 - lo_frequency, range, rf_level, &begin);
 
-	error |= estimate_band_power_demod_for_fft(state->base->handle,
+	error |= estimate_band_power_demod_for_fft(state,
 																						 state->nr+1,
 																						 state->rf_in+1,
 																						 &Pbandx1000, center_freq);
@@ -1262,7 +1232,7 @@ static int stid135_get_spectrum_scan_fft(struct dvb_frontend *fe,
 	}
 
 
-	error = fe_stid135_init_fft(state->base->handle, state->nr+1, state->rf_in+1, Reg);
+	error = fe_stid135_init_fft(&state->base->ip, state->nr+1, state->rf_in+1, Reg);
 	if(error) {
 		dprintk("fe_stid135_init_fft FAILED: error=%d\n", error);
 		return error;
@@ -1294,7 +1264,7 @@ static int stid135_get_spectrum_scan_fft(struct dvb_frontend *fe,
 		kfree(temp_freq);
 	if(temp_rf_level)
 		kfree(temp_rf_level);
-	error |= (error1=fe_stid135_term_fft(state->base->handle, state->nr+1, state->rf_in+1, Reg));
+	error |= (error1=fe_stid135_term_fft(&state->base->ip, state->nr+1, state->rf_in+1, Reg));
 	if(error) {
 		dprintk("fe_stid135_term_fft FAILED: error=%d\n", error);
 	}
@@ -1314,7 +1284,7 @@ static int stid135_get_spectrum_scan_regular(struct dvb_frontend *fe,
 {
 	struct stv *state = fe->demodulator_priv;
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
-	struct fe_stid135_internal_param * pParams = (struct fe_stid135_internal_param *) state->base->handle;
+	struct fe_stid135_internal_param * pParams = (struct fe_stid135_internal_param *) &state->base->ip;
 	s32 lo_frequency;
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	fe_lla_error_t error1 = FE_LLA_NO_ERROR;
@@ -1364,7 +1334,7 @@ static int stid135_get_spectrum_scan_regular(struct dvb_frontend *fe,
 		goto __onerror;
 	}
 
-	error |=(error1 = fe_stid135_set_symbol_rate(pParams->handle_demod,
+	error |=(error1 = fe_stid135_set_symbol_rate(state,
 																							 pParams->master_clock,
 																						 resolution*1000, state->nr+1));
 	if(error1) {
@@ -1434,7 +1404,7 @@ static int stid135_get_spectrum_scan_regular(struct dvb_frontend *fe,
 		}
 
 
-		error |= (error1=FE_STiD135_GetRFLevel(pParams, state->nr+1, &pch_rf, &pband_rf));
+		error |= (error1=FE_STiD135_GetRFLevel(state, state->nr+1, &pch_rf, &pband_rf));
 		s->rf_level[i] = pch_rf;
 		if(error1) {
 			dprintk("Failed: err=%d\n", error1);
@@ -1471,6 +1441,83 @@ static int stid135_get_spectrum_scan(struct dvb_frontend *fe,
 	return -1;
 }
 
+#if 0
+/*
+	init = 1: start the scan at the search range specified by the user
+	init = 0: start the scan just beyond the last found frequency
+ */
+static int stid135_sat_scan(struct dvb_frontend *fe, bool init,
+														unsigned int *delay,  enum fe_status *status)
+{
+	struct stv *state = fe->demodulator_priv;
+	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
+	struct fe_stid135_internal_param * pParams = &state->base->ip;
+	int asperity;
+	bool locked = false;
+	//state->Started = 0;
+	//state->satellite_scan = true;
+	//todo: 	MinSymbolRate
+	state->search_range =  500000;
+	state->symbol_rate =  1000000;							/*	minimum symbol rate for scan = 1Msps	*/
+	dprintk("set symbol_rate=%d\n", state->symbol_rate);
+
+	if(init) {
+		state->scan_next_frequency = p->scan_start_frequency;
+		state->scan_end_frequency = p->scan_end_frequency;
+	}
+
+	while(state->scan_next_frequency < state->scan_end_frequency) {
+		*status = 0;
+		if (kthread_should_stop() || dvb_frontend_task_should_stop(fe)) {
+			dprintk("exiting on should stop\n");
+			*status =0;
+			return 0;
+		}
+		p->frequency = state->scan_next_frequency;
+		dprintk("start=%d end=%d init=%d\n",
+						state->scan_next_frequency, state->scan_end_frequency,  init);
+
+		if(p->frequency >= state->scan_end_frequency) {
+			dprintk("Invalid ranged");
+			return -1;
+		}
+
+		p->algorithm = ALGORITHM_SEARCH_NEXT;
+
+		//TODO: satellitte_scan
+		asperity = scan_within_tuner_bw(fe, &locked);
+		dprintk("asperity=%d locked=%d freq=%d start=%d end=%d\n", asperity, locked,
+						p->frequency, state->scan_next_frequency, state->scan_end_frequency);
+		if(locked) {
+			//state->scan_end_frequency = p->frequency;
+			//stv091x_set_frequency_symbol_rate_bandwidth(state);
+			uint32_t step = 135*((state->symbol_rate/1000) / (2*100));
+			uint32_t next = p->frequency + step;
+			dprintk("symbol_rate=%d step=%d next-%d\n", state->symbol_rate, step, next);
+			if(next < state->scan_next_frequency) {
+				next += state->search_range/1000;
+				dprintk ("Adjusting next to prevent going backwards: new next=%d\n", next);
+			}
+			state->tune_time = jiffies;
+
+			state->scan_next_frequency = next;
+
+			*status = FE_HAS_SIGNAL|FE_HAS_CARRIER|FE_HAS_VITERBI|FE_HAS_SYNC|FE_HAS_LOCK;
+			*delay = HZ;
+
+			return 0;
+		} else {
+			*status = 0;
+		}
+	}
+	if(state->scan_next_frequency >= state->scan_end_frequency) {
+		dprintk("Signaling DONE\n");
+		*status |= FE_TIMEDOUT;
+	}
+	return 0;
+}
+#endif
+
 static struct dvb_frontend_ops stid135_ops = {
 	.delsys = { SYS_DVBS, SYS_DVBS2, SYS_DSS },
 	.info = {
@@ -1505,6 +1552,7 @@ static struct dvb_frontend_ops stid135_ops = {
 	.read_ucblocks			= stid135_read_ucblocks,
 	.spi_read			= spi_read,
 	.spi_write			= spi_write,
+	//	.scan =  stid135_sat_scan,
 	.get_spectrum		= stid135_get_spectrum_scan,
 	.extended_info = {
 		.extended_caps          = FE_CAN_SPECTRUMSCAN	|
@@ -1522,26 +1570,39 @@ static struct stv_base *match_base(struct i2c_adapter  *i2c, u8 adr)
 	return NULL;
 }
 
-//DT: called with  nr=adapter=0...7 and rf_in = nr/2=0...3
+/*DT: called with  nr=adapter=0...7 and rf_in = nr/2=0...3
+	state->base is created exactly once and is shared
+	between the 8 demods; provides access to the i2c hardware and such
+*/
 struct dvb_frontend *stid135_attach(struct i2c_adapter *i2c,
 						struct stid135_cfg *cfg,
 						int nr, int rf_in)
 {
+	fe_lla_error_t error = FE_LLA_NO_ERROR;
+	int i;
 	struct stv *state;
-	struct stv_base *base;
-	dprintk("ATTACH nr=%d rf_in=%d\n", nr, rf_in);
+	struct stv_base *base=NULL;
+
+	//struct fe_stid135_internal_param * pParams;
 	state = kzalloc(sizeof(struct stv), GFP_KERNEL);
 	if (!state)
 		return NULL;
 
+
+	dprintk("ATTACH addr=0x%x\n", cfg->adr);
 	base = match_base(i2c, cfg->adr);
+	dprintk("ATTACH here\n");
+
+
 	if (base) {
 		base->count++;
 		state->base = base;
+		dprintk("ATTACH DUP nr=%d rf_in=%d base=%p count=%d\n", nr, rf_in, base, base->count);
 	} else {
 		base = kzalloc(sizeof(struct stv_base), GFP_KERNEL);
 		if (!base)
 			goto fail;
+		dprintk("ATTACH NEW nr=%d rf_in=%d base=%p count=%d\n", nr, rf_in, base, base->count);
 		base->i2c = i2c;
 		base->adr = cfg->adr;
 		base->count = 1;
@@ -1564,8 +1625,32 @@ struct dvb_frontend *stid135_attach(struct i2c_adapter *i2c,
 			kfree(base);
 			goto fail;
 		}
+
 		list_add(&base->stvlist, &stvlist);
 	}
+	dprintk("ATTACH here\n");
+
+	//pParams = &state->base->ip;
+	/* Init for PID filtering feature */
+
+	state->pid_flt.first_disable_all_command = TRUE;
+	/* Init for GSE filtering feature */
+
+	state->gse_flt.first_disable_all_protocol_command = TRUE;
+	state->gse_flt.first_disable_all_label_command = TRUE;
+
+	/* Init for MODCOD filtering feature */
+#if 0
+	//does not belong here: global for chip
+	fe_stid135_modcod_flt_reg_init();
+#endif
+	for(i=0;i<NB_SAT_MODCOD;i++) {
+		state->mc_flt[i].forbidden = FALSE;
+	}
+	error = fe_stid135_apply_custom_qef_for_modcod_filter(state, 12, NULL, 13);
+	if(error)
+		dprintk("fe_stid135_apply_custom_qef_for_modcod_filter error=%d\n", error);
+
 	state->fe.ops               = stid135_ops;
 	state->fe.demodulator_priv  = state;
 	state->nr = nr;

@@ -460,8 +460,9 @@ fe_lla_error_t fe_stid135_term_fft(fe_stid135_handle_t handle, enum fe_stid135_d
 			Begin -> first value on table of data
 --RETURN	::	Error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_fft(fe_stid135_handle_t handle, enum fe_stid135_demod path, u32 mode, u32 nb_acquisition, s32 freq, u32 range, u32 *tab, u32* begin)
+fe_lla_error_t fe_stid135_fft(struct stv* state, enum fe_stid135_demod path, u32 mode, u32 nb_acquisition, s32 freq, u32 range, u32 *tab, u32* begin)
 {
+	struct fe_stid135_internal_param *pParams = &state->base->ip;
 	u32 nb_words =0;
 	s32 val[4]= { 0 }, val_max;
 	u32 j=0, i=0, bin=0;
@@ -473,13 +474,12 @@ fe_lla_error_t fe_stid135_fft(fe_stid135_handle_t handle, enum fe_stid135_demod 
 	s32 fld_value;
 	u8 timeout = 0;
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
-	struct fe_stid135_internal_param *pParams;
 	const u16 cfr_factor = 6711; // 6711 = 2^20/(10^6/2^6)*100
 	//dprintk("FFT start\n");
 	if(path > FE_SAT_DEMOD_4)
 		return(FE_LLA_BAD_PARAMETER);
 
-	pParams = (struct fe_stid135_internal_param *) handle;
+	//pParams = (struct fe_stid135_internal_param *) handle;
 	// Set the number of fft bins (4096 or lower)
 	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_FFTCTRL_FFT_MODE(path), (s32)mode);
 
@@ -518,7 +518,7 @@ fe_lla_error_t fe_stid135_fft(fe_stid135_handle_t handle, enum fe_stid135_demod 
 	error |= ChipSetRegisters(pParams->handle_demod, REG_RC8CODEW_DVBSX_DEMOD_CFRINIT2(path),3);
 
 	// Set bandwidth (symbol rate)
-	error |= fe_stid135_set_symbol_rate(pParams->handle_demod, pParams->master_clock, range, path);
+	error |= fe_stid135_set_symbol_rate(state, pParams->master_clock, range, path);
 
 
 	// start acquisition

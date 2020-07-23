@@ -56,7 +56,7 @@
 #define POWER_IREF 95 //105
 
 static u8 mc_mask_bitfield[FE_SAT_MODCODE_MAX];
-static u16 mc_reg_addr[FE_SAT_MODCODE_MAX][8];
+static u16 mc_reg_addr[FE_SAT_MODCODE_MAX][8]; //TODO
 
 static struct mc_array_customer st_mc_flt[FE_SAT_MODCODE_MAX] = {
 	// MODCODE, SNRx100
@@ -537,44 +537,43 @@ static const ST_Revision_t Revision  = "STiD135-LLA_REL_1.4.0-December_2018";
 /*==============================================================================*/
 /* Function Declarations  */
 
-static fe_lla_error_t FE_STiD135_GetDemodLock    (fe_stid135_handle_t handle,
+static fe_lla_error_t FE_STiD135_GetDemodLock    (struct stv* state,
 					 enum fe_stid135_demod Demod, u32 TimeOut, BOOL *Lock);
-static fe_lla_error_t FE_STiD135_StartSearch     (struct fe_stid135_internal_param *pParams,
+static fe_lla_error_t FE_STiD135_StartSearch     (struct stv* state,
 					enum fe_stid135_demod Demod);
 static fe_lla_error_t FE_STiD135_GetSignalParams(
-		struct fe_stid135_internal_param *pParams, enum fe_stid135_demod Demod,
+		struct stv* state, enum fe_stid135_demod Demod,
 		BOOL satellite_scan, enum fe_sat_signal_type *range_p);
 
-static fe_lla_error_t FE_STiD135_TrackingOptimization(
-		struct fe_stid135_internal_param *pParams, enum fe_stid135_demod Demod);
-static fe_lla_error_t FE_STiD135_BlindSearchAlgo(struct fe_stid135_internal_param *pParams,
+static fe_lla_error_t FE_STiD135_TrackingOptimization(struct stv* state, enum fe_stid135_demod Demod);
+static fe_lla_error_t FE_STiD135_BlindSearchAlgo(struct stv* state,
 		u32 demodTimeout, BOOL satellite_scan, enum fe_stid135_demod Demod, BOOL* lock_p);
-static fe_lla_error_t fe_stid135_get_agcrf_path(stchip_handle_t hChip,
+static fe_lla_error_t fe_stid135_get_agcrf_path(STCHIP_Info_t* hChip,
 			enum fe_stid135_demod demod, s32* agcrf_path_p);
-static fe_lla_error_t FE_STiD135_GetFECLock (stchip_handle_t hChip, enum fe_stid135_demod Demod,
+static fe_lla_error_t FE_STiD135_GetFECLock (STCHIP_Info_t* hChip, enum fe_stid135_demod Demod,
 	u32 TimeOut, BOOL* lock_bool_p);
-fe_lla_error_t fe_stid135_manage_matype_info(fe_stid135_handle_t Handle,
+fe_lla_error_t fe_stid135_manage_matype_info(struct stv* state,
 						enum fe_stid135_demod Demod);
-static fe_lla_error_t fe_stid135_manage_matype_info_raw_bbframe(fe_stid135_handle_t Handle,
+static fe_lla_error_t fe_stid135_manage_matype_info_raw_bbframe(struct stv* state,
 						enum fe_stid135_demod Demod);
-static fe_lla_error_t fe_stid135_flexclkgen_init(fe_stid135_handle_t handle);
-static fe_lla_error_t fe_stid135_set_reg_init_values(fe_stid135_handle_t handle, enum fe_stid135_demod demod);
-static fe_lla_error_t fe_stid135_set_reg_values_wb(fe_stid135_handle_t handle, enum fe_stid135_demod demod);
+static fe_lla_error_t fe_stid135_flexclkgen_init(struct fe_stid135_internal_param* pParams);
+static fe_lla_error_t fe_stid135_set_reg_init_values(struct stv* state, enum fe_stid135_demod demod);
+static fe_lla_error_t fe_stid135_set_reg_values_wb(struct stv* state, enum fe_stid135_demod demod);
 #ifdef USER2
 	static fe_lla_error_t fe_stid135_manage_manual_rolloff(fe_stid135_handle_t handle, enum fe_stid135_demod demod);
 #endif
 static BOOL fe_stid135_check_sis_or_mis(u8 matype);
-static fe_lla_error_t fe_stid135_get_mode_code(struct fe_stid135_internal_param *pParams,
+static fe_lla_error_t fe_stid135_get_mode_code(struct stv* state,
 					enum fe_stid135_demod demod,
 					enum fe_sat_modcode *modcode,
 					enum fe_sat_frame *frame,
 					enum fe_sat_pilots *pilots);
 
-fe_lla_error_t FE_STiD135_TunerStandby(stchip_handle_t TunerHandle,
+fe_lla_error_t FE_STiD135_TunerStandby(STCHIP_Info_t* TunerHandle,
 							 FE_OXFORD_TunerPath_t TunerNb, u8 Enable);
 
-fe_lla_error_t fe_stid135_set_vcore_supply(fe_stid135_handle_t handle);
-static fe_lla_error_t fe_stid135_select_min_isi(fe_stid135_handle_t handle, enum fe_stid135_demod demod);
+fe_lla_error_t fe_stid135_set_vcore_supply(struct fe_stid135_internal_param* pParams);
+static fe_lla_error_t fe_stid135_select_min_isi(struct stv* state, enum fe_stid135_demod demod);
 static void fe_stid135_modcod_flt_reg_init(void);
 
 //==============================================================================
@@ -586,12 +585,12 @@ static void fe_stid135_modcod_flt_reg_init(void);
 **PARAMS OUT	:: Synthesizer frequency (Hz)
 **RETURN	:: error
 *****************************************************/
-fe_lla_error_t FE_STiD135_GetMclkFreq(fe_stid135_handle_t Handle, u32* MclkFreq_p)
+fe_lla_error_t FE_STiD135_GetMclkFreq(struct fe_stid135_internal_param* pParams, u32* MclkFreq_p)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 
 	/*  Validation Board V1.0  */
-	error |= FE_STiD135_GetLoFreqHz(Handle, MclkFreq_p);
+	error |= FE_STiD135_GetLoFreqHz(pParams, MclkFreq_p);
 	*MclkFreq_p =    (*MclkFreq_p * 1000000) / 12;
 
 	return error;
@@ -604,12 +603,12 @@ fe_lla_error_t FE_STiD135_GetMclkFreq(fe_stid135_handle_t Handle, u32* MclkFreq_
 **PARAMS OUT	:: LO frequency ()
 **RETURN	:: error
 *****************************************************/
-fe_lla_error_t FE_STiD135_GetLoFreqHz(fe_stid135_handle_t Handle, u32* LoFreq_p)
+fe_lla_error_t FE_STiD135_GetLoFreqHz(struct fe_stid135_internal_param* pParams, u32* LoFreq_p)
 {
-	struct fe_stid135_internal_param *pParams;
+	//struct fe_stid135_internal_param *pParams;
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 
-	pParams = (struct fe_stid135_internal_param *) Handle;
+	//pParams = (struct fe_stid135_internal_param *) Handle;
 
 	*LoFreq_p = Oxford_GetFvco_MHz(pParams->handle_demod, pParams->quartz);
 	*LoFreq_p /=4;
@@ -626,9 +625,10 @@ fe_lla_error_t FE_STiD135_GetLoFreqHz(fe_stid135_handle_t Handle, u32* LoFreq_p)
 --PARAMS OUT	::	Symbol rate in Symbol/s
 --RETURN	::	error
 *****************************************************/
-fe_lla_error_t FE_STiD135_GetSymbolRate(stchip_handle_t hChip,u32 MasterClock,
+fe_lla_error_t FE_STiD135_GetSymbolRate(struct stv* state, u32 MasterClock,
 				enum fe_stid135_demod Demod, u32* symbolRate_p)
 {
+	STCHIP_Info_t* hChip = state->base->ip.handle_demod;
 	u32 sfrField3,
 	sfrField2,
 	sfrField1,
@@ -683,12 +683,12 @@ fe_lla_error_t FE_STiD135_GetSymbolRate(stchip_handle_t hChip,u32 MasterClock,
 --PARAMS OUT	::	NONE
 --RETURN	::	error
 *****************************************************/
-fe_lla_error_t fe_stid135_set_symbol_rate(stchip_handle_t hchip, u32 master_clock,
+fe_lla_error_t fe_stid135_set_symbol_rate(struct stv* state, u32 master_clock,
 				u32 symbol_rate, enum fe_stid135_demod demod)
 {
 	u32 reg_field2, reg_field1, reg_field0;
 	u32 reg32;
-
+	STCHIP_Info_t* hchip = state->base->ip.handle_demod;
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 
 	reg_field2 = FLD_FC8CODEW_DVBSX_DEMOD_SFRINIT2_SFR_INIT(demod);
@@ -725,9 +725,10 @@ fe_lla_error_t fe_stid135_set_symbol_rate(stchip_handle_t hchip, u32 master_cloc
 --PARAMS OUT	::	Frequency offset in Hz
 --RETURN	::	error
 --***************************************************/
-fe_lla_error_t FE_STiD135_GetCarrierFrequency(stchip_handle_t hChip,u32 MasterClock,
+fe_lla_error_t FE_STiD135_GetCarrierFrequency(struct stv* state, u32 MasterClock,
 				enum fe_stid135_demod Demod, s32* carrierFrequency_p)
 {
+	STCHIP_Info_t* hChip = state->base->ip.handle_demod;
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 
 	u32 cfrField2,
@@ -795,28 +796,28 @@ fe_lla_error_t FE_STiD135_GetCarrierFrequency(stchip_handle_t hChip,u32 MasterCl
 --PARAMS OUT	::	NONE
 --RETURN	::	error
 *****************************************************/
-fe_lla_error_t fe_stid135_set_carrier_frequency_init(fe_stid135_handle_t Handle,
+fe_lla_error_t fe_stid135_set_carrier_frequency_init(struct stv* state,
 				s32 frequency_hz, enum fe_stid135_demod demod)
 {
+	struct fe_stid135_internal_param *pParams = &state->base->ip;
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	s32 si_register;
 	s32 freq_up, freq_low;
 	s32 reg_up, reg_low;
 	const u16 cfr_factor = 6711; // 6711 = 2^20/(10^6/2^6)*100
-	struct fe_stid135_internal_param *pParams;
 
-	pParams = (struct fe_stid135_internal_param *) Handle;
-	if(pParams->demod_search_algo[demod-1] == FE_SAT_NEXT)
+	//pParams = (struct fe_stid135_internal_param *) Handle;
+	if(state->demod_search_algo == FE_SAT_NEXT)
 		return  FE_LLA_NO_ERROR;
 	/* First, set carrier freq boundaries */
 	// CFR_UP = wanted_freq - LOF + search_range/2
 	// CFR_DOWN = wanted_freq - LOF - search_range/2
-	if(pParams->demod_search_algo[demod-1] == FE_SAT_NEXT) {
-		freq_up = (s32)(pParams->tuner_frequency[demod-1])+ (s32)(pParams->demod_search_range_hz[demod-1]);
-		freq_low = (s32)(pParams->tuner_frequency[demod-1]);
+	if(state->demod_search_algo == FE_SAT_NEXT) {
+		freq_up = (s32)(state->tuner_frequency)+ (s32)(state->demod_search_range_hz);
+		freq_low = (s32)(state->tuner_frequency);
 	} else {
-		freq_up = (s32)(pParams->tuner_frequency[demod-1]) + (s32)(pParams->demod_search_range_hz[demod-1] / 2);
-		freq_low = (s32)(pParams->tuner_frequency[demod-1]) - (s32)(pParams->demod_search_range_hz[demod-1] / 2);
+		freq_up = (s32)(state->tuner_frequency) + (s32)(state->demod_search_range_hz / 2);
+		freq_low = (s32)(state->tuner_frequency) - (s32)(state->demod_search_range_hz / 2);
 	}
 	reg_up = (freq_up / 1000) * (1 << 11);
 	reg_up = reg_up / (((s32)pParams->master_clock / 1000) * 3);
@@ -827,35 +828,35 @@ fe_lla_error_t fe_stid135_set_carrier_frequency_init(fe_stid135_handle_t Handle,
 	reg_low = reg_low * (1 << 11);
 #if 0
 	printk("Initial Freq: blind=%d next=%d freq=%d up=%d low=%d range=%d\n",
-				 pParams->demod_search_algo[demod-1]==FE_SAT_BLIND_SEARCH,
-				 pParams->demod_search_algo[demod-1]==FE_SAT_NEXT,
-				 pParams->tuner_frequency[demod-1],
-				 freq_up, freq_low, (s32)(pParams->demod_search_range_hz[demod-1] / 2));
+				 state->demod_search_algo==FE_SAT_BLIND_SEARCH,
+				 state->demod_search_algo==FE_SAT_NEXT,
+				 state->tuner_frequency,
+				 freq_up, freq_low, (s32)(state->demod_search_range_hz / 2));
 #endif
-	if(pParams->demod_search_algo[demod-1] != FE_SAT_NEXT) {
+	if(state->demod_search_algo != FE_SAT_NEXT) {
 		/* Search range definition */
-		error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CARCFG(demod), 0x46);
+		error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CARCFG(demod), 0x46);
 		/*
 			0x46: bit[7:6]=01 manual programming of cfr up/low
 			bit[2]=1 derotator on
 					bi[1:0]=00 costas
 		*/
 		/*  manual cfrup/low setting, Carrier derotator on, phasedetect algo */
-		error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_CFRUP2_CFR_UP(demod),
+		error |= ChipSetFieldImage(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_CFRUP2_CFR_UP(demod),
 															 MMSB(reg_up));
-		error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_CFRUP1_CFR_UP(demod),
+		error |= ChipSetFieldImage(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_CFRUP1_CFR_UP(demod),
 															 MSB(reg_up));
-		error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_CFRUP0_CFR_UP(demod),
+		error |= ChipSetFieldImage(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_CFRUP0_CFR_UP(demod),
 															 LSB(reg_up));
-		error |= ChipSetRegisters(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRUP2(demod),3);
+		error |= ChipSetRegisters(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRUP2(demod),3);
 
-		error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_CFRLOW2_CFR_LOW(demod),
+		error |= ChipSetFieldImage(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_CFRLOW2_CFR_LOW(demod),
 															 MMSB(reg_low));
-		error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_CFRLOW1_CFR_LOW(demod),
+		error |= ChipSetFieldImage(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_CFRLOW1_CFR_LOW(demod),
 															 MSB(reg_low));
-		error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_CFRLOW0_CFR_LOW(demod),
+		error |= ChipSetFieldImage(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_CFRLOW0_CFR_LOW(demod),
 															 LSB(reg_low));
-		error |= ChipSetRegisters(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRLOW2(demod),3);
+		error |= ChipSetRegisters(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRLOW2(demod),3);
 
 	/*
 		Formula:
@@ -869,15 +870,15 @@ fe_lla_error_t fe_stid135_set_carrier_frequency_init(fe_stid135_handle_t Handle,
 
 		si_register = ((frequency_hz/PLL_FVCO_FREQUENCY)*cfr_factor)/100;
 
-		error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRINIT2(demod),
+		error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRINIT2(demod),
 																((u8)(si_register >> 16)));
-		error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRINIT1(demod),
+		error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRINIT1(demod),
 																((u8)(si_register >> 8)));
-		error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRINIT0(demod),
+		error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRINIT0(demod),
 																((u8)(si_register)));
 
 		//	s32 freq;
-		//	FE_STiD135_GetCarrierFrequency(pParams->handle_demod,master_clock,demod,&freq);
+		//	FE_STiD135_GetCarrierFrequency(state->base->ip.handle_demod,master_clock,demod,&freq);
 	}
 	return error;
 }
@@ -894,9 +895,10 @@ fe_lla_error_t fe_stid135_set_carrier_frequency_init(fe_stid135_handle_t Handle,
 --PARAMS OUT	::	timingoffset_p -> timing offset
 --RETURN	::	error
 *****************************************************/
-static fe_lla_error_t FE_STiD135_TimingGetOffset(stchip_handle_t hChip, u32 SymbolRate,
+static fe_lla_error_t FE_STiD135_TimingGetOffset(struct stv* state, u32 SymbolRate,
 					enum fe_stid135_demod Demod, s32* timingoffset_p)
 {
+	STCHIP_Info_t* hChip = state->base->ip.handle_demod;
 	u32 tmgField2,
 			tmgField1,
 			tmgField0;
@@ -943,7 +945,7 @@ static fe_lla_error_t FE_STiD135_TimingGetOffset(stchip_handle_t hChip, u32 Symb
 --RETURN	::	error
 *****************************************************/
 static  fe_lla_error_t FE_STiD135_GetViterbiPunctureRate(
-			stchip_handle_t hChip, enum fe_stid135_demod Demod, enum fe_sat_rate *punctureRate_p)
+			STCHIP_Info_t* hChip, enum fe_stid135_demod Demod, enum fe_sat_rate *punctureRate_p)
 {
 	s32 rateField;
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
@@ -991,7 +993,7 @@ static  fe_lla_error_t FE_STiD135_GetViterbiPunctureRate(
 --PARAMS OUT	::	ber_p -> BER
 --RETURN	::	error
 *****************************************************/
-static fe_lla_error_t FE_STiD135_GetBer(stchip_handle_t hChip, enum fe_stid135_demod Demod, u32* ber_p)
+static fe_lla_error_t FE_STiD135_GetBer(STCHIP_Info_t* hChip, enum fe_stid135_demod Demod, u32* ber_p)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	u32 ber, i;
@@ -1075,7 +1077,7 @@ static fe_lla_error_t FE_STiD135_GetBer(stchip_handle_t hChip, enum fe_stid135_d
 --PARAMS OUT	::	ber_p -> BER
 --RETURN	::	error
 *****************************************************/
-static fe_lla_error_t FE_STiD135_SetViterbiStandard(stchip_handle_t hChip,
+static fe_lla_error_t FE_STiD135_SetViterbiStandard(STCHIP_Info_t* hChip,
 					enum fe_sat_search_standard Standard,
 					enum fe_sat_rate puncture_rate,
 					enum fe_stid135_demod Demod)
@@ -1196,15 +1198,14 @@ ST_Revision_t FE_STiD135_GetRevision(void)
 --PARAMS OUT	::	cut_id => cut ID with major and minor ID
 --RETURN	::	error
 --***************************************************/
-fe_lla_error_t fe_stid135_get_cut_id(fe_stid135_handle_t Handle, enum device_cut_id *cut_id)
+fe_lla_error_t fe_stid135_get_cut_id(struct fe_stid135_internal_param* pParams, enum device_cut_id *cut_id)
 {
 	u32 reg_value;
 	u8 major_cut_id, minor_cut_id;
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
-	struct fe_stid135_internal_param *pParams;
+	//struct fe_stid135_internal_param *pParams;
 
-	pParams = (struct fe_stid135_internal_param *) Handle;
-	if (pParams != NULL) {
+	//	pParams = (struct fe_stid135_internal_param *) Handle;
 		error |= ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_STATUS97, &reg_value);
 		major_cut_id = (u8)((reg_value >> 28) & 0x1);
 		if(major_cut_id == 0) {
@@ -1222,9 +1223,6 @@ fe_lla_error_t fe_stid135_get_cut_id(fe_stid135_handle_t Handle, enum device_cut
 		} else {
 			*cut_id = STID135_UNKNOWN_CUT;
 		}
-	} else {
-		error = FE_LLA_INVALID_HANDLE;
-	}
 	return(error);
 }
 
@@ -1236,24 +1234,21 @@ fe_lla_error_t fe_stid135_get_cut_id(fe_stid135_handle_t Handle, enum device_cut
 --PARAMS OUT	::	pInfo	==> Informations (C/N)
 --RETURN	::	error (if any)
 --***************************************************/
-fe_lla_error_t	FE_STiD135_GetSignalInfoLite(fe_stid135_handle_t Handle,
+fe_lla_error_t	FE_STiD135_GetSignalInfoLite(struct stv* state,
 		enum fe_stid135_demod Demod, struct fe_sat_signal_info *pInfo)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
-	struct fe_stid135_internal_param *pParams;
+	//struct fe_stid135_internal_param *pParams;
 
-	pParams = (struct fe_stid135_internal_param *) Handle;
+	//pParams = (struct fe_stid135_internal_param *) Handle;
 
-	if (pParams != NULL) {
-		if ((pParams->handle_demod->Error) /*|| (pParams->h_tuner->Error)*/)
+		if ((state->base->ip.handle_demod->Error) /*|| (pParams->h_tuner->Error)*/)
 			error |= FE_LLA_I2C_ERROR;
 		else {
-			error |= FE_STiD135_CarrierGetQuality(pParams->handle_demod, Demod, &(pInfo->C_N), &(pInfo->standard));
-			if (pParams->handle_demod->Error)
+			error |= FE_STiD135_CarrierGetQuality(state->base->ip.handle_demod, Demod, &(pInfo->C_N), &(pInfo->standard));
+			if (state->base->ip.handle_demod->Error)
 				error = FE_LLA_I2C_ERROR;
 		}
-	} else
-		error = FE_LLA_INVALID_HANDLE;
 
 	return error;
 }
@@ -1267,7 +1262,7 @@ fe_lla_error_t	FE_STiD135_GetSignalInfoLite(fe_stid135_handle_t Handle,
 			data_present -> Bool (data found or not)
 --RETURN	::	error
 --***************************************************/
-fe_lla_error_t fe_stid135_get_lock_status(fe_stid135_handle_t handle, enum fe_stid135_demod Demod,
+fe_lla_error_t fe_stid135_get_lock_status(struct stv* state, enum fe_stid135_demod Demod,
 																					BOOL*carrier_lock, BOOL* data_present)
 {
 
@@ -1280,13 +1275,12 @@ fe_lla_error_t fe_stid135_get_lock_status(fe_stid135_handle_t handle, enum fe_st
 	*data_present = FALSE;
 
 
-	pParams = (struct fe_stid135_internal_param	*) handle;
+	pParams = &state->base->ip;
 
-	if (pParams != NULL) {
 #if 0
 		//the following always return tst=0 in blindscan
 		u32 tst=0;
-		error1 =ChipGetField(pParams->handle_demod,
+		error1 =ChipGetField(state->base->ip.handle_demod,
 												 FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS4_DMDPROG_ERROR(Demod), &tst);
 		dprintk("DSTATUS4=%d error=%d\n", tst, error1);
 #endif
@@ -1295,9 +1289,9 @@ fe_lla_error_t fe_stid135_get_lock_status(fe_stid135_handle_t handle, enum fe_st
 		//the following always return AUTO_GLOW=1 and AUTO_GUP=1 after blindscan
 		u32 tst1=0;
 		u32 tst2=0;
-		error1 =ChipGetField(pParams->handle_demod,
+		error1 =ChipGetField(state->base->ip.handle_demod,
 												 FLD_FC8CODEW_DVBSX_DEMOD_TMGCFG3_AUTO_GUP(Demod), &tst1);
-		error1 |=ChipGetField(pParams->handle_demod,
+		error1 |=ChipGetField(state->base->ip.handle_demod,
 												 FLD_FC8CODEW_DVBSX_DEMOD_TMGCFG3_AUTO_GLOW(Demod), &tst2);
 		dprintk("AUTO_GLOW=%d AUTO_GUP=%d error=%d\n", tst1, tst2, error1);
 #endif
@@ -1305,7 +1299,7 @@ fe_lla_error_t fe_stid135_get_lock_status(fe_stid135_handle_t handle, enum fe_st
 
 
 
-		error = error1 =  ChipGetField(pParams->handle_demod,
+		error = error1 =  ChipGetField(state->base->ip.handle_demod,
 				FLD_FC8CODEW_DVBSX_DEMOD_DMDSTATE_HEADER_MODE(Demod), &(fld_value[0]));
 		demodState = (enum fe_sat_search_state)(fld_value[0]);
 
@@ -1330,13 +1324,13 @@ fe_lla_error_t fe_stid135_get_lock_status(fe_stid135_handle_t handle, enum fe_st
 			*carrier_lock  = FALSE;
 		break;
 		case FE_SAT_DVBS2_FOUND:
-			error |= (error1=ChipGetField(pParams->handle_demod,
+			error |= (error1=ChipGetField(state->base->ip.handle_demod,
 																		FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS_LOCK_DEFINITIF(Demod), &(fld_value[0])));
 			//dprintk("error=%d\n", error1);
-			error |= (error1=ChipGetField(pParams->handle_demod,
+			error |= (error1=ChipGetField(state->base->ip.handle_demod,
 																		FLD_FC8CODEW_DVBSX_PKTDELIN_PDELSTATUS1_PKTDELIN_LOCK(Demod), &(fld_value[1])));
 			//dprintk("error=%d\n", error1);
-			error |= (error1=ChipGetField(pParams->handle_demod,
+			error |= (error1=ChipGetField(state->base->ip.handle_demod,
 																		FLD_FC8CODEW_DVBSX_HWARE_TSSTATUS_TSFIFO_LINEOK(Demod), &(fld_value[2])));
 			//dprintk("error=%d\n", error1);
 			*carrier_lock = fld_value[0];
@@ -1345,15 +1339,15 @@ fe_lla_error_t fe_stid135_get_lock_status(fe_stid135_handle_t handle, enum fe_st
 		break;
 
 		case FE_SAT_DVBS_FOUND:
-			error |= (error1=ChipGetField(pParams->handle_demod,
+			error |= (error1=ChipGetField(state->base->ip.handle_demod,
 																		FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS_LOCK_DEFINITIF(Demod), &(fld_value[0])));
 			if(error1)
 				dprintk("error=%d\n", error1);
-			error |= (error1=ChipGetField(pParams->handle_demod,
+			error |= (error1=ChipGetField(state->base->ip.handle_demod,
 																		FLD_FC8CODEW_DVBSX_VITERBI_VSTATUSVIT_LOCKEDVIT(Demod), &(fld_value[1])));
 			if(error1)
 			dprintk("error=%d\n", error1);
-			error |= (error1=ChipGetField(pParams->handle_demod,
+			error |= (error1=ChipGetField(state->base->ip.handle_demod,
 																		FLD_FC8CODEW_DVBSX_HWARE_TSSTATUS_TSFIFO_LINEOK(Demod), &(fld_value[2])));
 			if(error1)
 				dprintk("error=%d\n", error1);
@@ -1361,7 +1355,6 @@ fe_lla_error_t fe_stid135_get_lock_status(fe_stid135_handle_t handle, enum fe_st
 			*data_present  = fld_value[0] & fld_value[1] & fld_value[2];
 			break;
 		}
-	}
 
 	return error;
 }
@@ -1374,12 +1367,12 @@ fe_lla_error_t fe_stid135_get_lock_status(fe_stid135_handle_t handle, enum fe_st
 --PARAMS OUT	::	Locked_p -> Bool (data working or not)
 --RETURN	::	error
 --***************************************************/
-fe_lla_error_t fe_stid135_get_data_status(fe_stid135_handle_t handle, enum fe_stid135_demod Demod, BOOL* Locked_p)
+fe_lla_error_t fe_stid135_get_data_status(struct stv* state, enum fe_stid135_demod Demod, BOOL* Locked_p)
 {
 
 	s32 carrier_lock=0;
 	BOOL data=0;
-	int err = fe_stid135_get_lock_status(handle, Demod, &carrier_lock, &data);
+	int err = fe_stid135_get_lock_status(state, Demod, &carrier_lock, &data);
 	if(err)
 		dprintk("ERROR in fe_stid135_get_lock_status: err=%d\n", err);
 	*Locked_p = carrier_lock | data;
@@ -1396,7 +1389,7 @@ fe_lla_error_t fe_stid135_get_data_status(fe_stid135_handle_t handle, enum fe_st
 **PARAMS OUT	::	ber_p -> BER
 **RETURN	::	error
 *****************************************************/
-fe_lla_error_t FE_STiD135_GetErrorCount(stchip_handle_t hChip,
+fe_lla_error_t FE_STiD135_GetErrorCount(STCHIP_Info_t* hChip,
 		enum fe_stid135_error_counter Counter, enum fe_stid135_demod Demod, u32* ber_p)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
@@ -1457,7 +1450,7 @@ fe_lla_error_t FE_STiD135_GetErrorCount(stchip_handle_t hChip,
 --PARAMS OUT	::	lock_p -> Lock status true or false
 --RETURN	::	error
 --***************************************************/
-fe_lla_error_t FE_STiD135_WaitForLock(fe_stid135_handle_t Handle,enum fe_stid135_demod Demod,
+fe_lla_error_t FE_STiD135_WaitForLock(struct stv* state, enum fe_stid135_demod Demod,
 																			u32 DemodTimeOut,u32 FecTimeOut,BOOL satellite_scan, s32* lock_p, BOOL* fec_lock_p)
 {
 
@@ -1467,14 +1460,14 @@ fe_lla_error_t FE_STiD135_WaitForLock(fe_stid135_handle_t Handle,enum fe_stid135
 	struct fe_stid135_internal_param *pParams;
 	BOOL lock;
 
-	pParams = (struct fe_stid135_internal_param *) Handle;
+	pParams = &state->base->ip;
 
 	/* Stream Merger lock status field) */
 	strMergerLockField = FLD_FC8CODEW_DVBSX_HWARE_TSSTATUS_TSFIFO_LINEOK(Demod);
-	error |= FE_STiD135_GetDemodLock(Handle, Demod, DemodTimeOut, lock_p);
+	error |= FE_STiD135_GetDemodLock(state, Demod, DemodTimeOut, lock_p);
 
 	if (*lock_p) {
-		error |= FE_STiD135_GetFECLock(pParams->handle_demod, Demod, FecTimeOut, &lock);
+		error |= FE_STiD135_GetFECLock(state->base->ip.handle_demod, Demod, FecTimeOut, &lock);
 		if(fec_lock_p)
 			*fec_lock_p = lock;
 		*lock_p = *lock_p &&  lock;
@@ -1491,8 +1484,8 @@ fe_lla_error_t FE_STiD135_WaitForLock(fe_stid135_handle_t Handle,enum fe_stid135
 			{
 				/*Check the stream merger Lock (good packet at
 				the output)*/
-				error |= ChipGetField(pParams->handle_demod, strMergerLockField, lock_p);
-				ChipWaitOrAbort(pParams->handle_demod, 1);
+				error |= ChipGetField(state->base->ip.handle_demod, strMergerLockField, lock_p);
+				ChipWaitOrAbort(state->base->ip.handle_demod, 1);
 				timer++;
 			}
 		}
@@ -1507,7 +1500,7 @@ fe_lla_error_t FE_STiD135_WaitForLock(fe_stid135_handle_t Handle,enum fe_stid135
 
 }
 
-static fe_lla_error_t CarrierLoopAutoAdjust(fe_stid135_handle_t Handle,
+static fe_lla_error_t CarrierLoopAutoAdjust(struct stv* state,
 					enum fe_stid135_demod Demod, s32 cnr)
 {
 	struct fe_stid135_internal_param *pParams;
@@ -1518,10 +1511,10 @@ static fe_lla_error_t CarrierLoopAutoAdjust(fe_stid135_handle_t Handle,
 	u32 i=0;
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 
-	pParams = (struct fe_stid135_internal_param *) Handle;
+	pParams = &state->base->ip;
 	/* Read the Symbol rate */
-	error |= FE_STiD135_GetSymbolRate(pParams->handle_demod, pParams->master_clock, Demod, &symbol_rate);
-	error |= FE_STiD135_TimingGetOffset(pParams->handle_demod, symbol_rate, Demod, &offset);
+	error |= FE_STiD135_GetSymbolRate(state, pParams->master_clock, Demod, &symbol_rate);
+	error |= FE_STiD135_TimingGetOffset(state, symbol_rate, Demod, &offset);
 	if(offset < 0) {
 		offset *= (-1);
 		symbol_rate -= (u32)(offset);
@@ -1690,13 +1683,13 @@ static fe_lla_error_t CarrierLoopAutoAdjust(fe_stid135_handle_t Handle,
 					aclc256APSK=fe_stid135_256apsk_car_loop[i].CarLoop_500;
 
 	//printf( "0x%X 0x%X 0x%X 0x%X 0x%X 0x%X 0x%X\n",aclcQPSK,aclc8PSK,aclc16APSK,aclc32APSK, aclc64APSK, aclc128APSK, aclc256APSK);
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_ACLC2S2Q(Demod), aclcQPSK);
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_ACLC2S28(Demod), aclc8PSK);
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_ACLC2S216A(Demod), aclc16APSK);
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_ACLC2S232A(Demod), aclc32APSK);
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_ACLC2S264A(Demod), aclc64APSK);
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_ACLC2S2128A(Demod), aclc128APSK);
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_ACLC2S2256A(Demod), aclc256APSK);
+	error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_ACLC2S2Q(Demod), aclcQPSK);
+	error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_ACLC2S28(Demod), aclc8PSK);
+	error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_ACLC2S216A(Demod), aclc16APSK);
+	error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_ACLC2S232A(Demod), aclc32APSK);
+	error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_ACLC2S264A(Demod), aclc64APSK);
+	error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_ACLC2S2128A(Demod), aclc128APSK);
+	error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_ACLC2S2256A(Demod), aclc256APSK);
 
 	return(error);
 }
@@ -1800,7 +1793,7 @@ u8 FE_STiD135_GetOptimCarrierLoop(u32 SymbolRate, enum fe_sat_modcode ModCode,
 --PARAMS OUT	::	foundStandard_p -> standard (DVBS1, DVBS2 or DSS)
 --RETURN	::	error
 *****************************************************/
-fe_lla_error_t FE_STiD135_GetStandard(stchip_handle_t hChip,
+fe_lla_error_t FE_STiD135_GetStandard(STCHIP_Info_t* hChip,
 				enum fe_stid135_demod Demod, enum fe_sat_tracking_standard *foundStandard_p)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
@@ -1851,7 +1844,7 @@ fe_lla_error_t FE_STiD135_GetStandard(stchip_handle_t hChip,
 --PARAMS OUT	::	c_n_p -> C/N of the carrier, 0 if no carrier
 --RETURN	::	error
 --***************************************************/
-fe_lla_error_t FE_STiD135_CarrierGetQuality(stchip_handle_t hChip, enum fe_stid135_demod Demod, s32* c_n_p,
+fe_lla_error_t FE_STiD135_CarrierGetQuality(STCHIP_Info_t* hChip, enum fe_stid135_demod Demod, s32* c_n_p,
 																						enum fe_sat_tracking_standard* foundStandard)
 {
 	u32 lockFlagField, noiseField1, noiseField0;
@@ -1935,7 +1928,7 @@ fe_lla_error_t FE_STiD135_CarrierGetQuality(stchip_handle_t hChip, enum fe_stid1
 --PARAMS OUT	::	Lock_p -> lock status, boolean
 --RETURN	::	error
 --***************************************************/
-static fe_lla_error_t FE_STiD135_GetDemodLock (fe_stid135_handle_t handle,
+static fe_lla_error_t FE_STiD135_GetDemodLock (struct stv* state,
 					 enum fe_stid135_demod Demod, u32 TimeOut, BOOL *Lock_p)
 {
 	u32 headerField, lockField, symbFreq1, symbFreq2;
@@ -1950,7 +1943,7 @@ static fe_lla_error_t FE_STiD135_GetDemodLock (fe_stid135_handle_t handle,
 	u8 timeout = 0;
 
 	enum fe_sat_search_state demodState;
-	struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param*)handle;
+	struct fe_stid135_internal_param *pParams = &state->base->ip;
 
 	/* state machine search status field*/
 	headerField = FLD_FC8CODEW_DVBSX_DEMOD_DMDSTATE_HEADER_MODE(Demod);
@@ -1970,10 +1963,10 @@ static fe_lla_error_t FE_STiD135_GetDemodLock (fe_stid135_handle_t handle,
 	SRate_1MSymb_Sec = (1<<16) * 1 / (12*MclkFreq/1000000);
 
 	while ((timer < TimeOut_SymbRate) && (lock == 0)) {
-		error |= ChipGetRegisters(pParams->handle_demod, symbFreqRegister, 2);
+		error |= ChipGetRegisters(state->base->ip.handle_demod, symbFreqRegister, 2);
 		symbolRate = (u32)
-				((ChipGetFieldImage(pParams->handle_demod, symbFreq2) << 8)+
-				(ChipGetFieldImage(pParams->handle_demod, symbFreq1)));
+				((ChipGetFieldImage(state->base->ip.handle_demod, symbFreq2) << 8)+
+				(ChipGetFieldImage(state->base->ip.handle_demod, symbFreq1)));
 		if (TimeOut < DmdLock_TIMEOUT_LIMIT) {
 			TimeOut_SymbRate = TimeOut;
 		} else {
@@ -1995,7 +1988,7 @@ static fe_lla_error_t FE_STiD135_GetDemodLock (fe_stid135_handle_t handle,
 			TimeOut */
 		}
 
-		error |= ChipGetField(pParams->handle_demod, headerField, &fld_value);
+		error |= ChipGetField(state->base->ip.handle_demod, headerField, &fld_value);
 		demodState = (enum fe_sat_search_state)fld_value;
 		//dprintk("NOW dmodState=%d\n", demodState);
 		switch (demodState) {
@@ -2006,7 +1999,7 @@ static fe_lla_error_t FE_STiD135_GetDemodLock (fe_stid135_handle_t handle,
 
 		case FE_SAT_DVBS2_FOUND: /* found a DVBS2 signal */
 		case FE_SAT_DVBS_FOUND:
-			error |= ChipGetField(pParams->handle_demod, lockField, &lock);
+			error |= ChipGetField(state->base->ip.handle_demod, lockField, &lock);
 			//dprintk("PPP locked=%d\n", lock);
 		break;
 		}
@@ -2016,9 +2009,9 @@ static fe_lla_error_t FE_STiD135_GetDemodLock (fe_stid135_handle_t handle,
 	u32 lock_level =0;
 	u32 use_mode =0;
 	int error=0;
-	error |= (fe_lla_error_t)ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_TMGLOCK1_TMGLOCK_LEVEL(Demod),
+	error |= (fe_lla_error_t)ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_TMGLOCK1_TMGLOCK_LEVEL(Demod),
 																				&lock_level);
-	error |= (fe_lla_error_t)ChipSetFieldImage(pParams->handle_demod,
+	error |= (fe_lla_error_t)ChipSetFieldImage(state->base->ip.handle_demod,
 																						 FLD_FC8CODEW_DVBSX_DEMOD_CARCFG_CFRUPLOW_USEMODE(Demod), &use_mode);
 
 	dprintk("NOW symbol_rate=%d  dmodState=%d lock_level=%d use_mode=%d lock=%d error=%d \n",
@@ -2027,7 +2020,7 @@ static fe_lla_error_t FE_STiD135_GetDemodLock (fe_stid135_handle_t handle,
 #endif
 		if(lock == 0) {
 			mutex_unlock(pParams->master_lock);
-			ChipWaitOrAbort(pParams->handle_demod, 10);	/* wait 10ms */
+			ChipWaitOrAbort(state->base->ip.handle_demod, 10);	/* wait 10ms */
 			mutex_lock(pParams->master_lock);
 		}
 		timer += 10;
@@ -2035,31 +2028,31 @@ static fe_lla_error_t FE_STiD135_GetDemodLock (fe_stid135_handle_t handle,
 	}
 	if(lock == TRUE) {
 		/* We have to wait for demod locked before reading ANNEXEM field (cut 1 only) */
-		error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS6_SIGNAL_ANNEXEM(Demod), &fld_value);
+		error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS6_SIGNAL_ANNEXEM(Demod), &fld_value);
 		/* Dummy write to reset slicemin (if DVBS1 test followed by DVBS2 test) */
-		error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_SLICEMIN_DEMODFLT_SLICEMIN(Demod), 0);
-		error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_SLICEMAX_DEMODFLT_SLICEMAX(Demod), 0);
+		error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_SLICEMIN_DEMODFLT_SLICEMIN(Demod), 0);
+		error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_SLICEMAX_DEMODFLT_SLICEMAX(Demod), 0);
 		if((fld_value == 0) || (fld_value == 1)) {
-			error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_SLICESEL_DEMODFLT_SLICESEL(Demod), 0);
-			error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSDIVN_BYTE_OVERSAMPLING(Demod), 0);
+			error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_SLICESEL_DEMODFLT_SLICESEL(Demod), 0);
+			error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSDIVN_BYTE_OVERSAMPLING(Demod), 0);
 		} else { /* sliced mode */
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_SLICEMIN_DEMODFLT_SLICEMIN(Demod), &slc_min);
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_SLICEMAX_DEMODFLT_SLICEMAX(Demod), &slc_max);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_SLICEMIN_DEMODFLT_SLICEMIN(Demod), &slc_min);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_SLICEMAX_DEMODFLT_SLICEMAX(Demod), &slc_max);
 			while((slc_min == 255) && (slc_max == 0) && (timeout < 40)) { // 255 is not valid value for slicemin, 0 is not valid for slicemax
-				ChipWaitOrAbort(pParams->handle_demod,5);
+				ChipWaitOrAbort(state->base->ip.handle_demod,5);
 				timeout = (u8)(timeout + 5);
-				error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_SLICEMIN_DEMODFLT_SLICEMIN(Demod), &slc_min);
-				error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_SLICEMAX_DEMODFLT_SLICEMAX(Demod), &slc_max);
+				error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_SLICEMIN_DEMODFLT_SLICEMIN(Demod), &slc_min);
+				error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_SLICEMAX_DEMODFLT_SLICEMAX(Demod), &slc_max);
 			}
 			if(timeout >= 40) {// we force to 1 slice number
-				error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_SLICESEL_DEMODFLT_SLICESEL(Demod), slc_min);
+				error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_SLICESEL_DEMODFLT_SLICESEL(Demod), slc_min);
 				#ifdef USER2
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_SLICESEL_DEMODFLT_SLICESEL(Demod), 4);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_SLICESEL_DEMODFLT_SLICESEL(Demod), 4);
 				#endif
 			} else {
-				error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_SLICESEL_DEMODFLT_SLICESEL(Demod), &slc_sel);
+				error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_SLICESEL_DEMODFLT_SLICESEL(Demod), &slc_sel);
 				if((slc_sel < slc_min) || (slc_sel > slc_max)) {
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_SLICESEL_DEMODFLT_SLICESEL(Demod), slc_min);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_SLICESEL_DEMODFLT_SLICESEL(Demod), slc_min);
 				}
 			}
 		}
@@ -2079,7 +2072,7 @@ static fe_lla_error_t FE_STiD135_GetDemodLock (fe_stid135_handle_t handle,
 --PARAMS OUT	::	lock_bool_p -> lock status, boolean
 --RETURN	::	error
 --***************************************************/
-static fe_lla_error_t FE_STiD135_GetFECLock(stchip_handle_t hChip, enum fe_stid135_demod Demod,
+static fe_lla_error_t FE_STiD135_GetFECLock(STCHIP_Info_t* hChip, enum fe_stid135_demod Demod,
 				u32 TimeOut, BOOL* lock_bool_p)
 {
 	u32 headerField, pktdelinField, lockVitField, timer = 0;
@@ -2165,52 +2158,47 @@ u32 FE_STiD135_CarrierWidth(u32 SymbolRate, enum fe_sat_rolloff roll_off)
 --PARAMS OUT	::	NONE
 --RETURN	::	error
 --***************************************************/
-static fe_lla_error_t fe_stid135_set_reg_init_values(fe_stid135_handle_t handle, enum fe_stid135_demod demod)
+static fe_lla_error_t fe_stid135_set_reg_init_values(struct stv* state, enum fe_stid135_demod demod)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
-	struct fe_stid135_internal_param *pParams = NULL;
+	//struct fe_stid135_internal_param *pParams = &state->base->ip;
 
-	if(handle != NULL) {
-		pParams = (struct fe_stid135_internal_param *) handle;
+		error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DEMOD(demod), 0x00);
 
-		error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DEMOD(demod), 0x00);
+		error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DMDCFGMD(demod), 0xc8);
+		error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CARFREQ(demod), 0x45); // to make demod lock in DVBS1 (cold start only)
+		error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFR1BCFG(demod), 0x67);
+		error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_PLSMSCRAMBB(demod), 0x70);
 
-		error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DMDCFGMD(demod), 0xc8);
-		error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CARFREQ(demod), 0x45); // to make demod lock in DVBS1 (cold start only)
-		error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFR1BCFG(demod), 0x67);
-		error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_PLSMSCRAMBB(demod), 0x70);
+		error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSDLYSET2(demod), 0x31);
+		error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSDLYSET1(demod), 0x2B);
+		error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSDLYSET0(demod), 0x00);
 
-		error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSDLYSET2(demod), 0x31);
-		error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSDLYSET1(demod), 0x2B);
-		error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSDLYSET0(demod), 0x00);
-
-		error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CORRELMANT(demod), 0x78);
+		error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CORRELMANT(demod), 0x78);
 
 		/* New Setting by SG for NB low C/N */
-		error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CORRELABS(demod), 0x70);
-		error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CORRELCOEF(demod), 0x20);
-		error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CORRELFREQ(demod), 0x70);
+		error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CORRELABS(demod), 0x70);
+		error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CORRELCOEF(demod), 0x20);
+		error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CORRELFREQ(demod), 0x70);
 
 		/* Reset matype forcing mode */
-		error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_BBHCTRL2_FORCE_MATYPEMSB(demod), 0);
-		error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL0_HEMMODE_SELECT(demod), 0);
+		error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_BBHCTRL2_FORCE_MATYPEMSB(demod), 0);
+		error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL0_HEMMODE_SELECT(demod), 0);
 
 		/* Remove MPEG packetization mode */
-		error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG0_TSFIFO_EMBINDVB(demod), 0);
+		error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG0_TSFIFO_EMBINDVB(demod), 0);
 
-		error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CARHDR(demod), 0x08);
+		error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CARHDR(demod), 0x08);
 
 		/* Go back to initial value (may be adapted in tracking function) */
-		error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DFECFG(demod), 0xC1);
-		error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_XFECFG2(demod), 0x03);
+		error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DFECFG(demod), 0xC1);
+		error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_XFECFG2(demod), 0x03);
 
 		/* Go back to default value in NB (lot of dummy PL frames in WB) */
-		error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFR2CFR1(demod), 0x25);
+		error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFR2CFR1(demod), 0x25);
 
 		/* Go back to initial value for MIS+ISSYI use-case */
-		error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSPCRPID1_SOFFIFO_PCRADJ(demod), 0);
-	} else
-		error |= FE_LLA_INVALID_HANDLE;
+		error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSPCRPID1_SOFFIFO_PCRADJ(demod), 0);
 
 				return error;
 }
@@ -2224,38 +2212,33 @@ static fe_lla_error_t fe_stid135_set_reg_init_values(fe_stid135_handle_t handle,
 --PARAMS OUT	::	NONE
 --RETURN	::	error
 --***************************************************/
-static fe_lla_error_t fe_stid135_set_reg_values_wb(fe_stid135_handle_t handle, enum fe_stid135_demod demod)
+static fe_lla_error_t fe_stid135_set_reg_values_wb(struct stv* state, enum fe_stid135_demod demod)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
-	struct fe_stid135_internal_param *pParams = NULL;
 
-	if(handle != NULL) {
-		pParams = (struct fe_stid135_internal_param *) handle;
 
-		if (pParams->demod_search_range_hz[demod-1] > 24000000)
-			pParams->demod_search_range_hz[demod-1] = 24000000;
+		if (state->demod_search_range_hz > 24000000)
+			state->demod_search_range_hz = 24000000;
 
-		error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DMDCFGMD(demod), 0x80);
-		error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CARFREQ(demod), 0x00);
-		error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFR1BCFG(demod), 0xc5);
-		error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_PLSMSCRAMBB(demod), 0x40);
+		error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DMDCFGMD(demod), 0x80);
+		error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CARFREQ(demod), 0x00);
+		error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFR1BCFG(demod), 0xc5);
+		error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_PLSMSCRAMBB(demod), 0x40);
 
-		error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSDLYSET2(demod), 0xE2);
-		error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSDLYSET1(demod), 0x0A);
-		error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSDLYSET0(demod), 0x00);
+		error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSDLYSET2(demod), 0xE2);
+		error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSDLYSET1(demod), 0x0A);
+		error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSDLYSET0(demod), 0x00);
 
-		error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CORRELMANT(demod), 0x6A);
-		error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CORRELCOEF(demod), 0x20);
+		error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CORRELMANT(demod), 0x6A);
+		error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CORRELCOEF(demod), 0x20);
 		/* Reset new Setting by SG for NB low C/N */
-		error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CORRELABS(demod), 0x8c);
-		error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CORRELFREQ(demod), 0x30);
+		error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CORRELABS(demod), 0x8c);
+		error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CORRELFREQ(demod), 0x30);
 
-		error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CARHDR(demod), 0x18);
+		error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CARHDR(demod), 0x18);
 
 		/* On a signal with lot of dummy PL frames in WB, then need to adjust CFR2CFR1 */
-		error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFR2CFR1(demod), 0x23);
-	} else
-		error |= FE_LLA_INVALID_HANDLE;
+		error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFR2CFR1(demod), 0x23);
 
 	return error;
 }
@@ -2268,7 +2251,7 @@ static fe_lla_error_t fe_stid135_set_reg_values_wb(fe_stid135_handle_t handle, e
 --PARAMS OUT	::	NONE
 --RETURN	::	error
 --***************************************************/
-static fe_lla_error_t fe_stid135_manage_manual_rolloff(fe_stid135_handle_t handle, enum fe_stid135_demod demod)
+static fe_lla_error_t fe_stid135_manage_manual_rolloff(struct fe_stid135_internal_param* pParams, enum fe_stid135_demod demod)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	struct fe_stid135_internal_param *pParams = NULL;
@@ -2276,31 +2259,31 @@ static fe_lla_error_t fe_stid135_manage_manual_rolloff(fe_stid135_handle_t handl
 	if(handle != NULL) {
 		pParams = (struct fe_stid135_internal_param *) handle;
 
-		error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEMOD_MANUALS2_ROLLOFF(demod), 1);
-		error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEMOD_MANUALSX_ROLLOFF(demod), 1);
+		error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEMOD_MANUALS2_ROLLOFF(demod), 1);
+		error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEMOD_MANUALSX_ROLLOFF(demod), 1);
 		switch(pParams->roll_off[demod-1]) {
 			case FE_SAT_05:
-				error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEMOD_ROLLOFF_CONTROL(demod), 4);
+				error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEMOD_ROLLOFF_CONTROL(demod), 4);
 			break;
 			case FE_SAT_10:
-				error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEMOD_ROLLOFF_CONTROL(demod), 3);
+				error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEMOD_ROLLOFF_CONTROL(demod), 3);
 			break;
 			case FE_SAT_15:
-				error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEMOD_ROLLOFF_CONTROL(demod), 5);
+				error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEMOD_ROLLOFF_CONTROL(demod), 5);
 			break;
 			case FE_SAT_20:
-				error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEMOD_ROLLOFF_CONTROL(demod), 2);
+				error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEMOD_ROLLOFF_CONTROL(demod), 2);
 			break;
 			case FE_SAT_25:
-				error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEMOD_ROLLOFF_CONTROL(demod), 1);
+				error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEMOD_ROLLOFF_CONTROL(demod), 1);
 			break;
 			case FE_SAT_35:
-				error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEMOD_ROLLOFF_CONTROL(demod), 0);
+				error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEMOD_ROLLOFF_CONTROL(demod), 0);
 			break;
 			/*TD*/
 			default: /* by default automatic rolloff */
-				error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEMOD_MANUALS2_ROLLOFF(demod), 0);
-				error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEMOD_MANUALSX_ROLLOFF(demod), 0);
+				error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEMOD_MANUALS2_ROLLOFF(demod), 0);
+				error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEMOD_MANUALSX_ROLLOFF(demod), 0);
 
 			break;
 		}
@@ -2322,17 +2305,16 @@ static fe_lla_error_t fe_stid135_manage_manual_rolloff(fe_stid135_handle_t handl
 --PARAMS OUT	::	NONE
 --RETURN	::	Error (if any)
 --***************************************************/
-fe_lla_error_t	fe_stid135_search(fe_stid135_handle_t handle, enum fe_stid135_demod demod,
+fe_lla_error_t	fe_stid135_search(struct stv* state, enum fe_stid135_demod demod,
 	struct fe_sat_search_params *pSearch, struct fe_sat_search_result *pResult,
 	BOOL satellite_scan)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	fe_lla_error_t error1 = FE_LLA_NO_ERROR;
-	struct fe_stid135_internal_param *pParams = NULL;
+
 	enum fe_sat_signal_type signalType = FE_SAT_NOCARRIER;
 	s32 fld_value;
-	if (handle == NULL)
-		return FE_LLA_INVALID_HANDLE;
+	struct fe_stid135_internal_param *pParams = &state->base->ip;
 
 	if ((!(INRANGE(100000, pSearch->symbol_rate,  520000000))) ||
 			(!(INRANGE(500000, pSearch->search_range_hz, 70000000)))) {
@@ -2340,38 +2322,37 @@ fe_lla_error_t	fe_stid135_search(fe_stid135_handle_t handle, enum fe_stid135_dem
 		return FE_LLA_BAD_PARAMETER;
 	}
 
-	pParams = (struct fe_stid135_internal_param *) handle;
 
-	if (pParams->handle_demod->Error) {
+	if (state->base->ip.handle_demod->Error) {
 		dprintk("error=%d\n", FE_LLA_I2C_ERROR);
 		return FE_LLA_I2C_ERROR;
 	}
 
 	pParams->lo_frequency = pSearch->lo_frequency;
 
-	pParams->tuner_frequency[demod-1] = (s32)(
+	state->tuner_frequency = (s32)(
 		pSearch->frequency - pSearch->lo_frequency);
 
-	pParams->demod_search_standard[demod-1] = pSearch->standard;
-	pParams->demod_symbol_rate[demod-1] = pSearch->symbol_rate;
-	pParams->demod_search_range_hz[demod-1] = pSearch->search_range_hz;
-	pParams->demod_search_algo[demod-1] = pSearch->search_algo;
-	pParams->demod_search_iq_inv[demod-1] = pSearch->iq_inversion;
-	pParams->mis_mode[demod-1] = FALSE; /* Disable memorisation of MIS mode */
+	state->demod_search_standard = pSearch->standard;
+	state->demod_symbol_rate = pSearch->symbol_rate;
+	state->demod_search_range_hz = pSearch->search_range_hz;
+	state->demod_search_algo = pSearch->search_algo;
+	state->demod_search_iq_inv = pSearch->iq_inversion;
+	state->mis_mode = FALSE; /* Disable memorisation of MIS mode */
 
 	/* Set default register values to start a clean search */
-	error |= (error1=fe_stid135_set_reg_init_values(handle, demod));
+	error |= (error1=fe_stid135_set_reg_init_values(state, demod));
 	if(error1)
 		dprintk("error=%d\n", error1);
 
 #ifdef USER2
 	if(((pSearch->search_algo == FE_SAT_COLD_START) || (pSearch->search_algo == FE_SAT_WARM_START))
 		&& (pSearch->symbol_rate >= pParams->master_clock >> 1)) { /* if SR >= MST_CLK / 2 */
-		error |= (error1=ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_PKTDELIN_MATCST1(demod), 0x70));
+		error |= (error1=ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_PKTDELIN_MATCST1(demod), 0x70));
 		if(error1)
 			dprintk("error=%d\n", error1);
 
-			error |= (error1=ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_SLICESEL_DEMODFLT_SLICESEL(demod), 4));
+			error |= (error1=ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_SLICESEL_DEMODFLT_SLICESEL(demod), 4));
 			if(error1)
 				dprintk("error=%d\n", error1);
 
@@ -2379,9 +2360,9 @@ fe_lla_error_t	fe_stid135_search(fe_stid135_handle_t handle, enum fe_stid135_dem
 	}
 #endif
 #ifdef ATB
-		error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEMOD_ROLLOFF_CONTROL(demod), 2);
-		error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEMOD_MANUALS2_ROLLOFF(demod), 1);
-		error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEMOD_MANUALSX_ROLLOFF(demod), 1);
+		error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEMOD_ROLLOFF_CONTROL(demod), 2);
+		error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEMOD_MANUALS2_ROLLOFF(demod), 1);
+		error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEMOD_MANUALSX_ROLLOFF(demod), 1);
 	#endif
 #ifdef USER2
 		pParams->roll_off[demod-1] = pSearch->roll_off;
@@ -2391,15 +2372,15 @@ fe_lla_error_t	fe_stid135_search(fe_stid135_handle_t handle, enum fe_stid135_dem
 #endif
 
 		if((pSearch->symbol_rate >= pParams->master_clock) &&
-			 (pParams->demod_search_algo[demod-1] == FE_SAT_BLIND_SEARCH ||
-				pParams->demod_search_algo[demod-1] == FE_SAT_NEXT)
+			 (state->demod_search_algo == FE_SAT_BLIND_SEARCH ||
+				state->demod_search_algo == FE_SAT_NEXT)
 			 ) /* if SR >= MST_CLK  & Blind search algo : usecase forbidden */ {
 			dprintk("error=FE_LLA_NOT_SUPPORTED srate=%d\n", pSearch->symbol_rate);
 			return(FE_LLA_NOT_SUPPORTED);
 		}
 
 	/* Check if user wants to lock demod on a chip where High Symbol Rate feature is forbidden on this chip */
-	error |= (error1=ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DMDSELOBS_NOSHDB_SEL(demod), &fld_value));
+	error |= (error1=ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DMDSELOBS_NOSHDB_SEL(demod), &fld_value));
 	if(error1)
 		dprintk("error=%d\n", error1);
 	//dprintk("fld_value=%d srate=%d\n", fld_value, pSearch->symbol_rate);
@@ -2411,38 +2392,38 @@ fe_lla_error_t	fe_stid135_search(fe_stid135_handle_t handle, enum fe_stid135_dem
 
 	if(pSearch->symbol_rate >= pParams->master_clock) { /* if SR >= MST_CLK */
 		//dprintk("Force WARM_START\n");
-		pParams->demod_search_algo[demod-1] = FE_SAT_WARM_START; // we force warm algo if SR > MST_CLK
-		error |= (error1=fe_stid135_set_reg_values_wb(handle, demod));
+		state->demod_search_algo = FE_SAT_WARM_START; // we force warm algo if SR > MST_CLK
+		error |= (error1=fe_stid135_set_reg_values_wb(state, demod));
 		if(error1)
 			dprintk("error=%d\n", error1);
 
-		error |= (error1=ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CORRELCFG(demod), 0x83));
+		error |= (error1=ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CORRELCFG(demod), 0x83));
 		if(error1)
 			dprintk("error=%d\n", error1);
-		error |= (error1=ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG2_DEMODFLT_XXXMODE(demod), 0x15));
+		error |= (error1=ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG2_DEMODFLT_XXXMODE(demod), 0x15));
 		dprintk("XXXMODE set t0 0x15\n");
 		if(error1)
 			dprintk("error=%d\n", error1);
 	} else if((pSearch->symbol_rate >= pParams->master_clock >> 1) && (pSearch->symbol_rate < pParams->master_clock)) { /* if SR >= MST_CLK / 2 */
 		//dprintk("Force Medium symbol rate\n");
-		error |= (error1=ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CORRELCFG(demod), 0x83));
+		error |= (error1=ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CORRELCFG(demod), 0x83));
 		if(error1)
 			dprintk("error=%d\n", error1);
-		error |= (error1=ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG2_DEMODFLT_XXXMODE(demod), 0x15));
+		error |= (error1=ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG2_DEMODFLT_XXXMODE(demod), 0x15));
 		dprintk("XXXMODE set t0 0x15\n");
 		if(error1)
 			dprintk("error=%d\n", error1);
 	} else {
 		//dprintk("other symbol rate\n");
-		error |= (error1=ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CORRELCFG(demod), 0x01));
+		error |= (error1=ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CORRELCFG(demod), 0x01));
 		if(error1)
 			dprintk("error=%d\n", error1);
 	}
 
-	pParams->demod_puncture_rate[demod-1] = pSearch->puncture_rate;
-	pParams->demod_modulation[demod-1] = pSearch->modulation;
-	pParams->demod_modcode[demod-1] = pSearch->modcode;
-	pParams->tuner_index_jump[demod-1] = pSearch->tuner_index_jump;
+	state->demod_puncture_rate = pSearch->puncture_rate;
+	state->demod_modulation = pSearch->modulation;
+	state->demod_modcode = pSearch->modcode;
+	state->tuner_index_jump = pSearch->tuner_index_jump;
 	//dprintk("CHECK pr=%d mod=%d modcode=%d jump =%d\n", pSearch->puncture_rate,  pSearch->modulation, pSearch->modcode, pSearch->tuner_index_jump);
 	if (error != FE_LLA_NO_ERROR) {
 		error1=FE_LLA_NO_ERROR;
@@ -2452,44 +2433,44 @@ fe_lla_error_t	fe_stid135_search(fe_stid135_handle_t handle, enum fe_stid135_dem
 
 	if (demod == FE_SAT_DEMOD_2) {
 		if(pSearch->symbol_rate > pParams->master_clock >> 1) { /* if SR >= MST_CLK / 2 */
-			error |= (error1=ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG2_MODE_HAUTDEBIT(demod), 3));
+			error |= (error1=ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG2_MODE_HAUTDEBIT(demod), 3));
 			if(error1)
 				dprintk("error=%d\n", error1);
 				WAIT_N_MS(10);
-				error |= (error1=ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_PEGALCFG(demod), 0x1C));
+				error |= (error1=ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_PEGALCFG(demod), 0x1C));
 				if(error1)
 					dprintk("error=%d\n", error1);
 			} else {
-			error |= (error1=ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG2_MODE_HAUTDEBIT(demod), 2));
+			error |= (error1=ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG2_MODE_HAUTDEBIT(demod), 2));
 			if(error1)
 				dprintk("error=%d\n", error1);
-			error |= (error1=ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_PEGALCFG(demod), 0x00));
+			error |= (error1=ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_PEGALCFG(demod), 0x00));
 				if(error1)
 					dprintk("error=%d\n", error1);
 			}
 	}
 	if (demod == FE_SAT_DEMOD_4) {
 		if(pSearch->symbol_rate > pParams->master_clock >> 1) { /* if SR >= MST_CLK / 2 */
-			error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG2_MODE_HAUTDEBIT(demod), 3);
+			error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG2_MODE_HAUTDEBIT(demod), 3);
 				WAIT_N_MS(10);
-				error |= (error1=ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_PEGALCFG(demod), 0x1C));
+				error |= (error1=ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_PEGALCFG(demod), 0x1C));
 				if(error1)
 					dprintk("error=%d\n", error1);
 			} else {
-			error |= (error1=ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG2_MODE_HAUTDEBIT(demod), 2));
+			error |= (error1=ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG2_MODE_HAUTDEBIT(demod), 2));
 			if(error1)
 				dprintk("error=%d\n", error1);
-			error |= (error1=ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_PEGALCFG(demod), 0x00));
+			error |= (error1=ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_PEGALCFG(demod), 0x00));
 			if(error1)
 				dprintk("error=%d\n", error1);
 			}
 	}
 
-	error |= (error1=FE_STiD135_Algo(pParams, demod, satellite_scan, &signalType));
+	error |= (error1=FE_STiD135_Algo(state, demod, satellite_scan, &signalType));
 	if(error1)
 		dprintk("error=%d\n", error1);
 
-	pSearch->tuner_index_jump = pParams->tuner_index_jump[demod-1];
+	pSearch->tuner_index_jump = state->tuner_index_jump;
 
 	if (signalType == FE_SAT_TUNER_JUMP) {
 		error = FE_LLA_TUNER_JUMP;
@@ -2503,7 +2484,7 @@ fe_lla_error_t	fe_stid135_search(fe_stid135_handle_t handle, enum fe_stid135_dem
 	else if (((signalType == FE_SAT_RANGEOK)
 						 || ((satellite_scan > 0)
 						 && (signalType == FE_SAT_NODATA)))
-						&& (pParams->handle_demod->Error == CHIPERR_NO_ERROR))
+						&& (state->base->ip.handle_demod->Error == CHIPERR_NO_ERROR))
 	{
 		if ((satellite_scan > 0) && (signalType == FE_SAT_NODATA)) {
 			/* TPs with demod lock only are logged as well */
@@ -2514,34 +2495,34 @@ fe_lla_error_t	fe_stid135_search(fe_stid135_handle_t handle, enum fe_stid135_dem
 			dprintk("error=%d\n", error);
 		}
 
-		pResult->locked = pParams->demod_results[demod-1].locked;
-		pResult->has_carrier = pParams->demod_results[demod-1].has_carrier;
+		pResult->locked = state->demod_results.locked;
+		pResult->has_carrier = state->demod_results.has_carrier;
 
 		/* update results */
-		pResult->standard = pParams->demod_results[demod-1].standard;
-		pResult->frequency = pParams->demod_results[demod-1].frequency;
-		pResult->symbol_rate = pParams->demod_results[demod-1].symbol_rate;
-		pResult->puncture_rate = pParams->demod_results[demod-1].puncture_rate;
-		pResult->modcode = pParams->demod_results[demod-1].modcode;
-		pResult->pilots = pParams->demod_results[demod-1].pilots;
-		pResult->frame_length = pParams->demod_results[demod-1].frame_length;
-		pResult->spectrum = pParams->demod_results[demod-1].spectrum;
-		pResult->roll_off = pParams->demod_results[demod-1].roll_off;
-		pResult->modulation = pParams->demod_results[demod-1].modulation;
+		pResult->standard = state->demod_results.standard;
+		pResult->frequency = state->demod_results.frequency;
+		pResult->symbol_rate = state->demod_results.symbol_rate;
+		pResult->puncture_rate = state->demod_results.puncture_rate;
+		pResult->modcode = state->demod_results.modcode;
+		pResult->pilots = state->demod_results.pilots;
+		pResult->frame_length = state->demod_results.frame_length;
+		pResult->spectrum = state->demod_results.spectrum;
+		pResult->roll_off = state->demod_results.roll_off;
+		pResult->modulation = state->demod_results.modulation;
 
-		if (pParams->handle_demod->Error) {
+		if (state->base->ip.handle_demod->Error) {
 			error = FE_LLA_I2C_ERROR;
 			dprintk("error=%d\n", error);
 		}
 
 		/* Optimization setting for tracking */
-		error |= (error1=FE_STiD135_TrackingOptimization(pParams, demod));
+		error |= (error1=FE_STiD135_TrackingOptimization(state, demod));
 			if(error1)
 		dprintk("error=%d\n", error1);
 
 
 		/* Reset obs registers */
-			error |= (error1=fe_stid135_reset_obs_registers(handle, demod));
+			error |= (error1=fe_stid135_reset_obs_registers(state, demod));
 			if(error1)
 				dprintk("error=%d\n", error1);
 
@@ -2549,7 +2530,7 @@ fe_lla_error_t	fe_stid135_search(fe_stid135_handle_t handle, enum fe_stid135_dem
 		pResult->locked = FALSE;
 		pResult->has_carrier = FALSE;
 
-		switch (pParams->demod_error[demod-1]) {
+		switch (state->demod_error) {
 			/*I2C error*/
 		case FE_LLA_I2C_ERROR: {
 			error = FE_LLA_I2C_ERROR;
@@ -2578,7 +2559,7 @@ fe_lla_error_t	fe_stid135_search(fe_stid135_handle_t handle, enum fe_stid135_dem
 				dprintk("error=%d\n", error);
 				break;
 		}
-		if (pParams->handle_demod->Error) {
+		if (state->base->ip.handle_demod->Error) {
 			error = FE_LLA_I2C_ERROR;
 			dprintk("error=%d\n", error);
 		}
@@ -2599,7 +2580,7 @@ fe_lla_error_t	fe_stid135_search(fe_stid135_handle_t handle, enum fe_stid135_dem
 			FecTimeout -> computed timeout for FEC
 --RETURN	::	NONE
 --***************************************************/
-static void FE_STiD135_GetLockTimeout(u32 *DemodTimeout,u32 *FecTimeout,
+static void FE_STiD135_GetLockTimeout(u32 *DemodTimeout, u32 *FecTimeout,
 		u32 SymbolRate, enum fe_sat_search_algo Algo)
 {
 	switch (Algo) {
@@ -2689,7 +2670,7 @@ PARAMS OUT : *AGCRFIN1,
 																	 *Pband
 RETURN     : error
 **********************************************************************************/
-static fe_lla_error_t Estimate_Power_Int(stchip_handle_t Handle,
+static fe_lla_error_t Estimate_Power_Int(struct stv* state,
 					enum fe_stid135_demod Demod,
 					u8 TunerNb,
 					u8 *AGCRFIN1,
@@ -2727,35 +2708,35 @@ static fe_lla_error_t Estimate_Power_Int(stchip_handle_t Handle,
 	u32 mult;
 	struct fe_stid135_internal_param *pParams;
 	fe_lla_error_t error=FE_LLA_NO_ERROR;
-	pParams = (struct fe_stid135_internal_param*) Handle;
+	pParams = &state->base->ip;
 
 	/* Read all needed registers before calculation*/
-	error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_TAGC2_AGC2EXP_NOSFR(Demod), &fld_value);
+	error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_TAGC2_AGC2EXP_NOSFR(Demod), &fld_value);
 	NOSFR= (u8)fld_value;
-	error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DMDSTATE_DEMOD_LOCKED(Demod), &fld_value);
+	error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DMDSTATE_DEMOD_LOCKED(Demod), &fld_value);
 	DemodLock = (u8)fld_value;
-	error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC2I1(Demod), &reg_value);
+	error |= ChipGetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC2I1(Demod), &reg_value);
 	agc2i1 = (u8)reg_value;
-	error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC2I0(Demod), &reg_value);
+	error |= ChipGetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC2I0(Demod), &reg_value);
 	agc2i0 = (u8)reg_value;
-	error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_AGCRF_AGCRFIN1(TunerNb), &reg_value);
+	error |= ChipGetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_AGCRF_AGCRFIN1(TunerNb), &reg_value);
 	agcrfin1 = (u8)reg_value;
-	error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_AGCRF_AGCRFIN0(TunerNb), &reg_value);
+	error |= ChipGetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_AGCRF_AGCRFIN0(TunerNb), &reg_value);
 	agcrfin0 = (u8)reg_value;
-	error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC2REF(Demod), &reg_value);
+	error |= ChipGetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC2REF(Demod), &reg_value);
 	agc2ref = (u8)reg_value;
-	ChipWaitOrAbort(pParams->handle_demod,1);
-	error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC1REF(Demod), &reg_value);
+	ChipWaitOrAbort(state->base->ip.handle_demod,1);
+	error |= ChipGetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC1REF(Demod), &reg_value);
 	agc1ref = (u8)reg_value;
-	ChipWaitOrAbort(pParams->handle_demod,1);
-	error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC1POWERI(Demod), &reg_value);
+	ChipWaitOrAbort(state->base->ip.handle_demod,1);
+	error |= ChipGetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC1POWERI(Demod), &reg_value);
 	agc1poweri = (u8)reg_value;
-	error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC1POWERQ(Demod), &reg_value);
+	error |= ChipGetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC1POWERQ(Demod), &reg_value);
 	agc1powerq = (u8)reg_value;
 
-	error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC1IQIN1(Demod), &reg_value);
+	error |= ChipGetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC1IQIN1(Demod), &reg_value);
 	agciqin1 = (u8)reg_value;
-	error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC1IQIN0(Demod), &reg_value);
+	error |= ChipGetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC1IQIN0(Demod), &reg_value);
 	agciqin0 = (u8)reg_value;
 
 	/* check I2c error and demod lock for data coherency                */
@@ -2794,28 +2775,28 @@ static fe_lla_error_t Estimate_Power_Int(stchip_handle_t Handle,
 		switch(TunerNb) {
 			case AFE_TUNER1 :
 				gain_analogx1000 = LutGvanaIntegerTuner[agcrfin1];
-				error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RSTID135_AFE_AFE_AGC1_RF_PWM, &reg_value);
+				error |= ChipGetOneRegister(state->base->ip.handle_demod, (u16)REG_RSTID135_AFE_AFE_AGC1_RF_PWM, &reg_value);
 				agcrfpwm = (u8)reg_value;
 			break;
 			case AFE_TUNER2 :
 				gain_analogx1000 = LutGvanaIntegerTuner[agcrfin1];
-				error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RSTID135_AFE_AFE_AGC2_RF_PWM, &reg_value);
+				error |= ChipGetOneRegister(state->base->ip.handle_demod, (u16)REG_RSTID135_AFE_AFE_AGC2_RF_PWM, &reg_value);
 				agcrfpwm = (u8)reg_value;
 			break;
 			case AFE_TUNER3 :
 				gain_analogx1000 = LutGvanaIntegerTuner[agcrfin1];
-				error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RSTID135_AFE_AFE_AGC3_RF_PWM, &reg_value);
+				error |= ChipGetOneRegister(state->base->ip.handle_demod, (u16)REG_RSTID135_AFE_AFE_AGC3_RF_PWM, &reg_value);
 				agcrfpwm = (u8)reg_value;
 			break;
 			case AFE_TUNER4 :
 			default:
 				gain_analogx1000 = LutGvanaIntegerTuner[agcrfin1];
-				error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RSTID135_AFE_AFE_AGC4_RF_PWM, &reg_value);
+				error |= ChipGetOneRegister(state->base->ip.handle_demod, (u16)REG_RSTID135_AFE_AFE_AGC4_RF_PWM, &reg_value);
 				agcrfpwm = (u8)reg_value;
 			break;
 		}
 		/* if VGLNA is inIP3 substract  6db gain*/
-		VGLNAgainMode = Oxford_GetVGLNAgainMode(pParams->handle_demod, TunerNb);
+		VGLNAgainMode = Oxford_GetVGLNAgainMode(state->base->ip.handle_demod, TunerNb);
 		if (VGLNAgainMode != 1){
 			/* InterpolatedGvan always >0*/
 			gain_analogx1000 = gain_analogx1000 - 6000;
@@ -2865,7 +2846,7 @@ static fe_lla_error_t Estimate_Power_Int(stchip_handle_t Handle,
 #endif
 		/************ Correction ***************/
 		agc1 = (u32)((256 * agcrfin1) + agcrfin0);
-		f = (u32) pParams->demod_results[Demod-1].frequency;
+		f = (u32) state->demod_results.frequency;
 		correction1000 = (s32)(f/1000  - 1550);
 		correction1000 = (s32)(correction1000*1000/600);
 		correction1000 = (s32) (correction1000 * correction1000/1000);
@@ -2906,7 +2887,7 @@ static fe_lla_error_t Estimate_Power_Int(stchip_handle_t Handle,
 			pband_rf -> computed band power
 --RETURN	::	error
 --***************************************************/
-fe_lla_error_t FE_STiD135_GetRFLevel(fe_stid135_handle_t handle,
+fe_lla_error_t FE_STiD135_GetRFLevel(struct stv* state,
 			enum fe_stid135_demod Demod, s32 *pch_rf, s32 *pband_rf)
 
 {
@@ -2926,13 +2907,11 @@ fe_lla_error_t FE_STiD135_GetRFLevel(fe_stid135_handle_t handle,
 	s32 PchRFx1000 = 0;
 	s32 Pbandx1000 = 0;
 	s32 agcrf_path;
-	struct fe_stid135_internal_param *pParams;
+	struct fe_stid135_internal_param *pParams = &state->base->ip;
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
-
-	pParams = (struct fe_stid135_internal_param *) handle;
 	error |= fe_stid135_get_agcrf_path(pParams->handle_demod, Demod,&agcrf_path );
 
-	error |= Estimate_Power_Int(handle, Demod, (u8)agcrf_path, &AGCRFIN1, &AGCRFIN0, &Agc1, &AGC1POWERI, &AGC1POWERQ, &AGC1REF, &AGC2REF, &AGC2I1, &AGC2I0, &mant, &exp, &Agc2x1000, &InterpolatedGvanax1000, &PchRFx1000, &Pbandx1000);
+	error |= Estimate_Power_Int(state, Demod, (u8)agcrf_path, &AGCRFIN1, &AGCRFIN0, &Agc1, &AGC1POWERI, &AGC1POWERQ, &AGC1REF, &AGC2REF, &AGC2I1, &AGC2I0, &mant, &exp, &Agc2x1000, &InterpolatedGvanax1000, &PchRFx1000, &Pbandx1000);
 	*pch_rf = PchRFx1000;
 	*pband_rf = Pbandx1000;
 
@@ -2953,7 +2932,7 @@ PARAMS OUT	::	*AGCRFIN1,
 			*Pbandx1000
 RETURN		::	error
 **********************************************************************************/
-static fe_lla_error_t estimate_band_power_demod_not_locked(stchip_handle_t Handle,
+static fe_lla_error_t estimate_band_power_demod_not_locked(struct stv* state,
 					enum fe_stid135_demod Demod,
 					u8 TunerNb,
 					u8 *AGCRFIN1,
@@ -2970,7 +2949,7 @@ static fe_lla_error_t estimate_band_power_demod_not_locked(stchip_handle_t Handl
 
 	struct fe_stid135_internal_param *pParams;
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
-	pParams = (struct fe_stid135_internal_param*) Handle;
+	pParams = &state->base->ip;
 	/*Fig. p. 87
 		AGC_RF = input to analogue amplifier -> controls vglna
 
@@ -2996,19 +2975,19 @@ static fe_lla_error_t estimate_band_power_demod_not_locked(stchip_handle_t Handl
 	/* Read all needed registers before calculation*/
 
 	//AGC_RF = computed gain for analogue amplifier
-	error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_AGCRF_AGCRFIN1(TunerNb), &reg_value);
+	error |= ChipGetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_AGCRF_AGCRFIN1(TunerNb), &reg_value);
 	agcrfin1 = (u8)reg_value;
-	error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_AGCRF_AGCRFIN0(TunerNb), &reg_value);
+	error |= ChipGetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_AGCRF_AGCRFIN0(TunerNb), &reg_value);
 
 	//reference amplitude value for analogue amplifier
 	agcrfin0 = (u8)reg_value;
-	error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC1REF(Demod), &reg_value);
+	error |= ChipGetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC1REF(Demod), &reg_value);
 	agc1ref = (u8)reg_value;
 
 	//measured wide band amplititude (power at output of analugue amplifier)
-	error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC1IQIN1(Demod), &reg_value);
+	error |= ChipGetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC1IQIN1(Demod), &reg_value);
 	agciqin1 = (u8)reg_value;
-	error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC1IQIN0(Demod), &reg_value);
+	error |= ChipGetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC1IQIN0(Demod), &reg_value);
 	agciqin0 = (u8)reg_value;
 
 	switch(TunerNb) {
@@ -3027,7 +3006,7 @@ static fe_lla_error_t estimate_band_power_demod_not_locked(stchip_handle_t Handl
 		break;
 	}
 	/* if VGLNA is inIP3 substract  6db gain (lowe power versus high power input configuration)*/
-	VGLNAgainMode = Oxford_GetVGLNAgainMode(pParams->handle_demod, TunerNb);
+	VGLNAgainMode = Oxford_GetVGLNAgainMode(state->base->ip.handle_demod, TunerNb);
 	if (VGLNAgainMode != 1){
 		/* InterpolatedGvan always >0*/
 		gain_analogx1000 = gain_analogx1000 - 6000;
@@ -3035,17 +3014,17 @@ static fe_lla_error_t estimate_band_power_demod_not_locked(stchip_handle_t Handl
 
 
 	/* Read DMDISTATE to check if demod is stopped or reset, then put demod in search state for band power accuracy */
-	error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DMDISTATE(Demod), &reg_value);
+	error |= ChipGetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DMDISTATE(Demod), &reg_value);
 	savedmd = (u8)reg_value;
 	if ((savedmd == 0x5C) || (savedmd == 0x1C)) {
-		error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DMDISTATE(Demod), 0x00);
+		error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DMDISTATE(Demod), 0x00);
 		WAIT_N_MS(100);
 	}
 
 	//reread AGC1IQINx
-	error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC1IQIN1(Demod), &reg_value);
+	error |= ChipGetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC1IQIN1(Demod), &reg_value);
 	agciqin1 = (u8)reg_value;
-	error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC1IQIN0(Demod), &reg_value);
+	error |= ChipGetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC1IQIN0(Demod), &reg_value);
 	agciqin0 = (u8)reg_value;
 	agciqin = (u32)((256 * agciqin1) + agciqin0);
 
@@ -3079,7 +3058,7 @@ static fe_lla_error_t estimate_band_power_demod_not_locked(stchip_handle_t Handl
 
 	/* Restore value of DMDISTATE */
 	if (savedmd != 0)
-		error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DMDISTATE(Demod), savedmd);
+		error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DMDISTATE(Demod), savedmd);
 
 	if ( error== FE_LLA_NO_ERROR) {
 		*AGCRFIN1	= agcrfin1;
@@ -3100,7 +3079,7 @@ static fe_lla_error_t estimate_band_power_demod_not_locked(stchip_handle_t Handl
 			pband_rf -> computed band power
 --RETURN	::	error
 --***************************************************/
-fe_lla_error_t fe_stid135_get_band_power_demod_not_locked(fe_stid135_handle_t handle,
+fe_lla_error_t fe_stid135_get_band_power_demod_not_locked(struct stv* state,
 			enum fe_stid135_demod Demod, s32 *pband_rf)
 
 {
@@ -3113,15 +3092,15 @@ fe_lla_error_t fe_stid135_get_band_power_demod_not_locked(fe_stid135_handle_t ha
 	struct fe_stid135_internal_param *pParams;
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 
-	pParams = (struct fe_stid135_internal_param *) handle;
-	error |= fe_stid135_get_agcrf_path(pParams->handle_demod, Demod, &agcrf_path);
-	error |= estimate_band_power_demod_not_locked(handle, Demod, (u8)agcrf_path, &AGCRFIN1, &AGCRFIN0, &AGC1REF, &Pbandx1000);
+	pParams = &state->base->ip;
+	error |= fe_stid135_get_agcrf_path(state->base->ip.handle_demod, Demod, &agcrf_path);
+	error |= estimate_band_power_demod_not_locked(state, Demod, (u8)agcrf_path, &AGCRFIN1, &AGCRFIN0, &AGC1REF, &Pbandx1000);
 	*pband_rf = Pbandx1000;
 
 	return(error);
 }
 
-fe_lla_error_t estimate_band_power_demod_for_fft(fe_stid135_handle_t handle,
+fe_lla_error_t estimate_band_power_demod_for_fft(struct stv* state,
 																								 enum fe_stid135_demod Demod,
 																								 u8 TunerNb,
 																								 s32 *Pbandx1000, s32 frequency)
@@ -3133,28 +3112,28 @@ fe_lla_error_t estimate_band_power_demod_for_fft(fe_stid135_handle_t handle,
 	s32 correction1000=0;
 	u8 agcrfpwm=0;
 	u32 agc1;
-	struct fe_stid135_internal_param* pParams = (struct fe_stid135_internal_param*) handle;
+	//struct fe_stid135_internal_param* pParams = &state->base->ip;
 
-	fe_lla_error_t err= estimate_band_power_demod_not_locked(handle, Demod, TunerNb,
+	fe_lla_error_t err= estimate_band_power_demod_not_locked(state, Demod, TunerNb,
 																													 &agcrfin1, &agcrfin0, &AGC1REF, Pbandx1000);
 
 
 	switch(TunerNb) {
 	case AFE_TUNER1 :
-		err |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RSTID135_AFE_AFE_AGC1_RF_PWM, &reg_value);
+		err |= ChipGetOneRegister(state->base->ip.handle_demod, (u16)REG_RSTID135_AFE_AFE_AGC1_RF_PWM, &reg_value);
 		agcrfpwm = (u8)reg_value;
 		break;
 	case AFE_TUNER2 :
-		err |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RSTID135_AFE_AFE_AGC2_RF_PWM, &reg_value);
+		err |= ChipGetOneRegister(state->base->ip.handle_demod, (u16)REG_RSTID135_AFE_AFE_AGC2_RF_PWM, &reg_value);
 		agcrfpwm = (u8)reg_value;
 		break;
 	case AFE_TUNER3 :
-		err |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RSTID135_AFE_AFE_AGC3_RF_PWM, &reg_value);
+		err |= ChipGetOneRegister(state->base->ip.handle_demod, (u16)REG_RSTID135_AFE_AFE_AGC3_RF_PWM, &reg_value);
 		agcrfpwm = (u8)reg_value;
 		break;
 	case AFE_TUNER4 :
 	default:
-		err |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RSTID135_AFE_AFE_AGC4_RF_PWM, &reg_value);
+		err |= ChipGetOneRegister(state->base->ip.handle_demod, (u16)REG_RSTID135_AFE_AFE_AGC4_RF_PWM, &reg_value);
 		agcrfpwm = (u8)reg_value;
 		break;
 	}
@@ -3165,14 +3144,14 @@ fe_lla_error_t estimate_band_power_demod_for_fft(fe_stid135_handle_t handle,
 	if ((agc1 > 0) && (agcrfpwm >= 128)) {
 			correction1000 += correction1000;
 		}
-	dprintk("correction1000=%d\n", correction1000);
+	//dprintk("correction1000=%d\n", correction1000);
 	*Pbandx1000 += correction1000;
 	*Pbandx1000 -= 65248;
 	return err;
 }
 
 
-fe_lla_error_t fe_stid135_get_signal_quality(fe_stid135_handle_t Handle,
+fe_lla_error_t fe_stid135_get_signal_quality(struct stv* state,
 					enum fe_stid135_demod demod,
 					struct fe_sat_signal_info *pInfo,
 					int mc_auto)
@@ -3181,15 +3160,15 @@ fe_lla_error_t fe_stid135_get_signal_quality(fe_stid135_handle_t Handle,
 	struct fe_stid135_internal_param *pParams;
 	s32 pch_rf, pband_rf;
 
-	pParams = (struct fe_stid135_internal_param *) Handle;
+	pParams = &state->base->ip;
 
-	error |= FE_STiD135_GetBer(pParams->handle_demod, demod, &(pInfo->ber));
-	error |= FE_STiD135_GetRFLevel(pParams, demod, &pch_rf, &pband_rf);
+	error |= FE_STiD135_GetBer(state->base->ip.handle_demod, demod, &(pInfo->ber));
+	error |= FE_STiD135_GetRFLevel(state, demod, &pch_rf, &pband_rf);
 	pInfo->power = pch_rf;
-	error |= FE_STiD135_CarrierGetQuality(pParams->handle_demod, demod, &(pInfo->C_N), &(pInfo->standard));
+	error |= FE_STiD135_CarrierGetQuality(state->base->ip.handle_demod, demod, &(pInfo->C_N), &(pInfo->standard));
 	if (pInfo->standard == FE_SAT_DVBS2_STANDARD) {
 		if (mc_auto) {
-			error |= fe_stid135_filter_forbidden_modcodes(pParams, demod, pInfo->C_N * 10);
+			error |= fe_stid135_filter_forbidden_modcodes(state, demod, pInfo->C_N * 10);
 		}
 	} else {
 	}
@@ -3206,7 +3185,7 @@ fe_lla_error_t fe_stid135_get_signal_quality(fe_stid135_handle_t Handle,
 --PARAMS OUT	::	pInfo -> Informations (BER,C/N,power ...)
 --RETURN	::	Error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_get_signal_info(fe_stid135_handle_t Handle,
+fe_lla_error_t fe_stid135_get_signal_info(struct stv* state,
 					enum fe_stid135_demod Demod,
 					struct fe_sat_signal_info *pInfo,
 					u32 satellite_scan)
@@ -3218,17 +3197,15 @@ fe_lla_error_t fe_stid135_get_signal_info(fe_stid135_handle_t Handle,
 	//u32 reg_value = 0;
 	s32 symbolRateOffset = 0, carrier_frequency = 0;
 
-	pParams = (struct fe_stid135_internal_param *) Handle;
-	dprintk("signal_info: start\n");
-	if (pParams != NULL) {
-		dprintk("signal_info: here 1\n");
-		if ( pParams->handle_demod->Error )
+	pParams = &state->base->ip;
+	//	dprintk("signal_info: start\n");
+		if ( state->base->ip.handle_demod->Error )
 				error = FE_LLA_I2C_ERROR;
 
 		else {
 #if 0 //same as fe_stid135_get_lock_status (but that one makes better sense of lock status)
 			dprintk("signal_info: here 2\n");
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DMDSTATE_HEADER_MODE(Demod), &(fld_value[0]));
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DMDSTATE_HEADER_MODE(Demod), &(fld_value[0]));
 			demodState = (enum fe_sat_search_state)(fld_value[0]);
 			switch(demodState) {
 
@@ -3238,16 +3215,16 @@ fe_lla_error_t fe_stid135_get_signal_info(fe_stid135_handle_t Handle,
 				break;
 
 			case FE_SAT_DVBS2_FOUND:
-				error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS_LOCK_DEFINITIF(Demod), &(fld_value[0]));
-				error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELSTATUS1_PKTDELIN_LOCK(Demod), &(fld_value[1]));
-				error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSSTATUS_TSFIFO_LINEOK(Demod), &(fld_value[2]));
+				error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS_LOCK_DEFINITIF(Demod), &(fld_value[0]));
+				error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELSTATUS1_PKTDELIN_LOCK(Demod), &(fld_value[1]));
+				error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSSTATUS_TSFIFO_LINEOK(Demod), &(fld_value[2]));
 				pInfo->locked = fld_value[0] && fld_value[1] && fld_value[2];
 			break;
 
 			case FE_SAT_DVBS_FOUND:
-				error |= ChipGetField(pParams->handle_demod,FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS_LOCK_DEFINITIF(Demod), &(fld_value[0]));
-				error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_VITERBI_VSTATUSVIT_LOCKEDVIT(Demod), &(fld_value[1]));
-				error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSSTATUS_TSFIFO_LINEOK(Demod), &(fld_value[2]));
+				error |= ChipGetField(state->base->ip.handle_demod,FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS_LOCK_DEFINITIF(Demod), &(fld_value[0]));
+				error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_VITERBI_VSTATUSVIT_LOCKEDVIT(Demod), &(fld_value[1]));
+				error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSSTATUS_TSFIFO_LINEOK(Demod), &(fld_value[2]));
 
 				pInfo->locked = fld_value[0] && fld_value[1] && fld_value[2];
 			break;
@@ -3256,7 +3233,7 @@ fe_lla_error_t fe_stid135_get_signal_info(fe_stid135_handle_t Handle,
 			{
 				BOOL carrier_lock, data_present;
 
-				error |= fe_stid135_get_lock_status(Handle, Demod, &carrier_lock, &data_present);
+				error |= fe_stid135_get_lock_status(state, Demod, &carrier_lock, &data_present);
 
 				pInfo->locked = data_present;
 				pInfo->has_carrier = carrier_lock;
@@ -3269,30 +3246,30 @@ fe_lla_error_t fe_stid135_get_signal_info(fe_stid135_handle_t Handle,
 			/* On auxiliary demod, frequency found is not true, we have to pick it on master demod  */
 			/* On auxiliary demod, SR found is not true, we have to pick it on master demod  */
 			if(Demod == FE_SAT_DEMOD_2) {
-				error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG2_MODE_HAUTDEBIT(Demod), &(fld_value[0]));
+				error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG2_MODE_HAUTDEBIT(Demod), &(fld_value[0]));
 				if(fld_value[0] == 3) {
-					error |= FE_STiD135_GetCarrierFrequency(pParams->handle_demod,pParams->master_clock, FE_SAT_DEMOD_1, &carrier_frequency);
+					error |= FE_STiD135_GetCarrierFrequency(state, pParams->master_clock, FE_SAT_DEMOD_1, &carrier_frequency);
 					carrier_frequency /= 1000;
-					error |= FE_STiD135_GetSymbolRate(pParams->handle_demod, pParams->master_clock,FE_SAT_DEMOD_1, &(pInfo->symbol_rate));
-					error |= FE_STiD135_TimingGetOffset(pParams->handle_demod,pInfo->symbol_rate, FE_SAT_DEMOD_1, &symbolRateOffset);
+					error |= FE_STiD135_GetSymbolRate(state, pParams->master_clock,FE_SAT_DEMOD_1, &(pInfo->symbol_rate));
+					error |= FE_STiD135_TimingGetOffset(state, pInfo->symbol_rate, FE_SAT_DEMOD_1, &symbolRateOffset);
 				}
 			}
 			if(Demod == FE_SAT_DEMOD_4) {
-				error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG2_MODE_HAUTDEBIT(Demod), &(fld_value[0]));
+				error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG2_MODE_HAUTDEBIT(Demod), &(fld_value[0]));
 				if(fld_value[0] == 3) {
-					error |= FE_STiD135_GetCarrierFrequency(pParams->handle_demod,pParams->master_clock, FE_SAT_DEMOD_3, &carrier_frequency);
+					error |= FE_STiD135_GetCarrierFrequency(state, pParams->master_clock, FE_SAT_DEMOD_3, &carrier_frequency);
 					carrier_frequency /= 1000;
-					error |= FE_STiD135_GetSymbolRate(pParams->handle_demod, pParams->master_clock,FE_SAT_DEMOD_3, &(pInfo->symbol_rate));
-					error |= FE_STiD135_TimingGetOffset(pParams->handle_demod,pInfo->symbol_rate, FE_SAT_DEMOD_3, &symbolRateOffset);
+					error |= FE_STiD135_GetSymbolRate(state, pParams->master_clock,FE_SAT_DEMOD_3, &(pInfo->symbol_rate));
+					error |= FE_STiD135_TimingGetOffset(state, pInfo->symbol_rate, FE_SAT_DEMOD_3, &symbolRateOffset);
 				}
 			}
 			if(((Demod != FE_SAT_DEMOD_2) && (Demod != FE_SAT_DEMOD_4)) ||
 					((Demod == FE_SAT_DEMOD_2) && (fld_value[0] != 3)) ||
 					((Demod == FE_SAT_DEMOD_4) && (fld_value[0] != 3))) {
-				error |= FE_STiD135_GetCarrierFrequency(pParams->handle_demod,pParams->master_clock, Demod, &carrier_frequency);
+				error |= FE_STiD135_GetCarrierFrequency(state, pParams->master_clock, Demod, &carrier_frequency);
 				carrier_frequency /= 1000;
-				error |= FE_STiD135_GetSymbolRate(pParams->handle_demod,pParams->master_clock,Demod, &(pInfo->symbol_rate));
-				error |= FE_STiD135_TimingGetOffset(pParams->handle_demod,pInfo->symbol_rate,Demod, &symbolRateOffset);
+				error |= FE_STiD135_GetSymbolRate(state, pParams->master_clock,Demod, &(pInfo->symbol_rate));
+				error |= FE_STiD135_TimingGetOffset(state, pInfo->symbol_rate,Demod, &symbolRateOffset);
 			}
 
 			if(carrier_frequency < 0) {
@@ -3312,27 +3289,27 @@ fe_lla_error_t fe_stid135_get_signal_info(fe_stid135_handle_t Handle,
 				pInfo->symbol_rate += (u32)symbolRateOffset;
 
 			error |= FE_STiD135_GetStandard(
-				pParams->handle_demod, Demod, &(pInfo->standard));
+				state->base->ip.handle_demod, Demod, &(pInfo->standard));
 
 			 error |= FE_STiD135_GetViterbiPunctureRate(
-				pParams->handle_demod,Demod, &(pInfo->puncture_rate));
+				state->base->ip.handle_demod,Demod, &(pInfo->puncture_rate));
 
-			error |= fe_stid135_get_mode_code(pParams,
+			error |= fe_stid135_get_mode_code(state,
 						Demod,
 						&pInfo->modcode,
 						&pInfo->frame_length,
 						&pInfo->pilots);
 
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_TMGOBS_ROLLOFF_STATUS(Demod), &(fld_value[0]));
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_TMGOBS_ROLLOFF_STATUS(Demod), &(fld_value[0]));
 			pInfo->roll_off = (enum fe_sat_rolloff)(fld_value[0]);
 
 			if (satellite_scan == FALSE) {
-				error |= FE_STiD135_GetBer(pParams->handle_demod,Demod, &(pInfo->ber));
-				error |= FE_STiD135_GetRFLevel(pParams, Demod, &pch_rf, &pband_rf);
+				error |= FE_STiD135_GetBer(state->base->ip.handle_demod,Demod, &(pInfo->ber));
+				error |= FE_STiD135_GetRFLevel(state, Demod, &pch_rf, &pband_rf);
 				pInfo->power = pch_rf;
 				pInfo->powerdBmx10 = pch_rf * 10;
 				pInfo->band_power = pband_rf;
-				error |= FE_STiD135_CarrierGetQuality(pParams->handle_demod, Demod, &(pInfo->C_N), &(pInfo->standard));
+				error |= FE_STiD135_CarrierGetQuality(state->base->ip.handle_demod, Demod, &(pInfo->C_N), &(pInfo->standard));
 			} else { /* no BER, Power and CNR measurement during scan */
 				pInfo->ber = 0;
 				pInfo->power = 0;
@@ -3340,7 +3317,7 @@ fe_lla_error_t fe_stid135_get_signal_info(fe_stid135_handle_t Handle,
 			}
 
 			if(pInfo->standard == FE_SAT_DVBS2_STANDARD) {
-				error |= ChipGetField(pParams->handle_demod,FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS6_SPECINV_DEMOD(Demod), &(fld_value[0]));
+				error |= ChipGetField(state->base->ip.handle_demod,FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS6_SPECINV_DEMOD(Demod), &(fld_value[0]));
 				pInfo->spectrum = (enum fe_sat_iq_inversion)(fld_value[0]);
 
 				if (((pInfo->modcode >= FE_SAT_QPSK_14) && (pInfo->modcode <= FE_SAT_QPSK_910))
@@ -3407,32 +3384,29 @@ fe_lla_error_t fe_stid135_get_signal_info(fe_stid135_handle_t Handle,
 					pInfo->modulation = FE_SAT_MOD_UNKNOWN;
 
 				/*reset the error counter to PER*/
-				error |= ChipSetOneRegister(pParams->handle_demod,
+				error |= ChipSetOneRegister(state->base->ip.handle_demod,
 																		(u16)REG_RC8CODEW_DVBSX_HWARE_ERRCTRL1(Demod), 0x67);
 				//dprintk("MIS: mis_mode=%d\n", pParams->mis_mode[Demod-1] );
-				if(pParams->mis_mode[Demod-1] /* &&
+				if(state->mis_mode /* &&
 					 (pParams->demod_search_algo[Demod-1] == FE_SAT_BLIND_SEARCH ||
 					 pParams->demod_search_algo[Demod-1] == FE_SAT_NEXT)*/) {
 					fe_lla_error_t error1 = FE_LLA_NO_ERROR;
-					error1 |=fe_stid135_isi_scan(pParams, Demod, &pInfo->isi_list);
+					error1 |=fe_stid135_isi_scan(state, Demod, &pInfo->isi_list);
 					if(error1)
 						dprintk("MIS DETECTION: error=%d nb_isi=%d\n", error1, pInfo->isi_list.nb_isi);
 				}
 
 			} else { /*DVBS1/DSS*/
-				error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_VITERBI_FECM_IQINV(Demod), &(fld_value[0]));
+				error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_VITERBI_FECM_IQINV(Demod), &(fld_value[0]));
 				pInfo->spectrum = (enum fe_sat_iq_inversion)(fld_value[0]);
 				pInfo->modulation = FE_SAT_MOD_QPSK;
 			}
 
-			if (pParams->handle_demod->Error)
+			if (state->base->ip.handle_demod->Error)
 				error |= FE_LLA_I2C_ERROR;
 
 		}
 
-	}
-	else
-		error = FE_LLA_INVALID_HANDLE;
 
 	return error;
 }
@@ -3445,7 +3419,7 @@ fe_lla_error_t fe_stid135_get_signal_info(fe_stid135_handle_t Handle,
 --PARAMS OUT	::	pTrackingInfo ==> pointer to FE_STiD135_TrackingInfo_t struct.
 --RETURN	::	Error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_tracking(fe_stid135_handle_t Handle,
+fe_lla_error_t fe_stid135_tracking(struct stv* state,
 				enum fe_stid135_demod Demod,
 				struct fe_sat_tracking_info *pTrackingInfo)
 {
@@ -3455,20 +3429,19 @@ fe_lla_error_t fe_stid135_tracking(fe_stid135_handle_t Handle,
 	s32 pch_rf, pband_rf, fld_value[3], symbolRateOffset = 0;
 	u32 symbol_rate;
 
-	pParams = (struct fe_stid135_internal_param	*) Handle;
+	pParams = &state->base->ip;
 
-	if(pParams != NULL) {
 
-		if (pParams->handle_demod->Error)
+		if (state->base->ip.handle_demod->Error)
 			error=FE_LLA_I2C_ERROR;
 		else {
-			error = FE_STiD135_GetRFLevel(pParams, Demod, &pch_rf, &pband_rf);
+			error = FE_STiD135_GetRFLevel(state, Demod, &pch_rf, &pband_rf);
 			pTrackingInfo->power = pch_rf;
 			pTrackingInfo->powerdBmx10=(s32)(pch_rf * 10);
 			pTrackingInfo->band_power = pband_rf;
-			error |= FE_STiD135_GetBer(pParams->handle_demod, Demod, &(pTrackingInfo->ber));
+			error |= FE_STiD135_GetBer(state->base->ip.handle_demod, Demod, &(pTrackingInfo->ber));
 
-			error |= ChipGetField(pParams->handle_demod,FLD_FC8CODEW_DVBSX_DEMOD_DMDSTATE_HEADER_MODE(Demod), &(fld_value[0]));
+			error |= ChipGetField(state->base->ip.handle_demod,FLD_FC8CODEW_DVBSX_DEMOD_DMDSTATE_HEADER_MODE(Demod), &(fld_value[0]));
 			demodState = (enum fe_sat_search_state)(fld_value[0]);
 
 
@@ -3479,36 +3452,36 @@ fe_lla_error_t fe_stid135_tracking(fe_stid135_handle_t Handle,
 					pTrackingInfo->C_N = 0;
 				break;
 				case FE_SAT_DVBS2_FOUND:
-					error |= ChipGetField(pParams->handle_demod,FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS_LOCK_DEFINITIF(Demod), &(fld_value[0]));
-					error |= ChipGetField(pParams->handle_demod,FLD_FC8CODEW_DVBSX_PKTDELIN_PDELSTATUS1_PKTDELIN_LOCK(Demod), &(fld_value[1]));
-					error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSSTATUS_TSFIFO_LINEOK(Demod), &(fld_value[2]));
+					error |= ChipGetField(state->base->ip.handle_demod,FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS_LOCK_DEFINITIF(Demod), &(fld_value[0]));
+					error |= ChipGetField(state->base->ip.handle_demod,FLD_FC8CODEW_DVBSX_PKTDELIN_PDELSTATUS1_PKTDELIN_LOCK(Demod), &(fld_value[1]));
+					error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSSTATUS_TSFIFO_LINEOK(Demod), &(fld_value[2]));
 					pTrackingInfo->locked = fld_value[0] && fld_value[1] && fld_value[2];
 
-					error |= FE_STiD135_CarrierGetQuality(pParams->handle_demod, Demod,
+					error |= FE_STiD135_CarrierGetQuality(state->base->ip.handle_demod, Demod,
 																								&(pTrackingInfo->C_N), &(pTrackingInfo->standard)
 																								);
 					/* Bug fix BZ#107382 */
 					if(pTrackingInfo->C_N > SNR_MAX_THRESHOLD * 10) {
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DFECFG(Demod), 0x41);
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_XFECFG2(Demod), 0x00);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DFECFG(Demod), 0x41);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_XFECFG2(Demod), 0x00);
 					} else if (pTrackingInfo->C_N < SNR_MIN_THRESHOLD * 10) {
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DFECFG(Demod), 0xC1);
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_XFECFG2(Demod), 0x03);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DFECFG(Demod), 0xC1);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_XFECFG2(Demod), 0x03);
 					}
 					/* Performance improvement at SR <= 3MS/s */
-					if(pParams->demod_results[Demod-1].symbol_rate <= 3000000)
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_TCTL2(Demod), 0x04);
+					if(state->demod_results.symbol_rate <= 3000000)
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_TCTL2(Demod), 0x04);
 					else
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_TCTL2(Demod), 0x00);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_TCTL2(Demod), 0x00);
 					/*reset The error counter to PER*/
 					/* reset the error counter to  DVBS2 packet error rate */
-					error |= ChipSetOneRegister(pParams->handle_demod,
+					error |= ChipSetOneRegister(state->base->ip.handle_demod,
 					(u16)REG_RC8CODEW_DVBSX_HWARE_ERRCTRL1(Demod),0x67);
 					/* Adjust carrier loop alpha coefficients vs CNR */
-					error |= CarrierLoopAutoAdjust(pParams, Demod, pTrackingInfo->C_N);
+					error |= CarrierLoopAutoAdjust(state, Demod, pTrackingInfo->C_N);
 
-					error |= FE_STiD135_GetSymbolRate(pParams->handle_demod,pParams->master_clock,Demod, &symbol_rate);
-					error |= FE_STiD135_TimingGetOffset(pParams->handle_demod,symbol_rate,Demod, &symbolRateOffset);
+					error |= FE_STiD135_GetSymbolRate(state, pParams->master_clock,Demod, &symbol_rate);
+					error |= FE_STiD135_TimingGetOffset(state, symbol_rate,Demod, &symbolRateOffset);
 					/* Get timing loop offset */
 					if(symbolRateOffset < 0) {
 						symbolRateOffset *= (-1);
@@ -3519,51 +3492,49 @@ fe_lla_error_t fe_stid135_tracking(fe_stid135_handle_t Handle,
 
 					/* Management of partial wideband equalizer */
 					if(symbol_rate >= 250000000) { /* celerity = 200000km/s, 100m of wire => 500ns in the wire @500MS/s = 2ns/S, 500/2=250 levels */
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_WDFECFG(Demod), 0x42);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_WDFECFG(Demod), 0x42);
 					} else if(symbol_rate >= 125000000) {
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_WDFECFG(Demod), 0x4A);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_WDFECFG(Demod), 0x4A);
 					} else if(symbol_rate >=  62500000) {
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_WDFECFG(Demod), 0x52);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_WDFECFG(Demod), 0x52);
 					} else if(symbol_rate >=  31250000) {
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_WDFECFG(Demod), 0x5A);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_WDFECFG(Demod), 0x5A);
 					} else {
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_WDFECFG(Demod), 0x00);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_WDFECFG(Demod), 0x00);
 					}
 				break;
 
 				case FE_SAT_DVBS_FOUND:
-					error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS_LOCK_DEFINITIF(Demod), &(fld_value[0]));
-					error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_VITERBI_VSTATUSVIT_LOCKEDVIT(Demod), &(fld_value[1]));
-					error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSSTATUS_TSFIFO_LINEOK(Demod), &(fld_value[2]));
+					error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS_LOCK_DEFINITIF(Demod), &(fld_value[0]));
+					error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_VITERBI_VSTATUSVIT_LOCKEDVIT(Demod), &(fld_value[1]));
+					error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSSTATUS_TSFIFO_LINEOK(Demod), &(fld_value[2]));
 
 					pTrackingInfo->locked = fld_value[0] && fld_value[1] && fld_value[2];
-					error |= FE_STiD135_CarrierGetQuality(pParams->handle_demod, Demod,
+					error |= FE_STiD135_CarrierGetQuality(state->base->ip.handle_demod, Demod,
 																								&(pTrackingInfo->C_N), &(pTrackingInfo->standard));
 					break;
 			}
 
 			error |= FE_STiD135_GetLoFreqHz(pParams, (u32*)&(pTrackingInfo->frequency_if));
 			pTrackingInfo->frequency_if *= 1000;
-			error |= FE_STiD135_GetCarrierFrequency(pParams->handle_demod, pParams->master_clock,Demod, &(fld_value[0]));
+			error |= FE_STiD135_GetCarrierFrequency(state, pParams->master_clock,Demod, &(fld_value[0]));
 			if(fld_value[0] < 0) {
 				pTrackingInfo->frequency_if -= (-fld_value[0] / 1000);
 			} else {
 				pTrackingInfo->frequency_if += (fld_value[0] / 1000);
 			}
 
-			error = error | fe_stid135_get_mode_code(pParams,
+			error = error | fe_stid135_get_mode_code(state,
 					Demod,
 					&pTrackingInfo->modcode,
 					&pTrackingInfo->frame_length,
 					&pTrackingInfo->pilots);
 
-			if (pParams->handle_demod->Error)
+			if (state->base->ip.handle_demod->Error)
 				error=FE_LLA_I2C_ERROR;
 		}
 
-	}
-	else
-		error = FE_LLA_INVALID_HANDLE;
+
 
 	return error;
 }
@@ -3576,11 +3547,11 @@ fe_lla_error_t fe_stid135_tracking(fe_stid135_handle_t Handle,
 --RETURN	::	error
 --***************************************************/
 fe_lla_error_t fe_stid135_init(struct fe_sat_init_params *pInit,
-				fe_stid135_handle_t *handle)
+															 struct fe_stid135_internal_param* pParams,
+															 struct stv* state_demod1)
 {
-	struct fe_stid135_internal_param *pParams = NULL;
 	char chr_tmp[50] = "";
-	u8 i, j;
+	u8 i;
 
 	/* Demodulator chip initialisation parameters */
 	Demod_InitParams_t DemodInitParams;
@@ -3599,10 +3570,8 @@ fe_lla_error_t fe_stid135_init(struct fe_sat_init_params *pInit,
 	/* Internal params structure allocation */
 
 	STCHIP_Info_t DemodChip;
-	pParams = kzalloc(sizeof(struct fe_stid135_internal_param), GFP_KERNEL);
-	(*handle) = (fe_stid135_handle_t) pParams;
 
-	if (pParams != NULL) {
+	dprintk("here\n");
 		/* Chip initialisation */
 
 		/* Demodulator Init */
@@ -3621,7 +3590,7 @@ fe_lla_error_t fe_stid135_init(struct fe_sat_init_params *pInit,
 		DemodInitParams.Chip->Error = CHIPERR_NO_ERROR;
 		strcpy((char *)DemodInitParams.Chip->Name,
 			pInit->demod_name);
-
+	dprintk("here\n");
 		demod_init_error = STiD135_Init(&DemodInitParams,
 					&(pParams->handle_demod));
 		/* Frequency clock XTAL */
@@ -3630,23 +3599,9 @@ fe_lla_error_t fe_stid135_init(struct fe_sat_init_params *pInit,
 		pParams->internal_dcdc = pInit->internal_dcdc;
 		pParams->internal_ldo = pInit->internal_ldo;
 		pParams->rf_input_type = pInit->rf_input_type;
-
-		/* Init for PID filtering feature */
-		for(i=0;i<8;i++)
-			pParams->pid_flt[i].first_disable_all_command = TRUE;
-		/* Init for GSE filtering feature */
-		for(i=0;i<8;i++) {
-			pParams->gse_flt[i].first_disable_all_protocol_command = TRUE;
-			pParams->gse_flt[i].first_disable_all_label_command = TRUE;
-		}
-		/* Init for MODCOD filtering feature */
+		//DANGER: &(pParams->handle_demod) or (pParams->handle_demod)
+		//	error |= fe_stid135_apply_custom_qef_for_modcod_filter(pParams, NULL);
 		fe_stid135_modcod_flt_reg_init();
-		for(i=0;i<NB_SAT_MODCOD;i++) {
-			for(j=FE_SAT_DEMOD_1;j<=FE_SAT_DEMOD_8;j++) {
-				pParams->mc_flt[i].forbidden[j-1] = FALSE;
-			}
-		}
-		error |= fe_stid135_apply_custom_qef_for_modcod_filter(&(pParams->handle_demod), NULL);
 
 		TunerError = FE_STiD135_TunerInit(pParams);
 
@@ -3660,18 +3615,16 @@ fe_lla_error_t fe_stid135_init(struct fe_sat_init_params *pInit,
 		strcat(chr_tmp, "_SOC");
 		strcpy((char *)SocInitParams.Chip->Name, chr_tmp);
 		SocError = STiD135_SOC_Init(&SocInitParams, &(pParams->handle_soc));
-
+	dprintk("here\n");
 		/* Adjust Vcore voltage regarding process (AVS) */
 		error |= fe_stid135_set_vcore_supply(pParams);
 
 		/* Initialization of Flex Clock Gen SOC block */
 		flex_clk_gen_error = fe_stid135_flexclkgen_init(pParams);
-
+	dprintk("here\n");
 		if(pParams->handle_demod != NULL) {
 			if((demod_init_error == CHIPERR_NO_ERROR) && (TunerError == TUNER_NO_ERR) && (SocError == CHIPERR_NO_ERROR) && (flex_clk_gen_error == FE_LLA_NO_ERROR))
 			{
-				for(i=FE_SAT_DEMOD_1;i<FE_SAT_DEMOD_8;i++)
-					pParams->roll_off[i-1] = pInit->roll_off;
 #if 0 //not in main driver
 				/* settings for STTUNER or non-Gui applications
 				or Auto test*/
@@ -3688,21 +3641,23 @@ fe_lla_error_t fe_stid135_init(struct fe_sat_init_params *pInit,
 					pInit->tuner_iq_inversion);
 				/* switch to the PLL */
 #endif
+				dprintk("here\n");
 				/*Read the current Mclk*/
 				error |= FE_STiD135_GetMclkFreq(pParams, &(pParams->master_clock));
 				dprintk("MASTER CLOCK freq==%d\n", pParams->master_clock);
 				if(pParams->master_clock == 0)
 					return FE_LLA_INVALID_HANDLE;
-
+				dprintk("here\n");
 				/* BB filter calibration on all RF channels */
 				for(i=AFE_TUNER1;i<=AFE_TUNER4;i++) {
-					error |= fe_stid135_set_rfmux_path(pParams->handle_demod, FE_SAT_DEMOD_1, (FE_OXFORD_TunerPath_t)i);
-					error |= fe_stid135_init_before_bb_flt_calib(pParams, (FE_OXFORD_TunerPath_t)i, TRUE);
-					error |= fe_stid135_bb_flt_calib(pParams, (FE_OXFORD_TunerPath_t)i);
-					error |= fe_stid135_uninit_after_bb_flt_calib(pParams, (FE_OXFORD_TunerPath_t)i);
+					error |= fe_stid135_set_rfmux_path(state_demod1, FE_SAT_DEMOD_1, (FE_OXFORD_TunerPath_t)i);
+					error |= fe_stid135_init_before_bb_flt_calib(state_demod1, FE_SAT_DEMOD_1, (FE_OXFORD_TunerPath_t)i, TRUE);
+					error |= fe_stid135_bb_flt_calib(state_demod1, FE_SAT_DEMOD_1, (FE_OXFORD_TunerPath_t)i);
+					error |= fe_stid135_uninit_after_bb_flt_calib(state_demod1, FE_SAT_DEMOD_1, (FE_OXFORD_TunerPath_t)i);
 					error |= Oxford_TunerDisable(pParams->handle_demod, (FE_OXFORD_TunerPath_t)i);
 				}
-				error |= fe_stid135_set_rfmux_path(pParams->handle_demod, FE_SAT_DEMOD_1, AFE_TUNER1);
+				dprintk("here\n");
+				error |= fe_stid135_set_rfmux_path(state_demod1, FE_SAT_DEMOD_1, AFE_TUNER1);
 
 				/* Check the error at the end of the init */
 				if ((pParams->handle_demod->Error) || (pParams->handle_soc->Error))
@@ -3711,12 +3666,15 @@ fe_lla_error_t fe_stid135_init(struct fe_sat_init_params *pInit,
 			} else
 				error = FE_LLA_I2C_ERROR;
 		} else {
+			dprintk("here\n");
 			error = FE_LLA_INVALID_HANDLE;
 		}
-	}
+	dprintk("here\n");
 
 	return error;
 }
+
+
 
 
 /*****************************************************
@@ -3728,7 +3686,7 @@ fe_lla_error_t fe_stid135_init(struct fe_sat_init_params *pInit,
 --PARAMS OUT	::	NONE
 --RETURN	::	error (if any)
 --***************************************************/
-static fe_lla_error_t fe_stid135_manage_LNF_IP3 (stchip_handle_t demod_handle, FE_OXFORD_TunerPath_t tuner_nb, u32 agc1Power)
+static fe_lla_error_t fe_stid135_manage_LNF_IP3 (STCHIP_Info_t* demod_handle, FE_OXFORD_TunerPath_t tuner_nb, u32 agc1Power)
 {
 	STCHIP_Error_t error = CHIPERR_NO_ERROR;
 				u8 modeLNF=0;
@@ -3756,7 +3714,7 @@ static fe_lla_error_t fe_stid135_manage_LNF_IP3 (stchip_handle_t demod_handle, F
 --PARAMS OUT	::	signalType_p -> result of algo computation
 --RETURN	::	error
 --***************************************************/
-fe_lla_error_t FE_STiD135_Algo(struct fe_stid135_internal_param *pParams,
+fe_lla_error_t FE_STiD135_Algo(struct stv* state,
 		enum fe_stid135_demod Demod, BOOL satellite_scan, enum fe_sat_signal_type *signalType_p)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
@@ -3778,19 +3736,19 @@ fe_lla_error_t FE_STiD135_Algo(struct fe_stid135_internal_param *pParams,
 	*signalType_p = FE_SAT_NOCARRIER;
 
 	/*release reset DVBS2 packet delin*/
-	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL1_ALGOSWRST(Demod), 0);
+	error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL1_ALGOSWRST(Demod), 0);
 	streamMergerField = FLD_FC8CODEW_DVBSX_HWARE_TSCFG2_RST_HWARE(Demod);
 
 	/* Stop the stream merger before stopping the demod */
 	/* stream merger Stop*/
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DMDISTATE(Demod), 0x5C);
+	error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DMDISTATE(Demod), 0x5C);
 
 	/*Get the demod and FEC timeout recommended value depending on the
 	symbol rate and the search algo*/
 	FE_STiD135_GetLockTimeout(&demodTimeout, &fecTimeout,
-														pParams->demod_symbol_rate[Demod-1], pParams->demod_search_algo[Demod-1]);
+														state->demod_symbol_rate, state->demod_search_algo);
 	dprintk("FE_STiD135_GetLockTimeout: demodTimeout=%d fecTimeout=%d symrate=%d algo=%d\n",
-					demodTimeout, fecTimeout, pParams->demod_symbol_rate[Demod-1], pParams->demod_search_algo[Demod-1]
+					demodTimeout, fecTimeout, state->demod_symbol_rate, state->demod_search_algo
 	);
 #ifdef USER2
 	demodTimeout = demodTimeout * 16; // Low CNR
@@ -3799,30 +3757,30 @@ fe_lla_error_t FE_STiD135_Algo(struct fe_stid135_internal_param *pParams,
 #endif
 	fecTimeout   = fecTimeout   * 4;
 
-	error |= fe_stid135_set_symbol_rate(pParams->handle_demod,
-		pParams->master_clock, pParams->demod_symbol_rate[Demod-1], Demod);
+	error |= fe_stid135_set_symbol_rate(state,
+		state->base->ip.master_clock, state->demod_symbol_rate, Demod);
 
-		error |= fe_stid135_set_carrier_frequency_init(pParams,
-																									 pParams->tuner_frequency[Demod-1], Demod);
+		error |= fe_stid135_set_carrier_frequency_init(state,
+																									 state->tuner_frequency, Demod);
 #if 0 //not in main driver
-		error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEMOD_MANUALS2_ROLLOFF(Demod), 0);
-		error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEMOD_MANUALSX_ROLLOFF(Demod), 0);
+		error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEMOD_MANUALS2_ROLLOFF(Demod), 0);
+		error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEMOD_MANUALSX_ROLLOFF(Demod), 0);
 #endif
 		/* NO signal Detection */
 		/* Read PowerI and PowerQ To check the signal Presence */
 
-	error |= fe_stid135_get_agcrf_path(pParams->handle_demod, Demod, &AgcrfPath);
+	error |= fe_stid135_get_agcrf_path(state->base->ip.handle_demod, Demod, &AgcrfPath);
 
-	ChipWaitOrAbort(pParams->handle_demod, 10);
+	ChipWaitOrAbort(state->base->ip.handle_demod, 10);
 
-	error |= ChipGetRegisters(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_AGCRF_AGCRFIN1(AgcrfPath), 2);
+	error |= ChipGetRegisters(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_AGCRF_AGCRFIN1(AgcrfPath), 2);
 
-	agc1Power=MAKEWORD16(ChipGetFieldImage(pParams->handle_demod,
+	agc1Power=MAKEWORD16(ChipGetFieldImage(state->base->ip.handle_demod,
 		FLD_FC8CODEW_DVBSX_AGCRF_AGCRFIN1_AGCRF_VALUE(AgcrfPath)),
-		ChipGetFieldImage(pParams->handle_demod,
+		ChipGetFieldImage(state->base->ip.handle_demod,
 		FLD_FC8CODEW_DVBSX_AGCRF_AGCRFIN0_AGCRF_VALUE(AgcrfPath)));
 
-	error |= fe_stid135_manage_LNF_IP3(pParams->handle_demod, AgcrfPath, (u32)agc1Power);
+	error |= fe_stid135_manage_LNF_IP3(state->base->ip.handle_demod, AgcrfPath, (u32)agc1Power);
 
 	iqPower = 0;
 
@@ -3831,12 +3789,12 @@ fe_lla_error_t FE_STiD135_Algo(struct fe_stid135_internal_param *pParams,
 		POWERQ registers */
 		/* Read the IQ power value */
 		for (i = 0; i < 5; i++) {
-			error |= ChipGetRegisters(pParams->handle_demod,
+			error |= ChipGetRegisters(state->base->ip.handle_demod,
 				(u16)REG_RC8CODEW_DVBSX_AGCRF_AGCRF_POWERI(AgcrfPath), 2);
 			iqPower = iqPower + (ChipGetFieldImage(
-			pParams->handle_demod, FLD_FC8CODEW_DVBSX_AGCRF_AGCRF_POWERI_AGCRF_POWER_I(AgcrfPath))
+			state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_AGCRF_AGCRF_POWERI_AGCRF_POWER_I(AgcrfPath))
 					+  ChipGetFieldImage(
-			pParams->handle_demod, FLD_FC8CODEW_DVBSX_AGCRF_AGCRF_POWERQ_AGCRF_POWER_Q(AgcrfPath))) / 2;
+			state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_AGCRF_AGCRF_POWERQ_AGCRF_POWER_Q(AgcrfPath))) / 2;
 		}
 		iqPower /= 5;
 	}
@@ -3848,21 +3806,21 @@ fe_lla_error_t FE_STiD135_Algo(struct fe_stid135_internal_param *pParams,
 		// We keep this if statement on embedded side
 		if ((agc1Power == 0) && (iqPower < powerThreshold)) {
 			/*If (AGC1=0 and iqPower<IQThreshold)  then no signal  */
-			pParams->demod_results[Demod-1].locked = FALSE;
-			pParams->demod_results[Demod-1].has_carrier = FALSE;
+			state->demod_results.locked = FALSE;
+			state->demod_results.has_carrier = FALSE;
 			*signalType_p = FE_SAT_TUNER_NOSIGNAL ;
 		} else
 #endif
-			dprintk("XXX blind=%d satellite_scan=%d\n", pParams->demod_search_algo[Demod-1] == FE_SAT_BLIND_SEARCH,
+			dprintk("XXX blind=%d satellite_scan=%d\n", state->demod_search_algo == FE_SAT_BLIND_SEARCH,
 							satellite_scan);
-		if ((pParams->demod_search_algo[Demod-1] == FE_SAT_BLIND_SEARCH ||
-				 pParams->demod_search_algo[Demod-1] == FE_SAT_NEXT)
+		if ((state->demod_search_algo == FE_SAT_BLIND_SEARCH ||
+				 state->demod_search_algo == FE_SAT_NEXT)
 				&& (satellite_scan == TRUE)) {
 		iqPower = 0;
 		agc1Power = 0;
-		pParams->demod_results[Demod-1].locked = FALSE; /*if AGC1 integrator ==0
+		state->demod_results.locked = FALSE; /*if AGC1 integrator ==0
 																											and iqPower < Threshold then NO signal*/
-		pParams->demod_results[Demod-1].has_carrier = FALSE; /*if AGC1 integrator ==0
+		state->demod_results.has_carrier = FALSE; /*if AGC1 integrator ==0
 																											and iqPower < Threshold then NO signal*/
 		/* No edge detected, jump tuner bandwidth */
 		*signalType_p = FE_SAT_TUNER_NOSIGNAL;
@@ -3870,46 +3828,45 @@ fe_lla_error_t FE_STiD135_Algo(struct fe_stid135_internal_param *pParams,
 		}  else { /* falling edge detected or direct blind to be done */
 			/* Set the IQ inversion search mode */
 
-		error |= ChipSetFieldImage(pParams->handle_demod,
+		error |= ChipSetFieldImage(state->base->ip.handle_demod,
 		FLD_FC8CODEW_DVBSX_DEMOD_DEMOD_SPECINV_CONTROL(Demod),
 		FE_SAT_IQ_AUTO);   /* Set IQ inversion always in auto */
-		error |= ChipSetRegisters(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DEMOD(Demod), 1);
-		error |= FE_STiD135_SetSearchStandard(pParams, Demod);
+		error |= ChipSetRegisters(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DEMOD(Demod), 1);
+		error |= FE_STiD135_SetSearchStandard(state, Demod);
 
-		if (pParams->demod_search_algo[Demod-1] != FE_SAT_BLIND_SEARCH
-				&& pParams->demod_search_algo[Demod-1] != FE_SAT_NEXT)
-			error |= FE_STiD135_StartSearch(pParams,Demod);
+		if (state->demod_search_algo != FE_SAT_BLIND_SEARCH
+				&& state->demod_search_algo != FE_SAT_NEXT)
+			error |= FE_STiD135_StartSearch(state, Demod);
 
-		if (pParams->demod_search_algo[Demod-1] == FE_SAT_BLIND_SEARCH ||
-				pParams->demod_search_algo[Demod-1] == FE_SAT_NEXT) {
-			error |= FE_STiD135_BlindSearchAlgo(pParams, demodTimeout,
+		if (state->demod_search_algo == FE_SAT_BLIND_SEARCH ||
+				state->demod_search_algo == FE_SAT_NEXT) {
+			error |= FE_STiD135_BlindSearchAlgo(state, demodTimeout,
 																					satellite_scan, Demod, &lock);
 			dprintk("BLIND SEARCH: timeout=%d lock=%d\n", demodTimeout, lock);
 		} else {
 			/* case warm or cold start wait for demod lock */
-				error |= FE_STiD135_GetDemodLock(pParams,Demod,
-				demodTimeout, &lock);
+				error |= FE_STiD135_GetDemodLock(state, Demod, demodTimeout, &lock);
 		}
 
 		if (lock == TRUE) {
 			/* Read signal caracteristics and check the lock
 			range */
-			error |= FE_STiD135_GetSignalParams(pParams, Demod,
+			error |= FE_STiD135_GetSignalParams(state, Demod,
 																					satellite_scan, signalType_p);
 
 			/* Manage Matype Information if DVBS2 signal */
-			if (pParams->demod_results[Demod-1].standard == FE_SAT_DVBS2_STANDARD) {
+			if (state->demod_results.standard == FE_SAT_DVBS2_STANDARD) {
 				/* Before reading MATYPE value, we need to wait for packet delin locked */
-				error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELSTATUS1_FIRST_LOCK(Demod), &fld_value);
+				error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELSTATUS1_FIRST_LOCK(Demod), &fld_value);
 				while ((fld_value != TRUE) && (pdel_status_timeout < 220)) {
-					ChipWaitOrAbort(pParams->handle_demod, 8); //main driver has value 5
+					ChipWaitOrAbort(state->base->ip.handle_demod, 8); //main driver has value 5
 					pdel_status_timeout = (u8)(pdel_status_timeout + 5);
-					error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELSTATUS1_FIRST_LOCK(Demod), &fld_value);
+					error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELSTATUS1_FIRST_LOCK(Demod), &fld_value);
 				}
 				if (pdel_status_timeout < 220) {
 					// Either we deal with common data: TS-MPEG, GSE, and so on...
 					#if 1
-						error |= fe_stid135_manage_matype_info(pParams, Demod);
+						error |= fe_stid135_manage_matype_info(state, Demod);
 					// ...or we deal with raw BB frames
 					#else
 						error |= fe_stid135_manage_matype_info_raw_bbframe(pParams, Demod);
@@ -3931,68 +3888,68 @@ fe_lla_error_t FE_STiD135_Algo(struct fe_stid135_internal_param *pParams,
 
 		// - new management of NCR
 		/* Release stream merger reset */
-		error |= ChipSetField(pParams->handle_demod, streamMergerField, 0);
-		ChipWaitOrAbort(pParams->handle_demod, 3);
+		error |= ChipSetField(state->base->ip.handle_demod, streamMergerField, 0);
+		ChipWaitOrAbort(state->base->ip.handle_demod, 3);
 		/* Stream merger reset */
-		error |= ChipSetField(pParams->handle_demod, streamMergerField, 1);
+		error |= ChipSetField(state->base->ip.handle_demod, streamMergerField, 1);
 		/* Release stream merger reset */
-		error |= ChipSetField(pParams->handle_demod, streamMergerField, 0);
+		error |= ChipSetField(state->base->ip.handle_demod, streamMergerField, 0);
 		// - end of new management of NCR
 
-		error |= FE_STiD135_WaitForLock(pParams, Demod,demodTimeout, fecTimeout, satellite_scan, &lockstatus, &fec_lock);
-		pParams->demod_results[Demod-1].has_carrier = fec_lock;
+		error |= FE_STiD135_WaitForLock(state, Demod,demodTimeout, fecTimeout, satellite_scan, &lockstatus, &fec_lock);
+		state->demod_results.has_carrier = fec_lock;
 		if (lockstatus == TRUE) {
 			lock = TRUE;
 
-			pParams->demod_results[Demod-1].locked = TRUE;
+			state->demod_results.locked = TRUE;
 
-			if (pParams->demod_results[Demod-1].standard ==
+			if (state->demod_results.standard ==
 			FE_SAT_DVBS2_STANDARD) {
 				/*reset DVBS2 packet delinator error
 				counter */
-				error |= ChipSetFieldImage(pParams->handle_demod,
+				error |= ChipSetFieldImage(state->base->ip.handle_demod,
 				FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL2_RESET_UPKO_COUNT(Demod), 1);
-				error |= ChipSetRegisters(pParams->handle_demod,
+				error |= ChipSetRegisters(state->base->ip.handle_demod,
 				(u16)REG_RC8CODEW_DVBSX_PKTDELIN_PDELCTRL2(Demod), 1);
 
 				/*reset DVBS2 packet delinator error
 				counter */
-				error |= ChipSetFieldImage(pParams->handle_demod,
+				error |= ChipSetFieldImage(state->base->ip.handle_demod,
 				FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL2_RESET_UPKO_COUNT(Demod), 0);
-				error |= ChipSetRegisters(pParams->handle_demod,
+				error |= ChipSetRegisters(state->base->ip.handle_demod,
 					(u16)REG_RC8CODEW_DVBSX_PKTDELIN_PDELCTRL2(Demod), 1);
 
 				/* reset the error counter to  DVBS2
 				packet error rate */
-				error |= ChipSetOneRegister(pParams->handle_demod,
+				error |= ChipSetOneRegister(state->base->ip.handle_demod,
 					(u16)REG_RC8CODEW_DVBSX_HWARE_ERRCTRL1(Demod), 0x67);
 			} else {
 				/* reset the viterbi bit error rate */
-				error |= ChipSetOneRegister(pParams->handle_demod,
+				error |= ChipSetOneRegister(state->base->ip.handle_demod,
 				(u16)REG_RC8CODEW_DVBSX_HWARE_ERRCTRL1(Demod), 0x75);
 			}
 			/*Reset the Total packet counter */
-			error |= ChipSetOneRegister(pParams->handle_demod,
+			error |= ChipSetOneRegister(state->base->ip.handle_demod,
 			(u16)REG_RC8CODEW_DVBSX_FECSPY_FBERCPT4(Demod), 0);
 			/*Reset the packet Error counter2 (and Set it to
 			infinit error count mode )*/
-			error |= ChipSetOneRegister(pParams->handle_demod,
+			error |= ChipSetOneRegister(state->base->ip.handle_demod,
 			(u16)REG_RC8CODEW_DVBSX_HWARE_ERRCTRL2(Demod), 0xc1);
 
-			if(pParams->demod_symbol_rate[Demod-1] >= pParams->master_clock) {
+			if(state->demod_symbol_rate >= state->base->ip.master_clock) {
 				// Need to perform a switch of latency regulation OFF/ON to make work WB NCR tests (low datarate)
 				WAIT_N_MS(200);
-				error |= ChipGetField(pParams->handle_demod,
+				error |= ChipGetField(state->base->ip.handle_demod,
 					FLD_FC8CODEW_DVBSX_HWARE_TSSTATUS3_PCRCALC_NCRREADY(Demod), &fld_value);
 				if(fld_value != 0) {
 					WAIT_N_MS(100);
-					error |= ChipGetField(pParams->handle_demod,
+					error |= ChipGetField(state->base->ip.handle_demod,
 						FLD_FC8CODEW_DVBSX_HWARE_TSSTATUS3_PCRCALC_ERROR(Demod), &fld_value);
 					if(fld_value == 1) {
-						error |= ChipSetField(pParams->handle_demod,
+						error |= ChipSetField(state->base->ip.handle_demod,
 						FLD_FC8CODEW_DVBSX_HWARE_TSSTATE1_TSOUT_NOSYNC(Demod), 1);
 						WAIT_N_MS(10);
-						error |= ChipSetField(pParams->handle_demod,
+						error |= ChipSetField(state->base->ip.handle_demod,
 						FLD_FC8CODEW_DVBSX_HWARE_TSSTATE1_TSOUT_NOSYNC(Demod), 0);
 					}
 				}
@@ -4002,7 +3959,7 @@ fe_lla_error_t FE_STiD135_Algo(struct fe_stid135_internal_param *pParams,
 			/*if the demod is locked and not the FEC signal
 			type is no DATA*/
 			*signalType_p = FE_SAT_NODATA;
-			pParams->demod_results[Demod-1].locked = FALSE;
+			state->demod_results.locked = FALSE;
 		}
 
 	}
@@ -4019,44 +3976,44 @@ fe_lla_error_t FE_STiD135_Algo(struct fe_stid135_internal_param *pParams,
 --PARAMS OUT	::	NONE
 --RETURN	::	error
 --***************************************************/
-fe_lla_error_t FE_STiD135_SetSearchStandard(struct fe_stid135_internal_param *pParams,
+fe_lla_error_t FE_STiD135_SetSearchStandard(struct stv* state,
 					enum fe_stid135_demod Demod)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 
-	switch (pParams->demod_search_standard[Demod-1]) {
+	switch (state->demod_search_standard) {
 	case FE_SAT_SEARCH_DVBS1:
-		error |= ChipSetFieldImage(pParams->handle_demod,
+		error |= ChipSetFieldImage(state->base->ip.handle_demod,
 		FLD_FC8CODEW_DVBSX_DEMOD_DMDCFGMD_DVBS1_ENABLE(Demod), 1);
-		error |= ChipSetFieldImage(pParams->handle_demod,
+		error |= ChipSetFieldImage(state->base->ip.handle_demod,
 		FLD_FC8CODEW_DVBSX_DEMOD_DMDCFGMD_DVBS2_ENABLE(Demod), 0);
-		error |= ChipSetRegisters(pParams->handle_demod,
+		error |= ChipSetRegisters(state->base->ip.handle_demod,
 		(u16)REG_RC8CODEW_DVBSX_DEMOD_DMDCFGMD(Demod), 1);
 
-		error |= FE_STiD135_SetViterbiStandard(pParams->handle_demod,
-			pParams->demod_search_standard[Demod-1],
-			pParams->demod_puncture_rate[Demod-1], Demod);
+		error |= FE_STiD135_SetViterbiStandard(state->base->ip.handle_demod,
+			state->demod_search_standard,
+			state->demod_puncture_rate, Demod);
 
-		error |= ChipSetOneRegister(pParams->handle_demod,
+		error |= ChipSetOneRegister(state->base->ip.handle_demod,
 		(u16)REG_RC8CODEW_DVBSX_HWARE_SFDLYSET2(Demod), 0); /* Enable Super FEC */
 
 	break;
 
 	case FE_SAT_SEARCH_DSS:
 		/*If DVBS1/DSS only disable DVBS2 search*/
-		error |= ChipSetFieldImage(pParams->handle_demod,
+		error |= ChipSetFieldImage(state->base->ip.handle_demod,
 		FLD_FC8CODEW_DVBSX_DEMOD_DMDCFGMD_DVBS1_ENABLE(Demod), 1);
-		error |= ChipSetFieldImage(pParams->handle_demod,
+		error |= ChipSetFieldImage(state->base->ip.handle_demod,
 		FLD_FC8CODEW_DVBSX_DEMOD_DMDCFGMD_DVBS2_ENABLE(Demod), 0);
-		error |= ChipSetRegisters(pParams->handle_demod,
+		error |= ChipSetRegisters(state->base->ip.handle_demod,
 		(u16)REG_RC8CODEW_DVBSX_DEMOD_DMDCFGMD(Demod), 1);
 
-		error |= FE_STiD135_SetViterbiStandard(pParams->handle_demod,
-				pParams->demod_search_standard[Demod-1],
-				pParams->demod_puncture_rate[Demod-1], Demod);
+		error |= FE_STiD135_SetViterbiStandard(state->base->ip.handle_demod,
+				state->demod_search_standard,
+				state->demod_puncture_rate, Demod);
 
 		/* Stop Super FEC */
-		 error |= ChipSetOneRegister(pParams->handle_demod,
+		 error |= ChipSetOneRegister(state->base->ip.handle_demod,
 		(u16)REG_RC8CODEW_DVBSX_HWARE_SFDLYSET2(Demod), 2);
 
 	break;
@@ -4064,29 +4021,29 @@ fe_lla_error_t FE_STiD135_SetSearchStandard(struct fe_stid135_internal_param *pP
 	case FE_SAT_SEARCH_DVBS2:
 		/*If DVBS2 only activate the DVBS2 search and stop
 		the VITERBI*/
-		error |= ChipSetFieldImage(pParams->handle_demod,
+		error |= ChipSetFieldImage(state->base->ip.handle_demod,
 		FLD_FC8CODEW_DVBSX_DEMOD_DMDCFGMD_DVBS1_ENABLE(Demod), 0);
-		error |= ChipSetFieldImage(pParams->handle_demod,
+		error |= ChipSetFieldImage(state->base->ip.handle_demod,
 		FLD_FC8CODEW_DVBSX_DEMOD_DMDCFGMD_DVBS2_ENABLE(Demod), 1);
-		error |= ChipSetRegisters(pParams->handle_demod,
+		error |= ChipSetRegisters(state->base->ip.handle_demod,
 		(u16)REG_RC8CODEW_DVBSX_DEMOD_DMDCFGMD(Demod), 1);
 	break;
 
 	case FE_SAT_AUTO_SEARCH:
 		/*If automatic enable both DVBS1/DSS and DVBS2 search*/
-		error |= ChipSetFieldImage(pParams->handle_demod,
+		error |= ChipSetFieldImage(state->base->ip.handle_demod,
 		FLD_FC8CODEW_DVBSX_DEMOD_DMDCFGMD_DVBS1_ENABLE(Demod), 1);
-		error |= ChipSetFieldImage(pParams->handle_demod,
+		error |= ChipSetFieldImage(state->base->ip.handle_demod,
 		FLD_FC8CODEW_DVBSX_DEMOD_DMDCFGMD_DVBS2_ENABLE(Demod), 1);
-		error |= ChipSetRegisters(pParams->handle_demod,
+		error |= ChipSetRegisters(state->base->ip.handle_demod,
 		(u16)REG_RC8CODEW_DVBSX_DEMOD_DMDCFGMD(Demod), 1);
 
-		error |= FE_STiD135_SetViterbiStandard(pParams->handle_demod,
-				pParams->demod_search_standard[Demod-1],
-				pParams->demod_puncture_rate[Demod-1],Demod);
+		error |= FE_STiD135_SetViterbiStandard(state->base->ip.handle_demod,
+				state->demod_search_standard,
+				state->demod_puncture_rate,Demod);
 
 		/* Enable Super FEC */
-		error |= ChipSetOneRegister(pParams->handle_demod,
+		error |= ChipSetOneRegister(state->base->ip.handle_demod,
 		(u16)REG_RC8CODEW_DVBSX_HWARE_SFDLYSET2(Demod), 0);
 	break;
 
@@ -4104,32 +4061,32 @@ fe_lla_error_t FE_STiD135_SetSearchStandard(struct fe_stid135_internal_param *pP
 --PARAMS OUT	::	NONE
 --RETURN	::	error
 --***************************************************/
-static fe_lla_error_t FE_STiD135_StartSearch(struct fe_stid135_internal_param *pParams,
+static fe_lla_error_t FE_STiD135_StartSearch(struct stv* state,
 					enum fe_stid135_demod Demod)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	/* Reset the Demod */
-	if(pParams->demod_search_algo[Demod-1]!= FE_SAT_NEXT)
-		error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DMDISTATE(Demod), 0x1F);
+	if(state->demod_search_algo!= FE_SAT_NEXT)
+		error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DMDISTATE(Demod), 0x1F);
 
 #if 0 //test
-		error |= (fe_lla_error_t)ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_TMGTHRISE_TMGLOCK_THRISE(Demod), 0x18);
-		error |= (fe_lla_error_t)ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_TMGTHFALL_TMGLOCK_THFALL(Demod), 0x08);
+		error |= (fe_lla_error_t)ChipSetFieldImage(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_TMGTHRISE_TMGLOCK_THRISE(Demod), 0x18);
+		error |= (fe_lla_error_t)ChipSetFieldImage(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_TMGTHFALL_TMGLOCK_THFALL(Demod), 0x08);
 #endif
-	switch (pParams->demod_search_algo[Demod-1]) {
+	switch (state->demod_search_algo) {
 	case FE_SAT_WARM_START:
 		//dprintk("WARM START\n");
 		/*The symbol rate and the exact
 		carrier frequency are known */
 		/*Trig an acquisition (start the search)*/
 #if 0
-		error |= ChipSetOneRegister(pParams->handle_demod,
+		error |= ChipSetOneRegister(state->base->ip.handle_demod,
 																(u16)REG_RC8CODEW_DVBSX_DEMOD_DMDISTATE(Demod), 0x18);
 #else
 		/*better for low symbol rate - only choice which allows tuning to symbolrate 667
 			Note that tuner bandwith still takes into account known symbol rate
 		*/
-		error |= ChipSetOneRegister(pParams->handle_demod,
+		error |= ChipSetOneRegister(state->base->ip.handle_demod,
 																(u16)REG_RC8CODEW_DVBSX_DEMOD_DMDISTATE(Demod), 0x01);
 #endif
 		break;
@@ -4138,7 +4095,7 @@ static fe_lla_error_t FE_STiD135_StartSearch(struct fe_stid135_internal_param *p
 		//dprintk("COLD START\n");
 		/*The symbol rate is known*/
 		/*Trig an acquisition (start the search)*/
-		error |= ChipSetOneRegister(pParams->handle_demod,
+		error |= ChipSetOneRegister(state->base->ip.handle_demod,
 																(u16)REG_RC8CODEW_DVBSX_DEMOD_DMDISTATE(Demod), 0x15);
 		break;
 
@@ -4149,16 +4106,16 @@ static fe_lla_error_t FE_STiD135_StartSearch(struct fe_stid135_internal_param *p
 		//the following always return AUTO_GLOW=1 and AUTO_GUP=1 before blindscan
 		u32 tst1=0;
 		u32 tst2=0;
-		int error1 =ChipGetField(pParams->handle_demod,
+		int error1 =ChipGetField(state->base->ip.handle_demod,
 												 FLD_FC8CODEW_DVBSX_DEMOD_TMGCFG3_AUTO_GUP(Demod), &tst1);
-		error1 |=ChipGetField(pParams->handle_demod,
+		error1 |=ChipGetField(state->base->ip.handle_demod,
 												 FLD_FC8CODEW_DVBSX_DEMOD_TMGCFG3_AUTO_GLOW(Demod), &tst2);
 		dprintk("BEFORE AUTO_GLOW=%d AUTO_GUP=%d error=%d\n", tst1, tst2, error1);
 		}
 #endif
 
 		/*Trig an acquisition (start the search)*/
-		error |= ChipSetOneRegister(pParams->handle_demod,
+		error |= ChipSetOneRegister(state->base->ip.handle_demod,
 		(u16)REG_RC8CODEW_DVBSX_DEMOD_DMDISTATE(Demod), 0x00);
 
 		break;
@@ -4170,14 +4127,14 @@ static fe_lla_error_t FE_STiD135_StartSearch(struct fe_stid135_internal_param *p
 		//the following always return AUTO_GLOW=1 and AUTO_GUP=1 before blindscan
 		u32 tst1=0;
 		u32 tst2=0;
-		int error1 =ChipGetField(pParams->handle_demod,
+		int error1 =ChipGetField(state->base->ip.handle_demod,
 												 FLD_FC8CODEW_DVBSX_DEMOD_TMGCFG3_AUTO_GUP(Demod), &tst1);
-		error1 |=ChipGetField(pParams->handle_demod,
+		error1 |=ChipGetField(state->base->ip.handle_demod,
 												 FLD_FC8CODEW_DVBSX_DEMOD_TMGCFG3_AUTO_GLOW(Demod), &tst2);
 		dprintk("BEFORE AUTO_GLOW=%d AUTO_GUP=%d error=%d\n", tst1, tst2, error1);
 		}
 #endif
-		error |= ChipSetOneRegister(pParams->handle_demod,
+		error |= ChipSetOneRegister(state->base->ip.handle_demod,
 																(u16)REG_RC8CODEW_DVBSX_DEMOD_DMDISTATE(Demod), 0x14);
 
 		break;
@@ -4196,7 +4153,7 @@ static fe_lla_error_t FE_STiD135_StartSearch(struct fe_stid135_internal_param *p
 --PARAMS OUT	::	lock_p -> demod lock status
 --RETURN	::	error
 --***************************************************/
-static fe_lla_error_t FE_STiD135_BlindSearchAlgo(struct fe_stid135_internal_param *pParams,
+static fe_lla_error_t FE_STiD135_BlindSearchAlgo(struct stv* state,
 	u32 demodTimeout, BOOL satellite_scan, enum fe_stid135_demod Demod, BOOL* lock_p)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
@@ -4204,29 +4161,29 @@ static fe_lla_error_t FE_STiD135_BlindSearchAlgo(struct fe_stid135_internal_para
 	*lock_p = TRUE;
 	if (satellite_scan == FALSE) {
 	} else {
-		pParams->demod_search_range_hz[Demod-1] = (u32)(24000000 +
-			pParams->tuner_index_jump[Demod-1] * 1000);
-		if (pParams->demod_search_range_hz[Demod-1] > 40000000) {
-			pParams->demod_search_range_hz[Demod-1] = 40000000;
+		state->demod_search_range_hz = (u32)(24000000 +
+			state->tuner_index_jump * 1000);
+		if (state->demod_search_range_hz > 40000000) {
+			state->demod_search_range_hz = 40000000;
 		}
 	}
 	dprintk("Starting blindsearch satellite_scan=%d jump=%d freq=%d+%d\n", satellite_scan,
-					pParams->tuner_index_jump[Demod-1],		pParams->tuner_frequency[Demod-1],
-					pParams->demod_search_range_hz[Demod-1]);
-	error |= (error1=ChipSetOneRegister(pParams->handle_demod,
+					state->tuner_index_jump,		state->tuner_frequency,
+					state->demod_search_range_hz);
+	error |= (error1=ChipSetOneRegister(state->base->ip.handle_demod,
 																			(u16)REG_RC8CODEW_DVBSX_DEMOD_DMDISTATE(Demod), 0x5C)); /* Demod Stop*/
 	if(error1)
 		dprintk("error=%d\n", error1);
 #if 0
-	error |= (error1=fe_stid135_set_symbol_rate(pParams->handle_demod,pParams->master_clock,
-																							pParams->demod_symbol_rate[Demod-1], Demod));
+	error |= (error1=fe_stid135_set_symbol_rate(state,state->base->ip.master_clock,
+																							state->demod_symbol_rate, Demod));
 	if(error1)
 		dprintk("error=%d\n", error1);
 #endif
-	error |= (error1=FE_STiD135_StartSearch(pParams, Demod));
+	error |= (error1=FE_STiD135_StartSearch(state, Demod));
 	if(error1)
 		dprintk("error=%d\n", error1);
-	error |= (error1=FE_STiD135_GetDemodLock(pParams, Demod, demodTimeout, lock_p));
+	error |= (error1=FE_STiD135_GetDemodLock(state, Demod, demodTimeout, lock_p));
 	if(error1)
 		dprintk("error=%d\n", error1);
 
@@ -4244,7 +4201,7 @@ static fe_lla_error_t FE_STiD135_BlindSearchAlgo(struct fe_stid135_internal_para
 --RETURN	::	error
 --***************************************************/
 static  fe_lla_error_t FE_STiD135_GetSignalParams(
-	struct fe_stid135_internal_param *pParams, enum fe_stid135_demod Demod,
+	struct stv* state, enum fe_stid135_demod Demod,
 	BOOL satellite_scan, enum fe_sat_signal_type *range_p)
 
 {
@@ -4261,157 +4218,157 @@ static  fe_lla_error_t FE_STiD135_GetSignalParams(
 
 	*range_p=FE_SAT_OUTOFRANGE;
 
-	ChipWaitOrAbort(pParams->handle_demod, 5);
+	ChipWaitOrAbort(state->base->ip.handle_demod, 5);
 
-	if(pParams->demod_search_algo[Demod-1] == FE_SAT_BLIND_SEARCH ||
-		 pParams->demod_search_algo[Demod-1] == FE_SAT_NEXT) {
+	if(state->demod_search_algo == FE_SAT_BLIND_SEARCH ||
+		 state->demod_search_algo == FE_SAT_NEXT) {
 		/*	if Blind search wait for symbol rate offset information
 			transfer from the timing loop to the
 			demodulator symbol rate
 		*/
-		error |= ChipGetOneRegister(pParams->handle_demod,
+		error |= ChipGetOneRegister(state->base->ip.handle_demod,
 		(u16)REG_RC8CODEW_DVBSX_DEMOD_TMGREG2(Demod), &reg_value);
 		timing =  (u8)reg_value;
 		i = 0;
 		while ((i <= 50) && (timing != 0) && (timing != 0xFF)) {
-			error |= ChipGetOneRegister(pParams->handle_demod,
+			error |= ChipGetOneRegister(state->base->ip.handle_demod,
 				(u16)REG_RC8CODEW_DVBSX_DEMOD_TMGREG2(Demod), &reg_value);
 			timing =  (u8)reg_value;
-			ChipWaitOrAbort(pParams->handle_demod, 5);
+			ChipWaitOrAbort(state->base->ip.handle_demod, 5);
 			i += 5;
 		}
 	}
-	error |= FE_STiD135_GetStandard(pParams->handle_demod, Demod, &(pParams->demod_results[Demod-1].standard));
+	error |= FE_STiD135_GetStandard(state->base->ip.handle_demod, Demod, &(state->demod_results.standard));
 
 	/* On auxiliary demod, frequency found is not true, we have to pick it on master demod  */
 	if(Demod == FE_SAT_DEMOD_2) {
-		error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG2_MODE_HAUTDEBIT(Demod), &fld_value);
+		error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG2_MODE_HAUTDEBIT(Demod), &fld_value);
 		if(fld_value == 3) {
-			error |= FE_STiD135_GetCarrierFrequency(pParams->handle_demod,pParams->master_clock, FE_SAT_DEMOD_1, &offsetFreq);
-			error |= FE_STiD135_GetSymbolRate(pParams->handle_demod, pParams->master_clock,FE_SAT_DEMOD_1, &(pParams->demod_results[Demod-1].symbol_rate));
-			error |= FE_STiD135_TimingGetOffset(pParams->handle_demod,pParams->demod_results[Demod-1].symbol_rate, FE_SAT_DEMOD_1, &symbolRateOffset);
+			error |= FE_STiD135_GetCarrierFrequency(state, state->base->ip.master_clock, FE_SAT_DEMOD_1, &offsetFreq);
+			error |= FE_STiD135_GetSymbolRate(state, state->base->ip.master_clock,FE_SAT_DEMOD_1, &(state->demod_results.symbol_rate));
+			error |= FE_STiD135_TimingGetOffset(state, state->demod_results.symbol_rate, FE_SAT_DEMOD_1, &symbolRateOffset);
 		}
 	}
 	if(Demod == FE_SAT_DEMOD_4) {
-		error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG2_MODE_HAUTDEBIT(Demod), &fld_value);
+		error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG2_MODE_HAUTDEBIT(Demod), &fld_value);
 		if(fld_value == 3) {
-			error |= FE_STiD135_GetCarrierFrequency(pParams->handle_demod,pParams->master_clock, FE_SAT_DEMOD_3, &offsetFreq);
-			error |= FE_STiD135_GetSymbolRate(pParams->handle_demod, pParams->master_clock,FE_SAT_DEMOD_3, &(pParams->demod_results[Demod-1].symbol_rate));
-			error |= FE_STiD135_TimingGetOffset(pParams->handle_demod,pParams->demod_results[Demod-1].symbol_rate, FE_SAT_DEMOD_3, &symbolRateOffset);
+			error |= FE_STiD135_GetCarrierFrequency(state, state->base->ip.master_clock, FE_SAT_DEMOD_3, &offsetFreq);
+			error |= FE_STiD135_GetSymbolRate(state, state->base->ip.master_clock,FE_SAT_DEMOD_3, &(state->demod_results.symbol_rate));
+			error |= FE_STiD135_TimingGetOffset(state, state->demod_results.symbol_rate, FE_SAT_DEMOD_3, &symbolRateOffset);
 		}
 	}
 	if(((Demod != FE_SAT_DEMOD_2) && (Demod != FE_SAT_DEMOD_4)) ||
 		((Demod == FE_SAT_DEMOD_2) && (fld_value != 3)) ||
 		((Demod == FE_SAT_DEMOD_4) && (fld_value != 3))) {
-		error |= FE_STiD135_GetCarrierFrequency(pParams->handle_demod,pParams->master_clock, Demod, &offsetFreq);
-		error |= FE_STiD135_GetSymbolRate(pParams->handle_demod,pParams->master_clock,Demod, &(pParams->demod_results[Demod-1].symbol_rate));
-		error |= FE_STiD135_TimingGetOffset(pParams->handle_demod,pParams->demod_results[Demod-1].symbol_rate,Demod, &symbolRateOffset);
+		error |= FE_STiD135_GetCarrierFrequency(state, state->base->ip.master_clock, Demod, &offsetFreq);
+		error |= FE_STiD135_GetSymbolRate(state, state->base->ip.master_clock,Demod, &(state->demod_results.symbol_rate));
+		error |= FE_STiD135_TimingGetOffset(state, state->demod_results.symbol_rate,Demod, &symbolRateOffset);
 	}
 	/* Get timing loop offset */
 	if(symbolRateOffset < 0) {
 		symbolRateOffset *= (-1);
-		pParams->demod_results[Demod-1].symbol_rate -= (u32)symbolRateOffset;
+		state->demod_results.symbol_rate -= (u32)symbolRateOffset;
 	} else
-		pParams->demod_results[Demod-1].symbol_rate += (u32)symbolRateOffset;
+		state->demod_results.symbol_rate += (u32)symbolRateOffset;
 
-	lo_frequency = pParams->lo_frequency / 1000;
-	pParams->demod_results[Demod-1].frequency = lo_frequency;
+	lo_frequency = state->base->ip.lo_frequency / 1000;
+	state->demod_results.frequency = lo_frequency;
 	if(offsetFreq < 0) {
 		offsetFreq *= (-1);
-		pParams->demod_results[Demod-1].frequency -= (u32)offsetFreq/1000;
+		state->demod_results.frequency -= (u32)offsetFreq/1000;
 	} else
-		pParams->demod_results[Demod-1].frequency += (u32)offsetFreq/1000;
+		state->demod_results.frequency += (u32)offsetFreq/1000;
 
 	error |=
-		FE_STiD135_GetViterbiPunctureRate(pParams->handle_demod, Demod, &(pParams->demod_results[Demod-1].puncture_rate));
+		FE_STiD135_GetViterbiPunctureRate(state->base->ip.handle_demod, Demod, &(state->demod_results.puncture_rate));
 
-	error = error | fe_stid135_get_mode_code(pParams,
+	error = error | fe_stid135_get_mode_code(state,
 				Demod,
-				&pParams->demod_results[Demod-1].modcode,
-				&pParams->demod_results[Demod-1].frame_length,
-				&pParams->demod_results[Demod-1].pilots);
+				&state->demod_results.modcode,
+				&state->demod_results.frame_length,
+				&state->demod_results.pilots);
 
-	error |= ChipGetField(pParams->handle_demod,
+	error |= ChipGetField(state->base->ip.handle_demod,
 		FLD_FC8CODEW_DVBSX_DEMOD_TMGOBS_ROLLOFF_STATUS(Demod), &fld_value);
-	pParams->demod_results[Demod-1].roll_off = (enum fe_sat_rolloff)fld_value;
+	state->demod_results.roll_off = (enum fe_sat_rolloff)fld_value;
 
-	switch (pParams->demod_results[Demod-1].standard) {
+	switch (state->demod_results.standard) {
 	case FE_SAT_DVBS2_STANDARD:
 		error |= ChipGetField(
-		pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS6_SPECINV_DEMOD(Demod), &fld_value);
-		pParams->demod_results[Demod-1].spectrum = (enum fe_sat_iq_inversion)fld_value;
+		state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS6_SPECINV_DEMOD(Demod), &fld_value);
+		state->demod_results.spectrum = (enum fe_sat_iq_inversion)fld_value;
 
-		if (((pParams->demod_results[Demod-1].modcode >= FE_SAT_QPSK_14) && (pParams->demod_results[Demod-1].modcode <= FE_SAT_QPSK_910))
-			|| ((pParams->demod_results[Demod-1].modcode >= FE_SAT_DVBS1_QPSK_12) && (pParams->demod_results[Demod-1].modcode <= FE_SAT_DVBS1_QPSK_78))
-			|| ((pParams->demod_results[Demod-1].modcode >= FE_SATX_QPSK_13_45) && (pParams->demod_results[Demod-1].modcode <= FE_SATX_QPSK_11_20))
-			|| ((pParams->demod_results[Demod-1].modcode >= FE_SATX_QPSK_11_45) && (pParams->demod_results[Demod-1].modcode <= FE_SATX_QPSK_32_45)))
-			pParams->demod_results[Demod-1].modulation = FE_SAT_MOD_QPSK;
+		if (((state->demod_results.modcode >= FE_SAT_QPSK_14) && (state->demod_results.modcode <= FE_SAT_QPSK_910))
+			|| ((state->demod_results.modcode >= FE_SAT_DVBS1_QPSK_12) && (state->demod_results.modcode <= FE_SAT_DVBS1_QPSK_78))
+			|| ((state->demod_results.modcode >= FE_SATX_QPSK_13_45) && (state->demod_results.modcode <= FE_SATX_QPSK_11_20))
+			|| ((state->demod_results.modcode >= FE_SATX_QPSK_11_45) && (state->demod_results.modcode <= FE_SATX_QPSK_32_45)))
+			state->demod_results.modulation = FE_SAT_MOD_QPSK;
 
-		else if (((pParams->demod_results[Demod-1].modcode >= FE_SAT_8PSK_35) && (pParams->demod_results[Demod-1].modcode <= FE_SAT_8PSK_910))
-			|| ((pParams->demod_results[Demod-1].modcode >= FE_SATX_8PSK_23_36) && (pParams->demod_results[Demod-1].modcode <= FE_SATX_8PSK_13_18))
-			|| ((pParams->demod_results[Demod-1].modcode >= FE_SATX_8PSK_7_15) && (pParams->demod_results[Demod-1].modcode <= FE_SATX_8PSK_32_45))
-			|| (pParams->demod_results[Demod-1].modcode == FE_SATX_8PSK))
-			pParams->demod_results[Demod-1].modulation = FE_SAT_MOD_8PSK;
+		else if (((state->demod_results.modcode >= FE_SAT_8PSK_35) && (state->demod_results.modcode <= FE_SAT_8PSK_910))
+			|| ((state->demod_results.modcode >= FE_SATX_8PSK_23_36) && (state->demod_results.modcode <= FE_SATX_8PSK_13_18))
+			|| ((state->demod_results.modcode >= FE_SATX_8PSK_7_15) && (state->demod_results.modcode <= FE_SATX_8PSK_32_45))
+			|| (state->demod_results.modcode == FE_SATX_8PSK))
+			state->demod_results.modulation = FE_SAT_MOD_8PSK;
 
-		else if (((pParams->demod_results[Demod-1].modcode >= FE_SAT_16APSK_23) && (pParams->demod_results[Demod-1].modcode <= FE_SAT_16APSK_910))
-			|| ((pParams->demod_results[Demod-1].modcode >= FE_SATX_16APSK_26_45) && (pParams->demod_results[Demod-1].modcode <= FE_SATX_16APSK_23_36))
-			|| ((pParams->demod_results[Demod-1].modcode >= FE_SATX_16APSK_25_36) && (pParams->demod_results[Demod-1].modcode <= FE_SATX_16APSK_77_90))
-			|| ((pParams->demod_results[Demod-1].modcode >= FE_SATX_16APSK_7_15) && (pParams->demod_results[Demod-1].modcode <= FE_SATX_16APSK_32_45))
-			|| (pParams->demod_results[Demod-1].modcode == FE_SATX_16APSK))
-			pParams->demod_results[Demod-1].modulation = FE_SAT_MOD_16APSK;
+		else if (((state->demod_results.modcode >= FE_SAT_16APSK_23) && (state->demod_results.modcode <= FE_SAT_16APSK_910))
+			|| ((state->demod_results.modcode >= FE_SATX_16APSK_26_45) && (state->demod_results.modcode <= FE_SATX_16APSK_23_36))
+			|| ((state->demod_results.modcode >= FE_SATX_16APSK_25_36) && (state->demod_results.modcode <= FE_SATX_16APSK_77_90))
+			|| ((state->demod_results.modcode >= FE_SATX_16APSK_7_15) && (state->demod_results.modcode <= FE_SATX_16APSK_32_45))
+			|| (state->demod_results.modcode == FE_SATX_16APSK))
+			state->demod_results.modulation = FE_SAT_MOD_16APSK;
 
-		else if (((pParams->demod_results[Demod-1].modcode >= FE_SAT_32APSK_34) && (pParams->demod_results[Demod-1].modcode <= FE_SAT_32APSK_910))
-			|| ((pParams->demod_results[Demod-1].modcode >= FE_SATX_32APSK_R_58) && (pParams->demod_results[Demod-1].modcode <= FE_SATX_32APSK_7_9))
-			|| ((pParams->demod_results[Demod-1].modcode >= FE_SATX_32APSK_2_3) && (pParams->demod_results[Demod-1].modcode <= FE_SATX_32APSK_32_45_S))
-			|| (pParams->demod_results[Demod-1].modcode == FE_SATX_32APSK))
-			pParams->demod_results[Demod-1].modulation = FE_SAT_MOD_32APSK;
+		else if (((state->demod_results.modcode >= FE_SAT_32APSK_34) && (state->demod_results.modcode <= FE_SAT_32APSK_910))
+			|| ((state->demod_results.modcode >= FE_SATX_32APSK_R_58) && (state->demod_results.modcode <= FE_SATX_32APSK_7_9))
+			|| ((state->demod_results.modcode >= FE_SATX_32APSK_2_3) && (state->demod_results.modcode <= FE_SATX_32APSK_32_45_S))
+			|| (state->demod_results.modcode == FE_SATX_32APSK))
+			state->demod_results.modulation = FE_SAT_MOD_32APSK;
 
-		else if ((pParams->demod_results[Demod-1].modcode == FE_SATX_VLSNR1) || (pParams->demod_results[Demod-1].modcode == FE_SATX_VLSNR2))
-			pParams->demod_results[Demod-1].modulation = FE_SAT_MOD_VLSNR;
+		else if ((state->demod_results.modcode == FE_SATX_VLSNR1) || (state->demod_results.modcode == FE_SATX_VLSNR2))
+			state->demod_results.modulation = FE_SAT_MOD_VLSNR;
 
-		else if (((pParams->demod_results[Demod-1].modcode >= FE_SATX_64APSK_11_15) && (pParams->demod_results[Demod-1].modcode <= FE_SATX_64APSK_5_6))
-			|| (pParams->demod_results[Demod-1].modcode == FE_SATX_64APSK))
-			pParams->demod_results[Demod-1].modulation = FE_SAT_MOD_64APSK;
+		else if (((state->demod_results.modcode >= FE_SATX_64APSK_11_15) && (state->demod_results.modcode <= FE_SATX_64APSK_5_6))
+			|| (state->demod_results.modcode == FE_SATX_64APSK))
+			state->demod_results.modulation = FE_SAT_MOD_64APSK;
 
-		else if ((pParams->demod_results[Demod-1].modcode == FE_SATX_128APSK_3_4) || (pParams->demod_results[Demod-1].modcode == FE_SATX_128APSK_7_9))
-			pParams->demod_results[Demod-1].modulation = FE_SAT_MOD_128APSK;
+		else if ((state->demod_results.modcode == FE_SATX_128APSK_3_4) || (state->demod_results.modcode == FE_SATX_128APSK_7_9))
+			state->demod_results.modulation = FE_SAT_MOD_128APSK;
 
-		else if ((pParams->demod_results[Demod-1].modcode == FE_SATX_256APSK_32_45) || (pParams->demod_results[Demod-1].modcode == FE_SATX_256APSK_3_4)
-			|| (pParams->demod_results[Demod-1].modcode == FE_SATX_256APSK))
-			pParams->demod_results[Demod-1].modulation = FE_SAT_MOD_256APSK;
+		else if ((state->demod_results.modcode == FE_SATX_256APSK_32_45) || (state->demod_results.modcode == FE_SATX_256APSK_3_4)
+			|| (state->demod_results.modcode == FE_SATX_256APSK))
+			state->demod_results.modulation = FE_SAT_MOD_256APSK;
 
-		else if ((pParams->demod_results[Demod-1].modcode == FE_SATX_8APSK_5_9_L) || (pParams->demod_results[Demod-1].modcode == FE_SATX_8APSK_26_45_L))
-			pParams->demod_results[Demod-1].modulation = FE_SAT_MOD_8PSK_L;
+		else if ((state->demod_results.modcode == FE_SATX_8APSK_5_9_L) || (state->demod_results.modcode == FE_SATX_8APSK_26_45_L))
+			state->demod_results.modulation = FE_SAT_MOD_8PSK_L;
 
-		else if (((pParams->demod_results[Demod-1].modcode >= FE_SATX_16APSK_1_2_L) && (pParams->demod_results[Demod-1].modcode <= FE_SATX_16APSK_5_9_L))
-			|| (pParams->demod_results[Demod-1].modcode == FE_SATX_16APSK_3_5_L)
-			|| (pParams->demod_results[Demod-1].modcode == FE_SATX_16APSK_2_3_L))
-			pParams->demod_results[Demod-1].modulation = FE_SAT_MOD_16APSK_L;
+		else if (((state->demod_results.modcode >= FE_SATX_16APSK_1_2_L) && (state->demod_results.modcode <= FE_SATX_16APSK_5_9_L))
+			|| (state->demod_results.modcode == FE_SATX_16APSK_3_5_L)
+			|| (state->demod_results.modcode == FE_SATX_16APSK_2_3_L))
+			state->demod_results.modulation = FE_SAT_MOD_16APSK_L;
 
-		else if (pParams->demod_results[Demod-1].modcode == FE_SATX_32APSK_2_3_L)
-			pParams->demod_results[Demod-1].modulation = FE_SAT_MOD_32APSK_L;
+		else if (state->demod_results.modcode == FE_SATX_32APSK_2_3_L)
+			state->demod_results.modulation = FE_SAT_MOD_32APSK_L;
 
-		else if (pParams->demod_results[Demod-1].modcode == FE_SATX_64APSK_32_45_L)
-			pParams->demod_results[Demod-1].modulation = FE_SAT_MOD_64APSK_L;
+		else if (state->demod_results.modcode == FE_SATX_64APSK_32_45_L)
+			state->demod_results.modulation = FE_SAT_MOD_64APSK_L;
 
-		else if (((pParams->demod_results[Demod-1].modcode >= FE_SATX_256APSK_29_45_L) && (pParams->demod_results[Demod-1].modcode <= FE_SATX_256APSK_31_45_L))
-			|| (pParams->demod_results[Demod-1].modcode == FE_SATX_256APSK_11_15_L))
-			pParams->demod_results[Demod-1].modulation = FE_SAT_MOD_256APSK_L;
+		else if (((state->demod_results.modcode >= FE_SATX_256APSK_29_45_L) && (state->demod_results.modcode <= FE_SATX_256APSK_31_45_L))
+			|| (state->demod_results.modcode == FE_SATX_256APSK_11_15_L))
+			state->demod_results.modulation = FE_SAT_MOD_256APSK_L;
 
-		else if (pParams->demod_results[Demod-1].modcode == FE_SATX_1024APSK)
-			pParams->demod_results[Demod-1].modulation = FE_SAT_MOD_1024APSK;
+		else if (state->demod_results.modcode == FE_SATX_1024APSK)
+			state->demod_results.modulation = FE_SAT_MOD_1024APSK;
 
 		else
-			pParams->demod_results[Demod-1].modulation = FE_SAT_MOD_UNKNOWN;
+			state->demod_results.modulation = FE_SAT_MOD_UNKNOWN;
 
 	break;
 
 	case FE_SAT_DVBS1_STANDARD:
 	case FE_SAT_DSS_STANDARD:
-		error |= ChipGetField(pParams->handle_demod,
+		error |= ChipGetField(state->base->ip.handle_demod,
 			FLD_FC8CODEW_DVBSX_VITERBI_FECM_IQINV(Demod), &fld_value);
-		pParams->demod_results[Demod-1].spectrum = (enum fe_sat_iq_inversion)fld_value;
-		pParams->demod_results[Demod-1].modulation = FE_SAT_MOD_QPSK;
+		state->demod_results.spectrum = (enum fe_sat_iq_inversion)fld_value;
+		state->demod_results.modulation = FE_SAT_MOD_QPSK;
 	break;
 
 	case FE_SAT_TURBOCODE_STANDARD:
@@ -4419,29 +4376,29 @@ static  fe_lla_error_t FE_STiD135_GetSignalParams(
 	break;
 	}
 
-	offsetFreq = (s32)pParams->demod_results[Demod-1].frequency * 1000
-			- (s32)lo_frequency * 1000 - pParams->tuner_frequency[Demod-1];
+	offsetFreq = (s32)state->demod_results.frequency * 1000
+			- (s32)lo_frequency * 1000 - state->tuner_frequency;
 
-	if((pParams->demod_search_algo[Demod-1] == FE_SAT_BLIND_SEARCH ||
-			pParams->demod_search_algo[Demod-1] == FE_SAT_NEXT)
-	|| (pParams->demod_symbol_rate[Demod-1] < (u32)10000000)) {
-		if ((pParams->demod_search_algo[Demod-1] == FE_SAT_BLIND_SEARCH ||
-				 pParams->demod_search_algo[Demod-1] == FE_SAT_NEXT)
+	if((state->demod_search_algo == FE_SAT_BLIND_SEARCH ||
+			state->demod_search_algo == FE_SAT_NEXT)
+	|| (state->demod_symbol_rate < (u32)10000000)) {
+		if ((state->demod_search_algo == FE_SAT_BLIND_SEARCH ||
+				 state->demod_search_algo == FE_SAT_NEXT)
 		&& (satellite_scan == TRUE)) {
 			*range_p = FE_SAT_RANGEOK;
 		} else if ((u32)(ABS(offsetFreq)) <= ((
-			pParams->demod_search_range_hz[Demod-1] / 2)))
+			state->demod_search_range_hz / 2)))
 			*range_p = FE_SAT_RANGEOK;
 
 		else if ((u32)(ABS(offsetFreq)) <= (FE_STiD135_CarrierWidth(
-				pParams->demod_results[Demod-1].symbol_rate,
-					pParams->demod_results[Demod-1].roll_off) / 2))
+				state->demod_results.symbol_rate,
+					state->demod_results.roll_off) / 2))
 			*range_p = FE_SAT_RANGEOK;
 
 		else
 			*range_p = FE_SAT_OUTOFRANGE;
 	} else {
-		if ((u32)(ABS(offsetFreq)) <= ((pParams->demod_search_range_hz[Demod-1] / 2)))
+		if ((u32)(ABS(offsetFreq)) <= ((state->demod_search_range_hz / 2)))
 			*range_p = FE_SAT_RANGEOK;
 		else
 			*range_p = FE_SAT_OUTOFRANGE;
@@ -4459,8 +4416,7 @@ static  fe_lla_error_t FE_STiD135_GetSignalParams(
 --PARAMS OUT	::	NONE
 --RETURN	::	error
 --***************************************************/
-static fe_lla_error_t FE_STiD135_TrackingOptimization(
-	struct fe_stid135_internal_param *pParams, enum fe_stid135_demod Demod)
+static fe_lla_error_t FE_STiD135_TrackingOptimization(struct stv* state, enum fe_stid135_demod Demod)
 {
 	u32 symbolRate;
 	s32 pilots, timing_offset;
@@ -4471,76 +4427,76 @@ static fe_lla_error_t FE_STiD135_TrackingOptimization(
 
 
 	/* Read the Symbol rate */
-	error |= FE_STiD135_GetSymbolRate(pParams->handle_demod,pParams->master_clock, Demod, &symbolRate);
-	error |= FE_STiD135_TimingGetOffset(pParams->handle_demod,symbolRate, Demod, &timing_offset);
+	error |= FE_STiD135_GetSymbolRate(state, state->base->ip.master_clock, Demod, &symbolRate);
+	error |= FE_STiD135_TimingGetOffset(state, symbolRate, Demod, &timing_offset);
 	if(timing_offset < 0) {
 		timing_offset *= (-1);
 		symbolRate -= (u32)timing_offset;
 	} else
 		symbolRate += (u32)timing_offset;
 
-	switch (pParams->demod_results[Demod-1].standard) {
+	switch (state->demod_results.standard) {
 	case FE_SAT_DVBS1_STANDARD:
-		if (pParams->demod_search_standard == FE_SAT_AUTO_SEARCH) {
-			error |= ChipSetFieldImage(pParams->handle_demod,
+		if (state->demod_search_standard == FE_SAT_AUTO_SEARCH) {
+			error |= ChipSetFieldImage(state->base->ip.handle_demod,
 			FLD_FC8CODEW_DVBSX_DEMOD_DMDCFGMD_DVBS1_ENABLE(Demod), 1);
-			error |= ChipSetFieldImage(pParams->handle_demod,
+			error |= ChipSetFieldImage(state->base->ip.handle_demod,
 			FLD_FC8CODEW_DVBSX_DEMOD_DMDCFGMD_DVBS2_ENABLE(Demod), 0);
-			error |= ChipSetRegisters(pParams->handle_demod,
+			error |= ChipSetRegisters(state->base->ip.handle_demod,
 			(u16)REG_RC8CODEW_DVBSX_DEMOD_DMDCFGMD(Demod), 1);
 		}
 		/*Set the rolloff to the manual value (given at the
 		initialization)*/
-		error |= ChipSetFieldImage(pParams->handle_demod,
-			FLD_FC8CODEW_DVBSX_DEMOD_DEMOD_ROLLOFF_CONTROL(Demod), pParams->roll_off[Demod-1]);
-		error |= ChipSetFieldImage(pParams->handle_demod,
+		error |= ChipSetFieldImage(state->base->ip.handle_demod,
+			FLD_FC8CODEW_DVBSX_DEMOD_DEMOD_ROLLOFF_CONTROL(Demod), state->roll_off);
+		error |= ChipSetFieldImage(state->base->ip.handle_demod,
 			FLD_FC8CODEW_DVBSX_DEMOD_DEMOD_MANUALSX_ROLLOFF(Demod), 1);
-		error |= ChipSetRegisters(pParams->handle_demod,
+		error |= ChipSetRegisters(state->base->ip.handle_demod,
 			(u16)REG_RC8CODEW_DVBSX_DEMOD_DEMOD(Demod), 1);
 
 		/* force to viterbi bit error */
-		error |= ChipSetOneRegister(pParams->handle_demod,
+		error |= ChipSetOneRegister(state->base->ip.handle_demod,
 			(u16)REG_RC8CODEW_DVBSX_HWARE_ERRCTRL1(Demod), 0x75);
 	break;
 
 	case FE_SAT_DSS_STANDARD:
-		if( pParams->demod_search_standard == FE_SAT_AUTO_SEARCH) {
-			error |= ChipSetFieldImage(pParams->handle_demod,
+		if( state->demod_search_standard == FE_SAT_AUTO_SEARCH) {
+			error |= ChipSetFieldImage(state->base->ip.handle_demod,
 				FLD_FC8CODEW_DVBSX_DEMOD_DMDCFGMD_DVBS1_ENABLE(Demod), 1);
-			error |= ChipSetFieldImage(pParams->handle_demod,
+			error |= ChipSetFieldImage(state->base->ip.handle_demod,
 				FLD_FC8CODEW_DVBSX_DEMOD_DMDCFGMD_DVBS2_ENABLE(Demod), 0);
-			error |= ChipSetRegisters(pParams->handle_demod,
+			error |= ChipSetRegisters(state->base->ip.handle_demod,
 				(u16)REG_RC8CODEW_DVBSX_DEMOD_DMDCFGMD(Demod), 1);
 		}
 		/*Set the rolloff to the manual value
 		(given at the initialization)*/
-		error |= ChipSetFieldImage(pParams->handle_demod,
-			FLD_FC8CODEW_DVBSX_DEMOD_DEMOD_ROLLOFF_CONTROL(Demod),pParams->roll_off[Demod-1]);
-		error |= ChipSetFieldImage(pParams->handle_demod,
+		error |= ChipSetFieldImage(state->base->ip.handle_demod,
+			FLD_FC8CODEW_DVBSX_DEMOD_DEMOD_ROLLOFF_CONTROL(Demod),state->roll_off);
+		error |= ChipSetFieldImage(state->base->ip.handle_demod,
 			FLD_FC8CODEW_DVBSX_DEMOD_DEMOD_MANUALSX_ROLLOFF(Demod), 1);
-		error |= ChipSetRegisters(pParams->handle_demod,
+		error |= ChipSetRegisters(state->base->ip.handle_demod,
 			(u16)REG_RC8CODEW_DVBSX_DEMOD_DEMOD(Demod), 1);
 
 		/* force to viterbi bit error */
-		error |= ChipSetOneRegister(pParams->handle_demod,
+		error |= ChipSetOneRegister(state->base->ip.handle_demod,
 			(u16)REG_RC8CODEW_DVBSX_HWARE_ERRCTRL1(Demod), 0x75);
 	break;
 
 	case FE_SAT_DVBS2_STANDARD:
-		error |= ChipSetFieldImage(pParams->handle_demod,
+		error |= ChipSetFieldImage(state->base->ip.handle_demod,
 			FLD_FC8CODEW_DVBSX_DEMOD_DMDCFGMD_DVBS1_ENABLE(Demod), 0);
-		error |= ChipSetFieldImage(pParams->handle_demod,
+		error |= ChipSetFieldImage(state->base->ip.handle_demod,
 			FLD_FC8CODEW_DVBSX_DEMOD_DMDCFGMD_DVBS2_ENABLE(Demod), 1);
-		error |= ChipSetRegisters(pParams->handle_demod,
+		error |= ChipSetRegisters(state->base->ip.handle_demod,
 			(u16)REG_RC8CODEW_DVBSX_DEMOD_DMDCFGMD(Demod), 1);
 
 		/* force to DVBS2 PER  */
-		error |= ChipSetOneRegister(pParams->handle_demod,
+		error |= ChipSetOneRegister(state->base->ip.handle_demod,
 			(u16)REG_RC8CODEW_DVBSX_HWARE_ERRCTRL1(Demod), 0x67);
 
 
-		foundModcod = pParams->demod_results[Demod-1].modcode;
-		pilots = pParams->demod_results[Demod-1].pilots;
+		foundModcod = state->demod_results.modcode;
+		pilots = state->demod_results.pilots;
 
 		aclc = FE_STiD135_GetOptimCarrierLoop(symbolRate,
 				foundModcod, pilots);
@@ -4549,85 +4505,85 @@ static fe_lla_error_t FE_STiD135_TrackingOptimization(
 			|| ((foundModcod >= FE_SAT_DVBS1_QPSK_12) && (foundModcod <= FE_SAT_DVBS1_QPSK_78))
 			|| ((foundModcod >= FE_SATX_QPSK_13_45) && (foundModcod <= FE_SATX_QPSK_11_20))
 			|| ((foundModcod >= FE_SATX_QPSK_11_45) && (foundModcod <= FE_SATX_QPSK_32_45))) {
-			error |= ChipSetOneRegister(pParams->handle_demod,
+			error |= ChipSetOneRegister(state->base->ip.handle_demod,
 				(u16)REG_RC8CODEW_DVBSX_DEMOD_ACLC2S2Q(Demod), aclc);
 		} else if (((foundModcod >= FE_SAT_8PSK_35) && (foundModcod <= FE_SAT_8PSK_910))
 			|| ((foundModcod >= FE_SATX_8PSK_23_36) && (foundModcod <= FE_SATX_8PSK_13_18))
 			|| ((foundModcod >= FE_SATX_8PSK_7_15) && (foundModcod <= FE_SATX_8PSK_32_45))
 			|| (foundModcod == FE_SATX_8PSK)) {
-			error |= ChipSetOneRegister(pParams->handle_demod,
+			error |= ChipSetOneRegister(state->base->ip.handle_demod,
 				(u16)REG_RC8CODEW_DVBSX_DEMOD_ACLC2S2Q(Demod), 0x48);
-			error |= ChipSetOneRegister(pParams->handle_demod,
+			error |= ChipSetOneRegister(state->base->ip.handle_demod,
 				(u16)REG_RC8CODEW_DVBSX_DEMOD_ACLC2S28(Demod), aclc);
 		} else if (((foundModcod >= FE_SAT_16APSK_23) && (foundModcod <= FE_SAT_16APSK_910))
 			|| ((foundModcod >= FE_SATX_16APSK_26_45) && (foundModcod <= FE_SATX_16APSK_23_36))
 			|| ((foundModcod >= FE_SATX_16APSK_25_36) && (foundModcod <= FE_SATX_16APSK_77_90))
 			|| ((foundModcod >= FE_SATX_16APSK_7_15) && (foundModcod <= FE_SATX_16APSK_32_45))
 			|| (foundModcod == FE_SATX_16APSK)) {
-			error |= ChipSetOneRegister(pParams->handle_demod,
+			error |= ChipSetOneRegister(state->base->ip.handle_demod,
 				(u16)REG_RC8CODEW_DVBSX_DEMOD_ACLC2S2Q(Demod), 0x48);
-			error |= ChipSetOneRegister(pParams->handle_demod,
+			error |= ChipSetOneRegister(state->base->ip.handle_demod,
 				(u16)REG_RC8CODEW_DVBSX_DEMOD_ACLC2S216A(Demod), aclc);
 		} else if (((foundModcod >= FE_SAT_32APSK_34) && (foundModcod <= FE_SAT_32APSK_910))
 			|| ((foundModcod >= FE_SATX_32APSK_R_58) && (foundModcod <= FE_SATX_32APSK_7_9))
 			|| ((foundModcod >= FE_SATX_32APSK_2_3) && (foundModcod <= FE_SATX_32APSK_32_45_S))
 			|| (foundModcod == FE_SATX_32APSK)) {
-			error |= ChipSetOneRegister(pParams->handle_demod,
+			error |= ChipSetOneRegister(state->base->ip.handle_demod,
 				(u16)REG_RC8CODEW_DVBSX_DEMOD_ACLC2S2Q(Demod), 0x48);
-			error |= ChipSetOneRegister(pParams->handle_demod,
+			error |= ChipSetOneRegister(state->base->ip.handle_demod,
 				(u16)REG_RC8CODEW_DVBSX_DEMOD_ACLC2S232A(Demod), aclc);
 		} else if ((foundModcod == FE_SATX_VLSNR1) || (foundModcod == FE_SATX_VLSNR2)) {
-			error |= ChipSetOneRegister(pParams->handle_demod,
+			error |= ChipSetOneRegister(state->base->ip.handle_demod,
 				(u16)REG_RC8CODEW_DVBSX_DEMOD_ACLC2S2Q(Demod), 0x48);
-			/*error |= ChipSetOneRegister(pParams->handle_demod,
+			/*error |= ChipSetOneRegister(state->base->ip.handle_demod,
 				(u16)REG_RC8CODEW_DVBSX_DEMOD_ACLC2S2(Demod), aclc);*/
 		} else if (((foundModcod >= FE_SATX_64APSK_11_15) && (foundModcod <= FE_SATX_64APSK_5_6))
 			|| (foundModcod == FE_SATX_64APSK)) {
-			error |= ChipSetOneRegister(pParams->handle_demod,
+			error |= ChipSetOneRegister(state->base->ip.handle_demod,
 				(u16)REG_RC8CODEW_DVBSX_DEMOD_ACLC2S2Q(Demod), 0x48);
-			error |= ChipSetOneRegister(pParams->handle_demod,
+			error |= ChipSetOneRegister(state->base->ip.handle_demod,
 				(u16)REG_RC8CODEW_DVBSX_DEMOD_ACLC2S264A(Demod), aclc);
 		} else if ((foundModcod == FE_SATX_128APSK_3_4) || (foundModcod == FE_SATX_128APSK_7_9)) {
-			error |= ChipSetOneRegister(pParams->handle_demod,
+			error |= ChipSetOneRegister(state->base->ip.handle_demod,
 				(u16)REG_RC8CODEW_DVBSX_DEMOD_ACLC2S2Q(Demod), 0x48);
-			error |= ChipSetOneRegister(pParams->handle_demod,
+			error |= ChipSetOneRegister(state->base->ip.handle_demod,
 				(u16)REG_RC8CODEW_DVBSX_DEMOD_ACLC2S2128A(Demod), aclc);
 		} else if ((foundModcod == FE_SATX_256APSK_32_45) || (foundModcod == FE_SATX_256APSK_3_4)
 			|| (foundModcod == FE_SATX_256APSK)) {
-			error |= ChipSetOneRegister(pParams->handle_demod,
+			error |= ChipSetOneRegister(state->base->ip.handle_demod,
 				(u16)REG_RC8CODEW_DVBSX_DEMOD_ACLC2S2Q(Demod), 0x48);
-			error |= ChipSetOneRegister(pParams->handle_demod,
+			error |= ChipSetOneRegister(state->base->ip.handle_demod,
 				(u16)REG_RC8CODEW_DVBSX_DEMOD_ACLC2S2256A(Demod), aclc);
 		} else if ((foundModcod == FE_SATX_8APSK_5_9_L) || (foundModcod == FE_SATX_8APSK_26_45_L)) {
-			error |= ChipSetOneRegister(pParams->handle_demod,
+			error |= ChipSetOneRegister(state->base->ip.handle_demod,
 				(u16)REG_RC8CODEW_DVBSX_DEMOD_ACLC2S2Q(Demod), 0x48);
-			error |= ChipSetOneRegister(pParams->handle_demod,
+			error |= ChipSetOneRegister(state->base->ip.handle_demod,
 				(u16)REG_RC8CODEW_DVBSX_DEMOD_ACLC2S28(Demod), aclc);
 		} else if (((foundModcod >= FE_SATX_16APSK_1_2_L) && (foundModcod <= FE_SATX_16APSK_5_9_L))
 			|| (foundModcod == FE_SATX_16APSK_3_5_L)
 			|| (foundModcod == FE_SATX_16APSK_2_3_L)) {
-			error |= ChipSetOneRegister(pParams->handle_demod,
+			error |= ChipSetOneRegister(state->base->ip.handle_demod,
 				(u16)REG_RC8CODEW_DVBSX_DEMOD_ACLC2S2Q(Demod), 0x48);
-			error |= ChipSetOneRegister(pParams->handle_demod,
+			error |= ChipSetOneRegister(state->base->ip.handle_demod,
 				(u16)REG_RC8CODEW_DVBSX_DEMOD_ACLC2S216A(Demod), aclc);
 		} else if (foundModcod == FE_SATX_32APSK_2_3_L) {
-			error |= ChipSetOneRegister(pParams->handle_demod,
+			error |= ChipSetOneRegister(state->base->ip.handle_demod,
 				(u16)REG_RC8CODEW_DVBSX_DEMOD_ACLC2S2Q(Demod), 0x48);
-			error |= ChipSetOneRegister(pParams->handle_demod,
+			error |= ChipSetOneRegister(state->base->ip.handle_demod,
 				(u16)REG_RC8CODEW_DVBSX_DEMOD_ACLC2S232A(Demod), aclc);
 		} else if (foundModcod == FE_SATX_64APSK_32_45_L) {
-			error |= ChipSetOneRegister(pParams->handle_demod,
+			error |= ChipSetOneRegister(state->base->ip.handle_demod,
 				(u16)REG_RC8CODEW_DVBSX_DEMOD_ACLC2S2Q(Demod), 0x48);
-			error |= ChipSetOneRegister(pParams->handle_demod,
+			error |= ChipSetOneRegister(state->base->ip.handle_demod,
 				(u16)REG_RC8CODEW_DVBSX_DEMOD_ACLC2S264A(Demod), aclc);
 		} else if (((foundModcod >= FE_SATX_256APSK_29_45_L) && (foundModcod <= FE_SATX_256APSK_31_45_L))
 			|| (foundModcod == FE_SATX_256APSK_11_15_L)) {
-			error |= ChipSetOneRegister(pParams->handle_demod,
+			error |= ChipSetOneRegister(state->base->ip.handle_demod,
 				(u16)REG_RC8CODEW_DVBSX_DEMOD_ACLC2S2Q(Demod), 0x48);
-			error |= ChipSetOneRegister(pParams->handle_demod,
+			error |= ChipSetOneRegister(state->base->ip.handle_demod,
 				(u16)REG_RC8CODEW_DVBSX_DEMOD_ACLC2S2256A(Demod), aclc);
 		} else if (foundModcod == FE_SATX_1024APSK) {
-			error |= ChipSetOneRegister(pParams->handle_demod,
+			error |= ChipSetOneRegister(state->base->ip.handle_demod,
 				(u16)REG_RC8CODEW_DVBSX_DEMOD_ACLC2S2Q(Demod), 0x48);
 		}
 
@@ -4636,11 +4592,11 @@ static fe_lla_error_t FE_STiD135_TrackingOptimization(
 
 	case FE_SAT_UNKNOWN_STANDARD:
 	case FE_SAT_TURBOCODE_STANDARD:
-		error |= ChipSetFieldImage(pParams->handle_demod,
+		error |= ChipSetFieldImage(state->base->ip.handle_demod,
 			FLD_FC8CODEW_DVBSX_DEMOD_DMDCFGMD_DVBS1_ENABLE(Demod), 1);
-		error |= ChipSetFieldImage(pParams->handle_demod,
+		error |= ChipSetFieldImage(state->base->ip.handle_demod,
 			FLD_FC8CODEW_DVBSX_DEMOD_DMDCFGMD_DVBS2_ENABLE(Demod), 1);
-		error |= ChipSetRegisters (pParams->handle_demod,
+		error |= ChipSetRegisters (state->base->ip.handle_demod,
 			(u16)REG_RC8CODEW_DVBSX_DEMOD_DMDCFGMD(Demod), 1);
 	break;
 	}
@@ -4665,7 +4621,7 @@ static fe_lla_error_t FE_STiD135_TrackingOptimization(
 --PARAMS OUT	::	SlcList -> Slice list pointer
 --RETURN	::	Error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_get_slice_list(fe_stid135_handle_t Handle,
+fe_lla_error_t fe_stid135_get_slice_list(struct stv* state,
 		struct fe_stid135_slice_list *SlcList, enum fe_stid135_demod Demod)
 {
 	u8 FEC_Lock_TimeOut = 100;
@@ -4677,23 +4633,22 @@ fe_lla_error_t fe_stid135_get_slice_list(fe_stid135_handle_t Handle,
 	u16 i;
 	struct fe_stid135_internal_param *pParams;
 
-	pParams = (struct fe_stid135_internal_param *) Handle;
+	pParams = &state->base->ip;
 
 	SlcList->max_index = 0;
 
-	if(Handle != NULL) {
 		/* check if the demod can handle it */
 		if(Demod > FE_SAT_DEMOD_4)
 			return FE_LLA_INVALID_HANDLE;
 
 		/* store temporarily */
-		error |= ChipGetField(pParams->handle_demod,
+		error |= ChipGetField(state->base->ip.handle_demod,
 		FLD_FC8CODEW_DVBSX_DEMOD_SLICECFG_DEMODFLT_RAMMODE(Demod), &Demodflt_Rammode);
 
 		/* Switch off rammode */
-		error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_SLICECFG_DEMODFLT_RAMMODE(Demod), 0);
+		error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_SLICECFG_DEMODFLT_RAMMODE(Demod), 0);
 		/* fetch the SliceMax index */
-		error |= ChipGetOneRegister(pParams->handle_demod,
+		error |= ChipGetOneRegister(state->base->ip.handle_demod,
 		(u16)REG_RC8CODEW_DVBSX_DEMOD_SLICEMAX(Demod), &reg_value);
 		MaxSliceNumber = (u8)reg_value;
 
@@ -4702,10 +4657,10 @@ fe_lla_error_t fe_stid135_get_slice_list(fe_stid135_handle_t Handle,
 		if (MaxSliceNumber < 1) return error;
 
 		/* fetch the SliceMin index */
-		error |= ChipGetOneRegister(pParams->handle_demod,
+		error |= ChipGetOneRegister(state->base->ip.handle_demod,
 		(u16)REG_RC8CODEW_DVBSX_DEMOD_SLICEMIN(Demod), &reg_value);
 		MinSliceNumber = (u8)reg_value;
-		error |= ChipGetOneRegister(pParams->handle_demod,
+		error |= ChipGetOneRegister(state->base->ip.handle_demod,
 		(u16)REG_RC8CODEW_DVBSX_DEMOD_SLICESEL(Demod), &reg_value);
 		SliceSel = (u8)reg_value;
 		//rather use Getregisters,2 !
@@ -4713,16 +4668,16 @@ fe_lla_error_t fe_stid135_get_slice_list(fe_stid135_handle_t Handle,
 		for (i = MinSliceNumber; i <= MaxSliceNumber; i++) {
 			/* tbd, try fetching it from SLC itself, also the anchor
 			frame settings */
-			error |= ChipSetOneRegister(pParams->handle_demod,
+			error |= ChipSetOneRegister(state->base->ip.handle_demod,
 				(u16)REG_RC8CODEW_DVBSX_DEMOD_SLICESEL(Demod), i);
 
 			// Delineator reset, to be sure
-			error |= ChipSetField(pParams->handle_demod,
+			error |= ChipSetField(state->base->ip.handle_demod,
 				FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL1_ALGOSWRST(Demod),1);
-			error |= ChipSetField(pParams->handle_demod,
+			error |= ChipSetField(state->base->ip.handle_demod,
 				FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL1_ALGOSWRST(Demod),0);
 
-			error |= FE_STiD135_GetFECLock(pParams->handle_demod, Demod, FEC_Lock_TimeOut, &lock);
+			error |= FE_STiD135_GetFECLock(state->base->ip.handle_demod, Demod, FEC_Lock_TimeOut, &lock);
 			if (lock) {
 				SlcList->t_slice[SlcList->max_index].slice_id = (u8)i;
 				SlcList->max_index = (u16)(SlcList->max_index + 1);
@@ -4730,16 +4685,13 @@ fe_lla_error_t fe_stid135_get_slice_list(fe_stid135_handle_t Handle,
 				SlcList->t_slice[SlcList->max_index].slice_id = 0;
 			}
 		}
-		error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_SLICECFG_DEMODFLT_RAMMODE(Demod),
+		error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_SLICECFG_DEMODFLT_RAMMODE(Demod),
 					Demodflt_Rammode);
-		error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_SLICESEL(Demod),
+		error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_SLICESEL(Demod),
 			SliceSel);
 
-		error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL1_ALGOSWRST(Demod),1);
-		error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL1_ALGOSWRST(Demod),0);
-	}
-	else
-		error = FE_LLA_INVALID_HANDLE;
+		error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL1_ALGOSWRST(Demod),1);
+		error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL1_ALGOSWRST(Demod),0);
 
 	return error;
 }
@@ -4754,19 +4706,15 @@ fe_lla_error_t fe_stid135_get_slice_list(fe_stid135_handle_t Handle,
 --PARAMS OUT	::	None
 --RETURN	::	Error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_set_slice(fe_stid135_handle_t Handle,
+fe_lla_error_t fe_stid135_set_slice(struct stv* state,
 		enum fe_stid135_demod Demod, u8 SliceID)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
-	struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param*)Handle;
 
-	if(pParams == NULL)
-		error=FE_LLA_INVALID_HANDLE;
-	else {
-		error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG2_DEMODFLT_XXXMODE(Demod), 0x14);
-		error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_SLICESEL_DEMODFLT_SLICESEL(Demod),
-			SliceID);
-	}
+	error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG2_DEMODFLT_XXXMODE(Demod), 0x14);
+	error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_SLICESEL_DEMODFLT_SLICESEL(Demod),
+												SliceID);
+
 
 	return(error);
 }
@@ -4781,7 +4729,7 @@ fe_lla_error_t fe_stid135_set_slice(fe_stid135_handle_t Handle,
 --PARAMS OUT	::	pSliceInfo -> pointer to slice data structure
 --RETURN	::	Error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_get_slice_info(fe_stid135_handle_t Handle,
+fe_lla_error_t fe_stid135_get_slice_info(struct stv* state,
 		enum fe_stid135_demod Demod, u8 SliceId, struct fe_sat_slice *pSliceInfo)
 {
 	u8 FEC_Lock_TimeOut = 100;
@@ -4791,49 +4739,48 @@ fe_lla_error_t fe_stid135_get_slice_info(fe_stid135_handle_t Handle,
 	u8 SliceSel, MaxSliceNumber, MinSliceNumber;
 	struct fe_stid135_internal_param *pParams;
 
-	pParams = (struct fe_stid135_internal_param *) Handle;
+	pParams = &state->base->ip;
 
-	if(Handle != NULL) {
 		/* check if the demod can handle it */
 		if(Demod > FE_SAT_DEMOD_4)
 			return FE_LLA_INVALID_HANDLE;
 
 		/* fetch the SliceMax index */
-		error |= ChipGetOneRegister(pParams->handle_demod,
+		error |= ChipGetOneRegister(state->base->ip.handle_demod,
 		(u16)REG_RC8CODEW_DVBSX_DEMOD_SLICEMAX(Demod), &reg_value);
 		MaxSliceNumber = (u8)reg_value;
 		/* fetch the SliceMin index */
-		error |= ChipGetOneRegister(pParams->handle_demod,
+		error |= ChipGetOneRegister(state->base->ip.handle_demod,
 		(u16)REG_RC8CODEW_DVBSX_DEMOD_SLICEMIN(Demod), &reg_value);
 		MinSliceNumber = (u8)reg_value;
 		/* Save temporary */
-		error |= ChipGetOneRegister(pParams->handle_demod,
+		error |= ChipGetOneRegister(state->base->ip.handle_demod,
 		(u16)REG_RC8CODEW_DVBSX_DEMOD_SLICESEL(Demod), &reg_value);
 		SliceSel = (u8)reg_value;
 
 		if((SliceId >= MinSliceNumber) && (SliceId <= MaxSliceNumber)) {
 			/* tbd, try fetching it from SLC itself, also the anchor
 			frame settings */
-			error |= ChipSetOneRegister(pParams->handle_demod,
+			error |= ChipSetOneRegister(state->base->ip.handle_demod,
 				(u16)REG_RC8CODEW_DVBSX_DEMOD_SLICESEL(Demod), SliceId);
 
 			// Delineator reset, to be sure
-			error |= ChipSetField(pParams->handle_demod,
+			error |= ChipSetField(state->base->ip.handle_demod,
 				FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL1_ALGOSWRST(Demod),1);
-			error |= ChipSetField(pParams->handle_demod,
+			error |= ChipSetField(state->base->ip.handle_demod,
 				FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL1_ALGOSWRST(Demod),0);
 
-			error |= FE_STiD135_GetFECLock(pParams->handle_demod, Demod, FEC_Lock_TimeOut, &lock);
+			error |= FE_STiD135_GetFECLock(state->base->ip.handle_demod, Demod, FEC_Lock_TimeOut, &lock);
 			if (lock) {
 				// fetch the rest of the parameters
 				pSliceInfo->slice_id = SliceId;
-				error |= ChipGetOneRegister(pParams->handle_demod,
+				error |= ChipGetOneRegister(state->base->ip.handle_demod,
 						(u16)REG_RC8CODEW_DVBSX_PKTDELIN_PDELSTATUS2(Demod), &reg_value);
-				pSliceInfo->modcode = ChipGetFieldImage(pParams->handle_demod,
+				pSliceInfo->modcode = ChipGetFieldImage(state->base->ip.handle_demod,
 						FLD_FC8CODEW_DVBSX_PKTDELIN_PDELSTATUS2_FRAME_MODCOD(Demod));
-				pSliceInfo->frame_length = ChipGetFieldImage(pParams->handle_demod,
+				pSliceInfo->frame_length = ChipGetFieldImage(state->base->ip.handle_demod,
 						FLD_FC8CODEW_DVBSX_PKTDELIN_PDELSTATUS2_FRAME_TYPE(Demod)) >> 1;
-				pSliceInfo->pilots = ChipGetFieldImage(pParams->handle_demod,
+				pSliceInfo->pilots = ChipGetFieldImage(state->base->ip.handle_demod,
 						FLD_FC8CODEW_DVBSX_PKTDELIN_PDELSTATUS2_FRAME_TYPE(Demod)) & 0x01;
 			} else {
 				pSliceInfo->slice_id = SliceId;
@@ -4842,12 +4789,10 @@ fe_lla_error_t fe_stid135_get_slice_info(fe_stid135_handle_t Handle,
 				pSliceInfo->pilots = FE_SAT_UNKNOWN_PILOTS;
 			}
 		}
-		error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_SLICESEL(Demod), SliceSel);
+		error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_SLICESEL(Demod), SliceSel);
 
-		error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL1_ALGOSWRST(Demod),1);
-		error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL1_ALGOSWRST(Demod),0);
-	} else
-		error = FE_LLA_INVALID_HANDLE;
+		error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL1_ALGOSWRST(Demod),1);
+		error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL1_ALGOSWRST(Demod),0);
 
 	return error;
 }
@@ -4860,12 +4805,10 @@ fe_lla_error_t fe_stid135_get_slice_info(fe_stid135_handle_t Handle,
 --PARAMS OUT	::	chip ID
 --RETURN	::	error
 --***************************************************/
-fe_lla_error_t FE_STiD135_get_mid(fe_stid135_handle_t Handle, u8* mid_p)
+fe_lla_error_t FE_STiD135_get_mid(struct fe_stid135_internal_param* pParams, u8* mid_p)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
-	struct fe_stid135_internal_param *pParams;
 	u32 reg_value;
-	pParams = (struct fe_stid135_internal_param *) Handle;
 	error |= ChipGetOneRegister(pParams->handle_demod, RC8CODEW_C8CODEW_TOP_CTRL_MID, &reg_value);
 	*mid_p = (u8)reg_value;
 
@@ -4881,7 +4824,7 @@ fe_lla_error_t FE_STiD135_get_mid(fe_stid135_handle_t Handle, u8* mid_p)
 --PARAMS OUT	::	status_p -> bitfield structure reporting all status
 --RETURN	::	error
 --***************************************************/
-fe_lla_error_t FE_STiD135_GetStatus(fe_stid135_handle_t Handle, enum fe_stid135_demod Demod, struct status_bit_fields* status_p)
+fe_lla_error_t FE_STiD135_GetStatus(struct stv* state, enum fe_stid135_demod Demod, struct status_bit_fields* status_p)
 {
 	s32 AgcrfPath = 0;
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
@@ -4889,45 +4832,45 @@ fe_lla_error_t FE_STiD135_GetStatus(fe_stid135_handle_t Handle, enum fe_stid135_
 	s32 val1, val2, val3;
 	u32 val4;
 
-	pParams = (struct fe_stid135_internal_param *) Handle;
+	pParams = &state->base->ip;
 	if(pParams != NULL) {
-		error |= fe_stid135_get_agcrf_path(pParams->handle_demod, Demod, &AgcrfPath);
+		error |= fe_stid135_get_agcrf_path(state->base->ip.handle_demod, Demod, &AgcrfPath);
 
-		error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS_LOCK_DEFINITIF(Demod), &val1);
+		error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS_LOCK_DEFINITIF(Demod), &val1);
 		status_p->lock_definitif = (u8)(val1 & 0x1);
-		error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_SLICESTAT_DEMODFLT_PDELSYNC(Demod), &val1);
+		error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_SLICESTAT_DEMODFLT_PDELSYNC(Demod), &val1);
 		status_p->pdelsync = (u8)(val1 & 0x3);
-		error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_ASYMSTATUS_ASYMCTRL_ON(Demod), &val1);
+		error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_ASYMSTATUS_ASYMCTRL_ON(Demod), &val1);
 		status_p->asymctrl_on = (u8)(val1 & 0x1);
-		error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_GSTAT_PSD_DONE(Demod), &val1);
+		error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_GSTAT_PSD_DONE(Demod), &val1);
 		status_p->gstat_psd_done = (u8)(val1 & 0x1);
-		error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DISEQC_DISTXSTATUS_TX_END(AgcrfPath), &val1);
+		error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DISEQC_DISTXSTATUS_TX_END(AgcrfPath), &val1);
 		status_p->distxstatus_tx_end = (u8)(val1 & 0x1);
-		error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DISEQC_DISRXSTAT1_RXEND(AgcrfPath), &val1);
+		error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DISEQC_DISRXSTAT1_RXEND(AgcrfPath), &val1);
 		status_p->disrxstat1_rxend = (u8)(val1 & 0x1);
-		error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_FECSPY_FSTATUS_FOUND_SIGNAL(Demod), &val1);
+		error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_FECSPY_FSTATUS_FOUND_SIGNAL(Demod), &val1);
 		status_p->fstatus_found_signal = (u8)(val1 & 0x1);
-		error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSSTATUS_TSFIFO_LINEOK(Demod), &val1);
+		error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSSTATUS_TSFIFO_LINEOK(Demod), &val1);
 		status_p->tsfifo_lineok = (u8)(val1 & 0x1);
-		error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_SFSTATUS_SFEC_LINEOK(Demod), &val1);
+		error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_SFSTATUS_SFEC_LINEOK(Demod), &val1);
 		status_p->sfec_lineok = (u8)(val1 & 0x1);
-		error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELSTATUS1_BCH_ERROR_FLAG(Demod), &val1);
+		error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELSTATUS1_BCH_ERROR_FLAG(Demod), &val1);
 		status_p->bch = (u8)(val1 & 0x1);
-		error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELSTATUS1_PKTDELIN_LOCK(Demod), &val1);
+		error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELSTATUS1_PKTDELIN_LOCK(Demod), &val1);
 		status_p->pktdelin_lock = (u8)(val1 & 0x1);
-		error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_SUPERFEC_SFECSTATUS_LOCKEDSFEC(Demod), &val1);
+		error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_SUPERFEC_SFECSTATUS_LOCKEDSFEC(Demod), &val1);
 		status_p->lockedsfec = (u8)(val1 & 0x1);
-		error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_VITERBI_VSTATUSVIT_LOCKEDVIT(Demod), &val1);
+		error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_VITERBI_VSTATUSVIT_LOCKEDVIT(Demod), &val1);
 		status_p->lockedvit = (u8)(val1 & 0x1);
-		error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DMDSTATE_DEMOD_MODE(Demod), &val1);
+		error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DMDSTATE_DEMOD_MODE(Demod), &val1);
 		status_p->demod_mode = (u8)(val1 & 0x1F);
-		error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_AGCRF_AGCRFCN_AGCRF_LOCKED(AgcrfPath), &val1 );
+		error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_AGCRF_AGCRFCN_AGCRF_LOCKED(AgcrfPath), &val1 );
 		status_p->agcrf_locked = (u8)(val1 & 0x1);
-		error |= ChipGetField(pParams->handle_demod, FLD_FSTID135_AFE_AFE_STATUS_PLL_LOCK, &val1);
+		error |= ChipGetField(state->base->ip.handle_demod, FLD_FSTID135_AFE_AFE_STATUS_PLL_LOCK, &val1);
 		status_p->pll_lock = (u8)(val1 & 0x1);
-		error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS_CAR_LOCK(Demod), &val1);
+		error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS_CAR_LOCK(Demod), &val1);
 		status_p->car_lock = (u8)(val1 & 0x1);
-		error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS_TIMING_IS_LOCKED(Demod), &val1);
+		error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS_TIMING_IS_LOCKED(Demod), &val1);
 		status_p->timing_is_locked = (u8)(val1 & 0x1);
 		error |= ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_C8SECTPFE_SYS_C8SECTPFE_SYS_OTHER_ERR_STATUS, &val4);
 		val4 = val4 >> 1;
@@ -4938,40 +4881,40 @@ fe_lla_error_t FE_STiD135_GetStatus(fe_stid135_handle_t Handle, enum fe_stid135_
 		error |= ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_C8SECTPFE_TSDMA_C8SECTPFE_TSDMA_DEST1_STATUS, &val4);
 		val4 = val4 >> 1;
 		status_p->dest1_status_dma_overflow = (u8)(val4 & 0x1);
-		error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS5_SHDB_OVERFLOW(Demod), &val1);
+		error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS5_SHDB_OVERFLOW(Demod), &val1);
 		status_p->shdb_overflow = (u8)(val1 & 0x1);
-		error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS5_SHDB_ERROR(Demod), &val1);
+		error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS5_SHDB_ERROR(Demod), &val1);
 		status_p->shdb_error = (u8)(val1 & 0x1);
-		error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS2_DEMOD_DELOCK(Demod), &val1);
+		error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS2_DEMOD_DELOCK(Demod), &val1);
 		status_p->demod_delock = (u8)(val1 & 0x1);
-		error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELSTATUS1_PKTDELIN_DELOCK(Demod), &val1);
+		error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELSTATUS1_PKTDELIN_DELOCK(Demod), &val1);
 		status_p->pktdelin_delock = (u8)(val1 & 0x1);
 		/* Freeze the BBFCRCKO and UPCRCKO counters. Allow to read them in coherency. */
-		//ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL2_RESET_UPKO_COUNT(Demod), 1);
-		error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_BBFCRCKO1_BBHCRC_KOCNT(Demod), &val1) ;
-		error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_BBFCRCKO0_BBHCRC_KOCNT(Demod) , &val2);
+		//ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL2_RESET_UPKO_COUNT(Demod), 1);
+		error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_BBFCRCKO1_BBHCRC_KOCNT(Demod), &val1) ;
+		error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_BBFCRCKO0_BBHCRC_KOCNT(Demod) , &val2);
 		status_p->bbfcrcko = (u16)((val1 << 8)+ (val2));
 
-		error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_UPCRCKO1_PKTCRC_KOCNT(Demod), &val1);
-		error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_UPCRCKO0_PKTCRC_KOCNT(Demod), &val2);
+		error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_UPCRCKO1_PKTCRC_KOCNT(Demod), &val1);
+		error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_UPCRCKO0_PKTCRC_KOCNT(Demod), &val2);
 		status_p->upcrcko = (u16)((val1<< 8) + val2);
 		/* Reset and Restart BBFCRCKO and UPCRCKO counters. */
-		//ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL2_RESET_UPKO_COUNT(Demod), 0);
-		error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSSTATUS2_TSFIFO_LINENOK(Demod), &val1) ;
+		//ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL2_RESET_UPKO_COUNT(Demod), 0);
+		error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSSTATUS2_TSFIFO_LINENOK(Demod), &val1) ;
 		status_p->tsfifo_linenok = (u8)(val1 & 0x1);
-		error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSSTATUS2_DIL_NOSYNC(Demod), &val1);
+		error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSSTATUS2_DIL_NOSYNC(Demod), &val1);
 		status_p->dil_nosync = (u8)(val1 & 0x1);
-		error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSSTATUS_TSFIFO_ERROR(Demod), &val1);
+		error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSSTATUS_TSFIFO_ERROR(Demod), &val1);
 		status_p->tsfifo_error = (u8)(val1 & 0x1);
-		error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSDEBUG0_TSFIFO_ERROR_EVNT(Demod), &val1);
+		error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSDEBUG0_TSFIFO_ERROR_EVNT(Demod), &val1);
 		status_p->tsfifo_error_evnt = (u8)(val1 & 0x1);
-		error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_ERRCNT12_ERR_CNT1(Demod), &val1);
-		error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_ERRCNT11_ERR_CNT1(Demod), &val2);
-		error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_ERRCNT10_ERR_CNT1(Demod), &val3);
+		error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_ERRCNT12_ERR_CNT1(Demod), &val1);
+		error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_ERRCNT11_ERR_CNT1(Demod), &val2);
+		error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_ERRCNT10_ERR_CNT1(Demod), &val3);
 		status_p->errcnt1 = (u32)(((val1 << 16) + (val2 << 8) + val3) & 0xFFFFFF);
-		error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_ERRCNT22_ERR_CNT2(Demod), &val1);
-		error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_ERRCNT21_ERR_CNT2(Demod), &val2);
-		error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_ERRCNT20_ERR_CNT2(Demod), &val3);
+		error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_ERRCNT22_ERR_CNT2(Demod), &val1);
+		error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_ERRCNT21_ERR_CNT2(Demod), &val2);
+		error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_ERRCNT20_ERR_CNT2(Demod), &val3);
 		status_p->errcnt2 = (u32)(((val1 << 16) + (val2 << 8) + val3) & 0xFFFFFF);
 	}
 
@@ -4986,27 +4929,27 @@ fe_lla_error_t FE_STiD135_GetStatus(fe_stid135_handle_t Handle, enum fe_stid135_
 --PARAMS OUT	::	NONE
 --RETURN	::	error
 --***************************************************/
-fe_lla_error_t fe_stid135_reset_obs_registers(fe_stid135_handle_t Handle, enum fe_stid135_demod Demod)
+fe_lla_error_t fe_stid135_reset_obs_registers(struct stv* state, enum fe_stid135_demod Demod)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 
 	struct fe_stid135_internal_param *pParams;
 	s32 fld_value;
-	pParams = (struct fe_stid135_internal_param *) Handle;
+	pParams = &state->base->ip;
 	if(pParams != NULL) {
-		error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS5_SHDB_OVERFLOW(Demod), &fld_value);
-		error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS5_SHDB_ERROR(Demod), &fld_value);
-		error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS2_DEMOD_DELOCK(Demod), 0);
-		error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELSTATUS1_PKTDELIN_DELOCK(Demod), 0);
-		error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL2_RESET_UPKO_COUNT(Demod), 1);
-		error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL2_RESET_UPKO_COUNT(Demod), 0);
-		error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSSTATUS2_TSFIFO_LINENOK(Demod), 0);
-		error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSSTATUS2_DIL_NOSYNC(Demod), 0);
-		error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSSTATUS_TSFIFO_ERROR(Demod), &fld_value);
-		error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSDEBUG0_TSFIFO_ERROR_EVNT(Demod), 0);
-		error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELSTATUS1_BCH_ERROR_FLAG(Demod), 0);
+		error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS5_SHDB_OVERFLOW(Demod), &fld_value);
+		error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS5_SHDB_ERROR(Demod), &fld_value);
+		error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS2_DEMOD_DELOCK(Demod), 0);
+		error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELSTATUS1_PKTDELIN_DELOCK(Demod), 0);
+		error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL2_RESET_UPKO_COUNT(Demod), 1);
+		error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL2_RESET_UPKO_COUNT(Demod), 0);
+		error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSSTATUS2_TSFIFO_LINENOK(Demod), 0);
+		error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSSTATUS2_DIL_NOSYNC(Demod), 0);
+		error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSSTATUS_TSFIFO_ERROR(Demod), &fld_value);
+		error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSDEBUG0_TSFIFO_ERROR_EVNT(Demod), 0);
+		error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELSTATUS1_BCH_ERROR_FLAG(Demod), 0);
 		/* Reset counter of killed packet number */
-		error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_ERRCNT20(Demod), 0x00);
+		error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_ERRCNT20(Demod), 0x00);
 	}
 
 	return error;
@@ -5019,23 +4962,15 @@ fe_lla_error_t fe_stid135_reset_obs_registers(fe_stid135_handle_t Handle, enum f
 --PARAMS OUT	::	NONE
 --RETURN	::	Error (if any)
 --***************************************************/
-fe_lla_error_t FE_STiD135_Term(fe_stid135_handle_t Handle)
+fe_lla_error_t FE_STiD135_Term(struct fe_stid135_internal_param* pParams)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
-	struct fe_stid135_internal_param *pParams;
 
-	pParams = (struct fe_stid135_internal_param *) Handle;
 
-	if (pParams != NULL) {
 
 			ChipClose(pParams->handle_demod);
 			ChipClose(pParams->handle_soc);
 
-			if(Handle)
-				kfree(pParams);
-
-	} else
-		error = FE_LLA_INVALID_HANDLE;
 
 	return error;
 }
@@ -5050,7 +4985,7 @@ fe_lla_error_t FE_STiD135_Term(fe_stid135_handle_t Handle)
 			matype -> Matype read
 --RETURN	::	error
 --***************************************************/
-static fe_lla_error_t fe_stid135_read_hw_matype(stchip_handle_t hChip,
+static fe_lla_error_t fe_stid135_read_hw_matype(STCHIP_Info_t* hChip,
 	enum fe_stid135_demod Demod, u8 *matype, u8 *isi_read)
 {
 
@@ -5081,33 +5016,33 @@ static fe_lla_error_t fe_stid135_read_hw_matype(stchip_handle_t hChip,
 --PARAMS OUT	::	NONE
 --RETURN	::	Error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_manage_matype_info(fe_stid135_handle_t handle,
+fe_lla_error_t fe_stid135_manage_matype_info(struct stv* state,
 																						 enum fe_stid135_demod Demod)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	u8 matype_info, isi, genuine_matype;
 	s32 fld_value;
 	BOOL mis = FALSE;
-	struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *) handle;
+	struct fe_stid135_internal_param *pParams = &state->base->ip;
 
 	if(pParams == NULL)
 		error=FE_LLA_INVALID_HANDLE;
 	else {
-		if (pParams->handle_demod->Error)
+		if (state->base->ip.handle_demod->Error)
 			error = FE_LLA_I2C_ERROR;
 		else {
-			error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_TPKTDELIN_TESTBUS_SELECT(Demod), 8);
+			error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_TPKTDELIN_TESTBUS_SELECT(Demod), 8);
 			/* Free MATYPE forced mode */
-			error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_BBHCTRL2_FORCE_MATYPEMSB(Demod), 0);
+			error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_BBHCTRL2_FORCE_MATYPEMSB(Demod), 0);
 			/* Read Matype */
-			error = fe_stid135_read_hw_matype(pParams->handle_demod, Demod, &matype_info, &isi);
+			error = fe_stid135_read_hw_matype(state->base->ip.handle_demod, Demod, &matype_info, &isi);
 			genuine_matype = matype_info;
 
 			/* Chech if MIS stream (Multi Input Stream). If yes then set the MIS Filter to get the Min ISI */
 			if (!fe_stid135_check_sis_or_mis(matype_info)) {
 #if 0
-				if (pParams->demod_search_algo[Demod-1] == FE_SAT_BLIND_SEARCH ||
-						pParams->demod_search_algo[Demod-1] == FE_SAT_NEXT) {
+				if (state->demod_search_algo == FE_SAT_BLIND_SEARCH ||
+						state->demod_search_algo == FE_SAT_NEXT) {
 					fe_lla_error_t error1 = FE_LLA_NO_ERROR;
 					struct fe_sat_isi_struct_t isi;
 					int i;
@@ -5118,135 +5053,135 @@ fe_lla_error_t fe_stid135_manage_matype_info(fe_stid135_handle_t handle,
 						dprintk("MIS DETECTION: isi[%d]=%d\n", i, isi.isi[i]);
 					}
 				} else {
-					dprintk("MIS DETECTED algo=%d\n", pParams->demod_search_algo[Demod-1]);
+					dprintk("MIS DETECTED algo=%d\n", state->demod_search_algo);
 				}
 #endif
 				mis = TRUE;
-				pParams->mis_mode[Demod-1] = TRUE;
+				state->mis_mode = TRUE;
 				/* Get Min ISI and activate the MIS Filter */
-				error |= fe_stid135_select_min_isi(handle, Demod);
-				error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG0_TSFIFO_BITSPEED(Demod), 0);
+				error |= fe_stid135_select_min_isi(state, Demod);
+				error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG0_TSFIFO_BITSPEED(Demod), 0);
 				/* ISSYI use-case : minimize jitter below 100ns and provides a smooth TS output rate */
 				if((genuine_matype >> 3) & 0x1) {
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSPCRPID1_SOFFIFO_PCRADJ(Demod), 1);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSPCRPID1_SOFFIFO_PCRADJ(Demod), 1);
 				}
 			}
-			error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_TPKTDELIN_TESTBUS_SELECT(Demod), 0);
+			error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_TPKTDELIN_TESTBUS_SELECT(Demod), 0);
 
 			/* If TS/GS = 11 (MPEG TS), reset matype force bit and do NOT load frames in MPEG packets */
 			if(((genuine_matype>>6) & 0x3) == 0x3) {
 #if 1 //present in main driver
 					if((genuine_matype >> 3) & 0x3) {
 					/* CCM or ISSYI used */
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSSTATE1_TSOUT_NOSYNC(Demod), 0);
-					//error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSSYNC_TSFIFO_SYNCMODE(Demod), 0);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSSTATE1_TSOUT_NOSYNC(Demod), 0);
+					//error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSSYNC_TSFIFO_SYNCMODE(Demod), 0);
 				} else {
 					/* ACM and ISSYI not used */
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSSTATE1_TSOUT_NOSYNC(Demod), 1);
-					//error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSSYNC_TSFIFO_SYNCMODE(Demod), 2);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSSTATE1_TSOUT_NOSYNC(Demod), 1);
+					//error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSSYNC_TSFIFO_SYNCMODE(Demod), 2);
 					}
 #endif
 				/* Unforce HEM mode */
-				error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL0_HEMMODE_SELECT(Demod), 0);
+				error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL0_HEMMODE_SELECT(Demod), 0);
 				/* Go back to reset value settings */
-				error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG1_TSFIFO_MANSPEED(Demod), 0);
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSSPEED(Demod), 0xFF);
+				error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG1_TSFIFO_MANSPEED(Demod), 0);
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSSPEED(Demod), 0xFF);
 				/* To avoid reset of stream merger in annexM, ACM or if PID filter is enabled, set automatic computation of TS bit rate */
-				error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS6_SIGNAL_ANNEXEM(Demod), &fld_value);
+				error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS6_SIGNAL_ANNEXEM(Demod), &fld_value);
 				if((fld_value == 0) || (fld_value == 1) || (mis)) {
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG0_TSFIFO_BITSPEED(Demod), 0);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG0_TSFIFO_BITSPEED(Demod), 0);
 				} else { /* sliced mode */
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG0_TSFIFO_BITSPEED(Demod), 1);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSBITRATE1(Demod), 0x80);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSBITRATE0(Demod), 0x00);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG0_TSFIFO_BITSPEED(Demod), 1);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSBITRATE1(Demod), 0x80);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSBITRATE0(Demod), 0x00);
 				}
 			}
 			/* If TS/GS = 10 (GSE-HEM High Efficiency Mode) reset matype force bit, load frames in MPEG packets and disable latency regulation */
 			else if(((genuine_matype>>6) & 0x3) == 0x2){
 				#ifdef USER1
 					/* Force HEM mode */
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL0_HEMMODE_SELECT(Demod), 3);
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG1_TSFIFO_MANSPEED(Demod), 3);
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG0_TSFIFO_EMBINDVB(Demod), 1); // - new management of NCR
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL0_HEMMODE_SELECT(Demod), 3);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG1_TSFIFO_MANSPEED(Demod), 3);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG0_TSFIFO_EMBINDVB(Demod), 1); // - new management of NCR
 					/* Adjust TSSPEED according to channel maximum bit rate for the demodulator */
-					error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG0_SDEMAP_MAXLLRRATE(Demod), &fld_value);
+					error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG0_SDEMAP_MAXLLRRATE(Demod), &fld_value);
 					if(fld_value == 0x00) {
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSSPEED(Demod), 0x10); // - new management of NCR
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSSPEED(Demod), 0x10); // - new management of NCR
 					} else {
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSSPEED(Demod), 0x16); // - new management of NCR
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSSPEED(Demod), 0x16); // - new management of NCR
 					}
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSSTATE1_TSOUT_NOSYNC(Demod), 0);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSSTATE1_TSOUT_NOSYNC(Demod), 0);
 					/* To avoid reset of stream merger in annexM, ACM or if PID filter is enabled, set pragmatic smoothing mode for computation of TS bit rate */
 					matype_info &= 0x0F;
 					/* Set bit 5 to ignore ISI/MIS bit because not compatible with NCR feature (latency regulation) */
 					matype_info |= 0xB0;
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_PKTDELIN_MATCST1(Demod), matype_info);
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_BBHCTRL2_FORCE_MATYPEMSB(Demod), 1);
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG0_TSFIFO_BITSPEED(Demod), 1);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSBITRATE1(Demod), 0x80);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSBITRATE0(Demod), 0x00);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_PKTDELIN_MATCST1(Demod), matype_info);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_BBHCTRL2_FORCE_MATYPEMSB(Demod), 1);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG0_TSFIFO_BITSPEED(Demod), 1);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSBITRATE1(Demod), 0x80);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSBITRATE0(Demod), 0x00);
 				#else
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG0_TSFIFO_EMBINDVB(Demod), 1);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG0_TSFIFO_EMBINDVB(Demod), 1);
 					/* Go back to reset value settings */
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG1_TSFIFO_MANSPEED(Demod), 0);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSSPEED(Demod), 0xFF);
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSSTATE1_TSOUT_NOSYNC(Demod), 0);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG1_TSFIFO_MANSPEED(Demod), 0);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSSPEED(Demod), 0xFF);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSSTATE1_TSOUT_NOSYNC(Demod), 0);
 					/* Unforce HEM mode */
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL0_HEMMODE_SELECT(Demod), 0);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL0_HEMMODE_SELECT(Demod), 0);
 				#endif
 			}
 			/* If TS/GS = 00 (Generic packetized) or 01 (Generic continuous) force matype/tsgs = 10 and load frames in MPEG packets */
 			else if((((genuine_matype>>6) & 0x3) == 0x0) || ((genuine_matype>>6) & 0x3) == 0x1) {
 				#ifdef USER1
 					/* Force HEM mode */
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL0_HEMMODE_SELECT(Demod), 3);
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG1_TSFIFO_MANSPEED(Demod), 3);
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG0_TSFIFO_EMBINDVB(Demod), 1); // - new management of NCR
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL0_HEMMODE_SELECT(Demod), 3);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG1_TSFIFO_MANSPEED(Demod), 3);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG0_TSFIFO_EMBINDVB(Demod), 1); // - new management of NCR
 					/* Adjust TSSPEED according to channel maximum bit rate for the demodulator */
-					error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG0_SDEMAP_MAXLLRRATE(Demod), &fld_value);
+					error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG0_SDEMAP_MAXLLRRATE(Demod), &fld_value);
 					if(fld_value == 0x00) {
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSSPEED(Demod), 0x10); // - new management of NCR
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSSPEED(Demod), 0x10); // - new management of NCR
 					} else {
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSSPEED(Demod), 0x16); // - new management of NCR
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSSPEED(Demod), 0x16); // - new management of NCR
 					}
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSSTATE1_TSOUT_NOSYNC(Demod), 0);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSSTATE1_TSOUT_NOSYNC(Demod), 0);
 					/* To avoid reset of stream merger in annexM, ACM or if PID filter is enabled, set pragmatic smoothing mode for computation of TS bit rate */
 					matype_info &= 0x0F;
 					/* Set bit 5 to ignore ISI/MIS bit because not compatible with NCR feature (latency regulation) */
 					matype_info |= 0xB0;
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_PKTDELIN_MATCST1(Demod), matype_info);
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_BBHCTRL2_FORCE_MATYPEMSB(Demod), 1);
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG0_TSFIFO_BITSPEED(Demod), 1);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSBITRATE1(Demod), 0x80);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSBITRATE0(Demod), 0x00);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_PKTDELIN_MATCST1(Demod), matype_info);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_BBHCTRL2_FORCE_MATYPEMSB(Demod), 1);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG0_TSFIFO_BITSPEED(Demod), 1);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSBITRATE1(Demod), 0x80);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSBITRATE0(Demod), 0x00);
 				#else
 					matype_info &= 0x0F;
 					/* Set bit 5 to ignore ISI/MIS bit because not compatible with NCR feature (latency regulation) */
 					matype_info |= 0xB0;
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_PKTDELIN_MATCST1(Demod), matype_info);
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_BBHCTRL2_FORCE_MATYPEMSB(Demod), 1);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_PKTDELIN_MATCST1(Demod), matype_info);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_BBHCTRL2_FORCE_MATYPEMSB(Demod), 1);
 					/* Force HEM mode */
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL0_HEMMODE_SELECT(Demod), 3);
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG0_TSFIFO_EMBINDVB(Demod), 1);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL0_HEMMODE_SELECT(Demod), 3);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG0_TSFIFO_EMBINDVB(Demod), 1);
 					/* Switch to manual CLKOUT frequency processing */
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG1_TSFIFO_MANSPEED(Demod), 3);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSSPEED(Demod), 0x18);
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSSTATE1_TSOUT_NOSYNC(Demod), 0);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG1_TSFIFO_MANSPEED(Demod), 3);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSSPEED(Demod), 0x18);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSSTATE1_TSOUT_NOSYNC(Demod), 0);
 					/* To avoid reset of stream merger in annexM, ACM or if PID filter is enabled, set pragmatic smoothing mode for computation of TS bit rate */
 				#endif
 			}
 			/* WB, and MIS mode */
-			if ((pParams->demod_symbol_rate[Demod-1] > pParams->master_clock) && mis) {
-				error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG1_TSFIFO_MANSPEED(Demod), 3);
-				error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG0_SDEMAP_MAXLLRRATE(Demod), &fld_value);
+			if ((state->demod_symbol_rate > state->base->ip.master_clock) && mis) {
+				error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG1_TSFIFO_MANSPEED(Demod), 3);
+				error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG0_SDEMAP_MAXLLRRATE(Demod), &fld_value);
 				if(fld_value == 0x00) {
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSSPEED(Demod), 0x10); // - new management of NCR
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSSPEED(Demod), 0x10); // - new management of NCR
 				} else {
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSSPEED(Demod), 0x16); // - new management of NCR
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSSPEED(Demod), 0x16); // - new management of NCR
 				}
-				error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG0_TSFIFO_BITSPEED(Demod), 1);
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSBITRATE1(Demod), 0x80);
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSBITRATE0(Demod), 0x00);
+				error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG0_TSFIFO_BITSPEED(Demod), 1);
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSBITRATE1(Demod), 0x80);
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSBITRATE0(Demod), 0x00);
 			}
 		}
 	}
@@ -5262,46 +5197,46 @@ fe_lla_error_t fe_stid135_manage_matype_info(fe_stid135_handle_t handle,
 --PARAMS OUT	::	NONE
 --RETURN	::	Error (if any)
 --***************************************************/
-static fe_lla_error_t fe_stid135_manage_matype_info_raw_bbframe(fe_stid135_handle_t handle,
+static fe_lla_error_t fe_stid135_manage_matype_info_raw_bbframe(struct stv* state,
 						enum fe_stid135_demod Demod)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	u8 matype_info, isi, genuine_matype;
-	struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *) handle;
+	struct fe_stid135_internal_param *pParams = &state->base->ip;
 
 	if(pParams == NULL)
 		error=FE_LLA_INVALID_HANDLE;
 	else {
-		if (pParams->handle_demod->Error)
+		if (state->base->ip.handle_demod->Error)
 			error = FE_LLA_I2C_ERROR;
 		else {
 			/* Read Matype */
-			error = fe_stid135_read_hw_matype(pParams->handle_demod, Demod, &matype_info, &isi);
+			error = fe_stid135_read_hw_matype(state->base->ip.handle_demod, Demod, &matype_info, &isi);
 			genuine_matype = matype_info;
 
 			/* Check if MIS stream (Multi Input Stream). If yes then set the MIS Filter to get the Min ISI */
 			if (!fe_stid135_check_sis_or_mis(matype_info)) {
-				pParams->mis_mode[Demod-1] = TRUE;
+				state->mis_mode = TRUE;
 				/* Get Min ISI and activate the MIS Filter */
-				error |= fe_stid135_select_min_isi(handle, Demod);
-				error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG0_TSFIFO_BITSPEED(Demod), 0);
+				error |= fe_stid135_select_min_isi(state, Demod);
+				error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG0_TSFIFO_BITSPEED(Demod), 0);
 				/* ISSYI use-case : minimize jitter below 100ns and provides a smooth TS output rate */
 				if((genuine_matype >> 3) & 0x1) {
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSPCRPID1_SOFFIFO_PCRADJ(Demod), 1);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSPCRPID1_SOFFIFO_PCRADJ(Demod), 1);
 				}
 			}
 
 			/* If TS/GS = 01 (Generic continuous) => raw BB frame */
 			if(((genuine_matype>>6) & 0x3) == 0x1) {
-				error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL2_FORCE_CONTINUOUS(Demod), 1);
-				error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL2_FRAME_MODE(Demod), 1);
-				error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSSYNC_TSFIFO_SYNCMODE(Demod), 2);
+				error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL2_FORCE_CONTINUOUS(Demod), 1);
+				error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL2_FRAME_MODE(Demod), 1);
+				error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSSYNC_TSFIFO_SYNCMODE(Demod), 2);
 
-				error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG0_TSFIFO_EMBINDVB(Demod), 1);
+				error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG0_TSFIFO_EMBINDVB(Demod), 1);
 				/* Switch to manual CLKOUT frequency processing */
-				error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG1_TSFIFO_MANSPEED(Demod), 3);
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSSPEED(Demod), 0x18);
-				error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSSTATE1_TSOUT_NOSYNC(Demod), 0);
+				error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG1_TSFIFO_MANSPEED(Demod), 3);
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSSPEED(Demod), 0x18);
+				error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSSTATE1_TSOUT_NOSYNC(Demod), 0);
 				/* To avoid reset of stream merger in annexM, ACM or if PID filter is enabled, set pragmatic smoothing mode for computation of TS bit rate */
 			}
 		}
@@ -5317,22 +5252,19 @@ static fe_lla_error_t fe_stid135_manage_matype_info_raw_bbframe(fe_stid135_handl
 --PARAMS OUT	::	matype_infos -> pointer to MatypeInfo struct to fill
 --RETURN	::	Error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_get_matype_infos(fe_stid135_handle_t Handle,
+fe_lla_error_t fe_stid135_get_matype_infos(struct stv* state,
 			enum fe_stid135_demod Demod, struct fe_sat_dvbs2_matype_info_t *matype_infos)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
-	struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)Handle;
+	//struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)Handle;
 
 	u8 matype_val,isi;
 	s32 fld_value;
 
-	if(pParams == NULL)
-		error=FE_LLA_INVALID_HANDLE;
+	if (state->base->ip.handle_demod->Error )
+		error=FE_LLA_I2C_ERROR;
 	else {
-		if (pParams->handle_demod->Error )
-			error=FE_LLA_I2C_ERROR;
-		else {
-			error |= fe_stid135_read_hw_matype(pParams->handle_demod, Demod, &matype_val,
+			error |= fe_stid135_read_hw_matype(state->base->ip.handle_demod, Demod, &matype_val,
 						&isi);
 			/* Also available in Px_TSSTATEM:Px_TSFRAME_MODE */
 			matype_infos->StreamType = (matype_val>>6)&0x3;
@@ -5344,14 +5276,13 @@ fe_lla_error_t fe_stid135_get_matype_infos(fe_stid135_handle_t Handle,
 			/* Also available in Px_TSSTATEL:Px_NPD_ON */
 			matype_infos->NullPacketdeletion = (matype_val>>2)&0x1;
 			/* Also available in Px_TMGOBS:Px_ROLLOFF_STATUS */
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_TMGOBS_ROLLOFF_STATUS(Demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_TMGOBS_ROLLOFF_STATUS(Demod), &fld_value);
 			matype_infos->roll_off = (enum fe_sat_rolloff)(fld_value);
 
 			/*Check the error at the end of the function*/
-			if (pParams->handle_demod->Error )
+			if (state->base->ip.handle_demod->Error )
 				error = FE_LLA_I2C_ERROR;
 		}
-	}
 	return error;
 }
 
@@ -5401,7 +5332,7 @@ TUNER_Error_t FE_STiD135_TunerInit(struct fe_stid135_internal_param *pParams)
 --PARAMS OUT	::	NONE
 --RETURN	::	error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_tuner_enable(stchip_handle_t tuner_handle, FE_OXFORD_TunerPath_t tuner_nb)
+fe_lla_error_t fe_stid135_tuner_enable(STCHIP_Info_t* tuner_handle, FE_OXFORD_TunerPath_t tuner_nb)
 {
 	STCHIP_Error_t error = CHIPERR_NO_ERROR;
 
@@ -5451,7 +5382,7 @@ fe_lla_error_t fe_stid135_tuner_enable(stchip_handle_t tuner_handle, FE_OXFORD_T
 -PARAMS OUT	::	NONE
 --RETURN	::	Error (if any)
 --***************************************************/
-fe_lla_error_t FE_STiD135_TunerStandby(stchip_handle_t TunerHandle, FE_OXFORD_TunerPath_t TunerNb, u8 Enable)
+fe_lla_error_t FE_STiD135_TunerStandby(STCHIP_Info_t* TunerHandle, FE_OXFORD_TunerPath_t TunerNb, u8 Enable)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 
@@ -5477,7 +5408,7 @@ fe_lla_error_t FE_STiD135_TunerStandby(stchip_handle_t TunerHandle, FE_OXFORD_Tu
 -PARAMS OUT	::	agcrf_path_p -> tuner path number
 --RETURN	::	error
 --***************************************************/
-static fe_lla_error_t fe_stid135_get_agcrf_path(stchip_handle_t hChip,
+static fe_lla_error_t fe_stid135_get_agcrf_path(STCHIP_Info_t* hChip,
 			enum fe_stid135_demod demod, s32* agcrf_path_p)
 {
 
@@ -5530,11 +5461,11 @@ static fe_lla_error_t fe_stid135_get_agcrf_path(stchip_handle_t hChip,
 -PARAMS OUT	::	NONE
 --RETURN	::	error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_set_rfmux_path(stchip_handle_t hChip,
+fe_lla_error_t fe_stid135_set_rfmux_path(struct stv* state,
 			enum fe_stid135_demod demod, FE_OXFORD_TunerPath_t tuner)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
-
+	STCHIP_Info_t* hChip = state->base->ip.handle_demod;
 	switch(demod) {
 		case 1:
 			error |= ChipSetField(hChip, FLD_FC8CODEW_C8CODEW_RFMUX_RFMUX0_RFMUX_DEMOD_SEL_1, (s32)(tuner - 1));
@@ -5576,12 +5507,12 @@ fe_lla_error_t fe_stid135_set_rfmux_path(stchip_handle_t hChip,
 }
 
 /*
-fe_lla_error_t fe_stid135_fskmodulatorctrl (fe_stid135_handle_t handle,
+fe_lla_error_t fe_stid135_fskmodulatorctrl (struct stv* state,
 			 enum fe_stid135_demod	demod,
 			 bool fskmodulatorctrl)
 {
 }
-fe_lla_error_t fe_stid135_configurefsk (fe_stid135_handle_t handle,
+fe_lla_error_t fe_stid135_configurefsk (struct fe_stid135_internal_param* pParams,
 	enum fe_stid135_demod	demod, fe_stid135_modeparams_t fskparams)
 {
 }*/
@@ -5596,12 +5527,12 @@ fe_lla_error_t fe_stid135_configurefsk (fe_stid135_handle_t handle,
 --PARAMS OUT	::	None
 --RETURN	::	Error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_diseqc_init(fe_stid135_handle_t handle,
+fe_lla_error_t fe_stid135_diseqc_init(struct fe_stid135_internal_param* pParams,
 		 FE_OXFORD_TunerPath_t tuner_nb,
 		 enum fe_sat_diseqc_txmode diseqc_mode)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
-	struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *) handle;
+	//	struct fe_stid135_internal_param *pParams = &state->base->ip;
 	s32 mode_fld, envelop_fld;
 	u32 reg_value;
 
@@ -5691,16 +5622,14 @@ fe_lla_error_t fe_stid135_diseqc_init(fe_stid135_handle_t handle,
 --PARAMS OUT	::	None
 --RETURN	::	Error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_set_22khz_cont(fe_stid135_handle_t handle,
+fe_lla_error_t fe_stid135_set_22khz_cont(struct fe_stid135_internal_param* pParams,
 						FE_OXFORD_TunerPath_t tuner_nb,
 						BOOL tone)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
-	struct fe_stid135_internal_param *pParams = NULL;
+	//struct fe_stid135_internal_param *pParams = NULL;
 
-	pParams = (struct fe_stid135_internal_param*) handle;
-	if (pParams == NULL)
-		return FE_LLA_INVALID_HANDLE;
+	//pParams = (struct fe_stid135_internal_param*) handle;
 
 	if (pParams->handle_demod->Error)
 		return FE_LLA_I2C_ERROR;
@@ -5725,15 +5654,15 @@ fe_lla_error_t fe_stid135_set_22khz_cont(fe_stid135_handle_t handle,
 --PARAMS OUT	::	None
 --RETURN	::	Error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_diseqc_send(fe_stid135_handle_t handle,
+fe_lla_error_t fe_stid135_diseqc_send(struct fe_stid135_internal_param* pParams,
 				FE_OXFORD_TunerPath_t tuner_nb, u8 *data, u8 nbdata)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
-	struct fe_stid135_internal_param *pParams = NULL;
+	//struct fe_stid135_internal_param *pParams = NULL;
 	u32 i=0;
 	s32 fld_value;
 
-	pParams = (struct fe_stid135_internal_param*) handle;
+	//pParams = (struct fe_stid135_internal_param*) handle;
 	if(pParams != NULL)
 	{
 		if(pParams->handle_demod->Error)
@@ -5787,18 +5716,16 @@ fe_lla_error_t fe_stid135_diseqc_send(fe_stid135_handle_t handle,
 		::	NbData -> Number of received bytes.
 --RETURN	::	Error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_diseqc_receive(fe_stid135_handle_t handle,
+fe_lla_error_t fe_stid135_diseqc_receive(struct fe_stid135_internal_param* pParams,
 	u8 *data, u8 *nbdata)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
-	struct fe_stid135_internal_param *pParams = NULL;
+	//struct fe_stid135_internal_param *pParams = NULL;
 	u32 i=0;
 	u32 reg_value;
 	s32 fld_value;
 
-	pParams = (struct fe_stid135_internal_param*) handle;
-	if(pParams != NULL)
-	{
+	//pParams = (struct fe_stid135_internal_param*) handle;
 		if(pParams->handle_demod->Error)
 			error = FE_LLA_I2C_ERROR;
 		else
@@ -5819,9 +5746,6 @@ fe_lla_error_t fe_stid135_diseqc_receive(fe_stid135_handle_t handle,
 			if (pParams->handle_demod->Error) /*Check the error at the end of the function*/
 				error = FE_LLA_I2C_ERROR;
 		}
-	}
-	else
-		error = FE_LLA_INVALID_HANDLE;
 	return error;
 }
 
@@ -5832,12 +5756,12 @@ fe_lla_error_t fe_stid135_diseqc_receive(fe_stid135_handle_t handle,
 --PARAMS OUT	::	tuner_nb -> Current tuner 1 .. 4
 --RETURN	::	Error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_diseqc_reset(fe_stid135_handle_t handle, FE_OXFORD_TunerPath_t tuner_nb)
+fe_lla_error_t fe_stid135_diseqc_reset(struct fe_stid135_internal_param* pParams, FE_OXFORD_TunerPath_t tuner_nb)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
-	struct fe_stid135_internal_param *pParams = NULL;
+	//struct fe_stid135_internal_param *pParams = NULL;
 
-	pParams = (struct fe_stid135_internal_param*) handle;
+	//pParams = (struct fe_stid135_internal_param*) handle;
 	if(pParams != NULL)
 	{
 		if(pParams->handle_demod->Error)
@@ -5869,55 +5793,51 @@ fe_lla_error_t fe_stid135_diseqc_reset(fe_stid135_handle_t handle, FE_OXFORD_Tun
 -PARAMS OUT	::	NONE
 --RETURN	::	error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_enable_pid (fe_stid135_handle_t handle,
+fe_lla_error_t fe_stid135_enable_pid (struct stv* state,
 		 enum fe_stid135_demod demod, u32 pid_number)
 {
 
-	struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
+	//	struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	u8 i, ram_index = 0;
 	BOOL pid_already_output = FALSE;
 
-	if(pParams == NULL)
-		error=FE_LLA_INVALID_HANDLE;
-	else {
-		if (pParams->handle_demod->Error )
+		if (state->base->ip.handle_demod->Error )
 			error=FE_LLA_I2C_ERROR;
 		else {
 			/* Check if pid already output */
 			for(i=0;i<RAM_SIZE;i++) {
-				if((pParams->pid_flt[demod-1].ram_table[i].pid_number == pid_number) && (pParams->pid_flt[demod-1].ram_table[i].command != NONE))
+				if((state->pid_flt.ram_table[i].pid_number == pid_number) && (state->pid_flt.ram_table[i].command != NONE))
 					pid_already_output = TRUE;
 			}
 
 			if(pid_already_output == FALSE) {
 				/* Go to first free RAM location */
 				for(i=0;i<RAM_SIZE;i++)
-					if(pParams->pid_flt[demod-1].ram_table[i].command == NONE) {
+					if(state->pid_flt.ram_table[i].command == NONE) {
 						ram_index = i;
 						break;
 					}
 				/* Check if there is enough memory space */
 				if(ram_index < RAM_SIZE - 2) {
-					pParams->pid_flt[demod-1].ram_table[ram_index].pid_number = pid_number;
-					pParams->pid_flt[demod-1].ram_table[ram_index + 1].pid_number = pid_number;
+					state->pid_flt.ram_table[ram_index].pid_number = pid_number;
+					state->pid_flt.ram_table[ram_index + 1].pid_number = pid_number;
 					/* Enable PID command takes exactly 2 bytes */
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), pParams->pid_flt[demod-1].ram_table[ram_index].address);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), (pParams->pid_flt[demod-1].ram_table[ram_index].pid_number | 0x8000) >> 8);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->pid_flt[demod-1].ram_table[ram_index].address + 1));
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), (pParams->pid_flt[demod-1].ram_table[ram_index].pid_number | 0x8000) & 0xFF);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), state->pid_flt.ram_table[ram_index].address);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), (state->pid_flt.ram_table[ram_index].pid_number | 0x8000) >> 8);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->pid_flt.ram_table[ram_index].address + 1));
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), (state->pid_flt.ram_table[ram_index].pid_number | 0x8000) & 0xFF);
 					/* PID is no more dummy, but a real PID */
-					pParams->pid_flt[demod-1].ram_table[ram_index].command = ENABLE_PID;
-					pParams->pid_flt[demod-1].ram_table[ram_index + 1].command = ENABLE_PID;
+					state->pid_flt.ram_table[ram_index].command = ENABLE_PID;
+					state->pid_flt.ram_table[ram_index + 1].command = ENABLE_PID;
 				}
 			}
 
 
 			//Check the error at the end of the function
-			if (pParams->handle_demod->Error )
+			if (state->base->ip.handle_demod->Error )
 				error=FE_LLA_I2C_ERROR;
 		}
-	}
 	return error;
 }
 
@@ -5930,23 +5850,20 @@ fe_lla_error_t fe_stid135_enable_pid (fe_stid135_handle_t handle,
 -PARAMS OUT	::	NONE
 --RETURN	::	error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_disable_pid (fe_stid135_handle_t handle,
+fe_lla_error_t fe_stid135_disable_pid (struct stv* state,
 			enum fe_stid135_demod demod, u32 pid_number)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	u8 i, ram_index = 0;
 	BOOL pid_already_output = FALSE;
-	struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
+	//	struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
 
-	if(pParams == NULL)
-		error=FE_LLA_INVALID_HANDLE;
-	else {
-		if (pParams->handle_demod->Error )
+		if (state->base->ip.handle_demod->Error )
 			error=FE_LLA_I2C_ERROR;
 		else {
 			/* Check if pid already output */
 			for(i=0;i<RAM_SIZE;i++) {
-				if((pParams->pid_flt[demod-1].ram_table[i].pid_number == pid_number)  && (pParams->pid_flt[demod-1].ram_table[i].command != NONE))
+				if((state->pid_flt.ram_table[i].pid_number == pid_number)  && (state->pid_flt.ram_table[i].command != NONE))
 				{
 					pid_already_output = TRUE;
 					ram_index = i;
@@ -5956,22 +5873,21 @@ fe_lla_error_t fe_stid135_disable_pid (fe_stid135_handle_t handle,
 
 			if(pid_already_output == TRUE) {
 				/* Change pid already output to dummy PID */
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), pParams->pid_flt[demod-1].ram_table[ram_index].address);
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x9FFF >> 8);
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->pid_flt[demod-1].ram_table[ram_index].address + 1));
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x9FFF & 0xFF);
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), state->pid_flt.ram_table[ram_index].address);
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x9FFF >> 8);
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->pid_flt.ram_table[ram_index].address + 1));
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x9FFF & 0xFF);
 				/* PID is no more a real PID, but a dummy PID */
-				pParams->pid_flt[demod-1].ram_table[ram_index].command = NONE;
-				pParams->pid_flt[demod-1].ram_table[ram_index].pid_number = 0;
-				pParams->pid_flt[demod-1].ram_table[ram_index + 1].command = NONE;
-				pParams->pid_flt[demod-1].ram_table[ram_index + 1].pid_number = 0;
+				state->pid_flt.ram_table[ram_index].command = NONE;
+				state->pid_flt.ram_table[ram_index].pid_number = 0;
+				state->pid_flt.ram_table[ram_index + 1].command = NONE;
+				state->pid_flt.ram_table[ram_index + 1].pid_number = 0;
 			}
 
 			//Check the error at the end of the function
-			if (pParams->handle_demod->Error )
+			if (state->base->ip.handle_demod->Error )
 				error=FE_LLA_I2C_ERROR;
 		}
-	}
 	return error;
 }
 
@@ -5985,23 +5901,20 @@ fe_lla_error_t fe_stid135_disable_pid (fe_stid135_handle_t handle,
 -PARAMS OUT	::	NONE
 --RETURN	::	error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_disable_rangepid (fe_stid135_handle_t handle,
+fe_lla_error_t fe_stid135_disable_rangepid (struct stv* state,
 	 enum fe_stid135_demod demod,u32 pid_start_range, u32 pid_stop_range)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	u8 i, ram_index = 0;
 	BOOL range_already_output = FALSE;
-	struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
+	//struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
 
-	if(pParams == NULL)
-		error=FE_LLA_INVALID_HANDLE;
-	else {
-		if (pParams->handle_demod->Error )
+		if (state->base->ip.handle_demod->Error )
 			error=FE_LLA_I2C_ERROR;
 		else {
 			/* Check if pid already output */
 			for(i=0;i<RAM_SIZE-2;i++) {
-				if((pParams->pid_flt[demod-1].ram_table[i].command == SELECT_RANGE) && (pParams->pid_flt[demod-1].ram_table[i].pid_number == pid_start_range) && (pParams->pid_flt[demod-1].ram_table[i+2].pid_number == pid_stop_range))
+				if((state->pid_flt.ram_table[i].command == SELECT_RANGE) && (state->pid_flt.ram_table[i].pid_number == pid_start_range) && (state->pid_flt.ram_table[i+2].pid_number == pid_stop_range))
 				{
 					range_already_output = TRUE;
 					ram_index = i;
@@ -6010,29 +5923,28 @@ fe_lla_error_t fe_stid135_disable_rangepid (fe_stid135_handle_t handle,
 			}
 			if(range_already_output == TRUE) {
 				/* Change pid already output to dummy PID */
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), pParams->pid_flt[demod-1].ram_table[ram_index].address);
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x9FFF >> 8);
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->pid_flt[demod-1].ram_table[ram_index].address + 1));
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x9FFF & 0xFF);
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->pid_flt[demod-1].ram_table[ram_index].address + 2));
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x9FFF >> 8);
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->pid_flt[demod-1].ram_table[ram_index].address + 3));
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x9FFF & 0xFF);
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), state->pid_flt.ram_table[ram_index].address);
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x9FFF >> 8);
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->pid_flt.ram_table[ram_index].address + 1));
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x9FFF & 0xFF);
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->pid_flt.ram_table[ram_index].address + 2));
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x9FFF >> 8);
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->pid_flt.ram_table[ram_index].address + 3));
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x9FFF & 0xFF);
 				/* PID is no more a real PID, but a dummy PID */
-				pParams->pid_flt[demod-1].ram_table[ram_index].command = NONE;
-				pParams->pid_flt[demod-1].ram_table[ram_index].pid_number = 0;
-				pParams->pid_flt[demod-1].ram_table[ram_index + 1].command = NONE;
-				pParams->pid_flt[demod-1].ram_table[ram_index + 1].pid_number = 0;
-				pParams->pid_flt[demod-1].ram_table[ram_index + 2].command = NONE;
-				pParams->pid_flt[demod-1].ram_table[ram_index + 2].pid_number = 0;
-				pParams->pid_flt[demod-1].ram_table[ram_index + 3].command = NONE;
-				pParams->pid_flt[demod-1].ram_table[ram_index + 3].pid_number = 0;
+				state->pid_flt.ram_table[ram_index].command = NONE;
+				state->pid_flt.ram_table[ram_index].pid_number = 0;
+				state->pid_flt.ram_table[ram_index + 1].command = NONE;
+				state->pid_flt.ram_table[ram_index + 1].pid_number = 0;
+				state->pid_flt.ram_table[ram_index + 2].command = NONE;
+				state->pid_flt.ram_table[ram_index + 2].pid_number = 0;
+				state->pid_flt.ram_table[ram_index + 3].command = NONE;
+				state->pid_flt.ram_table[ram_index + 3].pid_number = 0;
 			}
 			//Check the error at the end of the function
-			if (pParams->handle_demod->Error )
+			if (state->base->ip.handle_demod->Error )
 				error=FE_LLA_I2C_ERROR;
 		}
-	}
 	return error;
 }
 
@@ -6046,52 +5958,47 @@ fe_lla_error_t fe_stid135_disable_rangepid (fe_stid135_handle_t handle,
 -PARAMS OUT	::	NONE
 --RETURN	::	error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_select_rangepid (fe_stid135_handle_t	handle,
+fe_lla_error_t fe_stid135_select_rangepid (struct stv* state,
 	 enum fe_stid135_demod demod,u32 pid_start_range, u32 pid_stop_range)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	u8 i, ram_index = 0;
-	struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
-
-	if(pParams == NULL)
-		error=FE_LLA_INVALID_HANDLE;
-	else {
-		if (pParams->handle_demod->Error )
+	//struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
+		if (state->base->ip.handle_demod->Error )
 			error=FE_LLA_I2C_ERROR;
 		else {
 			/* Go to first free RAM location */
 			for(i=0;i<RAM_SIZE;i++)
-				if(pParams->pid_flt[demod-1].ram_table[i].command == NONE) {
+				if(state->pid_flt.ram_table[i].command == NONE) {
 					ram_index = i;
 					break;
 				}
 			/* Check if there is enough memory space */
 			if(ram_index < RAM_SIZE - 4) {
-				pParams->pid_flt[demod-1].ram_table[ram_index].pid_number = pid_start_range;
-				pParams->pid_flt[demod-1].ram_table[ram_index + 1].pid_number = pid_start_range;
-				pParams->pid_flt[demod-1].ram_table[ram_index + 2].pid_number = pid_stop_range;
-				pParams->pid_flt[demod-1].ram_table[ram_index + 3].pid_number = pid_stop_range;
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), pParams->pid_flt[demod-1].ram_table[ram_index].address);
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), ((pid_stop_range | 0xC000) + 1) >> 8);
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->pid_flt[demod-1].ram_table[ram_index].address + 1));
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), ((pid_stop_range | 0xC000) + 1) & 0xFF);
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->pid_flt[demod-1].ram_table[ram_index].address + 2));
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), pid_start_range >> 8);
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->pid_flt[demod-1].ram_table[ram_index].address + 3));
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), pid_start_range & 0xFF);
+				state->pid_flt.ram_table[ram_index].pid_number = pid_start_range;
+				state->pid_flt.ram_table[ram_index + 1].pid_number = pid_start_range;
+				state->pid_flt.ram_table[ram_index + 2].pid_number = pid_stop_range;
+				state->pid_flt.ram_table[ram_index + 3].pid_number = pid_stop_range;
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), state->pid_flt.ram_table[ram_index].address);
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), ((pid_stop_range | 0xC000) + 1) >> 8);
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->pid_flt.ram_table[ram_index].address + 1));
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), ((pid_stop_range | 0xC000) + 1) & 0xFF);
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->pid_flt.ram_table[ram_index].address + 2));
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), pid_start_range >> 8);
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->pid_flt.ram_table[ram_index].address + 3));
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), pid_start_range & 0xFF);
 
 				/* PID is no more dummy, but a real PID */
-				pParams->pid_flt[demod-1].ram_table[ram_index].command = SELECT_RANGE;
-				pParams->pid_flt[demod-1].ram_table[ram_index + 1].command = SELECT_RANGE;
-				pParams->pid_flt[demod-1].ram_table[ram_index + 2].command = SELECT_RANGE;
-				pParams->pid_flt[demod-1].ram_table[ram_index + 3].command = SELECT_RANGE;
+				state->pid_flt.ram_table[ram_index].command = SELECT_RANGE;
+				state->pid_flt.ram_table[ram_index + 1].command = SELECT_RANGE;
+				state->pid_flt.ram_table[ram_index + 2].command = SELECT_RANGE;
+				state->pid_flt.ram_table[ram_index + 3].command = SELECT_RANGE;
 			}
 
 			//Check the error at the end of the function
-			if (pParams->handle_demod->Error )
+			if (state->base->ip.handle_demod->Error )
 				error=FE_LLA_I2C_ERROR;
 		}
-	}
 	return error;
 }
 
@@ -6103,41 +6010,37 @@ fe_lla_error_t fe_stid135_select_rangepid (fe_stid135_handle_t	handle,
 -PARAMS OUT	::	NONE
 --RETURN	::	error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_enable_allpid (fe_stid135_handle_t handle,
+fe_lla_error_t fe_stid135_enable_allpid (struct stv* state,
 	enum fe_stid135_demod demod)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	u8 i;
-	struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
+	//struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
 
-	if(pParams == NULL)
-		error=FE_LLA_INVALID_HANDLE;
-	else {
-		if (pParams->handle_demod->Error )
+		if (state->base->ip.handle_demod->Error )
 			error=FE_LLA_I2C_ERROR;
 		else {
 			/* All memory cells in RAM are reset, so update of table is necessary */
 			for(i=0;i<RAM_SIZE>>1;i++) {
-				pParams->pid_flt[demod-1].ram_table[i].command = ENABLE_ALL_PID;
-				pParams->pid_flt[demod-1].ram_table[i].pid_number = 0;
+				state->pid_flt.ram_table[i].command = ENABLE_ALL_PID;
+				state->pid_flt.ram_table[i].pid_number = 0;
 			}
 			// The filter RAM is erased to load a new program. All the packets are output waiting to go to 0x01 or 0x06
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), 0x02);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), 0x02);
 
 			/* PASSALL command */
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0xA000 >> 8);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0xA000 & 0xFF);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0000 >> 8);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0000 & 0xFF);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0xA000 >> 8);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0xA000 & 0xFF);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0000 >> 8);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0000 & 0xFF);
 
 			/* Activation with DELALL by default (0x01: H/W bug, ClearQuest opened) */
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), 0x06);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), 0x06);
 
 			//Check the error at the end of the function
-			if (pParams->handle_demod->Error )
+			if (state->base->ip.handle_demod->Error )
 				error=FE_LLA_I2C_ERROR;
 		}
-	}
 	return error;
 }
 
@@ -6149,57 +6052,54 @@ fe_lla_error_t fe_stid135_enable_allpid (fe_stid135_handle_t handle,
 -PARAMS OUT	::	NONE
 --RETURN	::	error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_disable_allpid (fe_stid135_handle_t handle,
+fe_lla_error_t fe_stid135_disable_allpid (struct stv* state,
 	enum fe_stid135_demod demod)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	u8 i;
-	struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
+	//struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
 
-	if(pParams == NULL)
-		error=FE_LLA_INVALID_HANDLE;
-	else {
-		if (pParams->handle_demod->Error )
+		if (state->base->ip.handle_demod->Error )
 			error=FE_LLA_I2C_ERROR;
 		else {
 			/* If this is the 1st time after power-up we perform this function or if a enable_all_pid has been performed, then we write into all memory cells in RAM */
-			if((pParams->pid_flt[demod-1].first_disable_all_command == TRUE) || (pParams->pid_flt[demod-1].ram_table[0].command == ENABLE_ALL_PID)) {
+			if((state->pid_flt.first_disable_all_command == TRUE) || (state->pid_flt.ram_table[0].command == ENABLE_ALL_PID)) {
 				// The filter RAM is erased to load a new program. All the packets are output waiting to go to 0x01 or 0x06
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), 0x03);
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), 0x03);
 
 				for(i=0;i<RAM_SIZE;i++) {
 					/* All PID are considered dummy PID */
-					pParams->pid_flt[demod-1].ram_table[i].command = NONE;
-					pParams->pid_flt[demod-1].ram_table[i].address = (u8)(i + 0x10);
-					pParams->pid_flt[demod-1].ram_table[i].pid_number = 0;
+					state->pid_flt.ram_table[i].command = NONE;
+					state->pid_flt.ram_table[i].address = (u8)(i + 0x10);
+					state->pid_flt.ram_table[i].pid_number = 0;
 				}
 				for(i=0;i<RAM_SIZE-1;i = (u8)(i + 2)) {
 					/* Change all pid to dummy PID */
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), pParams->pid_flt[demod-1].ram_table[i].address);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x9FFF >> 8);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), pParams->pid_flt[demod-1].ram_table[i+1].address);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x9FFF & 0xFF);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), state->pid_flt.ram_table[i].address);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x9FFF >> 8);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), state->pid_flt.ram_table[i+1].address);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x9FFF & 0xFF);
 				}
 
 				// Activation with DELALL by default (0x01: H/W bug, ClearQuest opened)
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), 0x06);
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), 0x06);
 
-				pParams->pid_flt[demod-1].first_disable_all_command = FALSE;
+				state->pid_flt.first_disable_all_command = FALSE;
 			} else {
 			/* If this is NOT the 1st time we perform this function, then we write only into memory cells in RAM that do not output dummy PID */
 			/* Aim is to avoid too much I2C traffic */
 				for(i=0;i<RAM_SIZE - 1;i++) {
-					if(pParams->pid_flt[demod-1].ram_table[i].command != NONE) {
+					if(state->pid_flt.ram_table[i].command != NONE) {
 						/* All PID are considered dummy PID */
-						pParams->pid_flt[demod-1].ram_table[i].command = NONE;
-						pParams->pid_flt[demod-1].ram_table[i + 1].command = NONE;
-						pParams->pid_flt[demod-1].ram_table[i].pid_number = 0;
-						pParams->pid_flt[demod-1].ram_table[i + 1].pid_number = 0;
+						state->pid_flt.ram_table[i].command = NONE;
+						state->pid_flt.ram_table[i + 1].command = NONE;
+						state->pid_flt.ram_table[i].pid_number = 0;
+						state->pid_flt.ram_table[i + 1].pid_number = 0;
 						/* Change all pid to dummy PID */
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), pParams->pid_flt[demod-1].ram_table[i].address);
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x9FFF >> 8);
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->pid_flt[demod-1].ram_table[i].address + 1));
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x9FFF & 0xFF);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), state->pid_flt.ram_table[i].address);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x9FFF >> 8);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->pid_flt.ram_table[i].address + 1));
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x9FFF & 0xFF);
 						/* we have dealed with 2 memory cells, so we go further */
 						i++;
 					}
@@ -6207,10 +6107,9 @@ fe_lla_error_t fe_stid135_disable_allpid (fe_stid135_handle_t handle,
 			}
 
 			//Check the error at the end of the function
-			if (pParams->handle_demod->Error )
+			if (state->base->ip.handle_demod->Error )
 				error=FE_LLA_I2C_ERROR;
 		}
-	}
 	return error;
 }
 
@@ -6224,7 +6123,7 @@ fe_lla_error_t fe_stid135_disable_allpid (fe_stid135_handle_t handle,
 -PARAMS OUT	::	NONE
 --RETURN	::	error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_changepid_number (fe_stid135_handle_t handle,
+fe_lla_error_t fe_stid135_changepid_number (struct stv* state,
 	enum fe_stid135_demod demod,u32 pid_inputnumber,u32 pid_outputnumber)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
@@ -6232,17 +6131,14 @@ fe_lla_error_t fe_stid135_changepid_number (fe_stid135_handle_t handle,
 	u16 pid_offset;
 	BOOL pid_already_output = FALSE;
 
-	struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
+	//struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
 
-	if(pParams == NULL)
-		error=FE_LLA_INVALID_HANDLE;
-	else {
-		if (pParams->handle_demod->Error )
+		if (state->base->ip.handle_demod->Error )
 			error=FE_LLA_I2C_ERROR;
 		else {
 			/* Check if pid already output */
 			for(i=0;i<RAM_SIZE;i++) {
-				if(pParams->pid_flt[demod-1].ram_table[i].pid_number == pid_inputnumber)
+				if(state->pid_flt.ram_table[i].pid_number == pid_inputnumber)
 				{
 					pid_already_output = TRUE;
 					ram_index = i;
@@ -6256,23 +6152,22 @@ fe_lla_error_t fe_stid135_changepid_number (fe_stid135_handle_t handle,
 				else
 					pid_offset = (u16)(pid_outputnumber - pid_inputnumber);
 				/* Change PID number of current PID */
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), pParams->pid_flt[demod-1].ram_table[ram_index].address);
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), pid_inputnumber >> 8);
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->pid_flt[demod-1].ram_table[ram_index].address + 1));
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), pid_inputnumber & 0xFF);
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->pid_flt[demod-1].ram_table[ram_index].address + 2));
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), pid_offset >> 8);
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->pid_flt[demod-1].ram_table[ram_index].address + 3));
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), pid_offset & 0xFF);
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), state->pid_flt.ram_table[ram_index].address);
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), pid_inputnumber >> 8);
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->pid_flt.ram_table[ram_index].address + 1));
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), pid_inputnumber & 0xFF);
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->pid_flt.ram_table[ram_index].address + 2));
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), pid_offset >> 8);
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->pid_flt.ram_table[ram_index].address + 3));
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), pid_offset & 0xFF);
 
-				pParams->pid_flt[demod-1].ram_table[ram_index].command = CHANGE_PID;
+				state->pid_flt.ram_table[ram_index].command = CHANGE_PID;
 			}
 
 			//Check the error at the end of the function
-			if (pParams->handle_demod->Error )
+			if (state->base->ip.handle_demod->Error )
 				error=FE_LLA_I2C_ERROR;
 		}
-	}
 	return error;
 }
 
@@ -6286,38 +6181,35 @@ fe_lla_error_t fe_stid135_changepid_number (fe_stid135_handle_t handle,
 -PARAMS OUT	::	NONE
 --RETURN	::	error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_enable_gselabel(fe_stid135_handle_t handle,
+fe_lla_error_t fe_stid135_enable_gselabel(struct stv* state,
 		enum fe_stid135_demod demod, enum label_type gselabel_type, u8 gselabel[6])
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	u8 i, j, k, ram_index;
 	BOOL label_already_output = FALSE;
 	BOOL ram_full;
-	struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
+	//struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
 
-	if(pParams == NULL)
-		error = FE_LLA_INVALID_HANDLE;
-	else {
-		if (pParams->handle_demod->Error)
+		if (state->base->ip.handle_demod->Error)
 			error = FE_LLA_I2C_ERROR;
 		else {
 			/* Check if label already output */
 			if(gselabel_type == THREE_BYTE_LABEL) {
 				for(i=(RAM_SIZE>>2);i < (RAM_SIZE>>1);i++) {
-					if((pParams->gse_flt[demod-1].ram_table[i].label[0] == gselabel[0])
-					&& (pParams->gse_flt[demod-1].ram_table[i].label[1] == gselabel[1])
-					&& (pParams->gse_flt[demod-1].ram_table[i].label[2] == gselabel[2]))
+					if((state->gse_flt.ram_table[i].label[0] == gselabel[0])
+					&& (state->gse_flt.ram_table[i].label[1] == gselabel[1])
+					&& (state->gse_flt.ram_table[i].label[2] == gselabel[2]))
 						label_already_output = TRUE;
 				}
 			}
 			if(gselabel_type == SIX_BYTE_LABEL) {
 				for(i=(RAM_SIZE>>1);i < RAM_SIZE;i++) {
-					if((pParams->gse_flt[demod-1].ram_table[i].label[0] == gselabel[0])
-					&& (pParams->gse_flt[demod-1].ram_table[i].label[1] == gselabel[1])
-					&& (pParams->gse_flt[demod-1].ram_table[i].label[2] == gselabel[2])
-					&& (pParams->gse_flt[demod-1].ram_table[i].label[3] == gselabel[3])
-					&& (pParams->gse_flt[demod-1].ram_table[i].label[4] == gselabel[4])
-					&& (pParams->gse_flt[demod-1].ram_table[i].label[5] == gselabel[5]))
+					if((state->gse_flt.ram_table[i].label[0] == gselabel[0])
+					&& (state->gse_flt.ram_table[i].label[1] == gselabel[1])
+					&& (state->gse_flt.ram_table[i].label[2] == gselabel[2])
+					&& (state->gse_flt.ram_table[i].label[3] == gselabel[3])
+					&& (state->gse_flt.ram_table[i].label[4] == gselabel[4])
+					&& (state->gse_flt.ram_table[i].label[5] == gselabel[5]))
 						label_already_output = TRUE;
 				}
 			}
@@ -6325,25 +6217,25 @@ fe_lla_error_t fe_stid135_enable_gselabel(fe_stid135_handle_t handle,
 			if(label_already_output == FALSE) {
 				/* Check if DISABLE_3BYTE_LABEL command is in second quarter of RAM */
 				for(i=(RAM_SIZE>>2);i < (RAM_SIZE>>1);i++) {
-					if(pParams->gse_flt[demod-1].ram_table[i].command == DISABLE_3BYTE_LABEL)
+					if(state->gse_flt.ram_table[i].command == DISABLE_3BYTE_LABEL)
 					{
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), pParams->gse_flt[demod-1].ram_table[i].address);
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0720 >> 8);
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 1));
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0720 & 0xFF);
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 2));
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 3));
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 4));
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 5));
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), state->gse_flt.ram_table[i].address);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0720 >> 8);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 1));
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0720 & 0xFF);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 2));
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 3));
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 4));
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 5));
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
 						/* Reflect GSE structure consequently - 6=number of modified bytes in RAM by this function */
 						for(j=0;j<6;j++) {
 							for(k=0;k<6;k++)
-								pParams->gse_flt[demod-1].ram_table[i+j].label[k] = 0;
-							pParams->gse_flt[demod-1].ram_table[i+j].command = NO_CMD;
+								state->gse_flt.ram_table[i+j].label[k] = 0;
+							state->gse_flt.ram_table[i+j].command = NO_CMD;
 						}
 						/* Go to 6 address locations forward to avoid rewrite of memory cells */
 						i = (u8)(i + 5); /* not 6 because of presence of i++ in loop */
@@ -6351,28 +6243,28 @@ fe_lla_error_t fe_stid135_enable_gselabel(fe_stid135_handle_t handle,
 				}
 				/* Check if DISABLE_6BYTE_LABEL command is in second half of RAM */
 				for(i=(RAM_SIZE>>1);i < RAM_SIZE;i++) {
-					if(pParams->gse_flt[demod-1].ram_table[i].command == DISABLE_6BYTE_LABEL) {
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), pParams->gse_flt[demod-1].ram_table[i].address);
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0320 >> 8);
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 1));
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0320 & 0xFF);
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 2));
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 3));
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 4));
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 5));
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 6));
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 7));
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+					if(state->gse_flt.ram_table[i].command == DISABLE_6BYTE_LABEL) {
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), state->gse_flt.ram_table[i].address);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0320 >> 8);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 1));
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0320 & 0xFF);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 2));
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 3));
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 4));
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 5));
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 6));
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 7));
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
 						/* Reflect GSE structure consequently - 6=number of modified bytes in RAM by this function */
 						for(j=0;j<8;j++) {
 							for(k=0;k<6;k++)
-								pParams->gse_flt[demod-1].ram_table[i+j].label[k] = 0;
-							pParams->gse_flt[demod-1].ram_table[i+j].command = NO_CMD;
+								state->gse_flt.ram_table[i+j].label[k] = 0;
+							state->gse_flt.ram_table[i+j].command = NO_CMD;
 						}
 						/* Go to 8 address locations forward to avoid rewrite of memory cells */
 						i = (u8)(i + 7); /* not 8 because of presence of i++ in loop */
@@ -6382,7 +6274,7 @@ fe_lla_error_t fe_stid135_enable_gselabel(fe_stid135_handle_t handle,
 					/* Go to first free RAM location */
 					ram_index = 0;
 					for(i=(RAM_SIZE>>2);i <= (RAM_SIZE>>1) - 6;i++) { // check in second quarter of RAM
-						if((pParams->gse_flt[demod-1].ram_table[i].command == NO_CMD) || (pParams->gse_flt[demod-1].ram_table[i].command == ENABLE_ALL_3BYTE_LABEL)){
+						if((state->gse_flt.ram_table[i].command == NO_CMD) || (state->gse_flt.ram_table[i].command == ENABLE_ALL_3BYTE_LABEL)){
 							ram_index = i;
 							break;
 						}
@@ -6395,26 +6287,26 @@ fe_lla_error_t fe_stid135_enable_gselabel(fe_stid135_handle_t handle,
 					if((ram_index <= (RAM_SIZE>>1) - 6) && (ram_full == FALSE)){ // check in second quarter of RAM & if RAM not full
 						/* Enable protocol command takes exactly 6 bytes for 3-byte label */
 						/* We output 3-byte label */
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), pParams->gse_flt[demod-1].ram_table[ram_index].address);
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0720 >> 8);
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[ram_index].address + 1));
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0720 & 0xFF);
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[ram_index].address + 2));
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), gselabel[1]);
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[ram_index].address + 3));
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), gselabel[0]);
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[ram_index].address + 4));
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[ram_index].address + 5));
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), gselabel[2]);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), state->gse_flt.ram_table[ram_index].address);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0720 >> 8);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[ram_index].address + 1));
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0720 & 0xFF);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[ram_index].address + 2));
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), gselabel[1]);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[ram_index].address + 3));
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), gselabel[0]);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[ram_index].address + 4));
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[ram_index].address + 5));
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), gselabel[2]);
 						// Activation with DELALL by default (0x01: H/W bug, ClearQuest opened)
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), 0x01);
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTC(demod), 0x08);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), 0x01);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTC(demod), 0x08);
 						/* Reflect GSE structure consequently */
 						for(i=0;i<6;i++) {
 							for(j=0;j<3;j++)
-								pParams->gse_flt[demod-1].ram_table[ram_index+i].label[j] = gselabel[j];
-							pParams->gse_flt[demod-1].ram_table[ram_index+i].command = ENABLE_3BYTE_LABEL;
+								state->gse_flt.ram_table[ram_index+i].label[j] = gselabel[j];
+							state->gse_flt.ram_table[ram_index+i].command = ENABLE_3BYTE_LABEL;
 						}
 					}
 				}
@@ -6423,7 +6315,7 @@ fe_lla_error_t fe_stid135_enable_gselabel(fe_stid135_handle_t handle,
 					/* Go to first free RAM location */
 					ram_index = 0;
 					for(i=(RAM_SIZE>>1);i <= RAM_SIZE - 8;i++) { // check in second half of RAM
-						if((pParams->gse_flt[demod-1].ram_table[i].command == NO_CMD) || (pParams->gse_flt[demod-1].ram_table[i].command == ENABLE_ALL_6BYTE_LABEL)){
+						if((state->gse_flt.ram_table[i].command == NO_CMD) || (state->gse_flt.ram_table[i].command == ENABLE_ALL_6BYTE_LABEL)){
 							ram_index = i;
 							break;
 						}
@@ -6436,39 +6328,38 @@ fe_lla_error_t fe_stid135_enable_gselabel(fe_stid135_handle_t handle,
 					if((ram_index <= RAM_SIZE - 8) && (ram_full == FALSE)){ // check in second half of RAM & if RAM not full
 						/* Enable protocol command takes exactly 8 bytes for 6-byte label */
 						/* We output 6-byte label */
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), pParams->gse_flt[demod-1].ram_table[ram_index].address);
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0320 >> 8);
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[ram_index].address + 1));
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0320 & 0xFF);
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[ram_index].address + 2));
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), gselabel[1]);
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[ram_index].address + 3));
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), gselabel[0]);
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[ram_index].address + 4));
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), gselabel[3]);
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[ram_index].address + 5));
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), gselabel[2]);
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[ram_index].address + 6));
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), gselabel[5]);
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[ram_index].address + 7));
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), gselabel[4]);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), state->gse_flt.ram_table[ram_index].address);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0320 >> 8);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[ram_index].address + 1));
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0320 & 0xFF);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[ram_index].address + 2));
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), gselabel[1]);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[ram_index].address + 3));
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), gselabel[0]);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[ram_index].address + 4));
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), gselabel[3]);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[ram_index].address + 5));
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), gselabel[2]);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[ram_index].address + 6));
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), gselabel[5]);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[ram_index].address + 7));
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), gselabel[4]);
 						// Activation with DELALL by default (0x01: H/W bug, ClearQuest opened)
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), 0x01);
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTC(demod), 0x08);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), 0x01);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTC(demod), 0x08);
 						/* Reflect GSE structure consequently */
 						for(i=0;i<8;i++) {
 							for(j=0;j<6;j++)
-								pParams->gse_flt[demod-1].ram_table[ram_index+i].label[j] = gselabel[j];
-							pParams->gse_flt[demod-1].ram_table[ram_index+i].command = ENABLE_6BYTE_LABEL;
+								state->gse_flt.ram_table[ram_index+i].label[j] = gselabel[j];
+							state->gse_flt.ram_table[ram_index+i].command = ENABLE_6BYTE_LABEL;
 						}
 					}
 				}
 			}
 			//Check the error at the end of the function
-			if (pParams->handle_demod->Error)
+			if (state->base->ip.handle_demod->Error)
 				error = FE_LLA_I2C_ERROR;
 		}
-	}
 	return error;
 }
 
@@ -6481,47 +6372,44 @@ fe_lla_error_t fe_stid135_enable_gselabel(fe_stid135_handle_t handle,
 -PARAMS OUT	::	NONE
 --RETURN	::	error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_enable_protocoltype(fe_stid135_handle_t handle,
+fe_lla_error_t fe_stid135_enable_protocoltype(struct stv* state,
 	enum fe_stid135_demod demod, u16 protocoltype)
 {
-	struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
+	//	struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	u8 i, j, ram_index = 0, ram_full;
 	BOOL protocol_already_output = FALSE;
 
-	if(pParams == NULL)
-		error = FE_LLA_INVALID_HANDLE;
-	else {
-		if (pParams->handle_demod->Error )
+		if (state->base->ip.handle_demod->Error )
 			error = FE_LLA_I2C_ERROR;
 		else {
 			/* Check if protocol already output */
 			for(i=0;i < (RAM_SIZE>>1);i++) {
-				if((pParams->gse_flt[demod-1].ram_table[i].protocol_number == protocoltype) && (pParams->gse_flt[demod-1].ram_table[i].command != NO_CMD))
+				if((state->gse_flt.ram_table[i].protocol_number == protocoltype) && (state->gse_flt.ram_table[i].command != NO_CMD))
 					protocol_already_output = TRUE;
 			}
 			/* if protocol not already output */
 			if(protocol_already_output == FALSE) {
 				/* Check if DISABLE_ALL_PROTOCOL command is in RAM */
 				for(i=0;i < (RAM_SIZE>>2);i++) { // we check if protocol is already in first quarter of RAM
-					if(pParams->gse_flt[demod-1].ram_table[i].command == DISABLE_ALL_PROTOCOL)
+					if(state->gse_flt.ram_table[i].command == DISABLE_ALL_PROTOCOL)
 					{
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), pParams->gse_flt[demod-1].ram_table[i].address);
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0520 >> 8);
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 1));
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0520 & 0xFF);
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 2));
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 3));
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 4));
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 5));
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), state->gse_flt.ram_table[i].address);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0520 >> 8);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 1));
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0520 & 0xFF);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 2));
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 3));
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 4));
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 5));
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
 						/* Reflect GSE structure consequently - 6=number of modified bytes in RAM by this function */
 						for(j=0;j<6;j++) {
-							pParams->gse_flt[demod-1].ram_table[i+j].protocol_number = 0;
-							pParams->gse_flt[demod-1].ram_table[i+j].command = NO_CMD;
+							state->gse_flt.ram_table[i+j].protocol_number = 0;
+							state->gse_flt.ram_table[i+j].command = NO_CMD;
 						}
 						/* Go to 6 address locations forward to avoid rewrite of memory cells */
 						i = (u8)(i + 5); /* not 6 because of presence of i++ in loop */
@@ -6529,7 +6417,7 @@ fe_lla_error_t fe_stid135_enable_protocoltype(fe_stid135_handle_t handle,
 				}
 				/* Go to first free RAM location */
 				for(i=0;i < (RAM_SIZE>>2) - 6;i++) { // check in first quarter of RAM
-					if((pParams->gse_flt[demod-1].ram_table[i].command == NO_CMD) || (pParams->gse_flt[demod-1].ram_table[i].command == ENABLE_ALL_PROTOCOL)) {
+					if((state->gse_flt.ram_table[i].command == NO_CMD) || (state->gse_flt.ram_table[i].command == ENABLE_ALL_PROTOCOL)) {
 						ram_index = i;
 						break;
 					}
@@ -6544,46 +6432,45 @@ fe_lla_error_t fe_stid135_enable_protocoltype(fe_stid135_handle_t handle,
 				if((ram_index <= (RAM_SIZE>>2) - 12) && (ram_full == FALSE)){ // check in first quarter of RAM & if RAM not full
 					/* Enable protocol command takes exactly 6 bytes for 3/6-byte label protocol and 6 bytes for broadcast protocol */
 					/* We output 3/6-byte label protocol */
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), pParams->gse_flt[demod-1].ram_table[ram_index].address);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0520 >> 8);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[ram_index].address + 1));
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0520 & 0xFF);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[ram_index].address + 2));
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), protocoltype >> 8);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[ram_index].address + 3));
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), protocoltype & 0xFF);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[ram_index].address + 4));
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[ram_index].address + 5));
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), state->gse_flt.ram_table[ram_index].address);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0520 >> 8);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[ram_index].address + 1));
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0520 & 0xFF);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[ram_index].address + 2));
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), protocoltype >> 8);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[ram_index].address + 3));
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), protocoltype & 0xFF);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[ram_index].address + 4));
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[ram_index].address + 5));
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
 					/* We output broadcast protocol */
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[ram_index].address + 6));
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0540 >> 8);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[ram_index].address + 7));
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0540 & 0xFF);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[ram_index].address + 8));
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), protocoltype >> 8);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[ram_index].address + 9));
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), protocoltype & 0xFF);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[ram_index].address + 10));
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[ram_index].address + 11));
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[ram_index].address + 6));
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0540 >> 8);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[ram_index].address + 7));
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0540 & 0xFF);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[ram_index].address + 8));
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), protocoltype >> 8);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[ram_index].address + 9));
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), protocoltype & 0xFF);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[ram_index].address + 10));
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[ram_index].address + 11));
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
 					// Activation with DELALL by default (0x01: H/W bug, ClearQuest opened)
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), 0x01);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTC(demod), 0x08);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), 0x01);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTC(demod), 0x08);
 					/* Reflect GSE structure consequently */
 					for(i=0;i<12;i++) {
-						pParams->gse_flt[demod-1].ram_table[ram_index+i].protocol_number = protocoltype;
-						pParams->gse_flt[demod-1].ram_table[ram_index+i].command = ENABLE_PROTOCOL;
+						state->gse_flt.ram_table[ram_index+i].protocol_number = protocoltype;
+						state->gse_flt.ram_table[ram_index+i].command = ENABLE_PROTOCOL;
 					}
 				}
 			}
 			//Check the error at the end of the function
-			if (pParams->handle_demod->Error)
+			if (state->base->ip.handle_demod->Error)
 				error = FE_LLA_I2C_ERROR;
 		}
-}
 	return error;
 }
 
@@ -6596,23 +6483,20 @@ fe_lla_error_t fe_stid135_enable_protocoltype(fe_stid135_handle_t handle,
 -PARAMS OUT	::	NONE
 --RETURN	::	error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_disable_gselabel(fe_stid135_handle_t handle,
+fe_lla_error_t fe_stid135_disable_gselabel(struct stv* state,
 	enum fe_stid135_demod	demod, u8 gselabel[6])
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	u8 i, j, ram_index = 0;
 	enum label_type gselabel_type = THREE_BYTE_LABEL;
 	BOOL label_already_output = FALSE;
-	struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
+	//struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
 
-	if(pParams == NULL)
-		error = FE_LLA_INVALID_HANDLE;
-	else {
 		/* Check if label already output */
 		for(i=(RAM_SIZE>>2);i < (RAM_SIZE>>1);i++) {
-			if((pParams->gse_flt[demod-1].ram_table[i].label[0] == gselabel[0])
-			&& (pParams->gse_flt[demod-1].ram_table[i].label[1] == gselabel[1])
-			&& (pParams->gse_flt[demod-1].ram_table[i].label[2] == gselabel[2])) {
+			if((state->gse_flt.ram_table[i].label[0] == gselabel[0])
+			&& (state->gse_flt.ram_table[i].label[1] == gselabel[1])
+			&& (state->gse_flt.ram_table[i].label[2] == gselabel[2])) {
 				label_already_output = TRUE;
 				gselabel_type = THREE_BYTE_LABEL;
 				ram_index = i;
@@ -6620,12 +6504,12 @@ fe_lla_error_t fe_stid135_disable_gselabel(fe_stid135_handle_t handle,
 			}
 		}
 		for(i=(RAM_SIZE>>1);i < RAM_SIZE;i++) {
-			if((pParams->gse_flt[demod-1].ram_table[i].label[0] == gselabel[0])
-			&& (pParams->gse_flt[demod-1].ram_table[i].label[1] == gselabel[1])
-			&& (pParams->gse_flt[demod-1].ram_table[i].label[2] == gselabel[2])
-			&& (pParams->gse_flt[demod-1].ram_table[i].label[3] == gselabel[3])
-			&& (pParams->gse_flt[demod-1].ram_table[i].label[4] == gselabel[4])
-			&& (pParams->gse_flt[demod-1].ram_table[i].label[5] == gselabel[5])) {
+			if((state->gse_flt.ram_table[i].label[0] == gselabel[0])
+			&& (state->gse_flt.ram_table[i].label[1] == gselabel[1])
+			&& (state->gse_flt.ram_table[i].label[2] == gselabel[2])
+			&& (state->gse_flt.ram_table[i].label[3] == gselabel[3])
+			&& (state->gse_flt.ram_table[i].label[4] == gselabel[4])
+			&& (state->gse_flt.ram_table[i].label[5] == gselabel[5])) {
 				label_already_output = TRUE;
 				gselabel_type = SIX_BYTE_LABEL;
 				ram_index = i;
@@ -6635,59 +6519,58 @@ fe_lla_error_t fe_stid135_disable_gselabel(fe_stid135_handle_t handle,
 		/* if label already output */
 		if(label_already_output == TRUE) {
 			if(gselabel_type == THREE_BYTE_LABEL) {
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), pParams->gse_flt[demod-1].ram_table[ram_index].address);
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0720 >> 8);
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[ram_index].address + 1));
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0720 & 0xFF);
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[ram_index].address + 2));
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[ram_index].address + 3));
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[ram_index].address + 4));
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[ram_index].address + 5));
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), state->gse_flt.ram_table[ram_index].address);
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0720 >> 8);
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[ram_index].address + 1));
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0720 & 0xFF);
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[ram_index].address + 2));
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[ram_index].address + 3));
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[ram_index].address + 4));
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[ram_index].address + 5));
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
 				/* Reflect GSE structure consequently */
 				for(i=0;i<6;i++) {
 					for(j=0;j<3;j++)
-						pParams->gse_flt[demod-1].ram_table[ram_index+i].label[j] = 0;
-					pParams->gse_flt[demod-1].ram_table[ram_index+i].command = NO_CMD;
+						state->gse_flt.ram_table[ram_index+i].label[j] = 0;
+					state->gse_flt.ram_table[ram_index+i].command = NO_CMD;
 				}
 			}
 			if(gselabel_type == SIX_BYTE_LABEL) {
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), pParams->gse_flt[demod-1].ram_table[ram_index].address);
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0320 >> 8);
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[ram_index].address + 1));
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0320 & 0xFF);
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[ram_index].address + 2));
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[ram_index].address + 3));
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[ram_index].address + 4));
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[ram_index].address + 5));
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[ram_index].address + 6));
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[ram_index].address + 7));
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), state->gse_flt.ram_table[ram_index].address);
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0320 >> 8);
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[ram_index].address + 1));
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0320 & 0xFF);
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[ram_index].address + 2));
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[ram_index].address + 3));
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[ram_index].address + 4));
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[ram_index].address + 5));
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[ram_index].address + 6));
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[ram_index].address + 7));
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
 				/* Reflect GSE structure consequently */
 				for(i=0;i<8;i++) {
 					for(j=0;j<6;j++)
-						pParams->gse_flt[demod-1].ram_table[ram_index+i].label[j] = 0;
-					pParams->gse_flt[demod-1].ram_table[ram_index+i].command = NO_CMD;
+						state->gse_flt.ram_table[ram_index+i].label[j] = 0;
+					state->gse_flt.ram_table[ram_index+i].command = NO_CMD;
 				}
 			}
 
 			// Activation with DELALL by default (0x01: H/W bug, ClearQuest opened)
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), 0x06);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTC(demod), 0x08);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), 0x06);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTC(demod), 0x08);
 
 			//Check the error at the end of the function
-			if (pParams->handle_demod->Error )
+			if (state->base->ip.handle_demod->Error )
 				error = FE_LLA_I2C_ERROR;
 		}
-	}
 	return error;
 }
 
@@ -6700,23 +6583,20 @@ fe_lla_error_t fe_stid135_disable_gselabel(fe_stid135_handle_t handle,
 -PARAMS OUT	::	NONE
 --RETURN	::	error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_disable_protocoltype(fe_stid135_handle_t handle,
+fe_lla_error_t fe_stid135_disable_protocoltype(struct stv* state,
  enum fe_stid135_demod demod, u16 protocoltype)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	u8 i, j, ram_index = 0;
 	BOOL protocol_already_output = FALSE;
-	struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
+	//	struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
 
-	if(pParams == NULL)
-		error = FE_LLA_INVALID_HANDLE;
-	else {
-		if (pParams->handle_demod->Error )
+	if (state->base->ip.handle_demod->Error )
 			error = FE_LLA_I2C_ERROR;
 		else {
 			/* Check if protocol already output */
 			for(i=0;i < (RAM_SIZE>>1);i++) {
-				if((pParams->gse_flt[demod-1].ram_table[i].protocol_number == protocoltype) && (pParams->gse_flt[demod-1].ram_table[i].command != NO_CMD))
+				if((state->gse_flt.ram_table[i].protocol_number == protocoltype) && (state->gse_flt.ram_table[i].command != NO_CMD))
 				{
 					protocol_already_output = TRUE;
 					ram_index = i;
@@ -6727,69 +6607,68 @@ fe_lla_error_t fe_stid135_disable_protocoltype(fe_stid135_handle_t handle,
 			if(protocol_already_output == TRUE) {
 				/* Check if DISABLE_ALL_PROTOCOL command is in RAM : REALLY MANDATORY ??? */
 				for(i=0;i < (RAM_SIZE>>2);i++) { // check in first quarter of RAM
-					if(pParams->gse_flt[demod-1].ram_table[i].command == DISABLE_ALL_PROTOCOL)
+					if(state->gse_flt.ram_table[i].command == DISABLE_ALL_PROTOCOL)
 					{
 						/* Change from disable all protocols to room booking */
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), pParams->gse_flt[demod-1].ram_table[i].address);
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x6500 >> 8);
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 1));
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x6500 & 0xFF);
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 2));
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 3));
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 4));
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 5));
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), state->gse_flt.ram_table[i].address);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x6500 >> 8);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 1));
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x6500 & 0xFF);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 2));
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 3));
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 4));
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 5));
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
 						/* Reflect GSE structure consequently */
 						for(j=0;j<6;j++) {
-							pParams->gse_flt[demod-1].ram_table[i+j].protocol_number = 0;
-							pParams->gse_flt[demod-1].ram_table[i+j].command = NO_CMD;
+							state->gse_flt.ram_table[i+j].protocol_number = 0;
+							state->gse_flt.ram_table[i+j].command = NO_CMD;
 						}
 					}
 				}
 				/* Change protocol already output to room booking */
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), pParams->gse_flt[demod-1].ram_table[ram_index].address);
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0520 >> 8);
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[ram_index].address + 1));
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0520 & 0xFF);
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[ram_index].address + 2));
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[ram_index].address + 3));
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[ram_index].address + 4));
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[ram_index].address + 5));
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), state->gse_flt.ram_table[ram_index].address);
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0520 >> 8);
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[ram_index].address + 1));
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0520 & 0xFF);
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[ram_index].address + 2));
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[ram_index].address + 3));
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[ram_index].address + 4));
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[ram_index].address + 5));
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
 
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[ram_index].address + 6));
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0540 >> 8);
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[ram_index].address + 7));
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0540 & 0xFF);
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[ram_index].address + 8));
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[ram_index].address + 9));
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[ram_index].address + 10));
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[ram_index].address + 11));
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[ram_index].address + 6));
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0540 >> 8);
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[ram_index].address + 7));
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0540 & 0xFF);
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[ram_index].address + 8));
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[ram_index].address + 9));
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[ram_index].address + 10));
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[ram_index].address + 11));
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
 				// Activation with DELALL by default (0x01: H/W bug, ClearQuest opened)
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), 0x06);
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTC(demod), 0x08);
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), 0x06);
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTC(demod), 0x08);
 				/* Reflect GSE structure consequently */
 				for(i=0;i<12;i++) {
-					pParams->gse_flt[demod-1].ram_table[ram_index+i].protocol_number = 0;
-					pParams->gse_flt[demod-1].ram_table[ram_index+i].command = NO_CMD;
+					state->gse_flt.ram_table[ram_index+i].protocol_number = 0;
+					state->gse_flt.ram_table[ram_index+i].command = NO_CMD;
 				}
 }
 
 			//Check the error at the end of the function
-			if (pParams->handle_demod->Error)
+			if (state->base->ip.handle_demod->Error)
 				error = FE_LLA_I2C_ERROR;
 		}
-	}
 	return error;
 }
 
@@ -6801,53 +6680,50 @@ fe_lla_error_t fe_stid135_disable_protocoltype(fe_stid135_handle_t handle,
 -PARAMS OUT	::	NONE
 --RETURN	::	error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_enable_allgselabel(fe_stid135_handle_t handle,
+fe_lla_error_t fe_stid135_enable_allgselabel(struct stv* state,
 				enum fe_stid135_demod	demod)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	u8 i, j, k;
-	struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
+	//	struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
 
-	if(pParams == NULL)
-		error = FE_LLA_INVALID_HANDLE;
-	else {
-		if (pParams->handle_demod->Error )
+		if (state->base->ip.handle_demod->Error )
 			error = FE_LLA_I2C_ERROR;
 		else {
 			/* Search all 3-byte label already output */
 			for(i=(RAM_SIZE>>2);i < (RAM_SIZE>>1) - 6;i++) { // check in second quarter of RAM
-				if(pParams->gse_flt[demod-1].ram_table[i].command == ENABLE_3BYTE_LABEL) {
+				if(state->gse_flt.ram_table[i].command == ENABLE_3BYTE_LABEL) {
 					/* Change 3-byte label already output to dummy label */
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), pParams->gse_flt[demod-1].ram_table[i].address);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0720 >> 8);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 1));
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0720 & 0xFF);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 2));
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 3));
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 4));
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 5));
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), state->gse_flt.ram_table[i].address);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0720 >> 8);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 1));
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0720 & 0xFF);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 2));
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 3));
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 4));
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 5));
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
 
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 6));
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0720 >> 8);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 7));
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0720 & 0xFF);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 8));
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 9));
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 10));
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 11));
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 6));
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0720 >> 8);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 7));
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0720 & 0xFF);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 8));
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 9));
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 10));
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 11));
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
 					/* Reflect GSE structure consequently */
 					for(j=0;j<12;j++) {
 						for(k=0;k<6;k++)
-							pParams->gse_flt[demod-1].ram_table[i+j].label[k] = 0;
-						pParams->gse_flt[demod-1].ram_table[i+j].command = NO_CMD;
+							state->gse_flt.ram_table[i+j].label[k] = 0;
+						state->gse_flt.ram_table[i+j].command = NO_CMD;
 					}
 					/* Go to 12 address locations forward to avoid rewrite of memory cells*/
 					i = (u8)(i + 11); /* not 12 because of presence of i++ in loop */
@@ -6855,46 +6731,46 @@ fe_lla_error_t fe_stid135_enable_allgselabel(fe_stid135_handle_t handle,
 }
 			/* Search all 6-byte label already output */
 			for(i=(RAM_SIZE>>1);i < RAM_SIZE - 6;i++) { // check in second half of RAM
-				if(pParams->gse_flt[demod-1].ram_table[i].command == ENABLE_6BYTE_LABEL) {
+				if(state->gse_flt.ram_table[i].command == ENABLE_6BYTE_LABEL) {
 					/* Change 3-byte label already output to dummy label */
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), pParams->gse_flt[demod-1].ram_table[i].address);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0320 >> 8);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 1));
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0320 & 0xFF);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 2));
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 3));
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 4));
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 5));
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 6));
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 7));
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), state->gse_flt.ram_table[i].address);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0320 >> 8);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 1));
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0320 & 0xFF);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 2));
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 3));
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 4));
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 5));
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 6));
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 7));
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
 
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 8));
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0720 >> 8);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 9));
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0720 & 0xFF);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 10));
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 11));
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 12));
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 13));
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 14));
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 15));
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 8));
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0720 >> 8);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 9));
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0720 & 0xFF);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 10));
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 11));
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 12));
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 13));
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 14));
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 15));
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
 					/* Reflect GSE structure consequently */
 					for(j=0;j<16;j++) {
 						for(k=0;k<6;k++)
-							pParams->gse_flt[demod-1].ram_table[i+j].label[k] = 0;
-						pParams->gse_flt[demod-1].ram_table[i+j].command = NO_CMD;
+							state->gse_flt.ram_table[i+j].label[k] = 0;
+						state->gse_flt.ram_table[i+j].command = NO_CMD;
 					}
 					/* Go to 16 address locations forward to avoid rewrite of memory cells*/
 					i = (u8)(i + 15); /* not 16 because of presence of i++ in loop */
@@ -6902,46 +6778,45 @@ fe_lla_error_t fe_stid135_enable_allgselabel(fe_stid135_handle_t handle,
 			}
 			/* Output labels different from zero ie output all 3-byte label */
 			/* Set RAM pointer to first free RAM cell of second quarter of RAM */
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), 0x10+(RAM_SIZE>>2));
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), 0x10+(RAM_SIZE>>2));
 
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x1320 >> 8);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x1320 & 0xFF);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x1320 >> 8);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x1320 & 0xFF);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
 
 			/* Output labels different from zero ie output all 6-byte label */
 			/* Set RAM pointer to first free RAM cell of second hald of RAM */
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), 0x10+(RAM_SIZE>>1));
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), 0x10+(RAM_SIZE>>1));
 
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x1720 >> 8);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x1720 & 0xFF);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x1720 >> 8);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x1720 & 0xFF);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
 
 			for(i=(RAM_SIZE>>2);i<6+(RAM_SIZE>>2);i++) {
 				for(k=0;k<6;k++)
-					pParams->gse_flt[demod-1].ram_table[i].label[k] = 0;
-				pParams->gse_flt[demod-1].ram_table[i].command = ENABLE_ALL_3BYTE_LABEL;
+					state->gse_flt.ram_table[i].label[k] = 0;
+				state->gse_flt.ram_table[i].command = ENABLE_ALL_3BYTE_LABEL;
 			}
 			for(i=(RAM_SIZE>>1);i<8+(RAM_SIZE>>1);i++) {
 				for(k=0;k<6;k++)
-					pParams->gse_flt[demod-1].ram_table[i].label[k] = 0;
-				pParams->gse_flt[demod-1].ram_table[i].command = ENABLE_ALL_6BYTE_LABEL;
+					state->gse_flt.ram_table[i].label[k] = 0;
+				state->gse_flt.ram_table[i].command = ENABLE_ALL_6BYTE_LABEL;
 			}
 			// Activation with DELALL by default (0x01: H/W bug, ClearQuest opened)
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), 0x06);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), 0x06);
 
 			//Check the error at the end of the function
-			if (pParams->handle_demod->Error )
+			if (state->base->ip.handle_demod->Error )
 				error = FE_LLA_I2C_ERROR;
 		}
-	}
 	return(error);
 }
 
@@ -6953,86 +6828,83 @@ fe_lla_error_t fe_stid135_enable_allgselabel(fe_stid135_handle_t handle,
 -PARAMS OUT	::	NONE
 --RETURN	::	error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_disable_allgselabel (fe_stid135_handle_t handle,
+fe_lla_error_t fe_stid135_disable_allgselabel (struct stv* state,
 		enum fe_stid135_demod demod)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	u8 i, j, k;
-	struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
+	//	struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
 
-	if(pParams == NULL)
-		error = FE_LLA_INVALID_HANDLE;
-	else {
-		if (pParams->handle_demod->Error )
+		if (state->base->ip.handle_demod->Error )
 			error = FE_LLA_I2C_ERROR;
 		else {
 			/* If this is the 1st time after power-up we perform this function, then we reset members of gse structure */
-			if(pParams->gse_flt[demod-1].first_disable_all_label_command == TRUE) {
+			if(state->gse_flt.first_disable_all_label_command == TRUE) {
 				for(i=0;i < RAM_SIZE;i++) {
-					pParams->gse_flt[demod-1].ram_table[i].address = (u8)(i + 0x10);
+					state->gse_flt.ram_table[i].address = (u8)(i + 0x10);
 				}
 				for(i=(RAM_SIZE>>2); i <= (RAM_SIZE>>1);i++) { // fill-in second quarter of RAM
-					pParams->gse_flt[demod-1].ram_table[i].command = NO_CMD;
+					state->gse_flt.ram_table[i].command = NO_CMD;
 					for(j=0;j<6;j++)
-						pParams->gse_flt[demod-1].ram_table[i].label[j] = 0;
+						state->gse_flt.ram_table[i].label[j] = 0;
 				}
 				for(i=(RAM_SIZE>>1); i < RAM_SIZE;i++) { // fill-in second quarter of RAM
-					pParams->gse_flt[demod-1].ram_table[i].command = NO_CMD;
+					state->gse_flt.ram_table[i].command = NO_CMD;
 					for(j=0;j<6;j++)
-						pParams->gse_flt[demod-1].ram_table[i].label[j] = 0;
+						state->gse_flt.ram_table[i].label[j] = 0;
 				}
-				pParams->gse_flt[demod-1].first_disable_all_label_command = FALSE;
+				state->gse_flt.first_disable_all_label_command = FALSE;
 				/* 192bytes/4/6 because 3-byte labels are only on second quarter and command on 6 bytes */
 				for(i=(RAM_SIZE>>2);i <= (RAM_SIZE>>1) - 6;i++) {
 					/* Set RAM pointer to the beginning of the second quarter */
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(0x10+i));
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0720 >> 8);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0720 & 0xFF);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(0x10+i));
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0720 >> 8);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0720 & 0xFF);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
 					/* Go to 6 address locations forward to avoid rewrite of memory cells */
 					i = (u8)(i + 5); /* not 6 because of presence of i++ in loop */
 				}
 				/* 192bytes/2/6 because 6-byte labels are only on second half and command on 8 bytes */
 				for(i=(RAM_SIZE>>1);i <= (11*RAM_SIZE/12) - 8;i++) {
 					/* Set RAM pointer to the beginning of the second half */
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(0x10+i));
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0320 >> 8);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0320 & 0xFF);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(0x10+i));
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0320 >> 8);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0320 & 0xFF);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
 					/* Go to 8 address locations forward to avoid rewrite of memory cells */
 					i = (u8)(i + 7); /* not 8 because of presence of i++ in loop */
 				}
 			} else {
 				/* Search all 3-byte label already output */
 				for(i=(RAM_SIZE>>2);i <= (RAM_SIZE>>1) - 6;i++) { // check in second quarter of RAM
-					if((pParams->gse_flt[demod-1].ram_table[i].command == ENABLE_3BYTE_LABEL) || (pParams->gse_flt[demod-1].ram_table[i].command == ENABLE_ALL_3BYTE_LABEL)) {
+					if((state->gse_flt.ram_table[i].command == ENABLE_3BYTE_LABEL) || (state->gse_flt.ram_table[i].command == ENABLE_ALL_3BYTE_LABEL)) {
 						/* Output dummy 3-byte label */
 						/* Output 3-byte label 0x000000 instead */
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), pParams->gse_flt[demod-1].ram_table[i].address);
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0720 >> 8);
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 1));
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0720 & 0xFF);
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 2));
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 3));
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 4));
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 5));
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), state->gse_flt.ram_table[i].address);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0720 >> 8);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 1));
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0720 & 0xFF);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 2));
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 3));
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 4));
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 5));
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
 						/* Reflect GSE structure consequently */
 						for(j=0;j<6;j++) {
 							for(k=0;k<3;k++)
-								pParams->gse_flt[demod-1].ram_table[i+j].label[k] = 0;
-							pParams->gse_flt[demod-1].ram_table[i+j].command = NO_CMD;
+								state->gse_flt.ram_table[i+j].label[k] = 0;
+							state->gse_flt.ram_table[i+j].command = NO_CMD;
 						}
 						/* Go to 6 address locations forward to avoid rewrite of memory cells */
 						i = (u8)(i + 5); /* not 6 because of presence of i++ in loop */
@@ -7040,30 +6912,30 @@ fe_lla_error_t fe_stid135_disable_allgselabel (fe_stid135_handle_t handle,
 				}
 				/* Search all 6-byte label already output */
 				for(i=(RAM_SIZE>>1);i <= (11*RAM_SIZE/12) - 8;i++) { // check in second half of RAM
-					if((pParams->gse_flt[demod-1].ram_table[i].command == ENABLE_6BYTE_LABEL) || (pParams->gse_flt[demod-1].ram_table[i].command == ENABLE_ALL_6BYTE_LABEL)) {
+					if((state->gse_flt.ram_table[i].command == ENABLE_6BYTE_LABEL) || (state->gse_flt.ram_table[i].command == ENABLE_ALL_6BYTE_LABEL)) {
 						/* Output dummy 6-byte label */
 						/* Output 6-byte label 0x000000000000 instead */
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), pParams->gse_flt[demod-1].ram_table[i].address);
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0320 >> 8);
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 1));
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0320 & 0xFF);
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 2));
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 3));
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 4));
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 5));
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 5));
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 5));
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), state->gse_flt.ram_table[i].address);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0320 >> 8);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 1));
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0320 & 0xFF);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 2));
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 3));
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 4));
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 5));
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 5));
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 5));
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
 						/* Reflect GSE structure consequently */
 						for(j=0;j<8;j++) {
 							for(k=0;k<3;k++)
-								pParams->gse_flt[demod-1].ram_table[i+j].label[k] = 0;
-							pParams->gse_flt[demod-1].ram_table[i+j].command = NO_CMD;
+								state->gse_flt.ram_table[i+j].label[k] = 0;
+							state->gse_flt.ram_table[i+j].command = NO_CMD;
 						}
 						/* Go to 6 address locations forward to avoid rewrite of memory cells */
 						i = (u8)(i + 7); /* not 8 because of presence of i++ in loop */
@@ -7071,13 +6943,12 @@ fe_lla_error_t fe_stid135_disable_allgselabel (fe_stid135_handle_t handle,
 				}
 			}
 			// Activation with DELALL by default (0x01: H/W bug, ClearQuest opened)
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), 0x06);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTC(demod), 0x08);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), 0x06);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTC(demod), 0x08);
 		}
 		//Check the error at the end of the function
-		if (pParams->handle_demod->Error)
+		if (state->base->ip.handle_demod->Error)
 			error = FE_LLA_I2C_ERROR;
-	}
 	return error;
 }
 
@@ -7089,52 +6960,48 @@ fe_lla_error_t fe_stid135_disable_allgselabel (fe_stid135_handle_t handle,
 -PARAMS OUT	::	NONE
 --RETURN	::	error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_enable_allprotocoltype(fe_stid135_handle_t handle,
+fe_lla_error_t fe_stid135_enable_allprotocoltype(struct stv* state,
 	enum fe_stid135_demod demod)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	u8 i, j/*, ram_index = 0*/;
-	struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
-
-	if(pParams == NULL)
-		error = FE_LLA_INVALID_HANDLE;
-	else {
-		if (pParams->handle_demod->Error )
+	//	struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
+		if (state->base->ip.handle_demod->Error )
 			error = FE_LLA_I2C_ERROR;
 		else {
 			/* Search all protocol already output */
 			for(i=0;i < (RAM_SIZE>>2) - 6;i++) { // check in first quarter of RAM
-				if(pParams->gse_flt[demod-1].ram_table[i].command == ENABLE_PROTOCOL) {
+				if(state->gse_flt.ram_table[i].command == ENABLE_PROTOCOL) {
 					/* Change protocol already output to room booking */
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), pParams->gse_flt[demod-1].ram_table[i].address);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0520 >> 8);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 1));
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0520 & 0xFF);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 2));
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 3));
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 4));
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 5));
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), state->gse_flt.ram_table[i].address);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0520 >> 8);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 1));
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0520 & 0xFF);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 2));
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 3));
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 4));
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 5));
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
 
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 6));
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0520 >> 8);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 7));
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0520 & 0xFF);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 8));
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 9));
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 10));
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 11));
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 6));
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0520 >> 8);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 7));
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0520 & 0xFF);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 8));
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 9));
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 10));
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 11));
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
 					/* Reflect GSE structure consequently */
 					for(j=0;j<12;j++) {
-						pParams->gse_flt[demod-1].ram_table[i+j].protocol_number = 0;
-						pParams->gse_flt[demod-1].ram_table[i+j].command = NO_CMD;
+						state->gse_flt.ram_table[i+j].protocol_number = 0;
+						state->gse_flt.ram_table[i+j].command = NO_CMD;
 					}
 					/* Go to 6 address locations forward to avoid rewrite of memory cells*/
 					i = (u8)(i + 11); /* not 12 because of presence of i++ in loop */
@@ -7142,32 +7009,31 @@ fe_lla_error_t fe_stid135_enable_allprotocoltype(fe_stid135_handle_t handle,
 			}
 			/* Output protocols different from zero ie output all 3/6-byte label protocols */
 			/* Set RAM pointer to first free RAM cell */
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), 0x10);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), 0x10);
 			/* Output protocols different from zero ie output all 3/6-byte label protocols */
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x1520 >> 8);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x1520 & 0xFF);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x1520 >> 8);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x1520 & 0xFF);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
 			/* Output protocols different from zero ie output all broadcast protocols */
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x1540 >> 8);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x1540 & 0xFF);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x1540 >> 8);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x1540 & 0xFF);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
 			for(i=0;i<12;i++) {
-				pParams->gse_flt[demod-1].ram_table[i].protocol_number = 0;
-				pParams->gse_flt[demod-1].ram_table[i].command = ENABLE_ALL_PROTOCOL;
+				state->gse_flt.ram_table[i].protocol_number = 0;
+				state->gse_flt.ram_table[i].command = ENABLE_ALL_PROTOCOL;
 			}
 			// Activation with DELALL by default (0x01: H/W bug, ClearQuest opened)
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), 0x06);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), 0x06);
 			//Check the error at the end of the function
-			if (pParams->handle_demod->Error )
+			if (state->base->ip.handle_demod->Error )
 				error = FE_LLA_I2C_ERROR;
 		}
-	}
 	return error;
 }
 
@@ -7179,66 +7045,63 @@ fe_lla_error_t fe_stid135_enable_allprotocoltype(fe_stid135_handle_t handle,
 -PARAMS OUT	::	NONE
 --RETURN	::	error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_disable_allprotocoltype(fe_stid135_handle_t handle,
+fe_lla_error_t fe_stid135_disable_allprotocoltype(struct stv* state,
 		enum fe_stid135_demod demod)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	u8 i, j;
-	struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
+	//struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
 
-	if(pParams == NULL)
-		error = FE_LLA_INVALID_HANDLE;
-	else {
-		if (pParams->handle_demod->Error )
+		if (state->base->ip.handle_demod->Error )
 			error = FE_LLA_I2C_ERROR;
 		else {
 			/* If this is the 1st time after power-up we perform this function, then we reset members of gse structure */
-			if(pParams->gse_flt[demod-1].first_disable_all_protocol_command == TRUE) {
+			if(state->gse_flt.first_disable_all_protocol_command == TRUE) {
 				for(i=0;i < (RAM_SIZE>>2);i++) { // check in first quarter of RAM
-					pParams->gse_flt[demod-1].ram_table[i].command = NO_CMD;
-					pParams->gse_flt[demod-1].ram_table[i].address = (u8)(i + 0x10);
-					pParams->gse_flt[demod-1].ram_table[i].protocol_number = 0;
+					state->gse_flt.ram_table[i].command = NO_CMD;
+					state->gse_flt.ram_table[i].address = (u8)(i + 0x10);
+					state->gse_flt.ram_table[i].protocol_number = 0;
 				}
 				for(i=(RAM_SIZE>>2);i < RAM_SIZE;i++) {
-					pParams->gse_flt[demod-1].ram_table[i].address = (u8)(i + 0x10);
+					state->gse_flt.ram_table[i].address = (u8)(i + 0x10);
 				}
-				pParams->gse_flt[demod-1].first_disable_all_protocol_command = FALSE;
+				state->gse_flt.first_disable_all_protocol_command = FALSE;
 				/* RAM start from 0x10, not from 0x00 */
 				/* Set RAM pointer to the beginning */
 				/* 192bytes/4/6 because protocols are only on first quarter and command on 6 bytes */
 				for(i=0;i < (RAM_SIZE>>2);i++) {
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(0x10 + i));
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0520 >> 8);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0520 & 0xFF);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(0x10 + i));
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0520 >> 8);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0520 & 0xFF);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
 					/* Go to 6 address locations forward to avoid rewrite of memory cells */
 					i = (u8)(i + 5); /* not 6 because of presence of i++ in loop */
 				}
 			} else {
 				/* Search all protocol already output */
 				for(i=0;i <= (RAM_SIZE>>2) - 6;i++) { // check in first quarter of RAM
-				if((pParams->gse_flt[demod-1].ram_table[i].command == ENABLE_PROTOCOL) || (pParams->gse_flt[demod-1].ram_table[i].command == ENABLE_ALL_PROTOCOL)) {
+				if((state->gse_flt.ram_table[i].command == ENABLE_PROTOCOL) || (state->gse_flt.ram_table[i].command == ENABLE_ALL_PROTOCOL)) {
 						/* Change protocol already output to room booking */
 						/* not room booking, but output protocol 0x0000 instead */
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), pParams->gse_flt[demod-1].ram_table[i].address);
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0520 >> 8);
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 1));
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0520 & 0xFF);
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 2));
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 3));
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 4));
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(pParams->gse_flt[demod-1].ram_table[i].address + 5));
-						error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), state->gse_flt.ram_table[i].address);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0520 >> 8);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 1));
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x0520 & 0xFF);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 2));
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 3));
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 4));
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), (u32)(state->gse_flt.ram_table[i].address + 5));
+						error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
 						/* Reflect GSE structure consequently */
 						for(j=0;j<6;j++) {
-							pParams->gse_flt[demod-1].ram_table[i+j].protocol_number = 0;
-							pParams->gse_flt[demod-1].ram_table[i+j].command = NO_CMD;
+							state->gse_flt.ram_table[i+j].protocol_number = 0;
+							state->gse_flt.ram_table[i+j].command = NO_CMD;
 						}
 						/* Go to 6 address locations forward to avoid rewrite of memory cells */
 						i = (u8)(i + 5); /* not 6 because of presence of i++ in loop */
@@ -7246,14 +7109,13 @@ fe_lla_error_t fe_stid135_disable_allprotocoltype(fe_stid135_handle_t handle,
 				}
 			}
 			// Activation with DELALL by default (0x01: H/W bug, ClearQuest opened)
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), 0x06);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTC(demod), 0x08);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), 0x06);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTC(demod), 0x08);
 
 			//Check the error at the end of the function
-			if (pParams->handle_demod->Error )
+			if (state->base->ip.handle_demod->Error )
 				error = FE_LLA_I2C_ERROR;
 		}
-	}
 	return error;
 }
 
@@ -7265,37 +7127,33 @@ fe_lla_error_t fe_stid135_disable_allprotocoltype(fe_stid135_handle_t handle,
 -PARAMS OUT	::	NONE
 --RETURN	::	error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_select_ncr_source(fe_stid135_handle_t handle,
+fe_lla_error_t fe_stid135_select_ncr_source(struct stv* state,
 					enum fe_stid135_demod demod)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
-	struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
+	//	struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
 
-	if(pParams == NULL)
-		error=FE_LLA_INVALID_HANDLE;
-	else {
-		if (pParams->handle_demod->Error )
+		if (state->base->ip.handle_demod->Error )
 			error=FE_LLA_I2C_ERROR;
 		else {
 #ifdef USER1
 			/* Select which TS has to be copied on TSout0 (TSmux) */
 			error |= ChipSetField(pParams->handle_soc, FLD_FSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG160_TSMUX_SEL, (s32)(demod - 1));
 			/* RCS feature association to selected demod - new management of NCR */
-			error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_C8CODEW_TOP_CTRL_TSRCSSEL_TSRCS_SEL, (s32)(demod - 1));
+			error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_C8CODEW_TOP_CTRL_TSRCSSEL_TSRCS_SEL, (s32)(demod - 1));
 #else
 			/* Set stream output frequency */
-			error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG1_TSFIFO_MANSPEED(demod), 0);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSSPEED(demod), 0x04);
+			error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG1_TSFIFO_MANSPEED(demod), 0);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSSPEED(demod), 0x04);
 			/* Make SUBNCR0 signal longer */
-			error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSRCSCFG_NCROUT_CLKLEN(demod), 2);
+			error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSRCSCFG_NCROUT_CLKLEN(demod), 2);
 			/* Added a sync byte to trigg on when sniffing packets */
-			error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSINSDELH_TSINSDEL_SYNCBYTE(demod), 1);
+			error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSINSDELH_TSINSDEL_SYNCBYTE(demod), 1);
 			/* Do not embed in DVB NCR packets! */
-			error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG0_TSFIFO_EMBINDVB(demod), 0);
-			error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSSTATE1_TSOUT_NOSYNC(demod), 1);
+			error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG0_TSFIFO_EMBINDVB(demod), 0);
+			error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSSTATE1_TSOUT_NOSYNC(demod), 1);
 #endif
 		}
-	}
 	return(error);
 }
 
@@ -7307,28 +7165,23 @@ fe_lla_error_t fe_stid135_select_ncr_source(fe_stid135_handle_t handle,
 -PARAMS OUT	::	NONE
 --RETURN	::	error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_unselect_ncr(fe_stid135_handle_t handle,
+fe_lla_error_t fe_stid135_unselect_ncr(struct stv* state,
 					enum fe_stid135_demod demod)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
-	struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
-
-	if(pParams == NULL)
-		error=FE_LLA_INVALID_HANDLE;
-	else {
-		if (pParams->handle_demod->Error )
+	//struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
+		if (state->base->ip.handle_demod->Error )
 			error=FE_LLA_I2C_ERROR;
 		else {
 			/* Unselect which TS has to be copied on TSout0 (TSmux) */
-			error |= ChipSetField(pParams->handle_soc, FLD_FSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG160_TSMUX_SEL, 0);
+			error |= ChipSetField(state->base->ip.handle_soc, FLD_FSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG160_TSMUX_SEL, 0);
 
 			/* Remove RCS feature association to demod - new management of NCR */
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_C8CODEW_TOP_CTRL_TSRCSSEL, 0);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_C8CODEW_TOP_CTRL_TSRCSSEL, 0);
 
 			/* Set default value for SUBNCR0 signal */
-			error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSRCSCFG_NCROUT_CLKLEN(demod), 0);
+			error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSRCSCFG_NCROUT_CLKLEN(demod), 0);
 		}
-	}
 	return(error);
 }
 
@@ -7340,34 +7193,30 @@ fe_lla_error_t fe_stid135_unselect_ncr(fe_stid135_handle_t handle,
 -PARAMS OUT	::	NCR status
 --RETURN	::	error
 --***************************************************/
-fe_lla_error_t fe_stid135_get_ncr_lock_status(fe_stid135_handle_t handle,
+fe_lla_error_t fe_stid135_get_ncr_lock_status(struct stv* state,
 					enum fe_stid135_demod demod, BOOL* ncr_lock_status_p)
 {
-	struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
+	//struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
 
 	s32 fld_value[2];
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	*ncr_lock_status_p = FALSE;
 
-	if(pParams != NULL) {
-		error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSSTATUS3_PCRCALC_NCRREADY(demod), &(fld_value[0]));
-		error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSSTATUS3_PCRCALC_ERROR(demod), &(fld_value[1])) ;
+		error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSSTATUS3_PCRCALC_NCRREADY(demod), &(fld_value[0]));
+		error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSSTATUS3_PCRCALC_ERROR(demod), &(fld_value[1])) ;
 		if((fld_value[0] == 2) && (fld_value[1] == 0x0))
 			*ncr_lock_status_p = TRUE;
 		else
 			*ncr_lock_status_p = FALSE;
-	} else {
-		*ncr_lock_status_p = FALSE;
-	}
 	return(error);
 }
 
 /*
-fe_lla_error_t fe_stid135_enable_irq (stchip_handle_t handle,
+fe_lla_error_t fe_stid135_enable_irq (STCHIP_Info_t* handle,
 			fe_stid135_irq_t irq_list)
 {
 }
-fe_lla_error_t fe_stid135_disable_irq (stchip_handle_t handle,
+fe_lla_error_t fe_stid135_disable_irq (STCHIP_Info_t* handle,
 				fe_stid135_irq_t irq_list)
 {
 }
@@ -7382,578 +7231,573 @@ fe_lla_error_t fe_stid135_disable_irq (stchip_handle_t handle,
 -PARAMS OUT	::	NONE
 --RETURN	::	error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_set_ts_parallel_serial(fe_stid135_handle_t handle, enum fe_stid135_demod demod, enum fe_ts_output_mode ts_mode)
+fe_lla_error_t fe_stid135_set_ts_parallel_serial(struct stv* state, enum fe_stid135_demod demod, enum fe_ts_output_mode ts_mode)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
-	struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
+	//	struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
 	u32 reg_value;
-
-	if(pParams == NULL)
-		error=FE_LLA_INVALID_HANDLE;
-	else {
-		if (pParams->handle_demod->Error )
+		if (state->base->ip.handle_demod->Error )
 			error=FE_LLA_I2C_ERROR;
 		else {
 			switch(ts_mode) {
 				case FE_TS_SERIAL_PUNCT_CLOCK:
-					error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG2_TSFIFO_SERIAL(demod), 1); /* Serial mode */
-					error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG2_TSFIFO_DVBCI(demod), 0);  /* punctured clock */
-					error |= ChipSetRegisters(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSCFG2(demod), 1);
+					error |= ChipSetFieldImage(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG2_TSFIFO_SERIAL(demod), 1); /* Serial mode */
+					error |= ChipSetFieldImage(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG2_TSFIFO_DVBCI(demod), 0);  /* punctured clock */
+					error |= ChipSetRegisters(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSCFG2(demod), 1);
 					if(demod == FE_SAT_DEMOD_1) {
 						// Setting alternate function 2 from PIO4_0 to PIO4_2
-						error |= ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1001, &reg_value);
+						error |= ChipGetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1001, &reg_value);
 						reg_value |= 0x00000222;
-						error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1001, reg_value);
+						error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1001, reg_value);
 
 						// Setting output enable from PIO4_0 to PIO4_2
-						error |= ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1040, &reg_value);
+						error |= ChipGetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1040, &reg_value);
 						reg_value |= 0x00000700;
-						error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1040, reg_value);
+						error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1040, reg_value);
 
 						// Setting clk not data for PIO4_0
-						error |= ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1108, &reg_value);
+						error |= ChipGetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1108, &reg_value);
 						reg_value |= 0x00000004;
-						error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1108, reg_value);
+						error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1108, reg_value);
 					}
 					else if(demod == FE_SAT_DEMOD_2) {
 						// Setting alternate function 2 from PIO4_3 to PIO4_5
-						error |= ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1001, &reg_value);
+						error |= ChipGetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1001, &reg_value);
 						reg_value |= 0x00222000;
-						error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1001, reg_value);
+						error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1001, reg_value);
 
 						// Setting output enable from PIO4_3 to PIO4_5
-						error |= ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1040, &reg_value);
+						error |= ChipGetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1040, &reg_value);
 						reg_value |= 0x00003800;
-						error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1040, reg_value);
+						error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1040, reg_value);
 
 						// Setting clk not data for PIO4_3
-						error |= ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1111, &reg_value);
+						error |= ChipGetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1111, &reg_value);
 						reg_value |= 0x00000004;
-						error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1111, reg_value);
+						error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1111, reg_value);
 					}
 					else if(demod == FE_SAT_DEMOD_3) {
 						// Setting alternate function 2 from PIO5_0 to PIO5_2
-						error |= ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1002, &reg_value);
+						error |= ChipGetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1002, &reg_value);
 						reg_value |= 0x00000222;
-						error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1002, reg_value);
+						error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1002, reg_value);
 
 						// Setting output enable from PIO5_0 to PIO5_2
-						error |= ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1040, &reg_value);
+						error |= ChipGetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1040, &reg_value);
 						reg_value |= 0x00070000;
-						error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1040, reg_value);
+						error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1040, reg_value);
 
 						// Setting clk not data for PIO5_0
-						error |= ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1116, &reg_value);
+						error |= ChipGetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1116, &reg_value);
 						reg_value |= 0x00000004;
-						error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1116, reg_value);
+						error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1116, reg_value);
 					}
 					else if(demod == FE_SAT_DEMOD_4) {
 						// Setting alternate function 2 from PIO5_3 to PIO5_5
-						error |= ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1002, &reg_value);
+						error |= ChipGetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1002, &reg_value);
 						reg_value |= 0x00222000;
-						error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1002, reg_value);
+						error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1002, reg_value);
 
 						// Setting output enable from PIO5_3 to PIO5_5
-						error |= ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1040, &reg_value);
+						error |= ChipGetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1040, &reg_value);
 						reg_value |= 0x00380000;
-						error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1040, reg_value);
+						error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1040, reg_value);
 
 						// Setting clk not data for PIO5_3
-						error |= ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1119, &reg_value);
+						error |= ChipGetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1119, &reg_value);
 						reg_value |= 0x00000004;
-						error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1119, reg_value);
+						error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1119, reg_value);
 					}
 					else if(demod == FE_SAT_DEMOD_5) {
 						// Setting alternate function 2 from PIO6_0 to PIO6_2
-						error |= ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1003, &reg_value);
+						error |= ChipGetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1003, &reg_value);
 						reg_value |= 0x00000222;
-						error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1003, reg_value);
+						error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1003, reg_value);
 
 						// Setting output enable from PIO6_0 to PIO6_2
-						error |= ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1040, &reg_value);
+						error |= ChipGetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1040, &reg_value);
 						reg_value |= 0x07000000;
-						error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1040, reg_value);
+						error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1040, reg_value);
 
 						// Setting clk not data for PIO6_0
-						error |= ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1124, &reg_value);
+						error |= ChipGetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1124, &reg_value);
 						reg_value |= 0x00000004;
-						error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1124, reg_value);
+						error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1124, reg_value);
 					}
 					else if(demod == FE_SAT_DEMOD_6) {
 						// Setting alternate function 2 from PIO6_3 to PIO6_5
-						error |= ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1003, &reg_value);
+						error |= ChipGetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1003, &reg_value);
 						reg_value |= 0x00222000;
-						error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1003, reg_value);
+						error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1003, reg_value);
 
 						// Setting output enable from PIO6_3 to PIO6_5
-						error |= ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1040, &reg_value);
+						error |= ChipGetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1040, &reg_value);
 						reg_value |= 0x38000000;
-						error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1040, reg_value);
+						error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1040, reg_value);
 
 						// Setting clk not data for PIO6_3
-						error |= ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1127, &reg_value);
+						error |= ChipGetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1127, &reg_value);
 						reg_value |= 0x00000004;
-						error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1127, reg_value);
+						error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1127, reg_value);
 					}
 					else if(demod == FE_SAT_DEMOD_7) {
 						// Setting alternate function 2 from PIO7_0 to PIO7_2
-						error |= ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1003, &reg_value);
+						error |= ChipGetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1003, &reg_value);
 						reg_value |= 0x00000222;
-						error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1003, reg_value);
+						error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1003, reg_value);
 
 						// Setting output enable from PIO7_0 to PIO7_2
-						error |= ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1040, &reg_value);
+						error |= ChipGetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1040, &reg_value);
 						reg_value |= 0x07000000;
-						error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1040, reg_value);
+						error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1040, reg_value);
 
 						// Setting clk not data for PIO7_0
-						error |= ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1124, &reg_value);
+						error |= ChipGetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1124, &reg_value);
 						reg_value |= 0x00000004;
-						error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1124, reg_value);
+						error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1124, reg_value);
 					}
 					else if(demod == FE_SAT_DEMOD_8) {
 						// Setting alternate function 2 from PIO7_3 to PIO7_5
-						error |= ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1003, &reg_value);
+						error |= ChipGetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1003, &reg_value);
 						reg_value |= 0x00222000;
-						error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1003, reg_value);
+						error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1003, reg_value);
 
 						// Setting output enable from PIO7_3 to PIO7_5
-						error |= ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1040, &reg_value);
+						error |= ChipGetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1040, &reg_value);
 						reg_value |= 0x38000000;
-						error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1040, reg_value);
+						error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1040, reg_value);
 
 						// Setting clk not data for PIO7_3
-						error |= ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1127, &reg_value);
+						error |= ChipGetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1127, &reg_value);
 						reg_value |= 0x00000004;
-						error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1127, reg_value);
+						error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1127, reg_value);
 					}
 					// Disable leaky packet mechanism, the bandwidth is free to be as low as possible
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSPIDFLTC_PIDFLT_LEAKPKT(demod), 0);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSPIDFLTC_PIDFLT_LEAKPKT(demod), 0);
 					// Remove bug fix: workaround of BZ#98230: bad sampling of data[3] of TS bus
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG0_TSFIFO_BCLKDEL1CK(demod), 0);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG0_TSFIFO_BCLKDEL1CK(demod), 0);
 				break;
 
 				case FE_TS_SERIAL_CONT_CLOCK:
-					error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG2_TSFIFO_SERIAL(demod), 1); /* Serial mode */
-					error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG2_TSFIFO_DVBCI(demod), 1);  /* continues clock */
-					error |= ChipSetRegisters(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSCFG2(demod), 1);
+					error |= ChipSetFieldImage(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG2_TSFIFO_SERIAL(demod), 1); /* Serial mode */
+					error |= ChipSetFieldImage(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG2_TSFIFO_DVBCI(demod), 1);  /* continues clock */
+					error |= ChipSetRegisters(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSCFG2(demod), 1);
 
 #if 1
-					error = ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1000, &reg_value);
+					error = ChipGetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1000, &reg_value);
 					reg_value |= 0x00001111;
-					error = ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1000, reg_value);
+					error = ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1000, reg_value);
 
-					error = ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1001, &reg_value);
+					error = ChipGetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1001, &reg_value);
 					if(reg_value!=0x00111111){
 						reg_value |= 0x00111111;
-						error = ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1001, reg_value);
+						error = ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1001, reg_value);
 					}
 
-					error = ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1002, &reg_value);
+					error = ChipGetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1002, &reg_value);
 					if(reg_value!=0x00111111){
 						reg_value |= 0x00111111;
-						error = ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1002, reg_value);
+						error = ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1002, reg_value);
 					}
 
-					error = ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1003, &reg_value);
+					error = ChipGetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1003, &reg_value);
 					if(reg_value!=0x00111111){
 						reg_value |= 0x00111111;
-						error = ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1003, reg_value);
+						error = ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1003, reg_value);
 					}
 
-					error = ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1003, &reg_value);
+					error = ChipGetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1003, &reg_value);
 					if(reg_value!=0x00111111){
 						reg_value |= 0x00111111;
-						error = ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1003, reg_value);
+						error = ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1003, reg_value);
 					}
 
-					error = ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1040, &reg_value);
+					error = ChipGetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1040, &reg_value);
 					if(reg_value!=0x3F3F3F00){
 						reg_value |= 0x3F3F3F00;
-						error = ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1040, reg_value);
+						error = ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1040, reg_value);
 					}
-					error = ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1040, &reg_value);
+					error = ChipGetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1040, &reg_value);
 					if(reg_value!=0x3F000000){
 						reg_value |= 0x3F000000;
-						error = ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1040, reg_value);
+						error = ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1040, reg_value);
 					}
 
-					error = ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1050, &reg_value);
+					error = ChipGetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1050, &reg_value);
 					if(reg_value!=0xFF000000){
 						reg_value |= 0xFF000000;
-						error = ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1050, reg_value);
+						error = ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1050, reg_value);
 					}
 
-					error = ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1108, &reg_value);
+					error = ChipGetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1108, &reg_value);
 					if(reg_value!=0x00000004){
 						reg_value |= 0x00000004;
-						error = ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1108, reg_value);
+						error = ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1108, reg_value);
 					}
 
 					// Setting clk not data for PIO4_3
-					error = ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1111, &reg_value);
+					error = ChipGetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1111, &reg_value);
 					if(reg_value!=0x00000004){
 						reg_value |= 0x00000004;
-						error = ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1111, reg_value);
+						error = ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1111, reg_value);
 					}
 					// Setting clk not data for PIO5_0
-					error = ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1116, &reg_value);
+					error = ChipGetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1116, &reg_value);
 					if(reg_value!=0x00000004){
 						reg_value |= 0x00000004;
-						error = ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1116, reg_value);
+						error = ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1116, reg_value);
 					}
 					// Setting clk not data for PIO5_3
-					error = ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1119, &reg_value);
+					error = ChipGetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1119, &reg_value);
 					if(reg_value!=0x00000004){
 						reg_value |= 0x00000004;
-						error = ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1119, reg_value);
+						error = ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1119, reg_value);
 					}
 					// Setting clk not data for PIO5_3
-					error = ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1119, &reg_value);
+					error = ChipGetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1119, &reg_value);
 					if(reg_value!=0x00000004){
 						reg_value |= 0x00000004;
-						error = ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1119, reg_value);
+						error = ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1119, reg_value);
 					}
 					// Setting clk not data for PIO6_0
-					error = ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1124, &reg_value);
+					error = ChipGetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1124, &reg_value);
 					if(reg_value!=0x00000004){
 						reg_value |= 0x00000004;
-						error = ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1124, reg_value);
+						error = ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1124, reg_value);
 					}
 					// Setting clk not data for PIO6_3
-					error = ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1127, &reg_value);
+					error = ChipGetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1127, &reg_value);
 					if(reg_value!=0x00000004){
 						reg_value |= 0x00000004;
-						error = ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1127, reg_value);
+						error = ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1127, reg_value);
 					}
 					// Setting clk not data for PIO7_0
-					error = ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1124, &reg_value);
+					error = ChipGetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1124, &reg_value);
 					if(reg_value!=0x00000004){
 						reg_value |= 0x00000004;
-						error = ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1124, reg_value);
+						error = ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1124, reg_value);
 					}
 					// Setting clk not data for PIO7_3
-					error = ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1127, &reg_value);
+					error = ChipGetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1127, &reg_value);
 					if(reg_value!=0x00000004){
 						reg_value |= 0x00000004;
-						error = ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1127, reg_value);
+						error = ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1127, reg_value);
 					}
 #endif
 
 					// Disable leaky packet mechanism, the bandwidth is free to be as low as possible
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSPIDFLTC_PIDFLT_LEAKPKT(demod), 0);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSPIDFLTC_PIDFLT_LEAKPKT(demod), 0);
 					// Remove bug fix: workaround of BZ#98230: bad sampling of data[3] of TS bus
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG0_TSFIFO_BCLKDEL1CK(demod), 0);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG0_TSFIFO_BCLKDEL1CK(demod), 0);
 				break;
 
 				case FE_TS_PARALLEL_PUNCT_CLOCK:
-					error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG2_TSFIFO_SERIAL(demod), 0); /* Parallel mode */
-					//error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG2_TSFIFO_DVBCI(demod), 0);  /* punctured clock */
-					error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG2_TSFIFO_DVBCI(demod), 1);  /* contiunous clock */
-					error |= ChipSetRegisters(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSCFG2(demod), 1);
+					error |= ChipSetFieldImage(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG2_TSFIFO_SERIAL(demod), 0); /* Parallel mode */
+					//error |= ChipSetFieldImage(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG2_TSFIFO_DVBCI(demod), 0);  /* punctured clock */
+					error |= ChipSetFieldImage(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG2_TSFIFO_DVBCI(demod), 1);  /* contiunous clock */
+					error |= ChipSetRegisters(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSCFG2(demod), 1);
 					/* Only demod#1 and demod#3 are able to output on SOC PIOs
 					It is a FPGA choice/limitation
 					One option to output any demod to SOC PIOs is to use mux
 					between demod and packet delineator */
 					if(demod == FE_SAT_DEMOD_1) {
 						// Setting alternate function 4 from PIO4_0 to PIO4_5
-						error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1001, 0x00444444);
+						error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1001, 0x00444444);
 						// Setting alternate function 4 from PIO5_0 to PIO5_5
-						error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1002, 0x00444444);
+						error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1002, 0x00444444);
 
 						// Setting output enable from PIO4_0 to PIO4_5 and from PIO5_0 to PIO5_5
-						error |= ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1040, &reg_value);
+						error |= ChipGetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1040, &reg_value);
 						reg_value |= 0x003F3F00;
-						error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1040, reg_value);
+						error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1040, reg_value);
 
 						// Setting clk not data for PIO4_0
-						error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1108, 0x00000004);
+						error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1108, 0x00000004);
 
 						// Setting data not clk for PIO4_3, PIO5_0 and PIO5_3
-						error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1111, 0x00000000);
-						error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1116, 0x00000000);
-						error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1119, 0x00000000);
+						error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1111, 0x00000000);
+						error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1116, 0x00000000);
+						error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1119, 0x00000000);
 					}
 					if(demod == FE_SAT_DEMOD_3) {
 						// Setting alternate function 4 from PIO6_0 to PIO6_5
-						error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1003, 0x00444444);
+						error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1003, 0x00444444);
 						// Setting alternate function 4 from PIO7_0 to PIO7_5
-						error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1003, 0x00444444);
+						error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1003, 0x00444444);
 
 						// Setting output enable from PIO6_0 to PIO6_5
-						error |= ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1040, &reg_value);
+						error |= ChipGetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1040, &reg_value);
 						reg_value |= 0x3F000000;
-						error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1040, reg_value);
+						error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1040, reg_value);
 						// Setting output enable from PIO7_0 to PIO7_5
-						error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1040, 0x3F000000);
+						error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1040, 0x3F000000);
 
 						// Setting clk not data for PIO6_0 (normally 0x4, but bug, workaround = 0x6)
-						error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1124, 0x00000006);
+						error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1124, 0x00000006);
 
 						// Setting data not clk for PIO6_3, PIO7_0 and PIO7_3
-						error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1127, 0x00000000);
-						error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1123, 0x00000000);
-						error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1127, 0x00000000);
+						error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1127, 0x00000000);
+						error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1123, 0x00000000);
+						error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1127, 0x00000000);
 					}
 					// Disable leaky packet mechanism, the bandwidth is free to be as low as possible
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSPIDFLTC_PIDFLT_LEAKPKT(demod), 0);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSPIDFLTC_PIDFLT_LEAKPKT(demod), 0);
 					// Bug fix: workaround of BZ#98230: bad sampling of data[3] of TS bus
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG0_TSFIFO_BCLKDEL1CK(demod), 3);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG0_TSFIFO_BCLKDEL1CK(demod), 3);
 				break;
 
 				case FE_TS_DVBCI_CLOCK:
-					error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG2_TSFIFO_SERIAL(demod), 0); /* Parallel mode */
-					error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG2_TSFIFO_DVBCI(demod), 1);  /* continues clock */
-					error |= ChipSetRegisters(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSCFG2(demod), 1);
+					error |= ChipSetFieldImage(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG2_TSFIFO_SERIAL(demod), 0); /* Parallel mode */
+					error |= ChipSetFieldImage(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG2_TSFIFO_DVBCI(demod), 1);  /* continues clock */
+					error |= ChipSetRegisters(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSCFG2(demod), 1);
 					// Disable leaky packet mechanism, the bandwidth is free to be as low as possible
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSPIDFLTC_PIDFLT_LEAKPKT(demod), 0);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSPIDFLTC_PIDFLT_LEAKPKT(demod), 0);
 					// Remove bug fix: workaround of BZ#98230: bad sampling of data[3] of TS bus
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG0_TSFIFO_BCLKDEL1CK(demod), 0);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG0_TSFIFO_BCLKDEL1CK(demod), 0);
 				break;
 
 				case FE_TS_PARALLEL_ON_TSOUT_0:
 					// Setting alternate function 3 from PIO4_0 to PIO4_5
-					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1001, 0x00333333);
+					error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1001, 0x00333333);
 					// Setting alternate function 3 from PIO5_0 to PIO5_5
-					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1002, 0x00333333);
+					error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1002, 0x00333333);
 
 					// Setting output enable from PIO4_0 to PIO4_5 and from PIO5_0 to PIO5_5
-					error |= ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1040, &reg_value);
+					error |= ChipGetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1040, &reg_value);
 					reg_value |= 0x003F3F00;
-					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1040, /*0x003F3F00*/reg_value);
+					error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1040, /*0x003F3F00*/reg_value);
 
 					// Setting clk not data for PIO4_0 and clock inversion (BZ#75008)
-					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1108, 0x00000205);
-					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1100, 0x00000000);
+					error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1108, 0x00000205);
+					error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1100, 0x00000000);
 					// Setting data not clk for pio from PIO4_1 to PIO4_5 and for pio from PIO5_0 to PIO5_4, and choose STFE clock as a clock source for retime block
-					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1109, 0x00000401);
-					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1110, 0x00000401);
-					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1111, 0x00000401);
-					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1112, 0x00000401);
-					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1113, 0x00000401);
-					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1116, 0x00000401);
-					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1117, 0x00000401);
-					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1118, 0x00000401);
-					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1119, 0x00000401);
-					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1120, 0x00000401);
+					error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1109, 0x00000401);
+					error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1110, 0x00000401);
+					error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1111, 0x00000401);
+					error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1112, 0x00000401);
+					error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1113, 0x00000401);
+					error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1116, 0x00000401);
+					error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1117, 0x00000401);
+					error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1118, 0x00000401);
+					error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1119, 0x00000401);
+					error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1120, 0x00000401);
 
 					// Enable leaky packet mechanism, the bandwidth is sustained to a minimum value
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSPIDFLTC_PIDFLT_LEAKPKT(demod), 1);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSPIDFLTC_PIDFLT_LEAKPKT(demod), 1);
 					// Remove bug fix: workaround of BZ#98230: bad sampling of data[3] of TS bus
-				//	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG0_TSFIFO_BCLKDEL1CK(demod), 0);
+				//	error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG0_TSFIFO_BCLKDEL1CK(demod), 0);
 				break;
 				case FE_TS_PARALLEL_ON_TSOUT_1:
 					// Setting alternate function 3 from PIO6_0 to PIO6_5
-					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1003, 0x00333333);
+					error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1003, 0x00333333);
 					// Setting alternate function 3 from PIO7_0 to PIO7_5
-					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1003, 0x00333333);
+					error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1003, 0x00333333);
 
 					// Setting output enable from PIO6_0 to PIO6_5
-					error |= ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1040, &reg_value);
+					error |= ChipGetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1040, &reg_value);
 					reg_value |= 0x3F000000;
-					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1040, reg_value);
+					error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1040, reg_value);
 					// Setting output enable from PIO7_0 to PIO7_5
-					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1040, 0x3F000000);
+					error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1040, 0x3F000000);
 
 					// Setting clk not data for PIO6_0 and clock inversion (BZ#75008)
-					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1124, 0x00000205);
+					error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1124, 0x00000205);
 
 					// Setting data not clk for pio from PIO6_0 to PIO6_5 and for pio from PIO7_0 to PIO7_4, and choose STFE clock as a clock source for retime block
-					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1125, 0x00000401);
-					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1126, 0x00000401);
-					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1127, 0x00000401);
-					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1128, 0x00000401);
-					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1129, 0x00000401);
-					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1124, 0x00000401);
-					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1125, 0x00000401);
-					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1126, 0x00000401);
-					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1127, 0x00000401);
-					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1128, 0x00000401);
+					error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1125, 0x00000401);
+					error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1126, 0x00000401);
+					error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1127, 0x00000401);
+					error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1128, 0x00000401);
+					error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1129, 0x00000401);
+					error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1124, 0x00000401);
+					error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1125, 0x00000401);
+					error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1126, 0x00000401);
+					error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1127, 0x00000401);
+					error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1128, 0x00000401);
 
 					// Enable leaky packet mechanism, the bandwidth is sustained to a minimum value
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSPIDFLTC_PIDFLT_LEAKPKT(demod), 1);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSPIDFLTC_PIDFLT_LEAKPKT(demod), 1);
 					// Remove bug fix: workaround of BZ#98230: bad sampling of data[3] of TS bus
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG0_TSFIFO_BCLKDEL1CK(demod), 0);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG0_TSFIFO_BCLKDEL1CK(demod), 0);
 				break;
 
 				case FE_TS_SERIAL_ON_TSOUT_0:
 					// Setting alternate function 3 from PIO4_0 to PIO4_2
-					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1001, 0x00000333);
+					error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1001, 0x00000333);
 
 					// Setting output enable from PIO4_0 to PIO4_2
-					error |= ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1040, &reg_value);
+					error |= ChipGetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1040, &reg_value);
 					reg_value |= 0x00000700;
-					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1040, reg_value);
+					error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1040, reg_value);
 
 					// Setting clk not data for PIO4_0 and clock inversion (BZ#75008)
-					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1108, 0x00000205);
+					error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1108, 0x00000205);
 
 					// Setting data not clk for pio from PIO4_1 to PIO4_2 and choose STFE clock as a clock source for retime block
-					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1109, 0x00000401);
-					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1110, 0x00000401);
+					error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1109, 0x00000401);
+					error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1110, 0x00000401);
 				break;
 
 				case FE_TS_SERIAL_ON_TSOUT_1:
 					// Setting alternate function 3 from PIO6_0 to PIO6_2
-					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1003, 0x00000333);
+					error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1003, 0x00000333);
 
 					// Setting output enable from PIO6_0 to PIO6_2
-					error |= ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1040, &reg_value);
+					error |= ChipGetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1040, &reg_value);
 					reg_value |= 0x07000000;
-					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1040, reg_value);
+					error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1040, reg_value);
 
 					// Setting clk not data for PIO6_0 and clock inversion (BZ#75008)
-					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1124, 0x00000205);
+					error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1124, 0x00000205);
 
 					// Setting data not clk for pio from PIO6_1 to PIO6_2 and choose STFE clock as a clock source for retime block
-					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1125, 0x00000401);
-					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1126, 0x00000401);
+					error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1125, 0x00000401);
+					error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1126, 0x00000401);
 				break;
 
 				case FE_TS_ASI:
-					error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG2_TSFIFO_SERIAL(demod), 1); /* Serial mode */
+					error |= ChipSetFieldImage(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG2_TSFIFO_SERIAL(demod), 1); /* Serial mode */
 					/* DVBCI setting: only for cut 1 */
-					error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG2_TSFIFO_DVBCI(demod), 1);  /* continuous clock only for BNC connector (J40) */
-					error |= ChipSetRegisters(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSCFG2(demod), 1); /* reset of merger + TS_FIFO serial */
+					error |= ChipSetFieldImage(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG2_TSFIFO_DVBCI(demod), 1);  /* continuous clock only for BNC connector (J40) */
+					error |= ChipSetRegisters(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSCFG2(demod), 1); /* reset of merger + TS_FIFO serial */
 
 					// Setting alternate function 2 from PIO3_5 to PIO3_7
-					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1002, 0x22220000); // only for J40 connector
+					error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1002, 0x22220000); // only for J40 connector
 
 					// Setting output enable from PIO3_4 to PIO3_7
-					error |= ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1040, &reg_value);
+					error |= ChipGetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1040, &reg_value);
 					reg_value |= 0x00F00000;
-					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1040, reg_value);
+					error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1040, reg_value);
 
 					// Setting clk not data for PIO3_5
-					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1121, 0x00000004);
+					error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1121, 0x00000004);
 
 					// Setting clk not data for PIO3_4
-					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1120, 0x00000004);
+					error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1120, 0x00000004);
 
 					// Remove bug fix: workaround of BZ#98230: bad sampling of data[3] of TS bus
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG0_TSFIFO_BCLKDEL1CK(demod), 0);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG0_TSFIFO_BCLKDEL1CK(demod), 0);
 				break;
 
 				case FE_TS_NCR:
-					error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG2_TSFIFO_SERIAL(demod), 1); /* Serial mode */
+					error |= ChipSetFieldImage(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG2_TSFIFO_SERIAL(demod), 1); /* Serial mode */
 					/* DVBCI setting: only for cut 1 */
-					error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG2_TSFIFO_DVBCI(demod), 1);  /*  CLKOUT pulse with each data for HE10 connector (J34) */
-					error |= ChipSetRegisters(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSCFG2(demod), 1); /* reset of merger + TS_FIFO serial */
+					error |= ChipSetFieldImage(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG2_TSFIFO_DVBCI(demod), 1);  /*  CLKOUT pulse with each data for HE10 connector (J34) */
+					error |= ChipSetRegisters(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSCFG2(demod), 1); /* reset of merger + TS_FIFO serial */
 
 					// Setting alternate function 2 from PIO3_5 to PIO3_7
-					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1002, 0x11110000); // only for J34 connector
+					error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1002, 0x11110000); // only for J34 connector
 
 					// Setting output enable from PIO3_4 to PIO3_7
-					error |= ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1040, &reg_value);
+					error |= ChipGetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1040, &reg_value);
 					reg_value |= 0x00F00000;
-					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1040, reg_value);
+					error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1040, reg_value);
 
 					// Setting clk not data for PIO3_5
-					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1121, 0x00000004);
+					error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1121, 0x00000004);
 
 					// Setting clk not data for PIO3_4
-					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1120, 0x00000004);
+					error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1120, 0x00000004);
 
 					// Remove bug fix: workaround of BZ#98230: bad sampling of data[3] of TS bus
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG0_TSFIFO_BCLKDEL1CK(demod), 0);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG0_TSFIFO_BCLKDEL1CK(demod), 0);
 				break;
 
 				case FE_TS_NCR_TEST_BUS: // new management of NCR
 					// FE_GPIO[18]=ts_extncr_out[1]=PIO1[1] (I2C repeater bus, SDA)
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_C8CODEW_TOP_CTRL_GPIO18CFG, 0x3C);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_C8CODEW_TOP_CTRL_GPIO18CFG, 0x3C);
 
 					// FE_GPIO[19]=ts_extncr_out[0]=PIO1[0] (I2C repeater bus, SCL)
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_C8CODEW_TOP_CTRL_GPIO19CFG, 0x3E);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_C8CODEW_TOP_CTRL_GPIO19CFG, 0x3E);
 
 					// Select AVS-PWM0, EXTNCR
-					error |= ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1000, &reg_value);
+					error |= ChipGetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1000, &reg_value);
 					reg_value |= 0x00001011;
-					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1000, reg_value);
+					error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1000, reg_value);
 
 					// Enable alternate function #1 for PIO2[0], PIO2[1], PIO2[2], PIO2[3] and PIO2[4]
-					error |= ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1001, &reg_value);
+					error |= ChipGetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1001, &reg_value);
 					reg_value |= 0x00011111;
-					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1001, reg_value);
+					error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1001, reg_value);
 
 					// Select PIO3[4] as FE-GPIO[3], PIO3[5] as FE-GPIO[2], PIO3[6] as FE-GPIO[1] and PIO3[7] as FE-GPIO[0]
-					error |= ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1002, &reg_value);
+					error |= ChipGetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1002, &reg_value);
 					reg_value |= /*0x33331111*/0x33310000; // 0x33330000 enough ??
-					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1002, reg_value);
+					error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1002, reg_value);
 
 					// Enable PIO3[5] and PIO3[7] as output, enable PIO3[4] and PIO3[6] as input
-					error |= ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1040, &reg_value);
+					error |= ChipGetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1040, &reg_value);
 					reg_value |= 0x3f501f1b/* Minimal value = 0x00A00000, but we set all PIOs as output */;
-					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1040, reg_value);
+					error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1040, reg_value);
 				break;
 
 				/* Careful, in mux stream mode, demod#1 and demod#2 work in pair, as in wideband mode
 				If demod#1 is not locked, then it is not possible to lock demod#2 */
 				case FE_TS12_MUX_STREAM_MODE:
 					// Set MUX stream, not DVBCI
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_GEN_TSGENERAL(1), 0x36);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_GEN_TSGENERAL(1), 0x36);
 					// Punctured clock
-					error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG2_TSFIFO_DVBCI(1), 0);
-					error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG2_TSFIFO_DVBCI(2), 0);
+					error |= ChipSetFieldImage(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG2_TSFIFO_DVBCI(1), 0);
+					error |= ChipSetFieldImage(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG2_TSFIFO_DVBCI(2), 0);
 					// Program PIO4[5:0] in alternate 4
-					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1001, 0x00444444);
+					error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1001, 0x00444444);
 					// Program PIO5[5:0] in alternate 4
-					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1002, 0x00444444);
+					error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1002, 0x00444444);
 					// Output enable, PIO pad enabled of PIO4[5:0] and PIO5[5:0]
-					error |= ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1040, &reg_value);
+					error |= ChipGetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1040, &reg_value);
 					reg_value |= 0x003F3F00;
-					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1040, reg_value);
+					error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1040, reg_value);
 					// Setting clk not data for PIO4_0
-					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1108, 0x00000004);
+					error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1108, 0x00000004);
 					// Setting clk not data for PIO5_5
-					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1121, 0x00000006);
+					error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1121, 0x00000006);
 					// Disable leaky packet mechanism, the bandwidth is free to be as low as possible
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSPIDFLTC_PIDFLT_LEAKPKT(1), 0);
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSPIDFLTC_PIDFLT_LEAKPKT(2), 0);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSPIDFLTC_PIDFLT_LEAKPKT(1), 0);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSPIDFLTC_PIDFLT_LEAKPKT(2), 0);
 					// Remove bug fix: workaround of BZ#98230: bad sampling of data[3] of TS bus
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG0_TSFIFO_BCLKDEL1CK(1), 0);
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG0_TSFIFO_BCLKDEL1CK(2), 0);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG0_TSFIFO_BCLKDEL1CK(1), 0);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG0_TSFIFO_BCLKDEL1CK(2), 0);
 				break;
 
 				/* Careful, in mux stream mode, demod#3 and demod#4 work in pair, as in wideband mode
 				If demod#3 is not locked, then it is not possible to lock demod#4 */
 				case FE_TS34_MUX_STREAM_MODE:
 					// Set MUX stream, not DVBCI
-					error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_GEN_TSGENERAL(2), 0x36);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_GEN_TSGENERAL(2), 0x36);
 					// Punctured clock
-					error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG2_TSFIFO_DVBCI(3), 0);
-					error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG2_TSFIFO_DVBCI(4), 0);
+					error |= ChipSetFieldImage(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG2_TSFIFO_DVBCI(3), 0);
+					error |= ChipSetFieldImage(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG2_TSFIFO_DVBCI(4), 0);
 					// Program PIO6[5:0] in alternate 4
-					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1003, 0x00444444);
+					error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1003, 0x00444444);
 					// Program PIO7[5:0] in alternate 4
-					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1003, 0x00444444);
+					error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1003, 0x00444444);
 					// Output enable, PIO pad enabled of PIO6[5:0]
-					error |= ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1040, &reg_value);
+					error |= ChipGetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1040, &reg_value);
 					reg_value |= 0x3F000000;
-					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1040, reg_value);
+					error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1040, reg_value);
 					// Output enable, PIO pad enabled of PIO7[5:0]
-					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1040, 0x3F000000);
+					error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1040, 0x3F000000);
 
 					// Setting clk not data for PIO6_0
-					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1124, 0x00000006);
+					error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1124, 0x00000006);
 					// Setting clk not data for PIO7_5
-					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1129, 0x00000006);
+					error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1129, 0x00000006);
 					// Disable leaky packet mechanism, the bandwidth is free to be as low as possible
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSPIDFLTC_PIDFLT_LEAKPKT(1), 0);
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSPIDFLTC_PIDFLT_LEAKPKT(2), 0);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSPIDFLTC_PIDFLT_LEAKPKT(1), 0);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSPIDFLTC_PIDFLT_LEAKPKT(2), 0);
 					// Remove bug fix: workaround of BZ#98230: bad sampling of data[3] of TS bus
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG0_TSFIFO_BCLKDEL1CK(1), 0);
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG0_TSFIFO_BCLKDEL1CK(2), 0);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG0_TSFIFO_BCLKDEL1CK(1), 0);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG0_TSFIFO_BCLKDEL1CK(2), 0);
 				break;
 
 				case FE_TS_OUTPUTMODE_DEFAULT:
 				break;
 			}
 			// 130MHz Oxford-Mclk CK_F1
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_C8CODEW_TOP_CTRL_GPIO14CFG, 0x7E);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_C8CODEW_TOP_CTRL_GPIO14CFG, 0x7E);
 			// Select Oxford-Mclk, IRQ, SGNL1[1]
-			error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1000, 0x00011000);
+			error |= ChipSetOneRegister(state->base->ip.handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1000, 0x00011000);
 		}
-	}
 	return error;
 }
 
@@ -7965,14 +7809,11 @@ fe_lla_error_t fe_stid135_set_ts_parallel_serial(fe_stid135_handle_t handle, enu
 -PARAMS OUT	::	NONE
 --RETURN	::	error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_enable_stfe(fe_stid135_handle_t handle, enum fe_stid135_stfe_output stfe_output)
+fe_lla_error_t fe_stid135_enable_stfe(struct fe_stid135_internal_param* pParams, enum fe_stid135_stfe_output stfe_output)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
-	struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
+	//	struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
 
-	if(pParams == NULL)
-		error=FE_LLA_INVALID_HANDLE;
-	else {
 		if (pParams->handle_demod->Error )
 			error=FE_LLA_I2C_ERROR;
 		else {
@@ -7999,7 +7840,6 @@ fe_lla_error_t fe_stid135_enable_stfe(fe_stid135_handle_t handle, enum fe_stid13
 			break;
 			}
 		}
-	}
 	return error;
 }
 
@@ -8041,17 +7881,13 @@ fe_lla_error_t fe_stid135_enable_stfe(fe_stid135_handle_t handle, enum fe_stid13
 							 0x74 => IB2 & IB4 & IB5 & IB6
 							 0x94 => IB0 & IB2 & IB4 & IB7
 */
-fe_lla_error_t fe_stid135_set_stfe(fe_stid135_handle_t handle, enum fe_stid135_stfe_mode mode, u8 stfe_input_path, enum fe_stid135_stfe_output stfe_output_path, u8 tag_header)
+fe_lla_error_t fe_stid135_set_stfe(struct fe_stid135_internal_param* pParams, enum fe_stid135_stfe_mode mode, u8 stfe_input_path, enum fe_stid135_stfe_output stfe_output_path, u8 tag_header)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	u8 i, path[8] = {0};
 	u32 reg_value;
 	//u32 dest0_route_reg, dest1_route_reg;
-	struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
-
-	if(pParams == NULL)
-		error=FE_LLA_INVALID_HANDLE;
-	else {
+	//	struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
 		if (pParams->handle_demod->Error )
 			error=FE_LLA_I2C_ERROR;
 		else {
@@ -8258,7 +8094,6 @@ fe_lla_error_t fe_stid135_set_stfe(fe_stid135_handle_t handle, enum fe_stid135_s
 		reg_value |= FSTID135_C8SECTPFE_TSDMA_C8SECTPFE_TSDMA_DEST1_FORMAT_WAIT_WHOLE_PACKET__MASK;
 		error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_C8SECTPFE_TSDMA_C8SECTPFE_TSDMA_DEST1_FORMAT, reg_value);
 #endif
-	}
 	return error;
 }
 
@@ -8269,15 +8104,12 @@ fe_lla_error_t fe_stid135_set_stfe(fe_stid135_handle_t handle, enum fe_stid135_s
 -PARAMS OUT	::	NONE
 --RETURN	::	error (if any)
 --***************************************************/
-static fe_lla_error_t fe_stid135_flexclkgen_init(fe_stid135_handle_t handle)
+static fe_lla_error_t fe_stid135_flexclkgen_init(struct fe_stid135_internal_param* pParams)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
-	struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
+	//	struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
 	u32 system_clock, reg_value;
 
-	if(pParams == NULL)
-		error=FE_LLA_INVALID_HANDLE;
-	else {
 		if (pParams->handle_demod->Error)
 			error=FE_LLA_I2C_ERROR;
 		else {
@@ -8388,7 +8220,6 @@ static fe_lla_error_t fe_stid135_flexclkgen_init(fe_stid135_handle_t handle)
 			error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_OXFORD_FLEXCLKGEN_A_FCG_CONFIG7, 0x42414141);
 			error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_OXFORD_FLEXCLKGEN_A_FCG_CONFIG8, 0x45434342);
 		}
-	}
 	return error;
 }
 
@@ -8401,15 +8232,13 @@ static fe_lla_error_t fe_stid135_flexclkgen_init(fe_stid135_handle_t handle)
 -PARAMS OUT	::	crossbar_p ->
 --RETURN	::	error (if any)
 --***************************************************/
-static fe_lla_error_t get_clk_source(internal_param_ptr Handle, u8 clkout_number, u8* crossbar_p)
+static fe_lla_error_t get_clk_source(struct fe_stid135_internal_param* pParams, u8 clkout_number, u8* crossbar_p)
 {
-	struct fe_stid135_internal_param *pParams;
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	u32 reg_value;
 
 	*crossbar_p = 0;
 
-	pParams = (struct fe_stid135_internal_param *) Handle;
 	switch(clkout_number) {
 		case 0:
 			error |= ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_OXFORD_FLEXCLKGEN_A_FCG_CONFIG6, &reg_value);
@@ -8484,19 +8313,17 @@ static fe_lla_error_t get_clk_source(internal_param_ptr Handle, u8 clkout_number
 -PARAMS OUT	::	clkout_p ->
 --RETURN	::	error (if any)
 --***************************************************/
-static fe_lla_error_t compute_final_divider(internal_param_ptr Handle, u32 clkin, u8 clkout_number, u32* clkout_p)
+static fe_lla_error_t compute_final_divider(struct fe_stid135_internal_param *pParams,
+																						u32 clkin, u8 clkout_number, u32* clkout_p)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 
 	u8 crossbar = 0;
 	s32 field_val;
-	struct fe_stid135_internal_param *pParams;
-
-	pParams = (struct fe_stid135_internal_param *) Handle;
 
 	*clkout_p = pParams->quartz;
 
-	error |= get_clk_source(Handle, clkout_number, &crossbar);
+	error |= get_clk_source(pParams, clkout_number, &crossbar);
 	switch(clkout_number) {
 		case 0:
 			error |= ChipGetField(pParams->handle_soc, FLD_FSTID135_OXFORD_FLEXCLKGEN_A_FCG_CONFIG89_FINDIV0DIVBY, &field_val);
@@ -8558,16 +8385,14 @@ static fe_lla_error_t compute_final_divider(internal_param_ptr Handle, u32 clkin
 -PARAMS OUT	::	clkout_p ->
 --RETURN	::	error (if any)
 --***************************************************/
-fe_lla_error_t get_soc_block_freq(internal_param_ptr Handle, u8 clkout_number, u32* clkout_p)
+fe_lla_error_t get_soc_block_freq(struct fe_stid135_internal_param *pParams, u8 clkout_number, u32* clkout_p)
 {
 	u8 crossbar;
 	u32 clkin = 0;
 	u32 Num, Den1, Den2, Den3, Den4, system_clock, reg_value;
-	struct fe_stid135_internal_param *pParams;
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	//u32 reg_val;
 
-	pParams = (struct fe_stid135_internal_param *) Handle;
 
 	/* if MODE_PIN0 = 1, then the system clock is equal to the crystal clock divided by 2 */
 	error |= ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_STATUS48, &reg_value);
@@ -8578,13 +8403,13 @@ fe_lla_error_t get_soc_block_freq(internal_param_ptr Handle, u8 clkout_number, u
 
 	*clkout_p = system_clock * 100;
 
-	error |= get_clk_source(Handle, clkout_number, &crossbar);
+	error |= get_clk_source(pParams, clkout_number, &crossbar);
 
 	switch(crossbar) {
 		case 0:
 			error |= ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_OXFORD_FLEXCLKGEN_A_GFG0_CONFIG1, &reg_value);
 			clkin = system_clock*(((reg_value>>16) & 0x7) + 16);
-			error |= compute_final_divider(Handle, clkin, clkout_number, clkout_p);
+			error |= compute_final_divider(pParams, clkin, clkout_number, clkout_p);
 		break;
 		case 1:
 			error |= ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_OXFORD_FLEXCLKGEN_A_GFG0_CONFIG1, &reg_value);
@@ -8600,7 +8425,7 @@ fe_lla_error_t get_soc_block_freq(internal_param_ptr Handle, u8 clkout_number, u
 			error |= ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_OXFORD_FLEXCLKGEN_A_GFG0_CONFIG5, &Den4);
 			Den4 = (Den4)&0x7FFF;
 			*clkout_p = (Num*(1<<20))/(Den1*Den2*((1<<20)+Den3*(1<<15)+Den4));
-			error |= compute_final_divider(Handle, *clkout_p, clkout_number, clkout_p);
+			error |= compute_final_divider(pParams, *clkout_p, clkout_number, clkout_p);
 		break;
 		case 2:
 			error |= ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_OXFORD_FLEXCLKGEN_A_GFG0_CONFIG1, &Num);
@@ -8616,7 +8441,7 @@ fe_lla_error_t get_soc_block_freq(internal_param_ptr Handle, u8 clkout_number, u
 			error |= ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_OXFORD_FLEXCLKGEN_A_GFG0_CONFIG6, &Den4);
 			Den4 = (Den4)&0x7FFF;
 			*clkout_p = (Num*(1<<20))/(Den1*Den2*((1<<20)+Den3*(1<<15)+Den4));
-			error |= compute_final_divider(Handle, *clkout_p, clkout_number, clkout_p);
+			error |= compute_final_divider(pParams, *clkout_p, clkout_number, clkout_p);
 		break;
 		case 3:
 			error |=ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_OXFORD_FLEXCLKGEN_A_GFG0_CONFIG1, &Num);
@@ -8632,7 +8457,7 @@ fe_lla_error_t get_soc_block_freq(internal_param_ptr Handle, u8 clkout_number, u
 			error |=ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_OXFORD_FLEXCLKGEN_A_GFG0_CONFIG7, &Den4);
 			Den4 = (Den4)&0x7FFF;
 			*clkout_p = (Num*(1<<20))/(Den1*Den2*((1<<20)+Den3*(1<<15)+Den4));
-			error |= compute_final_divider(Handle, *clkout_p, clkout_number, clkout_p);
+			error |= compute_final_divider(pParams, *clkout_p, clkout_number, clkout_p);
 		break;
 		case 4:
 			error |= ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_OXFORD_FLEXCLKGEN_A_GFG0_CONFIG1, &Num);
@@ -8648,7 +8473,7 @@ fe_lla_error_t get_soc_block_freq(internal_param_ptr Handle, u8 clkout_number, u
 			error |= ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_OXFORD_FLEXCLKGEN_A_GFG0_CONFIG8, &Den4);
 			Den4 = (Den4)&0x7FFF;
 			*clkout_p = (Num*(1<<20))/(Den1*Den2*((1<<20)+Den3*(1<<15)+Den4));
-			error |= compute_final_divider(Handle, *clkout_p, clkout_number, clkout_p);
+			error |= compute_final_divider(pParams, *clkout_p, clkout_number, clkout_p);
 		break;
 		case 5:
 			*clkout_p = system_clock * 100;
@@ -8668,7 +8493,7 @@ fe_lla_error_t get_soc_block_freq(internal_param_ptr Handle, u8 clkout_number, u
 			pilots -> pilot presence
 --RETURN	::	error (if any)
 --***************************************************/
-static fe_lla_error_t fe_stid135_get_mode_code(struct fe_stid135_internal_param *pParams,
+static fe_lla_error_t fe_stid135_get_mode_code(struct stv* state,
 					enum fe_stid135_demod demod,
 					enum fe_sat_modcode *modcode,
 					enum fe_sat_frame *frame,
@@ -8678,12 +8503,12 @@ static fe_lla_error_t fe_stid135_get_mode_code(struct fe_stid135_internal_param 
 	s32 dmdmodcode = 0;
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 
-	if(pParams->handle_demod == NULL)
+	if(state->base->ip.handle_demod == NULL)
 		error |= FE_LLA_INVALID_HANDLE;
 	else {
-		error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DMDMODCOD(demod), &mcode);
+		error |= ChipGetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DMDMODCOD(demod), &mcode);
 
-		if(pParams->demod_results[demod-1].standard == FE_SAT_DVBS2_STANDARD) {
+		if(state->demod_results.standard == FE_SAT_DVBS2_STANDARD) {
 
 			if(((mcode >> 7) & 0x01) == 1) {
 				dmdmodcode  =  (mcode >> 1) & 0x7F; // DVBS2X
@@ -8717,7 +8542,7 @@ static fe_lla_error_t fe_stid135_get_mode_code(struct fe_stid135_internal_param 
 				*pilots = FE_SAT_PILOTS_ON;
 			}
 		}
-		if(pParams->demod_results[demod-1].standard == FE_SAT_DVBS1_STANDARD) {
+		if(state->demod_results.standard == FE_SAT_DVBS1_STANDARD) {
 			dmdmodcode = (mcode >> 2) & 0x3F; // DVBS1
 			*pilots     =  FE_SAT_UNKNOWN_PILOTS;
 			*frame      =  FE_SAT_UNKNOWN_FRAME;
@@ -8728,7 +8553,7 @@ static fe_lla_error_t fe_stid135_get_mode_code(struct fe_stid135_internal_param 
 		}
 	}
 
-	if (pParams->handle_demod->Error )
+	if (state->base->ip.handle_demod->Error )
 		error = FE_LLA_I2C_ERROR;
 
 	return error;
@@ -8745,13 +8570,13 @@ static fe_lla_error_t fe_stid135_get_mode_code(struct fe_stid135_internal_param 
 --PARAMS OUT	::	NONE
 --RETURN	::	Error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_set_modcodes_filter(fe_stid135_handle_t handle,
+fe_lla_error_t fe_stid135_set_modcodes_filter(struct stv* state,
 						enum fe_stid135_demod demod,
 						struct fe_sat_dvbs2_mode_t *MODCODES_MASK,
 						s32 NbModes)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
-	struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
+	//struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
 
 	s32 regflist;
 	u32 modcodlst1, reg_value;
@@ -8765,48 +8590,45 @@ fe_lla_error_t fe_stid135_set_modcodes_filter(fe_stid135_handle_t handle,
 		frameLength=0,
 		frameType;
 
-	if(pParams == NULL)
-		error = FE_LLA_INVALID_HANDLE;
-	else {
-		if (pParams->handle_demod->Error)
+		if (state->base->ip.handle_demod->Error)
 			error = FE_LLA_I2C_ERROR;
 		else {
 			modcodlst1 = FLD_FC8CODEW_DVBSX_DEMOD_MODCODLST1_SYMBRATE_FILTER(demod);
 			regflist= (s32)REG_RC8CODEW_DVBSX_DEMOD_MODCODLST2(demod);
 
-			error |= ChipSetField(pParams->handle_demod, modcodlst1, 0); /* disable automatic filter vs. SR */
+			error |= ChipSetField(state->base->ip.handle_demod, modcodlst1, 0); /* disable automatic filter vs. SR */
 
 			/*First disable all modcodes */
 			/* Set to 1 modcod fields of MODCODLST1 register */
-			error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLST1_DIS_32PSK_9_10(demod), 0x3);
+			error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLST1_DIS_32PSK_9_10(demod), 0x3);
 			/* Set to 1 modcod fields of MODCODLST2 to MODCODLST3 registers */
 			for(i=0;i<2;i++)
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)(regflist + i), 0xFF);
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)(regflist + i), 0xFF);
 			/* Set to 1 modcod fields of MODCODLST4 register */
-			error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLST4_DIS_16PSK_8_9(demod), 0xF);
-			error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLST4_DIS_16PSK_9_10(demod), 0x3);
+			error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLST4_DIS_16PSK_8_9(demod), 0xF);
+			error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLST4_DIS_16PSK_9_10(demod), 0x3);
 			/* Set to 1 modcod fields of MODCODLST5 to MODCODLST6 registers */
 			for(i=3;i<5;i++)
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)(regflist + i), 0xFF);
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)(regflist + i), 0xFF);
 			/* Set to 1 modcod fields of MODCODLST7 register */
-			error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLST7_DIS_8P_8_9(demod), 0xF);
-			error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLST7_DIS_8PSK_9_10(demod), 0x3);
+			error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLST7_DIS_8P_8_9(demod), 0xF);
+			error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLST7_DIS_8PSK_9_10(demod), 0x3);
 			/* Set to 1 modcod fields of MODCODLST8 to MODCODLST9 registers */
 			for(i=6;i<8;i++)
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)(regflist + i), 0xFF);
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)(regflist + i), 0xFF);
 			/* Set to 1 modcod fields of MODCODLSTA register */
-			error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLSTA_DIS_QP_8_9(demod), 0xF);
-			error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLSTA_DIS_QPSK_9_10(demod), 0x3);
+			error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLSTA_DIS_QP_8_9(demod), 0xF);
+			error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLSTA_DIS_QPSK_9_10(demod), 0x3);
 			/* Set to 1 modcod fields of MODCODLSTB to MODCODLSTE registers */
 			for(i=9;i<13;i++)
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)(regflist + i), 0xFF);
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)(regflist + i), 0xFF);
 
 			/* Set to 1 modcod field of MODCODLSTF register */
-			error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLSTF_DIS_QPSK_1_4(demod), 0xF);
+			error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLSTF_DIS_QPSK_1_4(demod), 0xF);
 
 			/* Set to 1 modcod fields from MODCODLS10 to MODCODLS1F registers - DVBS2X */
 			for(i=14;i<30;i++) {
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)(regflist + i), 0xFF);
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)(regflist + i), 0xFF);
 			}
 
 			for(i=0;i<NbModes;i++) {
@@ -8816,14 +8638,14 @@ fe_lla_error_t fe_stid135_set_modcodes_filter(fe_stid135_handle_t handle,
 					pilots = MODCODES_MASK[i].pilots;
 					frameLength = MODCODES_MASK[i].frame_length;
 
-					error |= ChipGetOneRegister(pParams->handle_demod,regIndex, &reg_value);
+					error |= ChipGetOneRegister(state->base->ip.handle_demod,regIndex, &reg_value);
 					regMask = (u8)reg_value;
 					frameType= (u8)((frameLength << 1)|(pilots));
 					if(fieldIndex ==0)
 						regMask = (u8)(regMask & (~(0x01 << frameType)));
 					else
 						regMask = (u8)(regMask & (~(0x10 << frameType)));
-					error |= ChipSetOneRegister(pParams->handle_demod,regIndex,regMask);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod,regIndex,regMask);
 				} else if(INRANGE (FE_SATX_QPSK_13_45, MODCODES_MASK[i].mod_code, FE_SATX_1024APSK)){
 					regIndex = (u16)(REG_RC8CODEW_DVBSX_DEMOD_MODCODLS1F(demod) - MODCODES_MASK[i].mod_code/2);
 				}
@@ -8831,20 +8653,19 @@ fe_lla_error_t fe_stid135_set_modcodes_filter(fe_stid135_handle_t handle,
 				pilots = MODCODES_MASK[i].pilots;
 				frameLength = MODCODES_MASK[i].frame_length;
 
-				error |= ChipGetOneRegister(pParams->handle_demod,regIndex, &reg_value);
+				error |= ChipGetOneRegister(state->base->ip.handle_demod,regIndex, &reg_value);
 				regMask = (u8)reg_value;
 				frameType= (u8)((frameLength << 1)|(pilots));
 				if(fieldIndex ==0)
 					regMask = (u8)(regMask & (~(0x01 << frameType)));
 				else
 					regMask = (u8)(regMask & (~(0x10 << frameType)));
-				error |= ChipSetOneRegister(pParams->handle_demod,regIndex,regMask);   */
+				error |= ChipSetOneRegister(state->base->ip.handle_demod,regIndex,regMask);   */
 			}
 		}
 
-		if (pParams->handle_demod->Error ) /*Check the error at the end of the function*/
+		if (state->base->ip.handle_demod->Error ) /*Check the error at the end of the function*/
 			error=FE_LLA_I2C_ERROR;
-	}
 	return error;
 }
 
@@ -8857,36 +8678,33 @@ fe_lla_error_t fe_stid135_set_modcodes_filter(fe_stid135_handle_t handle,
 --PARAMS OUT	::	NONE
 --RETURN	::	Error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_reset_modcodes_filter(fe_stid135_handle_t handle,
+fe_lla_error_t fe_stid135_reset_modcodes_filter(struct stv* state,
 								 enum fe_stid135_demod demod)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
-	struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
+	//struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
 	u8 i, row_max;
 	u32 reg_value;
 
-	if(pParams == NULL)
-		error = FE_LLA_INVALID_HANDLE;
-	else {
-		if(pParams->handle_demod->Error)
-			error = FE_LLA_I2C_ERROR;
-		else {
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_MODCODLST0(demod), 0xFF);
-			error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLST1_NRESET_MODCODLST(demod), 1);
-
-			/*First disable all modcodes */
-			row_max = sizeof(pParams->mc_flt) / sizeof(struct modcod_data) - 1;
-			for(i = 0;i <= row_max;i++) {
-				pParams->mc_flt[i].forbidden[demod-1] = FALSE;
-				error |= ChipGetOneRegister(pParams->handle_demod, pParams->mc_flt[i].register_address[demod-1], &reg_value);
-				reg_value &= ~(pParams->mc_flt[i].mask_value);
-				error |= ChipSetOneRegister(pParams->handle_demod, pParams->mc_flt[i].register_address[demod-1], reg_value);
+	if(state->base->ip.handle_demod->Error) {
+		error = FE_LLA_I2C_ERROR;
+	} else {
+		error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_MODCODLST0(demod), 0xFF);
+		error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLST1_NRESET_MODCODLST(demod), 1);
+		/*First disable all modcodes */
+		row_max = sizeof(state->mc_flt) / sizeof(struct modcod_data) - 1;
+		for(i = 0;i <= row_max;i++) {
+				state->mc_flt[i].forbidden = FALSE;
+				error |= ChipGetOneRegister(state->base->ip.handle_demod, state->mc_flt[i].register_address, &reg_value);
+				dprintk("here error=%d\n", error);
+				reg_value &= ~(state->mc_flt[i].mask_value);
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, state->mc_flt[i].register_address, reg_value);
+				dprintk("here error=%d\n", error);
 			}
 
 		}
-		if (pParams->handle_demod->Error ) //Check the error at the end of the function
+		if (state->base->ip.handle_demod->Error ) //Check the error at the end of the function
 			error = FE_LLA_I2C_ERROR;
-	}
 	return error;
 }
 
@@ -8926,40 +8744,46 @@ and all the MODCODS superior to the current CNR will be disabled.
 --PARAMS OUT	::	NONE
 --RETURN	::	Error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_apply_custom_qef_for_modcod_filter(fe_stid135_handle_t handle, struct mc_array_customer *qef_table_from_customer)
+fe_lla_error_t fe_stid135_apply_custom_qef_for_modcod_filter(struct stv* state, int x, struct mc_array_customer *qef_table_from_customer, int y)
 {
-	u8 i, j;
+	u8 i;
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
-	struct mc_array_customer *cust_mc_flt = qef_table_from_customer;
-	struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
-
-	if(pParams == NULL)
-		error = FE_LLA_INVALID_HANDLE;
-	else {
-		if(pParams->handle_demod->Error)
-			error = FE_LLA_I2C_ERROR;
-		else {
+	struct mc_array_customer* cust_mc_flt =  qef_table_from_customer;
+	//struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
+	dprintk("x=%d y=%d q=%p\n",x,y, qef_table_from_customer);
+	dprintk("state->nr=%d cust_mc_flt=%p state->mc_flt=%p q=%p\n", state->nr, cust_mc_flt, state->mc_flt,
+					qef_table_from_customer );
+	dprintk("here state->base->ip.handle_demod=%p state->nr=%d\n", state->base->ip.handle_demod, state->nr);
+	dprintk("state->base->ip.handle_demod->Error=%d\n", state->base->ip.handle_demod->Error);
+	if(state->base->ip.handle_demod->Error) {
+		error = FE_LLA_I2C_ERROR;
+		dprintk("here\n");
+	} else {
+		dprintk("here\n");
 			if(cust_mc_flt == NULL) {
 				for(i = 0;i < NB_SAT_MODCOD;i++) {
-					for(j=FE_SAT_DEMOD_1;j<=FE_SAT_DEMOD_8;j++) {
-						pParams->mc_flt[i].register_address[j-1] = mc_reg_addr[st_mc_flt[i].modcod_id][j-1];
-					}
-					pParams->mc_flt[i].mask_value = mc_mask_bitfield[st_mc_flt[i].modcod_id];
-					pParams->mc_flt[i].qef = st_mc_flt[i].snr;
+					dprintk("here=%d\n", i);
+					dprintk("xxx: %d %d\n", i, st_mc_flt[i].modcod_id);
+
+					state->mc_flt[i].register_address = mc_reg_addr[st_mc_flt[i].modcod_id][state->nr+1-1];
+					state->mc_flt[i].mask_value = mc_mask_bitfield[st_mc_flt[i].modcod_id];
+					state->mc_flt[i].qef = st_mc_flt[i].snr;
 				}
 			} else {
 				for(i = 0;i < NB_SAT_MODCOD;i++) {
-					for(j=FE_SAT_DEMOD_1;j<=FE_SAT_DEMOD_8;j++) {
-						pParams->mc_flt[i].register_address[j-1] = mc_reg_addr[cust_mc_flt[i].modcod_id][j-1];
-					}
-					pParams->mc_flt[i].mask_value = mc_mask_bitfield[cust_mc_flt[i].modcod_id];
-					pParams->mc_flt[i].qef = cust_mc_flt[i].snr;
+					dprintk("here=%d\n", i);
+					if(cust_mc_flt[i].modcod_id>=FE_SAT_MODCODE_MAX)
+						dprintk("out of range: %d\n", i);
+					state->mc_flt[i].register_address = mc_reg_addr[cust_mc_flt[i].modcod_id][state->nr+1-1];
+					state->mc_flt[i].mask_value = mc_mask_bitfield[cust_mc_flt[i].modcod_id];
+					state->mc_flt[i].qef = cust_mc_flt[i].snr;
 				}
 			}
-		}
-		if (pParams->handle_demod->Error ) //Check the error at the end of the function
-			error = FE_LLA_I2C_ERROR;
 	}
+	dprintk("here\n");
+	if (state->base->ip.handle_demod->Error ) //Check the error at the end of the function
+		error = FE_LLA_I2C_ERROR;
+	dprintk("here\n");
 	return error;
 }
 
@@ -9155,58 +8979,54 @@ static void fe_stid135_modcod_flt_reg_init(void)
 --PARAMS OUT	::	NONE
 --RETURN	::	Error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_filter_forbidden_modcodes(fe_stid135_handle_t handle,
+fe_lla_error_t fe_stid135_filter_forbidden_modcodes(struct stv* state,
 						enum fe_stid135_demod demod,
 						s32 cnr)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
-	struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
+	//struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
 	u8 row_min, row_max, found_row, i;
 	u32 reg_value;
 
-	if(pParams == NULL)
-		error = FE_LLA_INVALID_HANDLE;
-	else {
-		if(pParams->handle_demod->Error)
+		if(state->base->ip.handle_demod->Error)
 			error = FE_LLA_I2C_ERROR;
 		else {
 			row_min = 0;
-			row_max = sizeof(pParams->mc_flt) / sizeof(struct modcod_data) - 1;
+			row_max = sizeof(state->mc_flt) / sizeof(struct modcod_data) - 1;
 			if(INRANGE(-300, cnr, 10000)) {
 				while((row_max - row_min) > 1) {
 					found_row = (u8)((row_max + row_min) >> 1);
-					if(INRANGE(pParams->mc_flt[row_min].qef, cnr, pParams->mc_flt[found_row].qef))
+					if(INRANGE(state->mc_flt[row_min].qef, cnr, state->mc_flt[found_row].qef))
 						row_max = found_row;
 					else
 						row_min = found_row;
 				}
 			}
 			/* Disable automatic filter vs. SR */
-			error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLST1_SYMBRATE_FILTER(demod), 0);
+			error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLST1_SYMBRATE_FILTER(demod), 0);
 
 			/* Disable all forbidden modcodes */
-			row_max = sizeof(pParams->mc_flt) / sizeof(struct modcod_data) - 1;
+			row_max = sizeof(state->mc_flt) / sizeof(struct modcod_data) - 1;
 			for(i = 0;i <= row_min;i++) {
-				if(pParams->mc_flt[i].forbidden[demod-1] == TRUE) {
-					pParams->mc_flt[i].forbidden[demod-1] = FALSE;
-					error |= ChipGetOneRegister(pParams->handle_demod, pParams->mc_flt[i].register_address[demod-1], &reg_value);
-					reg_value &= ~(pParams->mc_flt[i].mask_value);
-					error |= ChipSetOneRegister(pParams->handle_demod, pParams->mc_flt[i].register_address[demod-1], reg_value);
+				if(state->mc_flt[i].forbidden == TRUE) {
+					state->mc_flt[i].forbidden = FALSE;
+					error |= ChipGetOneRegister(state->base->ip.handle_demod, state->mc_flt[i].register_address, &reg_value);
+					reg_value &= ~(state->mc_flt[i].mask_value);
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, state->mc_flt[i].register_address, reg_value);
 				}
 			}
 			for(i = (u8)(row_min + 1);i <= row_max;i++) {
-				if(pParams->mc_flt[i].forbidden[demod-1] == FALSE) {
-					pParams->mc_flt[i].forbidden[demod-1] = TRUE;
-					error |= ChipGetOneRegister(pParams->handle_demod, pParams->mc_flt[i].register_address[demod-1], &reg_value);
-					reg_value |= pParams->mc_flt[i].mask_value;
-					error |= ChipSetOneRegister(pParams->handle_demod, pParams->mc_flt[i].register_address[demod-1], reg_value);
+				if(state->mc_flt[i].forbidden == FALSE) {
+					state->mc_flt[i].forbidden = TRUE;
+					error |= ChipGetOneRegister(state->base->ip.handle_demod, state->mc_flt[i].register_address, &reg_value);
+					reg_value |= state->mc_flt[i].mask_value;
+					error |= ChipSetOneRegister(state->base->ip.handle_demod, state->mc_flt[i].register_address, reg_value);
 				}
 			}
 		}
 
-		if (pParams->handle_demod->Error ) //Check the error at the end of the function
+		if (state->base->ip.handle_demod->Error ) //Check the error at the end of the function
 			error = FE_LLA_I2C_ERROR;
-	}
 	return error;
 }
 
@@ -9252,7 +9072,7 @@ static u8 check_modcodes_mask_2bits(u8 *inventory, s32 fld_value, u8 modcode_off
 			NbModes -> Number of detected mode codes
 --RETURN	::	Error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_modcodes_inventory(fe_stid135_handle_t handle,
+fe_lla_error_t fe_stid135_modcodes_inventory(struct stv* state,
 						enum fe_stid135_demod demod,
 						u8 *MODES_Inventory,
 						u8 *NbModes,
@@ -9260,16 +9080,13 @@ fe_lla_error_t fe_stid135_modcodes_inventory(fe_stid135_handle_t handle,
 {
 
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
-	struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
+	//struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
 	u32 modcodlst0,modcodlst1,modcodlste,modcodlstf,nresetmodcod;
 	u8 Index = 0;
 	s32 fld_value;
 	u32 reg_value;
 
-	if(pParams == NULL)
-		error=FE_LLA_INVALID_HANDLE;
-	else {
-		if (pParams->handle_demod->Error)
+		if (state->base->ip.handle_demod->Error)
 			error=FE_LLA_I2C_ERROR;
 		else {
 
@@ -9279,486 +9096,485 @@ fe_lla_error_t fe_stid135_modcodes_inventory(fe_stid135_handle_t handle,
 			modcodlstf = FLD_FC8CODEW_DVBSX_DEMOD_MODCODLSTF_MODCOD_NSTOCK(demod);
 			nresetmodcod = FLD_FC8CODEW_DVBSX_DEMOD_MODCODLST1_NRESET_MODCODLST(demod);
 
-			error |= ChipSetField(pParams->handle_demod, modcodlst1, 0);		/* disable automatic filter vs. SR */
-			error |= ChipSetField(pParams->handle_demod, nresetmodcod, 0);		/* Set all values to 0 */
-			error |= ChipSetField(pParams->handle_demod, modcodlstf, 0);		/* Set inventory mode */
+			error |= ChipSetField(state->base->ip.handle_demod, modcodlst1, 0);		/* disable automatic filter vs. SR */
+			error |= ChipSetField(state->base->ip.handle_demod, nresetmodcod, 0);		/* Set all values to 0 */
+			error |= ChipSetField(state->base->ip.handle_demod, modcodlstf, 0);		/* Set inventory mode */
 
-			ChipWaitOrAbort(pParams->handle_demod, Duration);			/* Wait for modecode occurence */
+			ChipWaitOrAbort(state->base->ip.handle_demod, Duration);			/* Wait for modecode occurence */
 
 			// QPSK
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLSTF_DIS_QPSK_1_4(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLSTF_DIS_QPSK_1_4(demod), &fld_value);
 			Index = check_modcodes_mask_4bits(MODES_Inventory, fld_value, 0x4, Index);
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLSTE_DIS_QPSK_1_3(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLSTE_DIS_QPSK_1_3(demod), &fld_value);
 			Index = check_modcodes_mask_4bits(MODES_Inventory, fld_value, 0x8, Index);
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLSTE_DIS_QPSK_2_5(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLSTE_DIS_QPSK_2_5(demod), &fld_value);
 			Index = check_modcodes_mask_4bits(MODES_Inventory, fld_value, 0xc, Index);
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLSTD_DIS_QPSK_1_2(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLSTD_DIS_QPSK_1_2(demod), &fld_value);
 			Index = check_modcodes_mask_4bits(MODES_Inventory, fld_value, 0x10, Index);
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLSTD_DIS_QPSK_3_5(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLSTD_DIS_QPSK_3_5(demod), &fld_value);
 			Index = check_modcodes_mask_4bits(MODES_Inventory, fld_value, 0x14, Index);
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLSTC_DIS_QP_2_3(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLSTC_DIS_QP_2_3(demod), &fld_value);
 			Index = check_modcodes_mask_4bits(MODES_Inventory, fld_value, 0x18, Index);
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLSTC_DIS_QP_3_4(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLSTC_DIS_QP_3_4(demod), &fld_value);
 			Index = check_modcodes_mask_4bits(MODES_Inventory, fld_value, 0x1c, Index);
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLSTB_DIS_QP_4_5(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLSTB_DIS_QP_4_5(demod), &fld_value);
 			Index = check_modcodes_mask_4bits(MODES_Inventory, fld_value, 0x20, Index);
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLSTB_DIS_QP_5_6(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLSTB_DIS_QP_5_6(demod), &fld_value);
 			Index = check_modcodes_mask_4bits(MODES_Inventory, fld_value, 0x24, Index);
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLSTA_DIS_QP_8_9(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLSTA_DIS_QP_8_9(demod), &fld_value);
 			Index = check_modcodes_mask_4bits(MODES_Inventory, fld_value, 0x28, Index);
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLSTA_DIS_QPSK_9_10(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLSTA_DIS_QPSK_9_10(demod), &fld_value);
 			Index = check_modcodes_mask_2bits(MODES_Inventory, fld_value, 0x2c, Index);
 			// 8PSK
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLST9_DIS_8P_3_5(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLST9_DIS_8P_3_5(demod), &fld_value);
 			Index = check_modcodes_mask_4bits(MODES_Inventory, fld_value, 0x30, Index);
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLST9_DIS_8P_2_3(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLST9_DIS_8P_2_3(demod), &fld_value);
 			Index = check_modcodes_mask_4bits(MODES_Inventory, fld_value, 0x34, Index);
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLST8_DIS_8P_3_4(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLST8_DIS_8P_3_4(demod), &fld_value);
 			Index = check_modcodes_mask_4bits(MODES_Inventory, fld_value, 0x38, Index);
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLST8_DIS_8P_5_6(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLST8_DIS_8P_5_6(demod), &fld_value);
 			Index = check_modcodes_mask_4bits(MODES_Inventory, fld_value, 0x3c, Index);
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLST7_DIS_8P_8_9(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLST7_DIS_8P_8_9(demod), &fld_value);
 			Index = check_modcodes_mask_4bits(MODES_Inventory, fld_value, 0x40, Index);
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLST7_DIS_8PSK_9_10(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLST7_DIS_8PSK_9_10(demod), &fld_value);
 			Index = check_modcodes_mask_2bits(MODES_Inventory, fld_value, 0x44, Index);
 			// 16APSK
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLST6_DIS_16PSK_2_3(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLST6_DIS_16PSK_2_3(demod), &fld_value);
 			Index = check_modcodes_mask_4bits(MODES_Inventory, fld_value, 0x48, Index);
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLST6_DIS_16PSK_3_4(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLST6_DIS_16PSK_3_4(demod), &fld_value);
 			Index = check_modcodes_mask_4bits(MODES_Inventory, fld_value, 0x4c, Index);
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLST5_DIS_16PSK_4_5(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLST5_DIS_16PSK_4_5(demod), &fld_value);
 			Index = check_modcodes_mask_4bits(MODES_Inventory, fld_value, 0x50, Index);
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLST5_DIS_16PSK_5_6(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLST5_DIS_16PSK_5_6(demod), &fld_value);
 			Index = check_modcodes_mask_4bits(MODES_Inventory, fld_value, 0x54, Index);
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLST4_DIS_16PSK_8_9(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLST4_DIS_16PSK_8_9(demod), &fld_value);
 			Index = check_modcodes_mask_4bits(MODES_Inventory, fld_value, 0x58, Index);
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLST4_DIS_16PSK_9_10(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLST4_DIS_16PSK_9_10(demod), &fld_value);
 			Index = check_modcodes_mask_2bits(MODES_Inventory, fld_value, 0x5c, Index);
 			// 32APSK
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLST3_DIS_32PSK_3_4(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLST3_DIS_32PSK_3_4(demod), &fld_value);
 			Index = check_modcodes_mask_4bits(MODES_Inventory, fld_value, 0x60, Index);
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLST3_DIS_32PSK_4_5(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLST3_DIS_32PSK_4_5(demod), &fld_value);
 			Index = check_modcodes_mask_4bits(MODES_Inventory, fld_value, 0x64, Index);
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLST2_DIS_32PSK_5_6(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLST2_DIS_32PSK_5_6(demod), &fld_value);
 			Index = check_modcodes_mask_4bits(MODES_Inventory, fld_value, 0x68, Index);
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLST2_DIS_32PSK_8_9(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLST2_DIS_32PSK_8_9(demod), &fld_value);
 			Index = check_modcodes_mask_4bits(MODES_Inventory, fld_value, 0x6c, Index);
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLST1_DIS_32PSK_9_10(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLST1_DIS_32PSK_9_10(demod), &fld_value);
 			Index = check_modcodes_mask_2bits(MODES_Inventory, fld_value, 0x70, Index);
 			// QPSK NF DVBS2X
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1F_DIS_QPSK_13_45_POFF(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1F_DIS_QPSK_13_45_POFF(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = FE_SATX_QPSK_13_45 << 1;
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1F_DIS_QPSK_13_45_PON(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1F_DIS_QPSK_13_45_PON(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = (FE_SATX_QPSK_13_45 << 1) + 1;
 
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1F_DIS_QPSK_9_20_POFF(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1F_DIS_QPSK_9_20_POFF(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = FE_SATX_QPSK_9_20 << 1;
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1F_DIS_QPSK_9_20_PON(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1F_DIS_QPSK_9_20_PON(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = (FE_SATX_QPSK_9_20 << 1) + 1;
 
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1E_DIS_QPSK_11_20_POFF(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1E_DIS_QPSK_11_20_POFF(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = FE_SATX_QPSK_11_20 << 1;
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1E_DIS_QPSK_11_20_PON(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1E_DIS_QPSK_11_20_PON(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = (FE_SATX_QPSK_11_20 << 1) + 1;
 
 			// 8PSK NF DVBS2X
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1E_DIS_8APSK_5_9_L_POFF(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1E_DIS_8APSK_5_9_L_POFF(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = FE_SATX_8APSK_5_9_L << 1;
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1E_DIS_8APSK_5_9_L_PON(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1E_DIS_8APSK_5_9_L_PON(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = (FE_SATX_8APSK_5_9_L << 1) + 1;
 
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1E_DIS_8APSK_26_45_L_POFF(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1E_DIS_8APSK_26_45_L_POFF(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = FE_SATX_8APSK_26_45_L << 1;
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1E_DIS_8APSK_26_45_L_POFF(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1E_DIS_8APSK_26_45_L_POFF(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = (FE_SATX_8APSK_26_45_L << 1) + 1;
 
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1E_DIS_8PSK_23_36_POFF(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1E_DIS_8PSK_23_36_POFF(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = FE_SATX_8PSK_23_36 << 1;
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1E_DIS_8PSK_23_36_PON(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1E_DIS_8PSK_23_36_PON(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = (FE_SATX_8PSK_23_36 << 1) + 1;
 
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1D_DIS_8PSK_25_36_POFF(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1D_DIS_8PSK_25_36_POFF(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = FE_SATX_8PSK_25_36 << 1;
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1D_DIS_8PSK_25_36_PON(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1D_DIS_8PSK_25_36_PON(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = (FE_SATX_8PSK_25_36 << 1) + 1;
 
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1D_DIS_8PSK_13_18_POFF(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1D_DIS_8PSK_13_18_POFF(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = FE_SATX_8PSK_13_18 << 1;
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1D_DIS_8PSK_13_18_PON(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1D_DIS_8PSK_13_18_PON(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = (FE_SATX_8PSK_13_18 << 1) + 1;
 
 			// 16APSK NF DVBS2X
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1D_DIS_16APSK_1_2_L_POFF(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1D_DIS_16APSK_1_2_L_POFF(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = FE_SATX_8PSK_13_18 << 1;
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1D_DIS_16APSK_1_2_L_PON(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1D_DIS_16APSK_1_2_L_PON(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = (FE_SATX_16APSK_1_2_L << 1) + 1;
 
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1D_DIS_16APSK_8_15_L_POFF(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1D_DIS_16APSK_8_15_L_POFF(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = FE_SATX_16APSK_8_15_L << 1;
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1D_DIS_16APSK_8_15_L_PON(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1D_DIS_16APSK_8_15_L_PON(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = (FE_SATX_16APSK_8_15_L << 1) + 1;
 
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1C_DIS_16APSK_5_9_L_POFF(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1C_DIS_16APSK_5_9_L_POFF(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = FE_SATX_16APSK_5_9_L << 1;
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1C_DIS_16APSK_5_9_L_PON(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1C_DIS_16APSK_5_9_L_PON(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = (FE_SATX_16APSK_5_9_L << 1) + 1;
 
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1C_DIS_16APSK_26_45_POFF(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1C_DIS_16APSK_26_45_POFF(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = FE_SATX_16APSK_26_45 << 1;
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1C_DIS_16APSK_26_45_PON(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1C_DIS_16APSK_26_45_PON(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = (FE_SATX_16APSK_26_45 << 1) + 1;
 
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1C_DIS_16APSK_3_5_POFF(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1C_DIS_16APSK_3_5_POFF(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = FE_SATX_16APSK_3_5 << 1;
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1C_DIS_16APSK_3_5_PON(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1C_DIS_16APSK_3_5_PON(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = (FE_SATX_16APSK_3_5 << 1) + 1;
 
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1C_DIS_16APSK_3_5_L_POFF(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1C_DIS_16APSK_3_5_L_POFF(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = FE_SATX_16APSK_3_5_L << 1;
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1C_DIS_16APSK_3_5_L_PON(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1C_DIS_16APSK_3_5_L_PON(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = (FE_SATX_16APSK_3_5_L << 1) + 1;
 
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1B_DIS_16APSK_28_45_POFF(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1B_DIS_16APSK_28_45_POFF(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = FE_SATX_16APSK_28_45 << 1;
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1B_DIS_16APSK_28_45_PON(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1B_DIS_16APSK_28_45_PON(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = (FE_SATX_16APSK_28_45 << 1) + 1;
 
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1B_DIS_16APSK_23_36_POFF(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1B_DIS_16APSK_23_36_POFF(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = FE_SATX_16APSK_23_36 << 1;
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1B_DIS_16APSK_23_36_PON(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1B_DIS_16APSK_23_36_PON(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = (FE_SATX_16APSK_23_36 << 1) + 1;
 
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1B_DIS_16APSK_2_3_L_POFF(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1B_DIS_16APSK_2_3_L_POFF(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = FE_SATX_16APSK_2_3_L << 1;
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1B_DIS_16APSK_2_3_L_PON(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1B_DIS_16APSK_2_3_L_PON(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = (FE_SATX_16APSK_2_3_L << 1) + 1;
 
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1B_DIS_16APSK_25_36_POFF(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1B_DIS_16APSK_25_36_POFF(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = FE_SATX_16APSK_25_36 << 1;
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1B_DIS_16APSK_25_36_PON(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1B_DIS_16APSK_25_36_PON(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = (FE_SATX_16APSK_25_36 << 1) + 1;
 
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1A_DIS_16APSK_13_18_POFF(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1A_DIS_16APSK_13_18_POFF(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = FE_SATX_16APSK_13_18 << 1;
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1A_DIS_16APSK_13_18_POFF(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1A_DIS_16APSK_13_18_POFF(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = (FE_SATX_16APSK_13_18 << 1) + 1;
 
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1A_DIS_16APSK_7_9_POFF(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1A_DIS_16APSK_7_9_POFF(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = FE_SATX_16APSK_7_9 << 1;
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1A_DIS_16APSK_7_9_PON(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1A_DIS_16APSK_7_9_PON(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = (FE_SATX_16APSK_7_9 << 1) + 1;
 
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1A_DIS_16APSK_77_90_POFF(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1A_DIS_16APSK_77_90_POFF(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = FE_SATX_16APSK_77_90 << 1;
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1A_DIS_16APSK_77_90_PON(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1A_DIS_16APSK_77_90_PON(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = (FE_SATX_16APSK_77_90 << 1) + 1;
 
 			// 32APSK NF DVBS2X
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1A_DIS_32APSK_2_3_L_POFF(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1A_DIS_32APSK_2_3_L_POFF(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = FE_SATX_32APSK_2_3_L << 1;
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1A_DIS_32APSK_2_3_L_PON(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS1A_DIS_32APSK_2_3_L_PON(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = (FE_SATX_32APSK_2_3_L << 1) + 1;
 
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS19_DIS_32APSK_32_45_POFF(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS19_DIS_32APSK_32_45_POFF(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = FE_SATX_32APSK_32_45 << 1;
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS19_DIS_32APSK_32_45_PON(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS19_DIS_32APSK_32_45_PON(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = (FE_SATX_32APSK_32_45 << 1) + 1;
 
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS19_DIS_32APSK_11_15_POFF(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS19_DIS_32APSK_11_15_POFF(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = FE_SATX_32APSK_11_15 << 1;
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS19_DIS_32APSK_11_15_PON(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS19_DIS_32APSK_11_15_PON(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = (FE_SATX_32APSK_11_15 << 1) + 1;
 
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS19_DIS_32APSK_7_9_POFF(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS19_DIS_32APSK_7_9_POFF(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = FE_SATX_32APSK_7_9 << 1;
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS19_DIS_32APSK_7_9_PON(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS19_DIS_32APSK_7_9_PON(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = (FE_SATX_32APSK_7_9 << 1) + 1;
 
 			// 64APSK NF DVBS2X
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS18_DIS_64APSK_32_45_L_POFF(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS18_DIS_64APSK_32_45_L_POFF(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = FE_SATX_64APSK_32_45_L << 1;
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS18_DIS_64APSK_32_45_L_PON(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS18_DIS_64APSK_32_45_L_PON(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = (FE_SATX_64APSK_32_45_L << 1) + 1;
 
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS18_DIS_64APSK_11_15_POFF(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS18_DIS_64APSK_11_15_POFF(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = FE_SATX_64APSK_11_15 << 1;
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS18_DIS_64APSK_11_15_PON(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS18_DIS_64APSK_11_15_PON(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = (FE_SATX_64APSK_11_15 << 1) + 1;
 
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS18_DIS_64APSK_7_9_POFF(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS18_DIS_64APSK_7_9_POFF(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = FE_SATX_64APSK_7_9 << 1;
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS18_DIS_64APSK_7_9_PON(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS18_DIS_64APSK_7_9_PON(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = (FE_SATX_64APSK_7_9 << 1) + 1;
 
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS17_DIS_64APSK_4_5_POFF(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS17_DIS_64APSK_4_5_POFF(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = FE_SATX_64APSK_4_5 << 1;
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS17_DIS_64APSK_4_5_PON(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS17_DIS_64APSK_4_5_PON(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = (FE_SATX_64APSK_4_5 << 1) + 1;
 
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS17_DIS_64APSK_5_6_POFF(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS17_DIS_64APSK_5_6_POFF(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = FE_SATX_64APSK_5_6 << 1;
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS17_DIS_64APSK_5_6_PON(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS17_DIS_64APSK_5_6_PON(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = (FE_SATX_64APSK_5_6 << 1) + 1;
 
 			// 128APSK NF DVBS2X
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS16_DIS_128APSK_3_4_POFF(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS16_DIS_128APSK_3_4_POFF(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = FE_SATX_128APSK_3_4 << 1;
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS16_DIS_128APSK_3_4_PON(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS16_DIS_128APSK_3_4_PON(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = (FE_SATX_128APSK_3_4 << 1) + 1;
 
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS16_DIS_128APSK_7_9_POFF(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS16_DIS_128APSK_7_9_POFF(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = FE_SATX_128APSK_7_9 << 1;
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS16_DIS_128APSK_7_9_PON(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS16_DIS_128APSK_7_9_PON(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = (FE_SATX_128APSK_7_9 << 1) + 1;
 
 			// 256APSK DVBS2X
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS16_DIS_256APSK_29_45_L_POFF(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS16_DIS_256APSK_29_45_L_POFF(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = FE_SATX_256APSK_29_45_L << 1;
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS16_DIS_256APSK_29_45_L_PON(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS16_DIS_256APSK_29_45_L_PON(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = (FE_SATX_256APSK_29_45_L << 1) + 1;
 
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS16_DIS_256APSK_2_3_L_POFF(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS16_DIS_256APSK_2_3_L_POFF(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = FE_SATX_256APSK_2_3_L << 1;
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS16_DIS_256APSK_2_3_L_PON(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS16_DIS_256APSK_2_3_L_PON(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = (FE_SATX_256APSK_2_3_L << 1) + 1;
 
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS15_DIS_256APSK_31_45_L_POFF(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS15_DIS_256APSK_31_45_L_POFF(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = FE_SATX_256APSK_31_45_L << 1;
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS15_DIS_256APSK_31_45_L_PON(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS15_DIS_256APSK_31_45_L_PON(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = (FE_SATX_256APSK_31_45_L << 1) + 1;
 
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS15_DIS_256APSK_32_45_POFF(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS15_DIS_256APSK_32_45_POFF(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = FE_SATX_256APSK_32_45 << 1;
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS15_DIS_256APSK_32_45_PON(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS15_DIS_256APSK_32_45_PON(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = (FE_SATX_256APSK_32_45 << 1) + 1;
 
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS15_DIS_256APSK_11_15_L_POFF(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS15_DIS_256APSK_11_15_L_POFF(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = FE_SATX_256APSK_11_15_L << 1;
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS15_DIS_256APSK_11_15_L_PON(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS15_DIS_256APSK_11_15_L_PON(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = (FE_SATX_256APSK_11_15_L << 1) + 1;
 
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS15_DIS_256APSK_3_4_POFF(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS15_DIS_256APSK_3_4_POFF(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = FE_SATX_256APSK_3_4 << 1;
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS15_DIS_256APSK_3_4_PON(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS15_DIS_256APSK_3_4_PON(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = (FE_SATX_256APSK_3_4 << 1) + 1;
 
 			// QPSK SF DVBS2X
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS14_DIS_QPSK_11_45_SH_POFF(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS14_DIS_QPSK_11_45_SH_POFF(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = FE_SATX_QPSK_11_45 << 1;
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS14_DIS_QPSK_11_45_SH_PON(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS14_DIS_QPSK_11_45_SH_PON(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = (FE_SATX_QPSK_11_45 << 1) + 1;
 
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS14_DIS_QPSK_4_15_SH_POFF(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS14_DIS_QPSK_4_15_SH_POFF(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = FE_SATX_QPSK_4_15 << 1;
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS14_DIS_QPSK_4_15_SH_PON(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS14_DIS_QPSK_4_15_SH_PON(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = (FE_SATX_QPSK_4_15 << 1) + 1;
 
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS14_DIS_QPSK_14_45_SH_POFF(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS14_DIS_QPSK_14_45_SH_POFF(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = FE_SATX_QPSK_14_45 << 1;
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS14_DIS_QPSK_14_45_SH_PON(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS14_DIS_QPSK_14_45_SH_PON(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = (FE_SATX_QPSK_14_45 << 1) + 1;
 
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS14_DIS_QPSK_7_15_SH_POFF(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS14_DIS_QPSK_7_15_SH_POFF(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = FE_SATX_QPSK_7_15 << 1;
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS14_DIS_QPSK_7_15_SH_PON(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS14_DIS_QPSK_7_15_SH_PON(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = (FE_SATX_QPSK_7_15 << 1) + 1;
 
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS13_DIS_QPSK_8_15_SH_POFF(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS13_DIS_QPSK_8_15_SH_POFF(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = FE_SATX_QPSK_8_15 << 1;
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS13_DIS_QPSK_8_15_SH_PON(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS13_DIS_QPSK_8_15_SH_PON(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = (FE_SATX_QPSK_8_15 << 1) + 1;
 
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS13_DIS_QPSK_32_45_SH_POFF(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS13_DIS_QPSK_32_45_SH_POFF(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = FE_SATX_QPSK_32_45 << 1;
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS13_DIS_QPSK_32_45_SH_PON(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS13_DIS_QPSK_32_45_SH_PON(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = (FE_SATX_QPSK_32_45 << 1) + 1;
 
 			// 8PSK SF DVBS2X
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS13_DIS_8PSK_7_15_SH_POFF(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS13_DIS_8PSK_7_15_SH_POFF(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = FE_SATX_8PSK_7_15 << 1;
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS13_DIS_8PSK_7_15_SH_PON(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS13_DIS_8PSK_7_15_SH_PON(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = (FE_SATX_8PSK_7_15 << 1) + 1;
 
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS13_DIS_8PSK_8_15_SH_POFF(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS13_DIS_8PSK_8_15_SH_POFF(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = FE_SATX_8PSK_8_15 << 1;
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS13_DIS_8PSK_8_15_SH_PON(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS13_DIS_8PSK_8_15_SH_PON(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = (FE_SATX_8PSK_8_15 << 1) + 1;
 
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS12_DIS_8PSK_26_45_SH_POFF(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS12_DIS_8PSK_26_45_SH_POFF(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = FE_SATX_8PSK_26_45 << 1;
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS12_DIS_8PSK_26_45_SH_PON(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS12_DIS_8PSK_26_45_SH_PON(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = (FE_SATX_8PSK_26_45 << 1) + 1;
 
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS12_DIS_8PSK_32_45_SH_POFF(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS12_DIS_8PSK_32_45_SH_POFF(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = FE_SATX_8PSK_32_45 << 1;
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS12_DIS_8PSK_32_45_SH_PON(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS12_DIS_8PSK_32_45_SH_PON(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = (FE_SATX_8PSK_32_45 << 1) + 1;
 
 			// 16APSK SF DVBS2X
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS12_DIS_16APSK_7_15_SH_POFF(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS12_DIS_16APSK_7_15_SH_POFF(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = FE_SATX_16APSK_7_15 << 1;
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS12_DIS_16APSK_7_15_SH_PON(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS12_DIS_16APSK_7_15_SH_PON(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = (FE_SATX_16APSK_7_15 << 1) + 1;
 
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS12_DIS_16APSK_8_15_SH_POFF(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS12_DIS_16APSK_8_15_SH_POFF(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = FE_SATX_16APSK_8_15 << 1;
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS12_DIS_16APSK_8_15_SH_PON(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS12_DIS_16APSK_8_15_SH_PON(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = (FE_SATX_16APSK_8_15 << 1) + 1;
 
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS11_DIS_16APSK_26_45_SH_POFF(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS11_DIS_16APSK_26_45_SH_POFF(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = FE_SATX_16APSK_26_45_S << 1;
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS11_DIS_16APSK_26_45_SH_PON(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS11_DIS_16APSK_26_45_SH_PON(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = (FE_SATX_16APSK_26_45_S << 1) + 1;
 
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS11_DIS_16APSK_3_5_SH_POFF(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS11_DIS_16APSK_3_5_SH_POFF(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = FE_SATX_16APSK_3_5_S << 1;
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS11_DIS_16APSK_3_5_SH_PON(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS11_DIS_16APSK_3_5_SH_PON(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = (FE_SATX_16APSK_3_5_S << 1) + 1;
 
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS11_DIS_16APSK_32_45_SH_POFF(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS11_DIS_16APSK_32_45_SH_POFF(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = FE_SATX_16APSK_32_45 << 1;
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS11_DIS_16APSK_32_45_SH_PON(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS11_DIS_16APSK_32_45_SH_PON(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = (FE_SATX_16APSK_32_45 << 1) + 1;
 
 			// 32APSK SF DVBS2X
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS11_DIS_32APSK_2_3_SH_POFF(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS11_DIS_32APSK_2_3_SH_POFF(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = FE_SATX_32APSK_2_3 << 1;
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS11_DIS_32APSK_2_3_SH_PON(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS11_DIS_32APSK_2_3_SH_PON(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = (FE_SATX_32APSK_2_3 << 1) + 1;
 
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS10_DIS_32APSK_32_45_SH_POFF(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS10_DIS_32APSK_32_45_SH_POFF(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = FE_SATX_32APSK_32_45_S << 1;
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS10_DIS_32APSK_32_45_SH_PON(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLS10_DIS_32APSK_32_45_SH_PON(demod), &fld_value);
 			if (fld_value == 1)
 				MODES_Inventory[Index++] = (FE_SATX_32APSK_32_45_S << 1) + 1;
 
 			*NbModes = (u8)(Index + 1);
 
 			/*set numeral mode */
-			error |= ChipSetField(pParams->handle_demod,modcodlst0,0);
+			error |= ChipSetField(state->base->ip.handle_demod,modcodlst0,0);
 			/* read mode code number sent to LDPC */
-			error |= ChipGetOneRegister(pParams->handle_demod, (u16)modcodlste, &reg_value);
+			error |= ChipGetOneRegister(state->base->ip.handle_demod, (u16)modcodlste, &reg_value);
 			MODES_Inventory[Index] = (u8)reg_value;
 			if (MODES_Inventory[Index]==0)
 				*NbModes = (u8)(*NbModes - 1); /* Most probably the signal is not locked or not a DVB-S2 */
 
-			error |= ChipSetField(pParams->handle_demod, modcodlst0, 1);	/* back to mode code mask mode */
-			error |= ChipSetField(pParams->handle_demod, modcodlstf, 1);	/* back to mode code filter mode */
-			error |= ChipSetField(pParams->handle_demod, modcodlst1, 1);	/* enable automatic filter vs. SR */
+			error |= ChipSetField(state->base->ip.handle_demod, modcodlst0, 1);	/* back to mode code mask mode */
+			error |= ChipSetField(state->base->ip.handle_demod, modcodlstf, 1);	/* back to mode code filter mode */
+			error |= ChipSetField(state->base->ip.handle_demod, modcodlst1, 1);	/* enable automatic filter vs. SR */
 
-			if (pParams->handle_demod->Error ) /*Check the error at the end of the function*/
+			if (state->base->ip.handle_demod->Error ) /*Check the error at the end of the function*/
 				error = FE_LLA_I2C_ERROR;
 		}
-	}
 	return error;
 }
 
@@ -9769,7 +9585,7 @@ fe_lla_error_t fe_stid135_modcodes_inventory(fe_stid135_handle_t handle,
 --PARAMS OUT	::	soc_temp -> temperature
 --RETURN	::	Error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_get_soc_temperature(fe_stid135_handle_t handle, s16 *soc_temp)
+fe_lla_error_t fe_stid135_get_soc_temperature(struct fe_stid135_internal_param* pParams, s16 *soc_temp)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	u32 reg_value;
@@ -9777,7 +9593,6 @@ fe_lla_error_t fe_stid135_get_soc_temperature(fe_stid135_handle_t handle, s16 *s
 	u8 dcorrect, data_ready;
 	u16 timeout = 0;
 	const u16 soc_temp_timeout = 500;
-	struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
 
 	// Reset thermal sensor block
 	error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_C9THS_GLUE_TOP_TSENSOR_CONFIG, 0x0);
@@ -9836,41 +9651,37 @@ static BOOL fe_stid135_check_sis_or_mis(u8 matype)
 --PARAMS OUT	::	NONE
 --RETURN	::	Error (if any)
 --***************************************************/
-static fe_lla_error_t fe_stid135_select_min_isi(fe_stid135_handle_t handle, enum fe_stid135_demod demod)
+static fe_lla_error_t fe_stid135_select_min_isi(struct stv* state, enum fe_stid135_demod demod)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	u8 min_isi, matype;
-	struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
+	//struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
 
-	if(pParams == NULL)
-		error = FE_LLA_INVALID_HANDLE;
-	else {
-		if (pParams->handle_demod->Error)
+		if (state->base->ip.handle_demod->Error)
 			error = FE_LLA_I2C_ERROR;
 		else {
 			/* Setup HW to store Min ISI */
-			error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL0_ISIOBS_MODE(demod), 1);
+			error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL0_ISIOBS_MODE(demod), 1);
 
 			/* Get Min ISI */
-			ChipWaitOrAbort(pParams->handle_demod, 30);
+			ChipWaitOrAbort(state->base->ip.handle_demod, 30);
 
-			error |= fe_stid135_read_hw_matype(pParams->handle_demod, demod, &matype, &min_isi);
+			error |= fe_stid135_read_hw_matype(state->base->ip.handle_demod, demod, &matype, &min_isi);
 
 			/*Enable the MIS filtering*/
-			error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL1_FILTER_EN(demod), 1);
+			error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL1_FILTER_EN(demod), 1);
 
 			/*Set the MIS filter*/
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_PKTDELIN_ISIENTRY(demod), (u32)min_isi);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_PKTDELIN_ISIBITENA(demod), (u32)0xFF);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_PKTDELIN_ISIENTRY(demod), (u32)min_isi);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_PKTDELIN_ISIBITENA(demod), (u32)0xFF);
 
 			/* Reset the packet delineator */
-			error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL1_ALGOSWRST(demod), 1);
-			error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL1_ALGOSWRST(demod), 0);
+			error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL1_ALGOSWRST(demod), 1);
+			error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL1_ALGOSWRST(demod), 0);
 
 			/* Setup HW to store Current ISI */
-			error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL0_ISIOBS_MODE(demod), 0);
+			error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL0_ISIOBS_MODE(demod), 0);
 		}
-	}
 	return error;
 }
 
@@ -9882,22 +9693,18 @@ static fe_lla_error_t fe_stid135_select_min_isi(fe_stid135_handle_t handle, enum
 --PARAMS OUT	::	ISI selected
 --RETURN	::	Error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_get_isi(fe_stid135_handle_t handle, enum fe_stid135_demod demod, u8 *p_isi_current)
+fe_lla_error_t fe_stid135_get_isi(struct stv* state, enum fe_stid135_demod demod, u8 *p_isi_current)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	u32 reg_value;
-	struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
+	//	struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
 
-	if(pParams == NULL)
-		error=FE_LLA_INVALID_HANDLE;
-	else {
-		if (pParams->handle_demod->Error)
+		if (state->base->ip.handle_demod->Error)
 			error=FE_LLA_I2C_ERROR;
 		else {
-			error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_PKTDELIN_ISIENTRY(demod), &reg_value);
+			error |= ChipGetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_PKTDELIN_ISIENTRY(demod), &reg_value);
 			*p_isi_current = (u8)reg_value;
 		}
-	}
 	return error;
 }
 
@@ -9909,27 +9716,24 @@ fe_lla_error_t fe_stid135_get_isi(fe_stid135_handle_t handle, enum fe_stid135_de
 --PARAMS OUT	::	p_isi_struct -> Struct ISI Nb of ISI and ISI numbers
 --RETURN	::	Error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_isi_scan(fe_stid135_handle_t handle, enum fe_stid135_demod demod, struct fe_sat_isi_struct_t *p_isi_struct)
+fe_lla_error_t fe_stid135_isi_scan(struct stv* state, enum fe_stid135_demod demod, struct fe_sat_isi_struct_t *p_isi_struct)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	u8 CurrentISI,matype;
 	u8 i;
 	u32 j=0, n;
 	BOOL ISIAlreadyFound;
-	struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
+	//struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
 
-	if(pParams == NULL)
-		error=FE_LLA_INVALID_HANDLE;
-	else {
-		if (pParams->handle_demod->Error)
+		if (state->base->ip.handle_demod->Error)
 			error=FE_LLA_I2C_ERROR;
 		else {
 			// Test mode to be able to read all ISIs in MATSTR0 register,
 			// otherwise only selected ISI is in MATSTR0 register
-			error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_TPKTDELIN_TESTBUS_SELECT(demod), 8);
+			error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_TPKTDELIN_TESTBUS_SELECT(demod), 8);
 			/* Setup HW to store Current ISI */
-			error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL0_ISIOBS_MODE(demod), 0);
-			ChipWaitOrAbort(pParams->handle_demod,100);
+			error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL0_ISIOBS_MODE(demod), 0);
+			ChipWaitOrAbort(state->base->ip.handle_demod,100);
 			/* initialise struct to FF */
 			for (i=0; i < 9; i++)
 				p_isi_struct->isi[i] = 0xFF;
@@ -9937,7 +9741,7 @@ fe_lla_error_t fe_stid135_isi_scan(fe_stid135_handle_t handle, enum fe_stid135_d
 			/* Get Current ISI and store in struct */
 			for (i=0; i < 40; i++) {
 				ISIAlreadyFound = FALSE;
-				error |= fe_stid135_read_hw_matype(pParams->handle_demod, demod, &matype, &CurrentISI);
+				error |= fe_stid135_read_hw_matype(state->base->ip.handle_demod, demod, &matype, &CurrentISI);
 				for (j=0; j<9; j++) {
 					if (CurrentISI == p_isi_struct->isi[j]) {
 						ISIAlreadyFound = TRUE;
@@ -9947,12 +9751,11 @@ fe_lla_error_t fe_stid135_isi_scan(fe_stid135_handle_t handle, enum fe_stid135_d
 					n = p_isi_struct->nb_isi++;
 					p_isi_struct->isi[n] = CurrentISI;
 				}
-				ChipWaitOrAbort(pParams->handle_demod,10);
+				ChipWaitOrAbort(state->base->ip.handle_demod,10);
 			}
 			// Go back to previous value of test mode
-			error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_TPKTDELIN_TESTBUS_SELECT(demod), 0);
+			error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_TPKTDELIN_TESTBUS_SELECT(demod), 0);
 		}
-	}
 	return error;
 }
 
@@ -9965,27 +9768,23 @@ fe_lla_error_t fe_stid135_isi_scan(fe_stid135_handle_t handle, enum fe_stid135_d
 			p_max_isi -> ISI Max
 --RETURN	::	Error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_get_list_isi(fe_stid135_handle_t handle, enum fe_stid135_demod demod, u8 *p_min_isi, u8 *p_max_isi)
+fe_lla_error_t fe_stid135_get_list_isi(struct stv* state, enum fe_stid135_demod demod, u8 *p_min_isi, u8 *p_max_isi)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
-	struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
+	//	struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
 	#if 0
 		u8 matype, i=0;
 	#endif
 	s32 fld_value;
 
-	if(pParams == NULL)
-		error=FE_LLA_INVALID_HANDLE;
-	else {
-		if (pParams->handle_demod->Error)
+		if (state->base->ip.handle_demod->Error)
 			error=FE_LLA_I2C_ERROR;
 		else {
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_ISIMINSTR_MATYPE_ISIMIN(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_ISIMINSTR_MATYPE_ISIMIN(demod), &fld_value);
 			*p_min_isi = (u8)fld_value;
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_ISIMAXSTR_MATYPE_ISIMAX(demod), &fld_value);
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_ISIMAXSTR_MATYPE_ISIMAX(demod), &fld_value);
 			*p_max_isi = (u8)fld_value;
 		}
-	}
 	return error;
 }
 
@@ -9998,30 +9797,26 @@ fe_lla_error_t fe_stid135_get_list_isi(fe_stid135_handle_t handle, enum fe_stid1
 --PARAMS OUT	::	NONE
 --RETURN	::	Error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_select_isi(fe_stid135_handle_t handle, enum fe_stid135_demod demod, u8 isi_wanted)
+fe_lla_error_t fe_stid135_select_isi(struct stv* state, enum fe_stid135_demod demod, u8 isi_wanted)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
-	struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
+	//struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
 
-	if(pParams == NULL)
-	error=FE_LLA_INVALID_HANDLE;
-	else {
-		if (pParams->handle_demod->Error)
+		if (state->base->ip.handle_demod->Error)
 			error=FE_LLA_I2C_ERROR;
 		else {
 			/* Force MIS mode if MIS signal previously detected */
-			if(pParams->mis_mode[demod-1] == TRUE) {
-				error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_MATCST1_MATYPECST_SISMIS(demod), 0);
+			if(state->mis_mode == TRUE) {
+				error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_MATCST1_MATYPECST_SISMIS(demod), 0);
 			}
 
 			/*Enable the MIS filtering*/
-			error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL1_FILTER_EN(demod), 1);
+			error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL1_FILTER_EN(demod), 1);
 
 			/*Set the MIS filter*/
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_PKTDELIN_ISIBITENA(demod), 0xFF);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_PKTDELIN_ISIENTRY(demod), isi_wanted);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_PKTDELIN_ISIBITENA(demod), 0xFF);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_PKTDELIN_ISIENTRY(demod), isi_wanted);
 		}
-	}
 	return error;
 }
 
@@ -10038,31 +9833,27 @@ fe_lla_error_t fe_stid135_select_isi(fe_stid135_handle_t handle, enum fe_stid135
 --PARAMS OUT	::	NONE
 --RETURN	::	Error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_set_mis_filtering(fe_stid135_handle_t Handle, enum fe_stid135_demod demod, BOOL EnableFiltering, u8 mis_filter, u8 mis_mask)
+fe_lla_error_t fe_stid135_set_mis_filtering(struct stv* state, enum fe_stid135_demod demod, BOOL EnableFiltering, u8 mis_filter, u8 mis_mask)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
-	struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)Handle;
+	//struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)Handle;
 
-	if(pParams == NULL)
-		error = FE_LLA_INVALID_HANDLE;
-	else {
-		if (pParams->handle_demod->Error)
+		if (state->base->ip.handle_demod->Error)
 			error=FE_LLA_I2C_ERROR;
 		else {
 			if(EnableFiltering == TRUE) {
-				error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL1_FILTER_EN(demod), 1); /*Enable the MIS filtering*/
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_PKTDELIN_ISIENTRY(demod), mis_filter);    /*Set the MIS filter*/
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_PKTDELIN_ISIBITENA(demod), mis_mask);			/*Set the MIS Mask*/
+				error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL1_FILTER_EN(demod), 1); /*Enable the MIS filtering*/
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_PKTDELIN_ISIENTRY(demod), mis_filter);    /*Set the MIS filter*/
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_PKTDELIN_ISIBITENA(demod), mis_mask);			/*Set the MIS Mask*/
 			} else {
-				error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL1_FILTER_EN(demod), 0);	/*Disable the MIS filtering*/
+				error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL1_FILTER_EN(demod), 0);	/*Disable the MIS filtering*/
 			}
-			error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL1_ALGOSWRST(demod), 1);	/*reset the packet delin*/
-			error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL1_ALGOSWRST(demod), 0);	/*reset the packet delin*/
+			error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL1_ALGOSWRST(demod), 1);	/*reset the packet delin*/
+			error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL1_ALGOSWRST(demod), 0);	/*reset the packet delin*/
 
-			if (pParams->handle_demod->Error) /*Check the error at the end of the function*/
+			if (state->base->ip.handle_demod->Error) /*Check the error at the end of the function*/
 				error=FE_LLA_I2C_ERROR;
 		}
-	}
 	return error;
 }
 
@@ -10074,23 +9865,19 @@ fe_lla_error_t fe_stid135_set_mis_filtering(fe_stid135_handle_t Handle, enum fe_
 -PARAMS OUT	::	NONE
 --RETURN	::	Error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_unlock(fe_stid135_handle_t handle, enum fe_stid135_demod demod)
+fe_lla_error_t fe_stid135_unlock(struct stv* state, enum fe_stid135_demod demod)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
-	struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
+	//	struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
 
-	if(pParams == NULL) {
-		error = FE_LLA_INVALID_HANDLE;
-	} else {
-		if(pParams->handle_demod->Error)
+		if(state->base->ip.handle_demod->Error)
 			error = FE_LLA_I2C_ERROR;
 		else {
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DMDISTATE(demod), 0x1C); /* Demod Stop*/
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DMDISTATE(demod), 0x1C); /* Demod Stop*/
 
-			if(pParams->handle_demod->Error)  /*Check the error at the end of the function*/
+			if(state->base->ip.handle_demod->Error)  /*Check the error at the end of the function*/
 				error = FE_LLA_I2C_ERROR;
 		}
-	}
 	return(error);
 }
 
@@ -10103,14 +9890,11 @@ fe_lla_error_t fe_stid135_unlock(fe_stid135_handle_t handle, enum fe_stid135_dem
 --RETURN	::	Error (if any)
 
 --***************************************************/
-fe_lla_error_t fe_stid135_set_abort_flag(fe_stid135_handle_t handle, BOOL abort)
+fe_lla_error_t fe_stid135_set_abort_flag(struct fe_stid135_internal_param* pParams, BOOL abort)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
-	struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
+	//struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
 
-	if(pParams == NULL) {
-		error = FE_LLA_INVALID_HANDLE;
-	} else {
 		if(pParams->handle_demod->Error)
 			error = FE_LLA_I2C_ERROR;
 		else {
@@ -10119,7 +9903,6 @@ fe_lla_error_t fe_stid135_set_abort_flag(fe_stid135_handle_t handle, BOOL abort)
 			if(pParams->handle_demod->Error) /*Check the error at the end of the function*/
 			error = FE_LLA_I2C_ERROR;
 		}
-	}
 	return(error);
 }
 
@@ -10134,15 +9917,11 @@ fe_lla_error_t fe_stid135_set_abort_flag(fe_stid135_handle_t handle, BOOL abort)
 -PARAMS OUT	::	NONE
 --RETURN	::	Error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_set_standby(fe_stid135_handle_t handle, u8 standby_on)
+fe_lla_error_t fe_stid135_set_standby(struct fe_stid135_internal_param* pParams, u8 standby_on)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
-	struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
+	//struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
 	enum fe_stid135_demod demod;
-
-	if(pParams == NULL) {
-		error = FE_LLA_INVALID_HANDLE;
-	} else {
 		if (pParams->handle_demod->Error)
 			error = FE_LLA_I2C_ERROR;
 		else {
@@ -10161,7 +9940,6 @@ fe_lla_error_t fe_stid135_set_standby(fe_stid135_handle_t handle, u8 standby_on)
 				error=FE_LLA_I2C_ERROR;
 		}
 
-	}
 
 	return error;
 }
@@ -10174,33 +9952,29 @@ fe_lla_error_t fe_stid135_set_standby(fe_stid135_handle_t handle, u8 standby_on)
 -PARAMS OUT	::	NONE
 --RETURN	::	Error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_clear_filter_ram(fe_stid135_handle_t handle, enum fe_stid135_demod demod)
+fe_lla_error_t fe_stid135_clear_filter_ram(struct stv* state, enum fe_stid135_demod demod)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	u8 i;
-	struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
+	//struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
 
-	if(pParams == NULL) {
-		error = FE_LLA_INVALID_HANDLE;
-	} else {
-		if (pParams->handle_demod->Error)
+		if (state->base->ip.handle_demod->Error)
 			error = FE_LLA_I2C_ERROR;
 		else {
 			/* Init for PID filtering feature */
-			pParams->pid_flt[demod-1].first_disable_all_command = TRUE;
+			state->pid_flt.first_disable_all_command = TRUE;
 			/* Init for GSE filtering feature */
-			pParams->gse_flt[demod-1].first_disable_all_protocol_command = TRUE;
-			pParams->gse_flt[demod-1].first_disable_all_label_command = TRUE;
+			state->gse_flt.first_disable_all_protocol_command = TRUE;
+			state->gse_flt.first_disable_all_label_command = TRUE;
 
 			/* Reset shared H/W RAM */
 			for(i=0;i < RAM_SIZE;i++) {
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), 0x10 + (u32)i);
-				error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), 0x10 + (u32)i);
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTL(demod), 0x00);
 			}
 			/* Disable filter so that output everything */
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), 0);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSPIDFLTM(demod), 0);
 		}
-	}
 	return error;
 }
 
@@ -10213,10 +9987,10 @@ fe_lla_error_t fe_stid135_clear_filter_ram(fe_stid135_handle_t handle, enum fe_s
 				total_packets_count -> total window packets , max is 2^24 packet.
 --RETURN	::	Error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_get_packet_error_rate(fe_stid135_handle_t handle, enum fe_stid135_demod demod, u32 *packets_error_count, u32 *total_packets_count)
+fe_lla_error_t fe_stid135_get_packet_error_rate(struct stv* state, enum fe_stid135_demod demod, u32 *packets_error_count, u32 *total_packets_count)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
-	struct fe_stid135_internal_param *pParams;
+	//struct fe_stid135_internal_param *pParams;
 	u32 packets_count4 = 0,
 		 packets_count3 = 0,
 		 packets_count2 = 0,
@@ -10225,27 +9999,26 @@ fe_lla_error_t fe_stid135_get_packet_error_rate(fe_stid135_handle_t handle, enum
 	BOOL demod_locked = FALSE;
 
 
-	pParams = (struct fe_stid135_internal_param *)handle;
+	//pParams = (struct fe_stid135_internal_param *)handle;
 
-	if(pParams != NULL) {
-		if (pParams->handle_demod->Error)
+	if (state->base->ip.handle_demod->Error)
 			error = FE_LLA_I2C_ERROR;
 		else {
-			fe_stid135_get_data_status(handle, demod, &demod_locked);
+			fe_stid135_get_data_status(state, demod, &demod_locked);
 			if(demod_locked == FALSE) { /*if Demod+FEC not locked */
 				*packets_error_count = 1 << 23;		 /*Packet error count is set to the maximum value*/
 				*total_packets_count = 1 << 24;		 /*Total Packet count is set to the maximum value*/
 			} else {
 				/*Read the error counter 2 (23 bits) */
-				error |= FE_STiD135_GetErrorCount(pParams->handle_demod, FE_STiD_COUNTER2, demod, packets_error_count);
+				error |= FE_STiD135_GetErrorCount(state->base->ip.handle_demod, FE_STiD_COUNTER2, demod, packets_error_count);
 				*packets_error_count &= 0x7FFFFF;
 
 				/* Read the total packet counter 40 bits, read 5 bytes is mondatory */
-				error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_FECSPY_FBERCPT4(demod), &packets_count4);    /*Read the Total packet counter byte 5*/
-				error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_FECSPY_FBERCPT3(demod), &packets_count3);    /*Read the Total packet counter byte 4*/
-				error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_FECSPY_FBERCPT2(demod), &packets_count2);    /*Read the Total packet counter byte 3*/
-				error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_FECSPY_FBERCPT1(demod), &packets_count1);    /*Read the Total packet counter byte 2*/
-				error |= ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_FECSPY_FBERCPT0(demod), &packets_count0);    /*Read the Total packet counter byte 1*/
+				error |= ChipGetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_FECSPY_FBERCPT4(demod), &packets_count4);    /*Read the Total packet counter byte 5*/
+				error |= ChipGetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_FECSPY_FBERCPT3(demod), &packets_count3);    /*Read the Total packet counter byte 4*/
+				error |= ChipGetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_FECSPY_FBERCPT2(demod), &packets_count2);    /*Read the Total packet counter byte 3*/
+				error |= ChipGetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_FECSPY_FBERCPT1(demod), &packets_count1);    /*Read the Total packet counter byte 2*/
+				error |= ChipGetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_FECSPY_FBERCPT0(demod), &packets_count0);    /*Read the Total packet counter byte 1*/
 
 				if( (packets_count4 == 0) && (packets_count3 == 0)) { /*Use the counter for a maximum of 2^24 packets*/
 					*total_packets_count = ((packets_count2 & 0xFF) << 16) + ((packets_count1 & 0xFF) << 8) + (packets_count0 & 0xFF);
@@ -10261,16 +10034,14 @@ fe_lla_error_t fe_stid135_get_packet_error_rate(fe_stid135_handle_t handle, enum
 				}
 			}
 
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_FECSPY_FBERCPT4(demod), 0);    /*Reset the Total packet counter */
-			error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_FECSPY_FECSPY_BERMETER_RESET(demod), 1);
-			error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_FECSPY_FECSPY_BERMETER_RESET(demod), 0);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_ERRCTRL2(demod), 0xc1); /*Reset the packet Error counter2 (and Set it to infinit error count mode )*/
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_FECSPY_FBERCPT4(demod), 0);    /*Reset the Total packet counter */
+			error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_FECSPY_FECSPY_BERMETER_RESET(demod), 1);
+			error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_FECSPY_FECSPY_BERMETER_RESET(demod), 0);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_ERRCTRL2(demod), 0xc1); /*Reset the packet Error counter2 (and Set it to infinit error count mode )*/
 
-			if (pParams->handle_demod->Error) /*Check the error at the end of the function*/
+			if (state->base->ip.handle_demod->Error) /*Check the error at the end of the function*/
 				error = FE_LLA_I2C_ERROR;
 		}
-	} else
-		error = FE_LLA_INVALID_HANDLE;
 
 	return error;
 }
@@ -10283,17 +10054,16 @@ fe_lla_error_t fe_stid135_get_packet_error_rate(fe_stid135_handle_t handle, enum
 --PARAMS OUT	::	NONE
 --RETURN	::	Error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_set_vcore_supply(fe_stid135_handle_t handle)
+fe_lla_error_t fe_stid135_set_vcore_supply(struct fe_stid135_internal_param* pParams)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
-	struct fe_stid135_internal_param *pParams;
+	//struct fe_stid135_internal_param *pParams;
 	u32 reg_value, pwm_value = 0x80, minor_cut;
 	u8 avs_code;
 	fe_lla_lookup_t *lookup = NULL;
 
-	pParams = (struct fe_stid135_internal_param *)handle;
+	//pParams = (struct fe_stid135_internal_param *)handle;
 
-	if(pParams != NULL) {
 		if (pParams->handle_demod->Error)
 			error = FE_LLA_I2C_ERROR;
 		else {
@@ -10334,8 +10104,6 @@ fe_lla_error_t fe_stid135_set_vcore_supply(fe_stid135_handle_t handle)
 			if (pParams->handle_demod->Error) /*Check the error at the end of the function*/
 				error = FE_LLA_I2C_ERROR;
 		}
-	} else
-		error = FE_LLA_INVALID_HANDLE;
 
 	return error;
 }
@@ -10349,33 +10117,30 @@ fe_lla_error_t fe_stid135_set_vcore_supply(fe_stid135_handle_t handle)
 --PARAMS OUT	::	NONE
 --RETURN	::	Error (if any)
 --***************************************************/
-fe_lla_error_t	fe_stid135_set_maxllr_rate( fe_stid135_handle_t handle,
+fe_lla_error_t	fe_stid135_set_maxllr_rate(struct stv* state,
 					enum fe_stid135_demod demod, u32 maxllr_rate)
 {
 
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
-	struct fe_stid135_internal_param *pParams;
+	//struct fe_stid135_internal_param *pParams;
 
-	pParams = (struct fe_stid135_internal_param *)handle;
+	//pParams = (struct fe_stid135_internal_param *)handle;
 	printk("fe_stid135_set_maxllr_rate rate %d\n",maxllr_rate);
-	if(pParams != NULL) {
-		if (pParams->handle_demod->Error)
+		if (state->base->ip.handle_demod->Error)
 			error = FE_LLA_I2C_ERROR;
 		else {
 			if (maxllr_rate == 90) // 90 = 720Mcb/s / 8
-				error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG0_SDEMAP_MAXLLRRATE(demod), 3);
+				error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG0_SDEMAP_MAXLLRRATE(demod), 3);
 			else if (maxllr_rate == 129) // 129.1667 = demod master clock
-				error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG0_SDEMAP_MAXLLRRATE(demod), 2);
+				error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG0_SDEMAP_MAXLLRRATE(demod), 2);
 			else if (maxllr_rate == 180) // 180 = 720Mcb/s / 4
-				error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG0_SDEMAP_MAXLLRRATE(demod), 1);
+				error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG0_SDEMAP_MAXLLRRATE(demod), 1);
 			else // 258.3333 = twice demod master clock
-				error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG0_SDEMAP_MAXLLRRATE(demod), 0);
+				error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG0_SDEMAP_MAXLLRRATE(demod), 0);
 
-			if (pParams->handle_demod->Error) /*Check the error at the end of the function*/
+			if (state->base->ip.handle_demod->Error) /*Check the error at the end of the function*/
 				error = FE_LLA_I2C_ERROR;
 		}
-	} else
-		error = FE_LLA_INVALID_HANDLE;
 
 	return error;
 
@@ -10389,14 +10154,13 @@ fe_lla_error_t	fe_stid135_set_maxllr_rate( fe_stid135_handle_t handle,
 --PARAMS OUT	::	NONE
 --RETURN	::	Error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_multi_normal_short_tuning(fe_stid135_handle_t handle)
+fe_lla_error_t fe_stid135_multi_normal_short_tuning(struct fe_stid135_internal_param* pParams)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
-	struct fe_stid135_internal_param *pParams;
+	//struct fe_stid135_internal_param *pParams;
 
-	pParams = (struct fe_stid135_internal_param *) handle;
+	//pParams = &state->base->ip;
 
-	if (pParams != NULL) {
 		if (pParams->handle_demod->Error)
 				error = FE_LLA_I2C_ERROR;
 
@@ -10423,8 +10187,6 @@ fe_lla_error_t fe_stid135_multi_normal_short_tuning(fe_stid135_handle_t handle)
 		if (pParams->handle_demod->Error)
 			error |= FE_LLA_I2C_ERROR;
 
-	} else
-		error = FE_LLA_INVALID_HANDLE;
 
 	return error;
 }
@@ -10439,37 +10201,39 @@ fe_lla_error_t fe_stid135_multi_normal_short_tuning(fe_stid135_handle_t handle)
 --PARAMS OUT	::	NONE
 --RETURN	::	Error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_init_before_bb_flt_calib(fe_stid135_handle_t handle, FE_OXFORD_TunerPath_t tuner_nb, BOOL squarewave_generation)
+fe_lla_error_t fe_stid135_init_before_bb_flt_calib(struct stv* state,
+																									 enum fe_stid135_demod Demod,
+																									 FE_OXFORD_TunerPath_t tuner_nb, BOOL squarewave_generation)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	struct fe_stid135_internal_param *pParams;
 
-	pParams = (struct fe_stid135_internal_param *) handle;
+	pParams = &state->base->ip;
 
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGCKS(FE_SAT_DEMOD_1), 0x02);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGCKS(Demod), 0x02);
 
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_BCLCNLK(FE_SAT_DEMOD_1), 0x00);
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_ACLCNLK(FE_SAT_DEMOD_1), 0x00);
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_BCLCLK(FE_SAT_DEMOD_1), 0x00);
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_ACLCLK(FE_SAT_DEMOD_1), 0x00);
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CARFREQ(FE_SAT_DEMOD_1), 0x00);
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CARHDR(FE_SAT_DEMOD_1), 0x00);
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFR1BCFG(FE_SAT_DEMOD_1), 0x00);
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFR1B2(FE_SAT_DEMOD_1), 0x00);
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFR1B1(FE_SAT_DEMOD_1), 0x00);
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFR1B0(FE_SAT_DEMOD_1), 0x00);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_BCLCNLK(Demod), 0x00);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_ACLCNLK(Demod), 0x00);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_BCLCLK(Demod), 0x00);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_ACLCLK(Demod), 0x00);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CARFREQ(Demod), 0x00);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CARHDR(Demod), 0x00);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFR1BCFG(Demod), 0x00);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFR1B2(Demod), 0x00);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFR1B1(Demod), 0x00);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFR1B0(Demod), 0x00);
 
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_TMGCFG(FE_SAT_DEMOD_1), 0xc3);
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_RTCNLK(FE_SAT_DEMOD_1), 0x00);
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_RTCLK(FE_SAT_DEMOD_1), 0x00);
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_TMGREG2(FE_SAT_DEMOD_1), 0x00);
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_TMGREG1(FE_SAT_DEMOD_1), 0x00);
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_TMGREG0(FE_SAT_DEMOD_1), 0x00);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_TMGCFG(Demod), 0xc3);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_RTCNLK(Demod), 0x00);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_RTCLK(Demod), 0x00);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_TMGREG2(Demod), 0x00);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_TMGREG1(Demod), 0x00);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_TMGREG0(Demod), 0x00);
 
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFR2CFR1(FE_SAT_DEMOD_1), 0x00);
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFR22(FE_SAT_DEMOD_1), 0x00);
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFR21(FE_SAT_DEMOD_1), 0x00);
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFR20(FE_SAT_DEMOD_1), 0x00);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFR2CFR1(Demod), 0x00);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFR22(Demod), 0x00);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFR21(Demod), 0x00);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFR20(Demod), 0x00);
 
 
 
@@ -10487,8 +10251,8 @@ fe_lla_error_t fe_stid135_init_before_bb_flt_calib(fe_stid135_handle_t handle, F
 
 	/* ------------- ------------------- --------------------------------- */
 
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_FILTCFGM(FE_SAT_DEMOD_1), 0x07);    /* switch off hd filters, set manual  */
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_FILTCFGL(FE_SAT_DEMOD_1), 0x00);    /* switch off hd filters, no amplification  */
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_FILTCFGM(Demod), 0x07);    /* switch off hd filters, set manual  */
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_FILTCFGL(Demod), 0x00);    /* switch off hd filters, no amplification  */
 
 
 	/* ------------- AGC1 configuration --------------------------------- */
@@ -10497,19 +10261,19 @@ fe_lla_error_t fe_stid135_init_before_bb_flt_calib(fe_stid135_handle_t handle, F
 	/*  AMM_FROZEN:  compensation freeze (unsigned)
 			AMM_CORRECT: compensation authorization
 	*/
-	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_AGC1CFG_AMM_FROZEN(FE_SAT_DEMOD_1),  1);
+	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_AGC1CFG_AMM_FROZEN(Demod),  1);
 
 	/*	[3]  QUAD_FROZEN: compensation freeze (unsigned)
 		[2]  QUAD_CORRECT: compensation authorization
 		00:  */
-	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_AGC1CFG_QUAD_FROZEN(FE_SAT_DEMOD_1),  1);
+	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_AGC1CFG_QUAD_FROZEN(Demod),  1);
 
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC1AMM(FE_SAT_DEMOD_1), 0x00);
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC1QUAD(FE_SAT_DEMOD_1), 0x00);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC1AMM(Demod), 0x00);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC1QUAD(Demod), 0x00);
 
 	/*	AGC1CN AGC1 control
 		[2:0]  AGCIQ_BETA: AGC1 loop speed: 000: stop				*/
-	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_AGC1CN_AGCIQ_BETA(FE_SAT_DEMOD_1), 0);
+	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_AGC1CN_AGCIQ_BETA(Demod), 0);
 
 
 	/*	AGC1ADJ AGC1 loop set point	 ????  */
@@ -10519,7 +10283,7 @@ fe_lla_error_t fe_stid135_init_before_bb_flt_calib(fe_stid135_handle_t handle, F
 	/* AGC2O AGC2 configuration   */
 	/* [2:0]  AGC2_COEF: AGC2 loop speed:  000: open loop, AGC2IM/L in manual */
 	// gAPISetField(DEMOD, pathId, FDEMOD_P1_AGC2_COEF, 0);
-	//ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_AGC2O_AGC2_COEF(FE_SAT_DEMOD_1), 0);
+	//ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_AGC2O_AGC2_COEF(Demod), 0);
 
 	/* AGC2IM/L							 */
 	/* AGC2I1,AGC2I0 AGC2 accumulator  */
@@ -10570,53 +10334,53 @@ fe_lla_error_t fe_stid135_init_before_bb_flt_calib(fe_stid135_handle_t handle, F
 		break;
 	}
 
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DMDCFGMD(FE_SAT_DEMOD_1), 0x40);		//idee PG 20/04/2017
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DMDCFG4(FE_SAT_DEMOD_1), 0x80);		//idee PG 20/04/2017
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DMDISTATE(FE_SAT_DEMOD_1), 0x00);		//idee PG ""
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DMDCFGMD(Demod), 0x40);		//idee PG 20/04/2017
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DMDCFG4(Demod), 0x80);		//idee PG 20/04/2017
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DMDISTATE(Demod), 0x00);		//idee PG ""
 
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC2O(FE_SAT_DEMOD_1), 0x00);			//idee PG ""
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC2I1(FE_SAT_DEMOD_1), 0x40);
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC2I0(FE_SAT_DEMOD_1), 0x00);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC2O(Demod), 0x00);			//idee PG ""
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC2I1(Demod), 0x40);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC2I0(Demod), 0x00);
 
-	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_GCTRL_LOW_RATE(FE_SAT_DEMOD_1), 0);
-	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_GCTRL_INPUT_MODE(FE_SAT_DEMOD_1), 0);
+	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_GCTRL_LOW_RATE(Demod), 0);
+	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_GCTRL_INPUT_MODE(Demod), 0);
 	/* 0 = symbols/intersymbols */
 	/* 1 = CTE */
 	/* 2 = Z4 */
 	/* 3 = filter calibration */
-	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_FFTCTRL_CTE_MODE(FE_SAT_DEMOD_1), 0);
-	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_FFTCTRL_FFT_SHIFT(FE_SAT_DEMOD_1), /*1*/0);
-	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_FFTCTRL_FFT_MODE(FE_SAT_DEMOD_1), 5);
+	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_FFTCTRL_CTE_MODE(Demod), 0);
+	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_FFTCTRL_FFT_SHIFT(Demod), /*1*/0);
+	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_FFTCTRL_FFT_MODE(Demod), 5);
 	/* 0 = 8192 points, 1 = 4096 points */
 	/* 2 = 2048 points, 3 = 1024 points */
 	/* 4 = 512 points,  5 = 256 points */
-	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_FFTACC_NB_ACC_FFT(FE_SAT_DEMOD_1), 255);
-	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_THRESHOLD_NO_STOP(FE_SAT_DEMOD_1), 0);
-	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEBUG1_CFO_FILT(FE_SAT_DEMOD_1), 0);
-	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEBUG1_SEL_MEM(FE_SAT_DEMOD_1), 0);
-	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_THRESHOLD_MAX_THRESHOLD(FE_SAT_DEMOD_1), 4);
-	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_GAINCONT_MODE_CONTINUOUS(FE_SAT_DEMOD_1), 0);
-	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_GAINCONT_GAIN_CONTINUOUS(FE_SAT_DEMOD_1), 0);
-	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_UPDCONT_UPD_CONTINUOUS(FE_SAT_DEMOD_1), 0);
-	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEBUG1_DISABLE_RESCALE(FE_SAT_DEMOD_1), 0);
-	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEBUG1_DEBUG_INTERSYMBOL(FE_SAT_DEMOD_1), 1);
-	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEBUG1_DISABLE_AVERAGE(FE_SAT_DEMOD_1), 1);
-	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_FFTCTRL_MODE_INTERSYMBOL(FE_SAT_DEMOD_1), 1);
-	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEBUG1_MODE_FULL(FE_SAT_DEMOD_1), 1);
+	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_FFTACC_NB_ACC_FFT(Demod), 255);
+	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_THRESHOLD_NO_STOP(Demod), 0);
+	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEBUG1_CFO_FILT(Demod), 0);
+	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEBUG1_SEL_MEM(Demod), 0);
+	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_THRESHOLD_MAX_THRESHOLD(Demod), 4);
+	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_GAINCONT_MODE_CONTINUOUS(Demod), 0);
+	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_GAINCONT_GAIN_CONTINUOUS(Demod), 0);
+	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_UPDCONT_UPD_CONTINUOUS(Demod), 0);
+	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEBUG1_DISABLE_RESCALE(Demod), 0);
+	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEBUG1_DEBUG_INTERSYMBOL(Demod), 1);
+	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEBUG1_DISABLE_AVERAGE(Demod), 1);
+	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_FFTCTRL_MODE_INTERSYMBOL(Demod), 1);
+	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEBUG1_MODE_FULL(Demod), 1);
 	/* Switch off PSD (Power Spectral Density) Log format*/
-	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEBUG1_MODE_DB(FE_SAT_DEMOD_1), 0);
-	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_GCTRL_UFBS_ENABLE(FE_SAT_DEMOD_1), 1);
+	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEBUG1_MODE_DB(Demod), 0);
+	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_GCTRL_UFBS_ENABLE(Demod), 1);
 
 	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_AGCRF_AGCRFCFG_AGCRF_BETA(tuner_nb), 0);
 	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_AGCRF_AGCRFIN1(tuner_nb), 0x40);
 	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_AGCRF_AGCRFIN0(tuner_nb), 0x00);
 
-	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG0_FIFO2_ULTRABS(FE_SAT_DEMOD_1), 1); /* Priority to UFBS scan */
-	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG2_MODE_HAUTDEBIT(FE_SAT_DEMOD_1), 1); /* Narrowband setting */
-	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DMDISTATE_I2C_DEMOD_MODE(FE_SAT_DEMOD_1), 2); /* set PEA to UFBS mode  */
-	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_TNRCFG2_TUN_IQSWAP(FE_SAT_DEMOD_1), 0); // DO NOT set to 1 !!!!
+	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG0_FIFO2_ULTRABS(Demod), 1); /* Priority to UFBS scan */
+	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG2_MODE_HAUTDEBIT(Demod), 1); /* Narrowband setting */
+	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DMDISTATE_I2C_DEMOD_MODE(Demod), 2); /* set PEA to UFBS mode  */
+	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_TNRCFG2_TUN_IQSWAP(Demod), 0); // DO NOT set to 1 !!!!
 
-	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_AGC1SHDB_ADCIN_IQOFF(FE_SAT_DEMOD_1), 0);	/* set I input active */
+	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_AGC1SHDB_ADCIN_IQOFF(Demod), 0);	/* set I input active */
 
 	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_AGCRF_AGCRFREF(tuner_nb), 0x58);
 
@@ -10632,45 +10396,45 @@ fe_lla_error_t fe_stid135_init_before_bb_flt_calib(fe_stid135_handle_t handle, F
 --PARAMS OUT	::	NONE
 --RETURN	::	Error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_uninit_after_bb_flt_calib(fe_stid135_handle_t handle, FE_OXFORD_TunerPath_t tuner_nb)
+fe_lla_error_t fe_stid135_uninit_after_bb_flt_calib(struct stv* state,
+																										enum fe_stid135_demod Demod,
+																										FE_OXFORD_TunerPath_t tuner_nb)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
-	struct fe_stid135_internal_param *pParams;
+	struct fe_stid135_internal_param *pParams = &state->base->ip;
 
-	pParams = (struct fe_stid135_internal_param *) handle;
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGCKS(Demod), 0x00);
 
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGCKS(FE_SAT_DEMOD_1), 0x00);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_BCLCNLK(Demod), 0x18);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_ACLCNLK(Demod), 0x28);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_BCLCLK(Demod), 0x18);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_ACLCLK(Demod), 0x28);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CARFREQ(Demod), 0x79);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CARHDR(Demod), 0x18);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFR1BCFG(Demod), 0x67);
 
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_BCLCNLK(FE_SAT_DEMOD_1), 0x18);
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_ACLCNLK(FE_SAT_DEMOD_1), 0x28);
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_BCLCLK(FE_SAT_DEMOD_1), 0x18);
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_ACLCLK(FE_SAT_DEMOD_1), 0x28);
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CARFREQ(FE_SAT_DEMOD_1), 0x79);
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CARHDR(FE_SAT_DEMOD_1), 0x18);
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFR1BCFG(FE_SAT_DEMOD_1), 0x67);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_TMGCFG(Demod), 0xd3);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_RTCNLK(Demod), 0x56);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_RTCLK(Demod), 0x56);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_TMGREG2(Demod), 0x00);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_TMGREG1(Demod), 0x06);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_TMGREG0(Demod), 0xec);
 
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_TMGCFG(FE_SAT_DEMOD_1), 0xd3);
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_RTCNLK(FE_SAT_DEMOD_1), 0x56);
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_RTCLK(FE_SAT_DEMOD_1), 0x56);
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_TMGREG2(FE_SAT_DEMOD_1), 0x00);
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_TMGREG1(FE_SAT_DEMOD_1), 0x06);
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_TMGREG0(FE_SAT_DEMOD_1), 0xec);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFR2CFR1(Demod), 0x25);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFR22(Demod), 0x00);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFR21(Demod), 0x00);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFR20(Demod), 0x1c);
 
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFR2CFR1(FE_SAT_DEMOD_1), 0x25);
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFR22(FE_SAT_DEMOD_1), 0x00);
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFR21(FE_SAT_DEMOD_1), 0x00);
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFR20(FE_SAT_DEMOD_1), 0x1c);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_FILTCFGM(Demod), 0x30);
 
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_FILTCFGM(FE_SAT_DEMOD_1), 0x30);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC1CFG(Demod),  0x54);
 
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC1CFG(FE_SAT_DEMOD_1),  0x54);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC1AMM(Demod), 0xff);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC1QUAD(Demod), 0xfe);
 
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC1AMM(FE_SAT_DEMOD_1), 0xff);
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC1QUAD(FE_SAT_DEMOD_1), 0xfe);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC1CN(Demod), 0x99);
 
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC1CN(FE_SAT_DEMOD_1), 0x99);
-
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC2O(FE_SAT_DEMOD_1), 0x5b);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC2O(Demod), 0x5b);
 
 	switch(tuner_nb) {
 		case AFE_TUNER1:
@@ -10694,43 +10458,43 @@ fe_lla_error_t fe_stid135_uninit_after_bb_flt_calib(fe_stid135_handle_t handle, 
 	}
 	error |= Oxford_StopBBcal(pParams->handle_demod, tuner_nb);
 
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DMDCFGMD(FE_SAT_DEMOD_1), 0xc8);
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DMDCFG4(FE_SAT_DEMOD_1), 0x00);
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DMDISTATE(FE_SAT_DEMOD_1), 0x1c);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DMDCFGMD(Demod), 0xc8);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DMDCFG4(Demod), 0x00);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DMDISTATE(Demod), 0x1c);
 
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC2I1(FE_SAT_DEMOD_1), 0x6c);
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC2I0(FE_SAT_DEMOD_1), 0x40);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC2I1(Demod), 0x6c);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC2I0(Demod), 0x40);
 
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_GCTRL(FE_SAT_DEMOD_1), 0x06);
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_FFTCTRL(FE_SAT_DEMOD_1), 0xc8);
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_FFTACC(FE_SAT_DEMOD_1), 0x0a);
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_THRESHOLD(FE_SAT_DEMOD_1), 0x04);
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DEBUG1(FE_SAT_DEMOD_1), 0x00);
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_GAINCONT(FE_SAT_DEMOD_1), 0x00);
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_UPDCONT(FE_SAT_DEMOD_1), 0x00);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_GCTRL(Demod), 0x06);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_FFTCTRL(Demod), 0xc8);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_FFTACC(Demod), 0x0a);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_THRESHOLD(Demod), 0x04);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DEBUG1(Demod), 0x00);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_GAINCONT(Demod), 0x00);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_UPDCONT(Demod), 0x00);
 
 	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_AGCRF_AGCRFCFG_AGCRF_BETA(tuner_nb), 1);
 	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_AGCRF_AGCRFIN1(tuner_nb), 0xca);
 	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_AGCRF_AGCRFIN0(tuner_nb), 0x10);
 
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_HDEBITCFG0(FE_SAT_DEMOD_1), 0x01);
-	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG2_MODE_HAUTDEBIT(FE_SAT_DEMOD_1), 2);
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_TNRCFG2(FE_SAT_DEMOD_1), 0x02);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_HDEBITCFG0(Demod), 0x01);
+	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG2_MODE_HAUTDEBIT(Demod), 2);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_TNRCFG2(Demod), 0x02);
 
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC1SHDB(FE_SAT_DEMOD_1), 0x00);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC1SHDB(Demod), 0x00);
 
 	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_AGCRF_AGCRFREF(tuner_nb), 0x60);
 #if 1 //present in main driver
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRUP2(FE_SAT_DEMOD_1), 0xCE);
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRUP1(FE_SAT_DEMOD_1), 0xC9);
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRUP0(FE_SAT_DEMOD_1), 0xCC);
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRLOW2(FE_SAT_DEMOD_1), 0xCE);
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRLOW1(FE_SAT_DEMOD_1), 0x21);
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRLOW0(FE_SAT_DEMOD_1), 0x50);
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRINIT2(FE_SAT_DEMOD_1), 0xCE);
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRINIT1(FE_SAT_DEMOD_1), 0x75);
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRINIT0(FE_SAT_DEMOD_1), 0x8E);
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CARCFG(FE_SAT_DEMOD_1), 0xC6);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRUP2(Demod), 0xCE);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRUP1(Demod), 0xC9);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRUP0(Demod), 0xCC);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRLOW2(Demod), 0xCE);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRLOW1(Demod), 0x21);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRLOW0(Demod), 0x50);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRINIT2(Demod), 0xCE);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRINIT1(Demod), 0x75);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRINIT0(Demod), 0x8E);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CARCFG(Demod), 0xC6);
 #endif
 	return (fe_lla_error_t)error;
 }
@@ -10744,19 +10508,19 @@ fe_lla_error_t fe_stid135_uninit_after_bb_flt_calib(fe_stid135_handle_t handle, 
 --PARAMS OUT	::	NONE
 --RETURN	::	magnitude of 5 bins
 --***************************************************/
-fe_lla_error_t fe_stid135_read_bin_from_psd_mem(fe_stid135_handle_t handle, u32 bin_max)
+fe_lla_error_t fe_stid135_read_bin_from_psd_mem(struct fe_stid135_internal_param* pParams, u32 bin_max)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	s32 fld_value;
 	u32 exp, val[5]= { 0 }, memstat, nb_samples, den;
 	u32 val_max_m2, val_max_m1, val_max, val_max_p1, val_max_p2;
-	struct fe_stid135_internal_param *pParams;
+	//struct fe_stid135_internal_param *pParams;
 
 	// Carefull! In PSD memory, datas are 32-bits wide coded split in 2 fields:
 	// (31:27); exp_max
 	// (26:0): psd
 	// with fft length of 256 bins, we get exp_max=0, but with higher fft lengths, exp_max is no more equal to 0
-	pParams = (struct fe_stid135_internal_param *) handle;
+	//pParams = &state->base->ip;
 	error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_FFTCTRL_FFT_MODE(FE_SAT_DEMOD_1), &fld_value);
 	den = (u32)(XtoPowerY(2, (u32)fld_value));
 	if(den != 0)
@@ -11103,41 +10867,40 @@ fe_lla_error_t fe_stid135_read_bin_from_psd_mem(fe_stid135_handle_t handle, u32 
 --PARAMS OUT	::	Magnitude based on 5 bins
 --RETURN	::	error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_measure_harmonic(fe_stid135_handle_t handle, u32 desired_frequency, u8 harmonic, u32 *val_5bin)
+fe_lla_error_t fe_stid135_measure_harmonic(struct stv* state, enum fe_stid135_demod Demod, u32 desired_frequency, u8 harmonic, u32 *val_5bin)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	s32 fld_value = 0, contmode;
 	u32 timeout = 0;
-	struct fe_stid135_internal_param *pParams;
+	struct fe_stid135_internal_param *pParams = &state->base->ip;
 	u32 binmax[2], peak_bin;
 
-	pParams = (struct fe_stid135_internal_param *) handle;
 	/* --------- measure harmonic -------------*/
-	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_GCTRL_UFBS_RESTART(FE_SAT_DEMOD_1), 1);
+	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_GCTRL_UFBS_RESTART(Demod), 1);
 
 	if(pParams->lo_frequency == 0) /* LO frequency not yet computed */
 		error |= FE_STiD135_GetLoFreqHz(pParams, &(pParams->lo_frequency));
-	pParams->tuner_frequency[FE_SAT_DEMOD_1-1] = (s32)(desired_frequency * harmonic - pParams->lo_frequency * 1000000 + 4000000); /* offset of 4MHz to avoid "battement" issue */
-	pParams->demod_search_range_hz[FE_SAT_DEMOD_1-1] = 30000000;
-	error |= fe_stid135_set_carrier_frequency_init(pParams, pParams->tuner_frequency[FE_SAT_DEMOD_1-1], FE_SAT_DEMOD_1);
+	state->tuner_frequency = (s32)(desired_frequency * harmonic - pParams->lo_frequency * 1000000 + 4000000); /* offset of 4MHz to avoid "battement" issue */
+	state->demod_search_range_hz = 30000000;
+	error |= fe_stid135_set_carrier_frequency_init(state, state->tuner_frequency, Demod);
 
-	pParams->demod_symbol_rate[FE_SAT_DEMOD_1-1] = 1*20*1000000;
-	error |= fe_stid135_set_symbol_rate(pParams->handle_demod, pParams->master_clock, pParams->demod_symbol_rate[FE_SAT_DEMOD_1-1], FE_SAT_DEMOD_1);
+	state->demod_symbol_rate = 1*20*1000000;
+	error |= fe_stid135_set_symbol_rate(state, pParams->master_clock, state->demod_symbol_rate, Demod);
 
-	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_GCTRL_UFBS_RESTART(FE_SAT_DEMOD_1), 0); /* run acquisition 1h and wait until done */
-	error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_GAINCONT_MODE_CONTINUOUS(FE_SAT_DEMOD_1), &fld_value);
+	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_GCTRL_UFBS_RESTART(Demod), 0); /* run acquisition 1h and wait until done */
+	error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_GAINCONT_MODE_CONTINUOUS(Demod), &fld_value);
 	if (!fld_value) {
-		error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_GSTAT_PSD_DONE(FE_SAT_DEMOD_1), &contmode);
+		error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_GSTAT_PSD_DONE(Demod), &contmode);
 		while((contmode != TRUE) && (timeout < 40)){
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_GSTAT_PSD_DONE(FE_SAT_DEMOD_1), &contmode);
+			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_GSTAT_PSD_DONE(Demod), &contmode);
 			timeout = (u8)(timeout + 1);
 			ChipWaitOrAbort(pParams->handle_demod, 1);
 		}
 	}
 
-	error |= ChipGetRegisters(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_BINMAX1(FE_SAT_DEMOD_1), 2);
-	binmax[0] = (u32)ChipGetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_BINMAX0_BIN_MAX(FE_SAT_DEMOD_1));
-	binmax[1] = (u32)ChipGetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_BINMAX1_BIN_MAX(FE_SAT_DEMOD_1));
+	error |= ChipGetRegisters(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_BINMAX1(Demod), 2);
+	binmax[0] = (u32)ChipGetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_BINMAX0_BIN_MAX(Demod));
+	binmax[1] = (u32)ChipGetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_BINMAX1_BIN_MAX(Demod));
 	peak_bin = ((binmax[1] & 0x1F) << 8) + binmax[0];
 	*val_5bin = fe_stid135_read_bin_from_psd_mem(pParams, peak_bin);
 	return(error);
@@ -11152,7 +10915,7 @@ fe_lla_error_t fe_stid135_measure_harmonic(fe_stid135_handle_t handle, u32 desir
 --PARAMS OUT	::	NONE
 --RETURN	::	error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_bb_flt_calib(fe_stid135_handle_t handle, FE_OXFORD_TunerPath_t tuner_nb)
+fe_lla_error_t fe_stid135_bb_flt_calib(struct stv* state, enum fe_stid135_demod Demod, FE_OXFORD_TunerPath_t tuner_nb)
 {
 	s32 fld_value = 0;
 	u32 measure_h1, measure_h3;
@@ -11166,7 +10929,7 @@ fe_lla_error_t fe_stid135_bb_flt_calib(fe_stid135_handle_t handle, FE_OXFORD_Tun
 	struct fe_stid135_internal_param *pParams;
 	s32 best_i_cal = 0x00, best_q_cal = 0x00;
 
-	pParams = (struct fe_stid135_internal_param *) handle;
+	pParams = &state->base->ip;
 
 	error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_FFTCTRL_FFT_MODE(FE_SAT_DEMOD_1), &fld_value);
 	end_index = (s32)(8192 / XtoPowerY(2, (u32)fld_value)) - 1;
@@ -11176,10 +10939,10 @@ fe_lla_error_t fe_stid135_bb_flt_calib(fe_stid135_handle_t handle, FE_OXFORD_Tun
 		middle_index = (start_index + end_index)/2;  // we set middle index for ical
 
 		error |= Oxford_StoreBBcalCode(pParams->handle_demod, tuner_nb, (u8)middle_index, (u8)(middle_index>>6));
-		error |= fe_stid135_measure_harmonic(handle, SQUAREWAVE_FREQUENCY, 1, &measure_h1);
+		error |= fe_stid135_measure_harmonic(state, FE_SAT_DEMOD_1, SQUAREWAVE_FREQUENCY, 1, &measure_h1);
 		error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_GSTAT_PEAK_FOUND(FE_SAT_DEMOD_1), &fld_value);
 		if(fld_value == 1) {
-			error |= fe_stid135_measure_harmonic(handle, SQUAREWAVE_FREQUENCY, 3, &measure_h3);
+			error |= fe_stid135_measure_harmonic(state, FE_SAT_DEMOD_1, SQUAREWAVE_FREQUENCY, 3, &measure_h3);
 			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_GSTAT_PEAK_FOUND(FE_SAT_DEMOD_1), &fld_value);
 			if(fld_value == 1) {
 				ratio = (measure_h1 * 10) / measure_h3;
@@ -11216,30 +10979,23 @@ fe_lla_error_t fe_stid135_bb_flt_calib(fe_stid135_handle_t handle, FE_OXFORD_Tun
 --PARAMS OUT	::	NONE
 --RETURN	::	Error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_set_gold_code(fe_stid135_handle_t handle, enum fe_stid135_demod demod, u32 goldcode)
+fe_lla_error_t fe_stid135_set_gold_code(struct stv* state, enum fe_stid135_demod demod, u32 goldcode)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
-	struct fe_stid135_internal_param *pParams;
-
-	pParams = (struct fe_stid135_internal_param *)handle;
-
-	if(pParams != NULL) {
-		if (pParams->handle_demod->Error)
+	//struct fe_stid135_internal_param *pParams = &state->base->ip;
+		if (state->base->ip.handle_demod->Error)
 			error = FE_LLA_I2C_ERROR;
 		else {
 			/* plscramb_root is the DVBS2 gold code. The root of PRBS X is computed internally */
-			error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_PLROOT2_PLSCRAMB_MODE(demod), 1);
+			error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_PLROOT2_PLSCRAMB_MODE(demod), 1);
 			/* DVBS2 Gold Code */
-			error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_PLROOT2_PLSCRAMB_ROOT(demod), (goldcode >> 16) & 0x3);
-			error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_PLROOT1_PLSCRAMB_ROOT(demod), (goldcode >> 8) & 0xFF);
-			error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_PLROOT0_PLSCRAMB_ROOT(demod), goldcode & 0xFF);
+			error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_PLROOT2_PLSCRAMB_ROOT(demod), (goldcode >> 16) & 0x3);
+			error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_PLROOT1_PLSCRAMB_ROOT(demod), (goldcode >> 8) & 0xFF);
+			error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_PLROOT0_PLSCRAMB_ROOT(demod), goldcode & 0xFF);
 
-			if (pParams->handle_demod->Error) /*Check the error at the end of the function*/
+			if (state->base->ip.handle_demod->Error) /*Check the error at the end of the function*/
 				error = FE_LLA_I2C_ERROR;
 		}
-	} else
-		error = FE_LLA_INVALID_HANDLE;
-
 	return error;
 }
 
@@ -11252,29 +11008,24 @@ fe_lla_error_t fe_stid135_set_gold_code(fe_stid135_handle_t handle, enum fe_stid
 --PARAMS OUT	::	NONE
 --RETURN	::	Error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_set_goldcold_root(fe_stid135_handle_t handle, enum fe_stid135_demod demod, u32 goldcode_root)
+fe_lla_error_t fe_stid135_set_goldcold_root(struct stv* state, enum fe_stid135_demod demod, u32 goldcode_root)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
-	struct fe_stid135_internal_param *pParams;
+	//struct fe_stid135_internal_param *pParams = &state->base->ip;
 
-	pParams = (struct fe_stid135_internal_param *)handle;
-
-	if(pParams != NULL) {
-		if (pParams->handle_demod->Error)
+		if (state->base->ip.handle_demod->Error)
 			error = FE_LLA_I2C_ERROR;
 		else {
 			/* plscramb_root is the root of PRBS X */
-			error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_PLROOT2_PLSCRAMB_MODE(demod), 0);
+			error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_PLROOT2_PLSCRAMB_MODE(demod), 0);
 			/* Root of PRBS X */
-			error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_PLROOT2_PLSCRAMB_ROOT(demod), (goldcode_root >> 16) & 0x3);
-			error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_PLROOT1_PLSCRAMB_ROOT(demod), (goldcode_root >> 8) & 0xFF);
-			error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_PLROOT0_PLSCRAMB_ROOT(demod), goldcode_root & 0xFF);
+			error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_PLROOT2_PLSCRAMB_ROOT(demod), (goldcode_root >> 16) & 0x3);
+			error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_PLROOT1_PLSCRAMB_ROOT(demod), (goldcode_root >> 8) & 0xFF);
+			error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_PLROOT0_PLSCRAMB_ROOT(demod), goldcode_root & 0xFF);
 
-			if (pParams->handle_demod->Error) /*Check the error at the end of the function*/
+			if (state->base->ip.handle_demod->Error) /*Check the error at the end of the function*/
 				error = FE_LLA_I2C_ERROR;
 		}
-	} else
-		error = FE_LLA_INVALID_HANDLE;
 
 	return error;
 }
@@ -11287,24 +11038,22 @@ fe_lla_error_t fe_stid135_set_goldcold_root(fe_stid135_handle_t handle, enum fe_
 --PARAMS OUT	::	NONE
 --RETURN	::	Error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_disable_goldcold(fe_stid135_handle_t handle, enum fe_stid135_demod demod)
+fe_lla_error_t fe_stid135_disable_goldcold(struct stv* state, enum fe_stid135_demod demod)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
-	struct fe_stid135_internal_param *pParams;
-
-	pParams = (struct fe_stid135_internal_param *)handle;
+	struct fe_stid135_internal_param *pParams = &state->base->ip;
 
 	if(pParams != NULL) {
-		if (pParams->handle_demod->Error)
+		if (state->base->ip.handle_demod->Error)
 			error = FE_LLA_I2C_ERROR;
 		else {
 			/* When writing 1 in PLROOT field, we disable goldcode feature */
-			error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_PLROOT2_PLSCRAMB_MODE(demod), 0);
-			error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_PLROOT2_PLSCRAMB_ROOT(demod), 0x00);
-			error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_PLROOT1_PLSCRAMB_ROOT(demod), 0x00);
-			error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_PLROOT0_PLSCRAMB_ROOT(demod), 0x01);
+			error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_PLROOT2_PLSCRAMB_MODE(demod), 0);
+			error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_PLROOT2_PLSCRAMB_ROOT(demod), 0x00);
+			error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_PLROOT1_PLSCRAMB_ROOT(demod), 0x00);
+			error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_PLROOT0_PLSCRAMB_ROOT(demod), 0x01);
 
-			if (pParams->handle_demod->Error) /*Check the error at the end of the function*/
+			if (state->base->ip.handle_demod->Error) /*Check the error at the end of the function*/
 				error = FE_LLA_I2C_ERROR;
 		}
 	} else
@@ -11323,52 +11072,41 @@ fe_lla_error_t fe_stid135_disable_goldcold(fe_stid135_handle_t handle, enum fe_s
 --PARAMS OUT	::	NONE
 --RETURN	::	Error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_set_pls(fe_stid135_handle_t handle, enum fe_stid135_demod demod, u8 mode, u32 code)
+fe_lla_error_t fe_stid135_set_pls(struct stv* state, enum fe_stid135_demod demod, u8 mode, u32 code)
 {
 	unsigned error = FE_LLA_NO_ERROR;
-	struct fe_stid135_internal_param *pParams;
+	//struct fe_stid135_internal_param *pParams = &state->base->ip;
 
-	pParams = (struct fe_stid135_internal_param *)handle;
-
-	if(pParams != NULL) {
-		if (pParams->handle_demod->Error)
+		if (state->base->ip.handle_demod->Error)
 			error = FE_LLA_I2C_ERROR;
 		else {
-			ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_PLROOT2_PLSCRAMB_MODE(demod), (mode) & 0x3);
-			ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_PLROOT2_PLSCRAMB_ROOT(demod), (code >> 16) & 0x3);
-			ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_PLROOT1_PLSCRAMB_ROOT(demod), (code >> 8) & 0xFF);
-			ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_PLROOT0_PLSCRAMB_ROOT(demod), code & 0xFF);
+			ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_PLROOT2_PLSCRAMB_MODE(demod), (mode) & 0x3);
+			ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_PLROOT2_PLSCRAMB_ROOT(demod), (code >> 16) & 0x3);
+			ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_PLROOT1_PLSCRAMB_ROOT(demod), (code >> 8) & 0xFF);
+			ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_PLROOT0_PLSCRAMB_ROOT(demod), code & 0xFF);
 
-			if (pParams->handle_demod->Error) /*Check the error at the end of the function*/
+			if (state->base->ip.handle_demod->Error) /*Check the error at the end of the function*/
 				error = FE_LLA_I2C_ERROR;
 		}
-	} else
-		error = FE_LLA_INVALID_HANDLE;
 
 	return (fe_lla_error_t)error;
 }
 
-fe_lla_error_t fe_stid135_get_pls(fe_stid135_handle_t handle, enum fe_stid135_demod demod, u8 *p_mode, u32 *p_code )
+fe_lla_error_t fe_stid135_get_pls(struct stv* state, enum fe_stid135_demod demod, u8 *p_mode, u32 *p_code )
 {
 	unsigned error = FE_LLA_NO_ERROR;
-	struct fe_stid135_internal_param *pParams;
-
-	pParams = (struct fe_stid135_internal_param *)handle;
-
-	if(pParams != NULL) {
-		if (pParams->handle_demod->Error)
+	//struct fe_stid135_internal_param *pParams = &state->base->ip;
+		if (state->base->ip.handle_demod->Error)
 			error = FE_LLA_I2C_ERROR;
 		else {
-			error = ChipGetRegisters(pParams->handle_demod, REG_RC8CODEW_DVBSX_DEMOD_PLROOT2(demod),3);
-			*p_mode = ChipGetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_PLROOT2_PLSCRAMB_MODE(demod));
-			*p_code = (ChipGetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_PLROOT2_PLSCRAMB_ROOT(demod)) << 16) |
-					(ChipGetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_PLROOT1_PLSCRAMB_ROOT(demod)) << 8) |
-					(ChipGetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_PLROOT0_PLSCRAMB_ROOT(demod)));
-			if (pParams->handle_demod->Error) /*Check the error at the end of the function*/
+			error = ChipGetRegisters(state->base->ip.handle_demod, REG_RC8CODEW_DVBSX_DEMOD_PLROOT2(demod),3);
+			*p_mode = ChipGetFieldImage(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_PLROOT2_PLSCRAMB_MODE(demod));
+			*p_code = (ChipGetFieldImage(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_PLROOT2_PLSCRAMB_ROOT(demod)) << 16) |
+					(ChipGetFieldImage(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_PLROOT1_PLSCRAMB_ROOT(demod)) << 8) |
+					(ChipGetFieldImage(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_PLROOT0_PLSCRAMB_ROOT(demod)));
+			if (state->base->ip.handle_demod->Error) /*Check the error at the end of the function*/
 				error = FE_LLA_I2C_ERROR;
 		}
-	} else
-		error = FE_LLA_INVALID_HANDLE;
 
 	return (fe_lla_error_t)error;
 }
@@ -11382,59 +11120,59 @@ fe_lla_error_t fe_stid135_get_pls(fe_stid135_handle_t handle, enum fe_stid135_de
 --PARAMS OUT	::	NONE
 --RETURN	::	Error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_enable_constel_display(fe_stid135_handle_t handle, enum fe_stid135_demod demod,
+fe_lla_error_t fe_stid135_enable_constel_display(struct stv* state, enum fe_stid135_demod demod,
 	u8 measuring_point)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
-	struct fe_stid135_internal_param *pParams;
+	struct fe_stid135_internal_param *pParams = &state->base->ip;
 
-	pParams = (struct fe_stid135_internal_param *)handle;
+	//pParams = (struct fe_stid135_internal_param *)handle;
 
-	if(pParams != NULL) {
-		if (pParams->handle_demod->Error)
+
+		if (state->base->ip.handle_demod->Error)
 			error = FE_LLA_I2C_ERROR;
 		else {
 			// Output constellation display samples at symbol rate
 			// Test bus out and constellation point
-			error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_C8CODEW_TOP_CTRL_TSTOUT_TEST_OUT, 1);
+			error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_C8CODEW_TOP_CTRL_TSTOUT_TEST_OUT, 1);
 			switch(demod) {
 				case FE_SAT_DEMOD_1:
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_C8CODEW_PATH_CTRL_GEN_TBUSSEL_TBUS_SELECT(1), 0);
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_C8CODEW_TOP_CTRL_TSTOUT_TS, 0);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_C8CODEW_PATH_CTRL_GEN_TBUSSEL_TBUS_SELECT(1), 0);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_C8CODEW_TOP_CTRL_TSTOUT_TS, 0);
 				break;
 				case FE_SAT_DEMOD_2:
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_C8CODEW_PATH_CTRL_GEN_TBUSSEL_TBUS_SELECT(1), 1);
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_C8CODEW_TOP_CTRL_TSTOUT_TS, 0);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_C8CODEW_PATH_CTRL_GEN_TBUSSEL_TBUS_SELECT(1), 1);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_C8CODEW_TOP_CTRL_TSTOUT_TS, 0);
 				break;
 				case FE_SAT_DEMOD_3:
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_C8CODEW_PATH_CTRL_GEN_TBUSSEL_TBUS_SELECT(2), 0);
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_C8CODEW_TOP_CTRL_TSTOUT_TS, 1);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_C8CODEW_PATH_CTRL_GEN_TBUSSEL_TBUS_SELECT(2), 0);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_C8CODEW_TOP_CTRL_TSTOUT_TS, 1);
 				break;
 				case FE_SAT_DEMOD_4:
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_C8CODEW_PATH_CTRL_GEN_TBUSSEL_TBUS_SELECT(2), 1);
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_C8CODEW_TOP_CTRL_TSTOUT_TS, 1);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_C8CODEW_PATH_CTRL_GEN_TBUSSEL_TBUS_SELECT(2), 1);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_C8CODEW_TOP_CTRL_TSTOUT_TS, 1);
 				break;
 				case FE_SAT_DEMOD_5:
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_C8CODEW_PATH_CTRL_GEN_TBUSSEL_TBUS_SELECT(3), 0);
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_C8CODEW_TOP_CTRL_TSTOUT_TS, 2);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_C8CODEW_PATH_CTRL_GEN_TBUSSEL_TBUS_SELECT(3), 0);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_C8CODEW_TOP_CTRL_TSTOUT_TS, 2);
 				break;
 				case FE_SAT_DEMOD_6:
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_C8CODEW_PATH_CTRL_GEN_TBUSSEL_TBUS_SELECT(3), 1);
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_C8CODEW_TOP_CTRL_TSTOUT_TS, 2);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_C8CODEW_PATH_CTRL_GEN_TBUSSEL_TBUS_SELECT(3), 1);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_C8CODEW_TOP_CTRL_TSTOUT_TS, 2);
 				break;
 				case FE_SAT_DEMOD_7:
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_C8CODEW_PATH_CTRL_GEN_TBUSSEL_TBUS_SELECT(4), 0);
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_C8CODEW_TOP_CTRL_TSTOUT_TS, 3);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_C8CODEW_PATH_CTRL_GEN_TBUSSEL_TBUS_SELECT(4), 0);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_C8CODEW_TOP_CTRL_TSTOUT_TS, 3);
 				break;
 				case FE_SAT_DEMOD_8:
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_C8CODEW_PATH_CTRL_GEN_TBUSSEL_TBUS_SELECT(4), 1);
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_C8CODEW_TOP_CTRL_TSTOUT_TS, 3);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_C8CODEW_PATH_CTRL_GEN_TBUSSEL_TBUS_SELECT(4), 1);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_C8CODEW_TOP_CTRL_TSTOUT_TS, 3);
 				break;
 			}
 
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_TCTL1(demod), measuring_point);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_TCTL1(demod), measuring_point);
 			// MLCK on FE_GPIO14
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_C8CODEW_TOP_CTRL_GPIO14CFG, 0x7E);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_C8CODEW_TOP_CTRL_GPIO14CFG, 0x7E);
 			// I/Q constellation output (Alternate 5)
 			error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1002, 0x00555555);
 			error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1003, 0x00555555);
@@ -11446,13 +11184,11 @@ fe_lla_error_t fe_stid135_enable_constel_display(fe_stid135_handle_t handle, enu
 			error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1040, 0x3FF01F1B);
 			error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1040, 0x3F3F3F0F);
 			// Enable 270MHz clock which is mandatory in DVBS
-			error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DMDCFG4_DIS_CLKENABLE(demod), 1);
+			error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DMDCFG4_DIS_CLKENABLE(demod), 1);
 
-			if (pParams->handle_demod->Error) /* Check the error at the end of the function */
+			if (state->base->ip.handle_demod->Error) /* Check the error at the end of the function */
 				error = FE_LLA_I2C_ERROR;
 		}
-	} else
-		error = FE_LLA_INVALID_HANDLE;
 
 	return error;
 }
@@ -11465,58 +11201,55 @@ fe_lla_error_t fe_stid135_enable_constel_display(fe_stid135_handle_t handle, enu
 --PARAMS OUT	::	NONE
 --RETURN	::	Error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_disable_constel_display(fe_stid135_handle_t handle, enum fe_stid135_demod demod)
+fe_lla_error_t fe_stid135_disable_constel_display(struct stv* state, enum fe_stid135_demod demod)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
-	struct fe_stid135_internal_param *pParams;
-
-	pParams = (struct fe_stid135_internal_param *)handle;
-
-	if(pParams != NULL) {
-		if (pParams->handle_demod->Error)
+	struct fe_stid135_internal_param *pParams = &state->base->ip;
+	//	pParams = (struct fe_stid135_internal_param *)handle;
+		if (state->base->ip.handle_demod->Error)
 			error = FE_LLA_I2C_ERROR;
 		else {
 			// Output constellation display samples at symbol rate
 			// Test bus out and constellation point
-			error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_C8CODEW_TOP_CTRL_TSTOUT_TEST_OUT, 0);
+			error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_C8CODEW_TOP_CTRL_TSTOUT_TEST_OUT, 0);
 			switch(demod) {
 				case FE_SAT_DEMOD_1:
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_C8CODEW_PATH_CTRL_GEN_TBUSSEL_TBUS_SELECT(1), 0);
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_C8CODEW_TOP_CTRL_TSTOUT_TS, 0);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_C8CODEW_PATH_CTRL_GEN_TBUSSEL_TBUS_SELECT(1), 0);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_C8CODEW_TOP_CTRL_TSTOUT_TS, 0);
 				break;
 				case FE_SAT_DEMOD_2:
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_C8CODEW_PATH_CTRL_GEN_TBUSSEL_TBUS_SELECT(1), 0);
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_C8CODEW_TOP_CTRL_TSTOUT_TS, 0);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_C8CODEW_PATH_CTRL_GEN_TBUSSEL_TBUS_SELECT(1), 0);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_C8CODEW_TOP_CTRL_TSTOUT_TS, 0);
 				break;
 				case FE_SAT_DEMOD_3:
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_C8CODEW_PATH_CTRL_GEN_TBUSSEL_TBUS_SELECT(2), 0);
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_C8CODEW_TOP_CTRL_TSTOUT_TS, 0);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_C8CODEW_PATH_CTRL_GEN_TBUSSEL_TBUS_SELECT(2), 0);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_C8CODEW_TOP_CTRL_TSTOUT_TS, 0);
 				break;
 				case FE_SAT_DEMOD_4:
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_C8CODEW_PATH_CTRL_GEN_TBUSSEL_TBUS_SELECT(2), 0);
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_C8CODEW_TOP_CTRL_TSTOUT_TS, 0);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_C8CODEW_PATH_CTRL_GEN_TBUSSEL_TBUS_SELECT(2), 0);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_C8CODEW_TOP_CTRL_TSTOUT_TS, 0);
 				break;
 				case FE_SAT_DEMOD_5:
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_C8CODEW_PATH_CTRL_GEN_TBUSSEL_TBUS_SELECT(3), 0);
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_C8CODEW_TOP_CTRL_TSTOUT_TS, 0);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_C8CODEW_PATH_CTRL_GEN_TBUSSEL_TBUS_SELECT(3), 0);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_C8CODEW_TOP_CTRL_TSTOUT_TS, 0);
 				break;
 				case FE_SAT_DEMOD_6:
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_C8CODEW_PATH_CTRL_GEN_TBUSSEL_TBUS_SELECT(3), 0);
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_C8CODEW_TOP_CTRL_TSTOUT_TS, 0);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_C8CODEW_PATH_CTRL_GEN_TBUSSEL_TBUS_SELECT(3), 0);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_C8CODEW_TOP_CTRL_TSTOUT_TS, 0);
 				break;
 				case FE_SAT_DEMOD_7:
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_C8CODEW_PATH_CTRL_GEN_TBUSSEL_TBUS_SELECT(4), 0);
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_C8CODEW_TOP_CTRL_TSTOUT_TS, 0);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_C8CODEW_PATH_CTRL_GEN_TBUSSEL_TBUS_SELECT(4), 0);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_C8CODEW_TOP_CTRL_TSTOUT_TS, 0);
 				break;
 				case FE_SAT_DEMOD_8:
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_C8CODEW_PATH_CTRL_GEN_TBUSSEL_TBUS_SELECT(4), 0);
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_C8CODEW_TOP_CTRL_TSTOUT_TS, 0);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_C8CODEW_PATH_CTRL_GEN_TBUSSEL_TBUS_SELECT(4), 0);
+					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_C8CODEW_TOP_CTRL_TSTOUT_TS, 0);
 				break;
 			}
 
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_TCTL1(demod), 0x00);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_TCTL1(demod), 0x00);
 			// MLCK on FE_GPIO14
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_C8CODEW_TOP_CTRL_GPIO14CFG, 0x82);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_C8CODEW_TOP_CTRL_GPIO14CFG, 0x82);
 			// I/Q constellation output (Alternate 5)
 			error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1002, 0x00000000);
 			error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1003, 0x00000000);
@@ -11528,13 +11261,11 @@ fe_lla_error_t fe_stid135_disable_constel_display(fe_stid135_handle_t handle, en
 			error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1040, 0x00000000);
 			error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1040, 0x00000000);
 			// Enable 270MHz clock which is mandatory in DVBS
-			error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DMDCFG4_DIS_CLKENABLE(demod), 0);
+			error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DMDCFG4_DIS_CLKENABLE(demod), 0);
 
-			if (pParams->handle_demod->Error) /* Check the error at the end of the function */
+			if (state->base->ip.handle_demod->Error) /* Check the error at the end of the function */
 				error = FE_LLA_I2C_ERROR;
 		}
-	} else
-		error = FE_LLA_INVALID_HANDLE;
 
 	return error;
 }
@@ -11554,79 +11285,77 @@ and output as samples or symbols
 --PARAMS OUT	::	NONE
 --RETURN	::	Error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_set_vtm(fe_stid135_handle_t handle, enum fe_stid135_demod demod,
+fe_lla_error_t fe_stid135_set_vtm(struct stv* state, enum fe_stid135_demod demod,
 	u32 frequency_hz, u32 symbol_rate, enum fe_sat_rolloff roll_off)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
-	struct fe_stid135_internal_param *pParams;
+	struct fe_stid135_internal_param *pParams = &state->base->ip;
+	//	struct fe_stid135_internal_param *pParams;
 
-	pParams = (struct fe_stid135_internal_param *)handle;
+	//pParams = (struct fe_stid135_internal_param *)handle;
 
-	if(pParams != NULL) {
-		if (pParams->handle_demod->Error)
+		if (state->base->ip.handle_demod->Error)
 			error = FE_LLA_I2C_ERROR;
 		else {
-			error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEMOD_MANUALS2_ROLLOFF(demod), 1); // manual roll-off
-			error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEMOD_ROLLOFF_CONTROL(demod), roll_off); // roll-off selection
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DMDCFGMD(demod), 0x40); // DVB-S only
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DMDCFG3(demod), 0x0A);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DMDCFG4(demod), 0x04);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_HDEBITCFG2(demod), 0x54); // Simple wide band
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_HDEBITCFG0(demod), 0x08);
+			error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEMOD_MANUALS2_ROLLOFF(demod), 1); // manual roll-off
+			error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEMOD_ROLLOFF_CONTROL(demod), roll_off); // roll-off selection
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DMDCFGMD(demod), 0x40); // DVB-S only
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DMDCFG3(demod), 0x0A);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DMDCFG4(demod), 0x04);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_HDEBITCFG2(demod), 0x54); // Simple wide band
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_HDEBITCFG0(demod), 0x08);
 
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC2O(demod), 0x03); // AGC set-up: AGC2 remains active
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGCKS(demod), 0x02);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC2O(demod), 0x03); // AGC set-up: AGC2 remains active
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGCKS(demod), 0x02);
 
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CARCFG(demod), 0x06); // Carrier loop frozen
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_ACLCNLK(demod), 0x00);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_BCLCNLK(demod), 0x00);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_ACLCLK(demod), 0x00);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_BCLCLK(demod), 0x00);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CARFREQ(demod), 0x00);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CARHDR(demod), 0x00);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFR1BCFG(demod), 0x00);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRINC2(demod), 0x80);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRINC1(demod), 0x00);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRINC0(demod), 0x00);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFR2CFR1(demod), 0x00);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CARCFG(demod), 0x06); // Carrier loop frozen
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_ACLCNLK(demod), 0x00);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_BCLCNLK(demod), 0x00);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_ACLCLK(demod), 0x00);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_BCLCLK(demod), 0x00);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CARFREQ(demod), 0x00);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CARHDR(demod), 0x00);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFR1BCFG(demod), 0x00);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRINC2(demod), 0x80);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRINC1(demod), 0x00);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRINC0(demod), 0x00);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFR2CFR1(demod), 0x00);
 
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_RTCNLK(demod), 0x00); // Timing loop frozen
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_RTCLK(demod), 0x00);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_TMGCFG3(demod), 0x16);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_TMGREG2(demod), 0x00);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_TMGREG1(demod), 0x00);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_TMGREG0(demod), 0x00);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_RTCNLK(demod), 0x00); // Timing loop frozen
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_RTCLK(demod), 0x00);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_TMGCFG3(demod), 0x16);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_TMGREG2(demod), 0x00);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_TMGREG1(demod), 0x00);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_TMGREG0(demod), 0x00);
 
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_VITERBI_VITSCALE(demod), 0x04); // Prevents Viterbi block from locking
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_VITERBI_VTH78(demod), 0x00);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_VITERBI_PRVIT(demod), 0x60);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_VITERBI_VITSCALE(demod), 0x04); // Prevents Viterbi block from locking
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_VITERBI_VTH78(demod), 0x00);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_VITERBI_PRVIT(demod), 0x60);
 
-			error |= fe_stid135_enable_constel_display(handle, demod, 5);
+			error |= fe_stid135_enable_constel_display(state, demod, 5);
 
 			// Program carrier offset
-			error |= FE_STiD135_GetLoFreqHz(pParams, &(pParams->lo_frequency));
-			pParams->tuner_frequency[demod-1] = (s32)(frequency_hz - pParams->lo_frequency*1000000);
-			pParams->demod_search_range_hz[demod-1] = 60000000;
-			error |= fe_stid135_set_carrier_frequency_init(handle, (s32)frequency_hz, demod);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CARCFG(demod), 0x06); // Carrier loop frozen, one more time because fe_stid135_set_carrier_frequency_init() function writes 0x46 in it
+			error |= FE_STiD135_GetLoFreqHz(pParams, &(state->base->ip.lo_frequency));
+			state->tuner_frequency = (s32)(frequency_hz - state->base->ip.lo_frequency*1000000);
+			state->demod_search_range_hz = 60000000;
+			error |= fe_stid135_set_carrier_frequency_init(state, (s32)frequency_hz, demod);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CARCFG(demod), 0x06); // Carrier loop frozen, one more time because fe_stid135_set_carrier_frequency_init() function writes 0x46 in it
 			// Program SR
-			error |= fe_stid135_set_symbol_rate(pParams->handle_demod, pParams->master_clock, symbol_rate, demod);
+			error |= fe_stid135_set_symbol_rate(state, state->base->ip.master_clock, symbol_rate, demod);
 			// Launch a warm start (AEP = 0x18)
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DMDISTATE(demod), 0x18);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DMDISTATE(demod), 0x18);
 			// OPTION (should be automatic): Wait 100000 symbols and copy P1_CFRINIT2/1/0 values in P1_CFR2/1/0
 			/*WAIT_N_MS(100); // to be adapted
-			ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRINIT2(demod), &reg_value);
-			ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFR12(demod), reg_value);
-			ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRINIT1(demod), &reg_value);
-			ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFR11(demod), reg_value);
-			ChipGetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRINIT0(demod), &reg_value);
-			ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFR10(demod), reg_value);*/
+			ChipGetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRINIT2(demod), &reg_value);
+			ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFR12(demod), reg_value);
+			ChipGetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRINIT1(demod), &reg_value);
+			ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFR11(demod), reg_value);
+			ChipGetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRINIT0(demod), &reg_value);
+			ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFR10(demod), reg_value);*/
 
-			if (pParams->handle_demod->Error) /* Check the error at the end of the function */
+			if (state->base->ip.handle_demod->Error) /* Check the error at the end of the function */
 				error = FE_LLA_I2C_ERROR;
 		}
-	} else
-		error = FE_LLA_INVALID_HANDLE;
 
 	return error;
 }
@@ -11641,64 +11370,60 @@ context of demod register settings
 --PARAMS OUT	::	NONE
 --RETURN	::	Error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_unset_vtm(fe_stid135_handle_t handle, enum fe_stid135_demod demod)
+fe_lla_error_t fe_stid135_unset_vtm(struct stv* state, enum fe_stid135_demod demod)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
-	struct fe_stid135_internal_param *pParams;
+	//	struct fe_stid135_internal_param *pParams = &state->base->ip;
 
-	pParams = (struct fe_stid135_internal_param *)handle;
 
-	if(pParams != NULL) {
-		if (pParams->handle_demod->Error)
+		if (state->base->ip.handle_demod->Error)
 			error = FE_LLA_I2C_ERROR;
 		else {
-			error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEMOD_MANUALS2_ROLLOFF(demod), 0);
-			error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEMOD_ROLLOFF_CONTROL(demod), 0);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DMDCFGMD(demod), 0xC8);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DMDCFG3(demod), 0x08);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DMDCFG4(demod), 0x00);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_HDEBITCFG2(demod), 0x94);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_HDEBITCFG0(demod), 0x01);
+			error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEMOD_MANUALS2_ROLLOFF(demod), 0);
+			error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEMOD_ROLLOFF_CONTROL(demod), 0);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DMDCFGMD(demod), 0xC8);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DMDCFG3(demod), 0x08);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DMDCFG4(demod), 0x00);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_HDEBITCFG2(demod), 0x94);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_HDEBITCFG0(demod), 0x01);
 
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC2O(demod), 0x5B);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGCKS(demod), 0x00);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC2O(demod), 0x5B);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGCKS(demod), 0x00);
 
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CARCFG(demod), 0xC6);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_ACLCNLK(demod), 0x28);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_BCLCNLK(demod), 0x18);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_ACLCLK(demod), 0x28);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_BCLCLK(demod), 0x18);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CARFREQ(demod), 0x79);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CARHDR(demod), 0x18);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFR1BCFG(demod), 0x67);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRINC2(demod), 0x05);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRINC1(demod), 0x29);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRINC0(demod), 0x58);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFR2CFR1(demod), 0x25);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CARCFG(demod), 0xC6);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_ACLCNLK(demod), 0x28);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_BCLCNLK(demod), 0x18);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_ACLCLK(demod), 0x28);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_BCLCLK(demod), 0x18);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CARFREQ(demod), 0x79);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CARHDR(demod), 0x18);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFR1BCFG(demod), 0x67);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRINC2(demod), 0x05);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRINC1(demod), 0x29);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRINC0(demod), 0x58);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFR2CFR1(demod), 0x25);
 
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_RTCNLK(demod), 0x56);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_RTCLK(demod), 0x56);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_TMGCFG3(demod), 0x06);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_TMGREG2(demod), 0x40);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_TMGREG1(demod), 0x06);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_TMGREG0(demod), 0xEC);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_RTCNLK(demod), 0x56);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_RTCLK(demod), 0x56);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_TMGCFG3(demod), 0x06);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_TMGREG2(demod), 0x40);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_TMGREG1(demod), 0x06);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_TMGREG0(demod), 0xEC);
 
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_VITERBI_VITSCALE(demod), 0x00);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_VITERBI_VTH78(demod), 0x28);
-			error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_VITERBI_PRVIT(demod), 0xBF);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_VITERBI_VITSCALE(demod), 0x00);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_VITERBI_VTH78(demod), 0x28);
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_VITERBI_PRVIT(demod), 0xBF);
 
-			if (pParams->handle_demod->Error) /* Check the error at the end of the function */
+			if (state->base->ip.handle_demod->Error) /* Check the error at the end of the function */
 				error = FE_LLA_I2C_ERROR;
 		}
-	} else
-		error = FE_LLA_INVALID_HANDLE;
 
 	return error;
 }
 
-STCHIP_Error_t stvvglna_init(SAT_VGLNA_Params_t *InitParams, STCHIP_Handle_t *hChipHandle)
+STCHIP_Error_t stvvglna_init(SAT_VGLNA_Params_t *InitParams, STCHIP_Info_t* *hChipHandle)
 {
-	STCHIP_Handle_t hChip = NULL;
+	STCHIP_Info_t* hChip = NULL;
 	STCHIP_Error_t error = CHIPERR_NO_ERROR;
 	u32 reg_value;
 	u8 i;
@@ -11752,7 +11477,7 @@ STCHIP_Error_t stvvglna_init(SAT_VGLNA_Params_t *InitParams, STCHIP_Handle_t *hC
 }
 
 
-STCHIP_Error_t stvvglna_set_standby(STCHIP_Handle_t hChip, U8 StandbyOn)
+STCHIP_Error_t stvvglna_set_standby(STCHIP_Info_t* hChip, U8 StandbyOn)
 {
 	STCHIP_Error_t error = CHIPERR_NO_ERROR;
 
@@ -11775,7 +11500,7 @@ STCHIP_Error_t stvvglna_set_standby(STCHIP_Handle_t hChip, U8 StandbyOn)
 	return error;
 }
 
-STCHIP_Error_t stvvglna_get_status(STCHIP_Handle_t hChip, U8 *Status)
+STCHIP_Error_t stvvglna_get_status(STCHIP_Info_t* hChip, U8 *Status)
 {
 	STCHIP_Error_t error = CHIPERR_NO_ERROR;
 	s32 flagAgcLow,flagAgcHigh;
@@ -11806,7 +11531,7 @@ STCHIP_Error_t stvvglna_get_status(STCHIP_Handle_t hChip, U8 *Status)
 }
 
 
-STCHIP_Error_t stvvglna_get_gain(STCHIP_Handle_t hChip,S32 *Gain)
+STCHIP_Error_t stvvglna_get_gain(STCHIP_Info_t* hChip,S32 *Gain)
 {
 
 	S32 VGO, swlnaGain;
@@ -11836,7 +11561,7 @@ STCHIP_Error_t stvvglna_get_gain(STCHIP_Handle_t hChip,S32 *Gain)
 }
 
 
-STCHIP_Error_t stvvglna_term(STCHIP_Handle_t hChip)
+STCHIP_Error_t stvvglna_term(STCHIP_Info_t* hChip)
 {
 	STCHIP_Error_t error = CHIPERR_NO_ERROR;
 
