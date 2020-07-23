@@ -518,7 +518,7 @@ fe_lla_error_t fe_stid135_fft(struct stv* state, enum fe_stid135_demod path, u32
 	error |= ChipSetRegisters(pParams->handle_demod, REG_RC8CODEW_DVBSX_DEMOD_CFRINIT2(path),3);
 
 	// Set bandwidth (symbol rate)
-	error |= fe_stid135_set_symbol_rate(state, pParams->master_clock, range, path);
+	error |= fe_stid135_set_symbol_rate(state, range);
 
 
 	// start acquisition

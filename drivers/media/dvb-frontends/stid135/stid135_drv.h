@@ -503,7 +503,7 @@ fe_lla_error_t  FE_STiD135_CarrierGetQuality(STCHIP_Info_t* hChip, enum fe_stid1
 				enum fe_sat_tracking_standard* foundStandard);
 
 
-	fe_lla_error_t FE_STiD135_GetErrors(struct stv* state, enum fe_stid135_demod Demod,
+	fe_lla_error_t FE_STiD135_GetErrors(struct stv* state,
 		double *Errors, double *bits, double *Packets, double *Ber);
 	fe_lla_error_t fe_stid135_start_per(fe_stid135_handle_t handle, enum fe_stid135_demod demod, u8 Mode);
 
@@ -538,24 +538,22 @@ fe_lla_error_t  FE_STiD135_CarrierGetQuality(STCHIP_Info_t* hChip, enum fe_stid1
 					unsigned char *Status,
 							BOOL fer_dvbs2x);
 
-fe_lla_error_t fe_stid135_get_lock_status(struct stv* state, enum fe_stid135_demod Demod,
+fe_lla_error_t fe_stid135_get_lock_status(struct stv* state,
 																								BOOL* carrier_lock, BOOL *data);
-fe_lla_error_t fe_stid135_get_data_status(struct stv* state, enum fe_stid135_demod Demod, BOOL* Locked_p);
+fe_lla_error_t fe_stid135_get_data_status(struct stv* state, BOOL* Locked_p);
 
 
 fe_lla_error_t  FE_STiD135_GetErrorCount(STCHIP_Info_t* hChip,
 	enum fe_stid135_error_counter Counter, enum fe_stid135_demod Demod, u32* ber_p);
 
-fe_lla_error_t FE_STiD135_Algo(struct stv* state,
-	enum fe_stid135_demod Demod, BOOL satellite_scan, enum fe_sat_signal_type *signalType_p);
+fe_lla_error_t FE_STiD135_Algo(struct stv* state, BOOL satellite_scan, enum fe_sat_signal_type *signalType_p);
 
 fe_lla_error_t FE_STiD135_GetStandard(STCHIP_Info_t* hChip,
 	enum fe_stid135_demod Demod, enum fe_sat_tracking_standard *foundStandard_p);
 
 TUNER_Error_t FE_STiD135_TunerInit(struct fe_stid135_internal_param *pParams);
 
-fe_lla_error_t FE_STiD135_SetSearchStandard(struct stv* state,
-	enum fe_stid135_demod Demod);
+fe_lla_error_t FE_STiD135_SetSearchStandard(struct stv* state);
 
 fe_lla_error_t get_soc_block_freq(struct fe_stid135_internal_param* pParams, u8 clkout_number, u32* clkout_p);
 
@@ -563,198 +561,181 @@ fe_lla_error_t  FE_STiD135_GetMclkFreq (struct fe_stid135_internal_param* pParam
 
 			fe_lla_error_t  FE_STiD135_GetLoFreqHz (struct fe_stid135_internal_param* pParams, u32* LoFreq_p);
 
-fe_lla_error_t FE_STiD135_WaitForLock(struct stv* state,enum fe_stid135_demod Demod,
+fe_lla_error_t FE_STiD135_WaitForLock(struct stv* state,
 																			u32 DemodTimeOut,u32 FecTimeOut,BOOL satellite_scan, s32* lock_p,
 																			BOOL* fec_lock_p);
 
 
 /* ---------------- Exported functions (API) ---------------------- */
 fe_lla_error_t fe_stid135_get_signal_quality(struct stv* state,
-					enum fe_stid135_demod demod,
 					struct fe_sat_signal_info *pInfo,
 					int mc_auto);
 
 fe_lla_error_t fe_stid135_get_signal_info(struct stv* state,
-	enum fe_stid135_demod Demod, struct fe_sat_signal_info *pInfo,
+																					struct fe_sat_signal_info *pInfo,
 	u32 satellite_scan);
 
-fe_lla_error_t fe_stid135_tracking(struct stv* state, enum fe_stid135_demod Demod,
+fe_lla_error_t fe_stid135_tracking(struct stv* state,
 							 struct fe_sat_tracking_info *pTrackingInfo)  ;
 
 fe_lla_error_t FE_STiD135_Term(struct fe_stid135_internal_param* pParams);
 
-fe_lla_error_t	fe_stid135_search  (struct stv* state, enum fe_stid135_demod demod,
+fe_lla_error_t	fe_stid135_search  (struct stv* state,
 	struct fe_sat_search_params *pSearch, struct fe_sat_search_result *pResult,
 	BOOL satellite_scan);
 
 fe_lla_error_t  fe_stid135_init(struct fe_sat_init_params *pInit,
-																struct fe_stid135_internal_param*pParams,
-																struct stv* state_demod1);
+																struct fe_stid135_internal_param*pParams);
 
 ST_Revision_t FE_STiD135_GetRevision(void);
 
-fe_lla_error_t FE_STiD135_GetStatus(struct stv* state, enum fe_stid135_demod Demod, struct status_bit_fields* status_p);
+fe_lla_error_t FE_STiD135_GetStatus(struct stv* state, struct status_bit_fields* status_p);
 
-fe_lla_error_t fe_stid135_reset_obs_registers(struct stv* state, enum fe_stid135_demod Demod);
+fe_lla_error_t fe_stid135_reset_obs_registers(struct stv* state);
 
 fe_lla_error_t fe_stid135_get_matype_infos(struct stv* state,
-			enum fe_stid135_demod Demod, struct fe_sat_dvbs2_matype_info_t *matype_infos);
+																					 struct fe_sat_dvbs2_matype_info_t *matype_infos);
 
 fe_lla_error_t fe_stid135_get_slice_list(struct stv* state,
-		struct fe_stid135_slice_list *SlcList, enum fe_stid135_demod Demod);
+		struct fe_stid135_slice_list *SlcList);
 
-fe_lla_error_t fe_stid135_set_slice(struct stv* state,
-		enum fe_stid135_demod Demod, u8 SliceID);
+fe_lla_error_t fe_stid135_set_slice(struct stv* state, u8 SliceID);
 
-fe_lla_error_t fe_stid135_get_slice_info(struct stv* state,
-		enum fe_stid135_demod Demod, u8 SliceId, struct fe_sat_slice *pSliceInfo);
+fe_lla_error_t fe_stid135_get_slice_info(struct stv* state, u8 SliceId, struct fe_sat_slice *pSliceInfo);
 
 fe_lla_error_t fe_stid135_tuner_enable(STCHIP_Info_t* tuner_handle, FE_OXFORD_TunerPath_t tuner_nb);
 
-fe_lla_error_t fe_stid135_set_rfmux_path(struct stv* state,
-			enum fe_stid135_demod demod, FE_OXFORD_TunerPath_t tuner);
+fe_lla_error_t fe_stid135_set_rfmux_path_(STCHIP_Info_t* hChip, 	enum fe_stid135_demod Demod,
+																					FE_OXFORD_TunerPath_t tuner);
+fe_lla_error_t fe_stid135_set_rfmux_path(struct stv* state, FE_OXFORD_TunerPath_t tuner);
 
-fe_lla_error_t fe_stid135_set_ts_parallel_serial(struct stv* state, enum fe_stid135_demod demod, enum fe_ts_output_mode ts_mode);
+
+fe_lla_error_t fe_stid135_set_ts_parallel_serial(struct fe_stid135_internal_param *pParams, enum fe_stid135_demod demod, enum fe_ts_output_mode ts_mode);
 
 fe_lla_error_t fe_stid135_enable_stfe(struct fe_stid135_internal_param* pParams, enum fe_stid135_stfe_output stfe_output);
 
 fe_lla_error_t fe_stid135_set_stfe(struct fe_stid135_internal_param* pParams, enum fe_stid135_stfe_mode mode, u8 stfe_input_path,
 	enum fe_stid135_stfe_output stfe_output_path, u8 tag_header);
 
-fe_lla_error_t fe_stid135_enable_pid (struct stv* state,
-		 enum fe_stid135_demod	demod, u32 pid_number);
+fe_lla_error_t fe_stid135_enable_pid (struct stv* state, u32 pid_number);
 
-fe_lla_error_t fe_stid135_disable_pid (struct stv* state,
-			enum fe_stid135_demod demod, u32 pid_number);
+fe_lla_error_t fe_stid135_disable_pid (struct stv* state, u32 pid_number);
 
-fe_lla_error_t fe_stid135_select_rangepid (struct stv* state,
-	 enum fe_stid135_demod demod,u32 pid_start_range, u32 pid_stop_range);
+fe_lla_error_t fe_stid135_select_rangepid (struct stv* state, u32 pid_start_range, u32 pid_stop_range);
 
-fe_lla_error_t fe_stid135_enable_allpid (struct stv* state,
-	enum fe_stid135_demod demod);
+fe_lla_error_t fe_stid135_enable_allpid (struct stv* state);
 
-fe_lla_error_t fe_stid135_disable_allpid (struct stv* state,
-	enum fe_stid135_demod demod);
+fe_lla_error_t fe_stid135_disable_allpid (struct stv* state);
 
-fe_lla_error_t fe_stid135_changepid_number (struct stv* state,
-	enum fe_stid135_demod demod,u32 pid_inputnumber,u32 pid_outputnumber);
+fe_lla_error_t fe_stid135_changepid_number (struct stv* state, u32 pid_inputnumber,u32 pid_outputnumber);
 
-fe_lla_error_t fe_stid135_disable_rangepid (struct stv* state,
-	 enum fe_stid135_demod demod,u32 pid_start_range, u32 pid_stop_range);
+fe_lla_error_t fe_stid135_disable_rangepid (struct stv* state, u32 pid_start_range, u32 pid_stop_range);
 
-fe_lla_error_t fe_stid135_enable_protocoltype(struct stv* state,
-enum fe_stid135_demod demod, u16 protocoltype);
+fe_lla_error_t fe_stid135_enable_protocoltype(struct stv* state, u16 protocoltype);
 
-fe_lla_error_t fe_stid135_disable_protocoltype(struct stv* state,
- enum fe_stid135_demod demod, u16 protocoltype);
+fe_lla_error_t fe_stid135_disable_protocoltype(struct stv* state, u16 protocoltype);
 
-fe_lla_error_t fe_stid135_disable_allprotocoltype(struct stv* state,
- enum fe_stid135_demod demod);
+fe_lla_error_t fe_stid135_disable_allprotocoltype(struct stv* state);
 
-fe_lla_error_t fe_stid135_enable_allprotocoltype(struct stv* state,
- enum fe_stid135_demod demod);
+fe_lla_error_t fe_stid135_enable_allprotocoltype(struct stv* state);
 
-fe_lla_error_t fe_stid135_disable_allgselabel(struct stv* state,
-	enum fe_stid135_demod demod);
+fe_lla_error_t fe_stid135_disable_allgselabel(struct stv* state);
 
-fe_lla_error_t fe_stid135_enable_allgselabel(struct stv* state,
-	enum fe_stid135_demod demod);
+fe_lla_error_t fe_stid135_enable_allgselabel(struct stv* state);
 
-fe_lla_error_t fe_stid135_enable_gselabel(struct stv* state,
-		enum fe_stid135_demod demod, enum label_type gselabel_type, u8 gselabel[6]);
+fe_lla_error_t fe_stid135_enable_gselabel(struct stv* state, enum label_type gselabel_type, u8 gselabel[6]);
 
-fe_lla_error_t fe_stid135_disable_gselabel(struct stv* state,
-	enum fe_stid135_demod	demod, u8 gselabel[6]);
+fe_lla_error_t fe_stid135_disable_gselabel(struct stv* state, u8 gselabel[6]);
 
-fe_lla_error_t fe_stid135_select_ncr_source(struct stv* state,
-					enum fe_stid135_demod demod);
+fe_lla_error_t fe_stid135_select_ncr_source(struct stv* state);
 
-fe_lla_error_t fe_stid135_get_ncr_lock_status(struct stv* state,
-		enum fe_stid135_demod demod, BOOL* ncr_lock_status_p);
+			fe_lla_error_t fe_stid135_get_ncr_lock_status(struct stv* state, BOOL* ncr_lock_status_p);
 
 fe_lla_error_t fe_stid135_set_modcodes_filter(struct stv* state,
-						enum fe_stid135_demod demod,
 						struct fe_sat_dvbs2_mode_t *MODCODES_MASK,
 						s32 NbModes);
 
-fe_lla_error_t fe_stid135_reset_modcodes_filter(struct stv* state,
-								 enum fe_stid135_demod demod);
+fe_lla_error_t fe_stid135_reset_modcodes_filter(struct stv* state);
 
 fe_lla_error_t fe_stid135_modcodes_inventory(struct stv* state,
-						enum fe_stid135_demod demod,
 						u8 *MODES_Inventory,
 						u8 *NbModes,
 						u16 Duration);
 
 fe_lla_error_t fe_stid135_filter_forbidden_modcodes(struct stv* state,
-						enum fe_stid135_demod demod,
 						s32 cnr);
 
 fe_lla_error_t fe_stid135_get_soc_temperature(struct fe_stid135_internal_param* pParams, s16 *soc_temp);
 
-fe_lla_error_t fe_stid135_isi_scan(struct stv* state, enum fe_stid135_demod demod, struct fe_sat_isi_struct_t *p_isi_struct);
+fe_lla_error_t fe_stid135_isi_scan(struct stv* state, struct fe_sat_isi_struct_t *p_isi_struct);
 
-fe_lla_error_t fe_stid135_get_list_isi(struct stv* state, enum fe_stid135_demod demod, u8 *p_min_isi, u8 *p_max_isi);
+fe_lla_error_t fe_stid135_get_list_isi(struct stv* state, u8 *p_min_isi, u8 *p_max_isi);
 
-fe_lla_error_t fe_stid135_get_isi(struct stv* state, enum fe_stid135_demod demod, u8 *p_isi_current);
+fe_lla_error_t fe_stid135_get_isi(struct stv* state, u8 *p_isi_current);
 
-fe_lla_error_t fe_stid135_select_isi(struct stv* state, enum fe_stid135_demod demod, u8 isi_wanted);
+fe_lla_error_t fe_stid135_select_isi(struct stv* state, u8 isi_wanted);
 
-fe_lla_error_t fe_stid135_set_mis_filtering(struct stv* state, enum fe_stid135_demod demod, BOOL EnableFiltering, u8 mis_filter, u8 mis_mask);
+fe_lla_error_t fe_stid135_set_mis_filtering(struct stv* state, BOOL EnableFiltering, u8 mis_filter, u8 mis_mask);
 
-fe_lla_error_t fe_stid135_unlock(struct stv* state, enum fe_stid135_demod demod);
+fe_lla_error_t fe_stid135_unlock(struct stv* state);
 
 fe_lla_error_t fe_stid135_set_abort_flag(struct fe_stid135_internal_param* pParams, BOOL abort);
 
 fe_lla_error_t fe_stid135_set_standby(struct fe_stid135_internal_param* pParams, u8 standby_on);
 
-fe_lla_error_t fe_stid135_clear_filter_ram(struct stv* state, enum fe_stid135_demod demod);
+fe_lla_error_t fe_stid135_clear_filter_ram(struct stv* state);
 
-fe_lla_error_t fe_stid135_get_packet_error_rate(struct stv* state, enum fe_stid135_demod demod, u32 *packets_error_count, u32 *total_packets_count);
+fe_lla_error_t fe_stid135_get_packet_error_rate(struct stv* state, u32 *packets_error_count, u32 *total_packets_count);
 
-fe_lla_error_t FE_STiD135_GetRFLevel(struct stv* state,
-			enum fe_stid135_demod Demod, s32 *pch_rf, s32 *pband_rf);
+fe_lla_error_t FE_STiD135_GetRFLevel(struct stv* state, s32 *pch_rf, s32 *pband_rf);
 
-fe_lla_error_t fe_stid135_unselect_ncr(struct stv* state,
-					enum fe_stid135_demod demod);
-fe_lla_error_t	fe_stid135_set_maxllr_rate(struct stv* state,
-		enum fe_stid135_demod demod, u32 maxllr_rate);
+fe_lla_error_t fe_stid135_unselect_ncr(struct stv* state);
+fe_lla_error_t	fe_stid135_set_maxllr_rate(struct stv* state, u32 maxllr_rate);
 
 fe_lla_error_t FE_STiD135_TunerStandby(STCHIP_Info_t* TunerHandle, FE_OXFORD_TunerPath_t TunerNb, u8 Enable);
 
-fe_lla_error_t fe_stid135_get_band_power_demod_not_locked(struct stv* state,
-			enum fe_stid135_demod Demod, s32 *pband_rf);
+fe_lla_error_t fe_stid135_get_band_power_demod_not_locked(struct stv* state, s32 *pband_rf);
 
 fe_lla_error_t estimate_band_power_demod_for_fft(struct stv* state,
-																								 enum fe_stid135_demod Demod,
 																								 u8 TunerNb,
 																								 s32 *Pbandx1000, s32 frequency);
 
 fe_lla_error_t fe_stid135_get_cut_id(struct fe_stid135_internal_param* pParams, enum device_cut_id *cut_id);
 
-			fe_lla_error_t fe_stid135_apply_custom_qef_for_modcod_filter(struct stv* state, int x,
-																																	 struct mc_array_customer *mc_flt,
-																																	 int y);
+			fe_lla_error_t fe_stid135_apply_custom_qef_for_modcod_filter(struct stv* state,
+																																	 struct mc_array_customer *mc_flt);
 
 fe_lla_error_t fe_stid135_multi_normal_short_tuning(struct fe_stid135_internal_param* pParams);
 
+			fe_lla_error_t fe_stid135_bb_flt_calib_(struct fe_stid135_internal_param *pParams,
+																							enum fe_stid135_demod Demod, FE_OXFORD_TunerPath_t tuner_nb);
+			fe_lla_error_t fe_stid135_bb_flt_calib(struct stv* state, FE_OXFORD_TunerPath_t tuner_nb);
+			fe_lla_error_t fe_stid135_bb_flt_calib(struct stv* state, FE_OXFORD_TunerPath_t tuner_nb);
+
+fe_lla_error_t fe_stid135_init_before_bb_flt_calib_(struct fe_stid135_internal_param *pParams, enum fe_stid135_demod Demod,
+																										FE_OXFORD_TunerPath_t tuner_nb, BOOL squarewave_generation);
+
 fe_lla_error_t fe_stid135_init_before_bb_flt_calib(struct stv* state,
-																									 enum fe_stid135_demod Demod,
 	FE_OXFORD_TunerPath_t tuner_nb, BOOL squarewave_generation);
 
+			fe_lla_error_t fe_stid135_uninit_after_bb_flt_calib_(struct fe_stid135_internal_param* pParams,
+																													 enum fe_stid135_demod Demod,
+																										 FE_OXFORD_TunerPath_t tuner_nb);
+
 fe_lla_error_t fe_stid135_uninit_after_bb_flt_calib(struct stv* state,
-																										enum fe_stid135_demod Demod,
 																										FE_OXFORD_TunerPath_t tuner_nb);
 
-			fe_lla_error_t fe_stid135_measure_harmonic(struct stv* state, enum fe_stid135_demod Demod, u32 desired_frequency, u8 harmonic, u32 *val_5bin);
-fe_lla_error_t fe_stid135_bb_flt_calib(struct stv* state, enum fe_stid135_demod Demod, FE_OXFORD_TunerPath_t tuner_nb);
+			fe_lla_error_t fe_stid135_measure_harmonic(struct fe_stid135_internal_param *pParams,
+																								 enum fe_stid135_demod Demod,
+																								 u32 desired_frequency, u8 harmonic, u32 *val_5bin);
 
-fe_lla_error_t fe_stid135_set_gold_code(struct stv* state, enum fe_stid135_demod demod, u32 goldcode);
-fe_lla_error_t fe_stid135_set_goldcold_root(struct stv* state, enum fe_stid135_demod demod, u32 goldcold_root);
-fe_lla_error_t fe_stid135_disable_goldcold(struct stv* state, enum fe_stid135_demod demod);
 
-fe_lla_error_t fe_stid135_set_pls(struct stv* state, enum fe_stid135_demod demod, u8 pls_mode, u32 pls_code );
-fe_lla_error_t fe_stid135_get_pls(struct stv* state, enum fe_stid135_demod demod, u8 *p_mode, u32 *p_code );
+fe_lla_error_t fe_stid135_set_gold_code(struct stv* state, u32 goldcode);
+fe_lla_error_t fe_stid135_set_goldcold_root(struct stv* state, u32 goldcold_root);
+fe_lla_error_t fe_stid135_disable_goldcold(struct stv* state);
+
+fe_lla_error_t fe_stid135_set_pls(struct stv* state, u8 pls_mode, u32 pls_code );
+fe_lla_error_t fe_stid135_get_pls(struct stv* state, u8 *p_mode, u32 *p_code );
 
 fe_lla_error_t fe_stid135_diseqc_init(struct fe_stid135_internal_param* pParams, FE_OXFORD_TunerPath_t tuner_nb, enum fe_sat_diseqc_txmode diseqc_mode);
 
@@ -766,23 +747,21 @@ fe_lla_error_t fe_stid135_diseqc_reset(struct fe_stid135_internal_param* pParams
 
 fe_lla_error_t fe_stid135_set_22khz_cont(struct fe_stid135_internal_param* pParams, FE_OXFORD_TunerPath_t tuner_nb, BOOL tone);
 
-fe_lla_error_t fe_stid135_set_vtm(struct stv* state, enum fe_stid135_demod demod,
+fe_lla_error_t fe_stid135_set_vtm(struct stv* state,
 	u32 frequency_hz, u32 symbol_rate, enum fe_sat_rolloff roll_off);
 
-fe_lla_error_t fe_stid135_unset_vtm(struct stv* state, enum fe_stid135_demod demod);
+fe_lla_error_t fe_stid135_unset_vtm(struct stv* state);
 
-fe_lla_error_t fe_stid135_enable_constel_display(struct stv* state, enum fe_stid135_demod demod,
+fe_lla_error_t fe_stid135_enable_constel_display(struct stv* state,
 						u8 measuring_point);
 
-fe_lla_error_t fe_stid135_disable_constel_display(struct stv* state, enum fe_stid135_demod demod);
+fe_lla_error_t fe_stid135_disable_constel_display(struct stv* state);
 
 fe_lla_error_t fe_stid135_set_carrier_frequency_init(struct stv* state,
-				s32 frequency_hz, enum fe_stid135_demod demod);
-			fe_lla_error_t fe_stid135_set_symbol_rate(struct stv* state, u32 master_clock,
-				u32 symbol_rate, enum fe_stid135_demod demod);
+				s32 frequency_hz);
+fe_lla_error_t fe_stid135_set_symbol_rate(struct stv* state,  u32 symbol_rate);
 
-fe_lla_error_t fe_stid135_manage_matype_info(struct stv* state,
-						enum fe_stid135_demod Demod);
+fe_lla_error_t fe_stid135_manage_matype_info(struct stv* state);
 
 STCHIP_Error_t stvvglna_init(SAT_VGLNA_Params_t *InitParams, STCHIP_Info_t* *hChipHandle);
 STCHIP_Error_t stvvglna_set_standby(STCHIP_Info_t* hChip, U8 StandbyOn);
