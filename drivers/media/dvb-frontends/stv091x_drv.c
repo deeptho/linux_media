@@ -1079,7 +1079,6 @@ static int stv091x_set_search_range(struct stv *state, struct dtv_frontend_prope
 	s32 range;
 	if(p->algorithm == ALGORITHM_WARM) {
 		range = 1000;
-		range = (range<<16)/(state->base->mclk/1000); //1Mhz
 	} else if(p->algorithm == ALGORITHM_COLD || p->algorithm == ALGORITHM_COLD_BEST_GUESS) {
 		/* CFR min =- (search_range/2 + margin )
 			 CFR max = +(search_range/2 + margin)
@@ -1089,7 +1088,6 @@ static int stv091x_set_search_range(struct stv *state, struct dtv_frontend_prope
 			range=(state->search_range/2000)+80;
 		else
 			range=(state->search_range/2000)+1600;
-		range = (range<<16)/(state->base->mclk/1000);
 	} else if(p->algorithm == ALGORITHM_BLIND || ALGORITHM_SEARCH_NEXT||
 						p->algorithm == ALGORITHM_BLIND_BEST_GUESS) {
 		if(state->satellite_scan) {
@@ -1106,8 +1104,8 @@ static int stv091x_set_search_range(struct stv *state, struct dtv_frontend_prope
 		//set limits on how far we can search for a carrier
 		//default search_range=16 000 000; make it less for lower symbol rate
 		range = (state->search_range / 2000);
-		range = (range << 16) / (state->base->mclk / 1000);
 	}
+	range = (range<<16)/(state->base->mclk/1000); //1Mhz
 	write_reg(state, RSTV0910_P2_CFRUP1 + state->regoff,
 						(range >> 8) & 0xff);
 	write_reg(state, RSTV0910_P2_CFRUP0 + state->regoff, (range & 0xff));
@@ -2045,7 +2043,7 @@ static int stv091x_carrier_check(struct stv* state, s32 *FinalFreq, s32* frequen
 	tmp3= read_reg(state, RSTV0910_P2_BCLC);
 	write_reg(state, RSTV0910_P2_BCLC,0x00);
 	tmp4= read_reg(state, RSTV0910_P2_CARFREQ);
-	write_reg(state, RSTV0910_P2_CARFREQ,0x00);
+	write_reg(state, RSTV0910_P2_CARFREQ,0x00); //stop coarse carrrier corr
 
 	write_reg(state, RSTV0910_P2_AGC2REF,0x38);
 
@@ -2259,7 +2257,7 @@ static int scan_within_tuner_bw(struct dvb_frontend *fe, bool* locked_ret)
 	if (state->symbol_rate < 100000 || state->symbol_rate > 70000000)
 		return -EINVAL;
 	stv091x_compute_timeouts(&state->DemodTimeout, &state->FecTimeout, state->symbol_rate, p->algorithm);
-	stv091x_set_frequency_symbol_rate_bandwidth(state);
+	stv091x_set_frequency_symbol_rate_bandwidth(state); //bw set to max. symbol_rate set to 1MHz
 
 
 	state->ReceiveMode = Mode_None;
