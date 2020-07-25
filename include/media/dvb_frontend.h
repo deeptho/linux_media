@@ -707,6 +707,7 @@ struct dtv_frontend_properties {
 	s32 scan_start_frequency;
 	s32 scan_end_frequency;
 	s32 scan_resolution;
+	s32 scan_fft_size;
 };
 
 #define DVB_FE_NO_EXIT  0

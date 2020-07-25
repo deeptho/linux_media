@@ -1168,6 +1168,7 @@ static struct dtv_cmds_h dtv_cmds[DTV_MAX_COMMAND + 1] = {
 	_DTV_CMD(DTV_SCAN_START_FREQUENCY, 1, 0),
 	_DTV_CMD(DTV_SCAN_END_FREQUENCY, 1, 0),
 	_DTV_CMD(DTV_SCAN_RESOLUTION, 1, 0),
+	_DTV_CMD(DTV_SCAN_FFT_SIZE, 1, 0),
 	_DTV_CMD(DTV_ISI_LIST, 0, 0),
 	_DTV_CMD(DTV_PLS_SEARCH_RANGE, 1, 0),
 	_DTV_CMD(DTV_PLS_SEARCH_LIST, 1, 0),
@@ -1463,6 +1464,9 @@ static int dtv_property_process_get(struct dvb_frontend *fe,
 		break;
 	case DTV_SCAN_RESOLUTION:
 		tvp->u.data = c->scan_resolution;
+		break;
+	case DTV_SCAN_FFT_SIZE:
+		tvp->u.data = c->scan_fft_size;
 		break;
 	case DTV_SPECTRUM:
 		dtv_get_spectrum(fe, &tvp->u.spectrum);
@@ -1980,6 +1984,9 @@ static int dtv_property_process_set_int(struct dvb_frontend *fe,
 	case DTV_SCAN_RESOLUTION:
 		c->scan_resolution = data;
 		break;
+	case DTV_SCAN_FFT_SIZE:
+		c->scan_fft_size = data;
+		break;
 
 	case DTV_SEARCH_RANGE:
 		c->search_range = data;
@@ -2262,13 +2269,17 @@ static int init_dtv_fe_spectrum_scan(struct dtv_fe_spectrum* s, struct dtv_front
 		s->num_freq =1;
 	s->freq= kzalloc(s->num_freq * (sizeof(s->freq[0])), GFP_KERNEL);
 	s->rf_level= kzalloc(s->num_freq * (sizeof(s->rf_level[0])), GFP_KERNEL);
-	if (!s->freq || !s->rf_level) {
+	s->rf_band= kzalloc(s->num_freq * (sizeof(s->rf_band[0])), GFP_KERNEL);
+	if (!s->freq || !s->rf_level || !s->rf_band) {
 		if(s->freq)
 			kfree(s->freq);
 		if(s->rf_level)
 			kfree(s->rf_level);
+		if(s->rf_band)
+			kfree(s->rf_band);
 		s->num_freq = 0;
 		s->rf_level= NULL;
+		s->rf_band= NULL;
 		s->freq = NULL;
 		return -ENOMEM;
 	}
@@ -2750,8 +2761,8 @@ static int dtv_get_spectrum(struct dvb_frontend *fe, struct dtv_fe_spectrum* use
 	u32 num_freq = kernel->num_freq;
 	if(num_freq > user->num_freq)
 		num_freq = user->num_freq;
-	//copy all data (freq and rf_level, stored in the same buffer)
-	if(user->freq == NULL || user->rf_level==0) {
+	//copy all data (freq and rf_level, rf_band)
+	if(user->freq == NULL || user->rf_level==0 || user->rf_band==0) {
 		dev_err(fe->dvb->device,
 						"%s: called without allocated memory\n",
 						__func__);
@@ -2764,6 +2775,10 @@ static int dtv_get_spectrum(struct dvb_frontend *fe, struct dtv_fe_spectrum* use
 		err = -EFAULT;
 	}
 	if (copy_to_user((void __user*) user->rf_level, kernel->rf_level, num_freq * sizeof(__s32))) {
+		err = -EFAULT;
+	}
+
+	if (copy_to_user((void __user*) user->rf_band, kernel->rf_band, num_freq * sizeof(__s32))) {
 		err = -EFAULT;
 	}
 

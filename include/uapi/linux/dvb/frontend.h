@@ -595,8 +595,9 @@ enum fe_interleaving {
 #define DTV_SCAN_START_FREQUENCY 79
 #define DTV_SCAN_END_FREQUENCY 80
 #define DTV_SCAN_RESOLUTION 81
-#define DTV_SCAN 82
-#define DTV_SPECTRUM 83
+#define DTV_SCAN_FFT_SIZE 82
+#define DTV_SCAN 83
+#define DTV_SPECTRUM 84
 
 #define DTV_MAX_COMMAND	 DTV_SPECTRUM
 
@@ -929,6 +930,7 @@ enum dtv_fe_spectrum_method {
 struct dtv_fe_spectrum {
 	__u32 *freq;
 	__s32 *rf_level;
+	__s32 *rf_band;
 	__u32 num_freq;
 	__u32 scale; //FE_SCALE_DECIBEL; or FE_SCALE_RELATIVE
 	__u8 spectrum_method;
