@@ -234,28 +234,6 @@ struct fe_stid135_internal_param {
 	STCHIP_Info_t* handle_anafe; /*  Handle to AFE */
 	STCHIP_Info_t* handle_fpga; /*  Handle to FPGA */
 	STCHIP_Info_t* handle_soc; /*  Handle to SOC */
-#if 0 //TEST
-	enum fe_sat_rolloff roll_off[8]; /* manual RollOff for DVBS1/DSS only */
-
-	/* Demod */
-	enum fe_sat_search_standard	demod_search_standard[8];/* Search standard:
-					Auto, DVBS1/DSS only or DVBS2 only*/
-	enum fe_sat_search_algo		demod_search_algo[8]; /* Algorithm for
-						search Blind, Cold or Warm*/
-	enum fe_sat_search_iq_inv	demod_search_iq_inv[8]; /* I,Q
-					inversion search : auto, auto norma
-					first, normal or inverted */
-	enum fe_sat_rate		demod_puncture_rate[8];
-	enum fe_sat_modcode		demod_modcode[8];
-	enum fe_sat_modulation		demod_modulation[8];
-	struct fe_sat_search_result	demod_results[8]; /* Results of the
-					search */
-	fe_lla_error_t			demod_error[8]; /* Last error
-					encountered */
-	u32				demod_symbol_rate[8]; /* Symbol rate (Bds) */
-
-	u32				demod_search_range_hz[8]; /* Search range (Hz) */
-#endif
 	u32				quartz;/* Demod Reference frequency (Hz) */
 	u8			internal_dcdc; /* DCDC supply either internal or external */
 	u8			internal_ldo; /* LDO supply either internal or external */
@@ -384,7 +362,6 @@ struct stv {
 	s32 scan_next_frequency;
 	s32 scan_end_frequency;
 
-#if 1 // TEST
 	enum fe_sat_rolloff roll_off; /* manual RollOff for DVBS1/DSS only */
 
 	/* Demod */
@@ -409,7 +386,6 @@ struct stv {
 	struct gse_ram_byte		gse_flt;
 	BOOL	mis_mode; /* Memorisation of MIS mode */
 	struct modcod_data	mc_flt[NB_SAT_MODCOD];
-#endif
 
 };
 
@@ -698,7 +674,7 @@ fe_lla_error_t fe_stid135_get_band_power_demod_not_locked(struct stv* state, s32
 
 fe_lla_error_t estimate_band_power_demod_for_fft(struct stv* state,
 																								 u8 TunerNb,
-																								 s32 *Pbandx1000, s32 frequency);
+																								 s32 *Pbandx1000, bool* double_correction);
 
 fe_lla_error_t fe_stid135_get_cut_id(struct fe_stid135_internal_param* pParams, enum device_cut_id *cut_id);
 

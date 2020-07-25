@@ -77,6 +77,15 @@ static fe_lla_error_t fe_stid135_fft_save_registers(fe_stid135_handle_t handle, 
 	Reg[i++] = fld_value;
 	error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_AGC1ADJ_AGC1_ADJUSTED(path), &reg_value);
 	Reg[i++] = reg_value;
+
+#if 0
+	error |= ChipGetField(pParams->handle_demod,  FLD_FSTID135_AFE_AFE_AGC2_CTRL_AGC2_BB_CTRL+	DVBSX_DEMOD[path-1], &reg_value);
+	Reg[i++] = reg_value;
+	error |= ChipGetField(pParams->handle_demod,  FLD_FSTID135_AFE_AFE_AGC2_CTRL_AGC2_RF_CTRL+	DVBSX_DEMOD[path-1], &reg_value);
+	Reg[i++] = reg_value;
+#endif
+
+
 	error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_AGC2ADJ_AGC2ADJ_MANUAL(path), &fld_value);
 	Reg[i++] = fld_value;
 	error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_AGC2ADJ_AGC2REF_XXDB(path), &reg_value);
@@ -190,7 +199,7 @@ static fe_lla_error_t fe_stid135_fft_save_registers(fe_stid135_handle_t handle, 
 --RETURN	::	Error (if any)
 --***************************************************/
 fe_lla_error_t fe_stid135_init_fft(fe_stid135_handle_t handle, enum fe_stid135_demod path,
-																	 FE_OXFORD_TunerPath_t tuner_nb, s32 Reg[60])
+																	 FE_OXFORD_TunerPath_t tuner_nb, int fft_mode, s32 Reg[60])
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	struct fe_stid135_internal_param *pParams;
@@ -212,7 +221,11 @@ fe_lla_error_t fe_stid135_init_fft(fe_stid135_handle_t handle, enum fe_stid135_d
 	/* Agc blocked */
 	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_AGC1ADJ_AGC1ADJ_MANUAL(path), 1);
 	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_AGC2ADJ_AGC2ADJ_MANUAL(path), 1);
-	//error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_AGC2O_AGC2_COEF(path), 0);
+#if 0
+	error |= ChipSetField(pParams->handle_demod,  FLD_FSTID135_AFE_AFE_AGC2_CTRL_AGC2_BB_CTRL +	DVBSX_DEMOD[path-1], 1); //max gain
+	error |= ChipSetField(pParams->handle_demod,  FLD_FSTID135_AFE_AFE_AGC2_CTRL_AGC2_RF_CTRL +	DVBSX_DEMOD[path-1], 1); //max gain
+#endif
+	//error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_AGC2O_AGC2_COEF(path), 0);0
 
 	//configure decimation filters
 	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_FILTCFGM_FILTRE1_MANUEL(path), 1);
@@ -240,8 +253,8 @@ fe_lla_error_t fe_stid135_init_fft(fe_stid135_handle_t handle, enum fe_stid135_d
 		//select continuous update of spectrum after 2 scans
 	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_UPDCONT_UPD_CONTINUOUS(path), 0);
 #endif
-	// Request 256 samples; max would be 4096 samples
-	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_FFTCTRL_FFT_MODE(path), 5);
+	// Request 256 samples; max would be 4096 samples: note: the actual call will later change this value
+	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_FFTCTRL_FFT_MODE(path), fft_mode);
 
 	//negative frequencies are stored at lowest index (matlab fftshift)
 	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_FFTCTRL_FFT_SHIFT(path), 1);
@@ -279,7 +292,7 @@ fe_lla_error_t fe_stid135_init_fft(fe_stid135_handle_t handle, enum fe_stid135_d
 	#endif
 
 	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEBUG1_DEBUG_INTERSYMBOL(path), 0);	// Off
-#if 0
+#if 1
 	//spectrum will be in log format: (PSD=val*3/64 dB) (unsigned)
 	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEBUG1_MODE_DB(path), 1);
 #else
@@ -288,9 +301,13 @@ fe_lla_error_t fe_stid135_init_fft(fe_stid135_handle_t handle, enum fe_stid135_d
 	//read power spectral density instead of fft result
 	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEBUG1_SEL_MEM(path), 0);
 
+#if 1
 	//format will be 32 bit, not 16 bit
 	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEBUG1_MODE_FULL(path), 1);
-
+#else
+		//format will be 16 bit, not 32 bit
+	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEBUG1_MODE_FULL(path), 0);
+#endif
 	//do not discards the values for which CTEHT=0. (unsigned)
 	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEBUG1_CFO_FILT(path), 0);
 	//store the result
@@ -386,6 +403,12 @@ fe_lla_error_t fe_stid135_term_fft(fe_stid135_handle_t handle, enum fe_stid135_d
 	error |= ChipSetField (pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_AGC1ADJ_AGC1ADJ_MANUAL(path), Reg[i++]);
 	error |= ChipSetField (pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_AGC2ADJ_AGC2ADJ_MANUAL(path), Reg[i++]);
 	error |= ChipSetField (pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_AGC1ADJ_AGC1_ADJUSTED(path), Reg[i++]);
+
+#if 0
+	error |= ChipSetField(pParams->handle_demod,  FLD_FSTID135_AFE_AFE_AGC2_CTRL_AGC2_BB_CTRL+	DVBSX_DEMOD[path-1], Reg[i++]);
+	error |= ChipSetField(pParams->handle_demod,  FLD_FSTID135_AFE_AFE_AGC2_CTRL_AGC2_RF_CTRL+	DVBSX_DEMOD[path-1], Reg[i++]);
+#endif
+
 	error |= ChipSetField (pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_AGC2ADJ_AGC2REF_XXDB(path), Reg[i++]);
 
 	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_FILTCFGM(path), (u32)Reg[i++]);
@@ -460,7 +483,8 @@ fe_lla_error_t fe_stid135_term_fft(fe_stid135_handle_t handle, enum fe_stid135_d
 			Begin -> first value on table of data
 --RETURN	::	Error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_fft(struct stv* state, enum fe_stid135_demod path, u32 mode, u32 nb_acquisition, s32 freq, u32 range, u32 *tab, u32* begin)
+fe_lla_error_t fe_stid135_fft(struct stv* state, enum fe_stid135_demod path, u32 mode, u32 nb_acquisition, s32 freq,
+															u32 range, u32 *tab, u32* begin, s32 buffer_size)
 {
 	struct fe_stid135_internal_param *pParams = &state->base->ip;
 	u32 nb_words =0;
@@ -576,7 +600,7 @@ fe_lla_error_t fe_stid135_fft(struct stv* state, enum fe_stid135_demod path, u32
 #if 0
 		WAIT_N_MS(5);
 #else
-		WAIT_N_MS(1);
+		//WAIT_N_MS(1);
 #endif
 
 		error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMADDR1_MEM_ADDR(path), (i>>8) & 0x03);
@@ -603,10 +627,17 @@ fe_lla_error_t fe_stid135_fft(struct stv* state, enum fe_stid135_demod path, u32
 				val[2] = ChipGetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMVA00_MEM_VAL0(path) + ((4 * j) << 16));
 				val[1] = ChipGetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMVA11_MEM_VAL1(path) + ((4 * j) << 16));
 				val[0] = ChipGetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMVA10_MEM_VAL1(path) + ((4 * j) << 16));
+#if 0
 				val_max = STLog10(((val[3] & 0x7) << 24) + (val[2] << 16) + (val[1] << 8) + val[0])
-					+693* exp;
+					+3010* exp;
+#else
+				//PSD=val*3/64 dB
+				val_max = ((((val[3] & 0x7) << 24) + (val[2] << 16) + (val[1] << 8) + val[0]) * 3000*XtoPowerY(2, exp))/64;
+#endif
 				bin = (u32)(i*4+j);
-				tab[nbr_pts-bin-1] = 10*(u32)val_max; 	// fill the table back to front
+				if(nbr_pts-bin-1 < 0 || nbr_pts-bin-1 >= buffer_size)
+					dprintk("BUG!!!! nbr_pts-bin-1=%d max=%d\n", nbr_pts-bin-1, buffer_size);
+				tab[nbr_pts-bin-1] = (u32)val_max; 	// fill the table back to front
 			}
 		} else if(fld_value == 0) { // 16-bit mode
 			// read temporary memory
@@ -614,9 +645,15 @@ fe_lla_error_t fe_stid135_fft(struct stv* state, enum fe_stid135_demod path, u32
 				error |= ChipGetRegisters(pParams->handle_demod, (u16)(REG_RC8CODEW_DVBSX_DEMOD_MEMVA01(path) + (2 * j)), 2);
 				val[3] = ChipGetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMVA01_MEM_VAL0(path) + ((2 * j) << 16)); // 16 = address bus width for demod
 				val[2] = ChipGetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMVA00_MEM_VAL0(path) + ((2 * j) << 16));
-				val_max = STLog10((val[3] << 8) + val[2]) + 693*exp;
+#if 0
+				val_max = STLog10((val[3] << 8) + val[2]) + 3010*exp;
+#else
+					val_max = (((val[3] << 8) + val[2]) * 3000*XtoPowerY(2, exp))/64;
+#endif
 				bin = (u32)(i*8+j);
-				tab[nbr_pts-bin-1] = 10*(u32)val_max; 	// fil the table back to front; unit is 0.001dB
+				if(nbr_pts-bin-1 < 0 || bin >= buffer_size)
+					dprintk("BUG!!!! bin=%d max=%d\n", bin, buffer_size);
+				tab[nbr_pts-bin-1] = (u32)val_max; 	// fil the table back to front; unit is 0.001dB
 			}
 		}
 	}
