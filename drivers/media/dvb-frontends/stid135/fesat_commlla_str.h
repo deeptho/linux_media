@@ -294,7 +294,8 @@ struct fe_sat_search_params {
 		u32 				frequency;		/* Transponder frequency (in KHz)				*/
 		u32 				symbol_rate;		/* Transponder symbol rate  (in bds)				*/
 		u32 				search_range_hz;		/* Range of the search (in Hz)  				*/
-		enum fe_sat_search_standard	standard;		/* DVBS1,DVBS2, DSS or Turbo					*/
+	enum fe_sat_search_standard	standard;		/* DVBS1,DVBS2, DSS or Turbo					*/
+	s32 stream_id;
 		enum fe_sat_modulation		modulation;		/* modulation type use	FE_MOD_UNKNOWN for auto 		*/
 		enum fe_sat_rate		puncture_rate;		/* DVBS1,DSS and turbo puncture rate use FE_PR_UNKNOWN for auto	*/
 		enum fe_sat_modcode		modcode;		/* DVBS2 modcode use FE_MODCODE_UNKNOWN for auto		*/
@@ -310,8 +311,8 @@ struct fe_sat_search_params {
 	};
 
 struct fe_sat_search_result {
-	  BOOL 				locked;		/* Transponder found 			*/
-	  BOOL        has_carrier;  /*Some signal was found*/
+//	  BOOL 				locked;		/* Transponder found 			*/
+//	  BOOL        has_carrier;  /*Some signal was found*/
 		u32				frequency;	/* Found frequency	 		*/
 		u32 				symbol_rate;	/* Found Symbol rate			*/
 		enum fe_sat_tracking_standard	standard;	/* Found Standard DVBS1,DVBS2 or DSS	*/
@@ -337,16 +338,21 @@ typedef  struct fe_sat_isi_struct_t  fe_sat_isi_struct;
 
 
 struct fe_sat_signal_info {
-	bool timedout; /*tuning has timed out*/
+	//bool timedout; /*tuning has timed out*/
 	bool fec_locked;
 	bool demod_locked;
 	bool satellite_scan;
 	///existing data
-	BOOL        tuned;   /*tuning has finished*/
+	bool        has_signal;   /*tuning has finished*/
+	bool        has_carrier;  /*Some signal was found*/
+	bool        has_viterbi;
+	bool        has_sync;
+	bool        has_timedout;
+	bool        has_lock;
+#if 0 //NEW
 	//BOOL        timedout;
-	BOOL        has_carrier;  /*Some signal was found*/
 	BOOL 				locked;		/* Transponder locked					*/
-	BOOL 				data_present;		/* Data found on Transponder*/
+#endif
 	u32 				frequency;	/* Transponder frequency (in KHz)			*/
 	u32 				symbol_rate;	/* Transponder symbol rate  (in Mbds)			*/
 

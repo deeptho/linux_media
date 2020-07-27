@@ -815,14 +815,8 @@ static int wait_for_dmdlock(struct dvb_frontend *fe, bool require_data)
 				//dprintk("vstatusvit=%d\n", vstatusvit);
 
 				if (vstatusvit&0x08 /*LOCKEDVIT viterbi locked*/) {
-#if 0
-					if (STV091X_READ_FIELD(state, TSFIFO_LINEOK)) {
-						lock = 1;
-					}
-#else
 					state->fec_locked = 1;
 					lock = 1;
-#endif
 				}
 			}
 			break;
@@ -990,7 +984,6 @@ void stv091x_compute_timeouts(s32* demod_timeout, s32* fec_timeout, s32 symbol_r
 			fec timeout = same as cold*/
 		(*demod_timeout)/=2;
 	}
-
 }
 
 static void stv091x_set_symbol_rate(struct stv* state, u32 symbol_rate)
@@ -1073,6 +1066,7 @@ int stv091x_set_frequency_symbol_rate_bandwidth(struct stv* state)
 
 	return 0;
 }
+
 
 static int stv091x_set_search_range(struct stv *state, struct dtv_frontend_properties *p)
 {
@@ -1196,7 +1190,7 @@ static int stv091x_set_search_standard(struct stv *state, struct dtv_frontend_pr
 	u8 regDMDCFGMD;
 
 
-		if(p->algorithm == ALGORITHM_WARM)
+	if(p->algorithm == ALGORITHM_WARM)
 		state->DEMOD |= 0x80; //manual mode for rolloff
 	else
 		state->DEMOD &= ~0x80; //automatic mode for rolloff
@@ -1835,6 +1829,7 @@ static s32 stv091x_narrow_band_signal_power_dbm(struct dvb_frontend *fe)
 	return (x-y) + (-520 - stv091x_agc1_power_gain_dbm(state)) +17991; //unit is 0.001dB
 }
 
+
 static int read_status(struct dvb_frontend *fe, enum fe_status *status)
 {
 	struct stv *state = fe->demodulator_priv;
@@ -1864,7 +1859,7 @@ static int read_status(struct dvb_frontend *fe, enum fe_status *status)
 		DStatus = read_reg(state, RSTV0910_P2_DSTATUS + state->regoff);
 		dprintk("DStatus=%d\n", DStatus);
 		if (DStatus & 0x80)
-			*status |= FE_HAS_CARRIER;
+			*status |= FE_HAS_CARRIER; // *carrierlock==True
 		if (DStatus & 0x08)
 			CurReceiveMode = (DmdState & 0x20) ?
 				Mode_DVBS : Mode_DVBS2;
@@ -1896,11 +1891,11 @@ static int read_status(struct dvb_frontend *fe, enum fe_status *status)
 		if (state->ReceiveMode == Mode_DVBS2) {
 			u8 PDELStatus;
 			PDELStatus = read_reg(state, RSTV0910_P2_PDELSTATUS1 + state->regoff);
-			FECLock = (PDELStatus & 0x02) != 0;
+			FECLock = (PDELStatus & 0x02) != 0; //*datapresent==True
 		} else {
 			u8 VStatus;
 			VStatus = read_reg(state, RSTV0910_P2_VSTATUSVIT + state->regoff);
-			FECLock = (VStatus & 0x08) != 0;
+			FECLock = (VStatus & 0x08) != 0; //*datapresent==True
 		}
 	}
 	dprintk("FECLock=%d\n", FECLock);
@@ -2122,6 +2117,7 @@ static int stv091x_carrier_check(struct stv* state, s32 *FinalFreq, s32* frequen
 
 			if ((agc2ratio > STV0910_BLIND_SEARCH_AGC2BANDWIDTH) && (agc2level==minagc2level)) {	 /* rising edge */
 				asperity=1;		 /* The first edge is rising */
+				//never triggered!
 				waitforfall=1;
 				for (l=0;l<5*div;l++) {
 					agc2leveltab[l]= agc2level;
@@ -2347,7 +2343,7 @@ static int tune_once(struct dvb_frontend *fe, bool* need_retune)
 		 p->algorithm == ALGORITHM_BLIND_BEST_GUESS)
 		dprintk("SET_STREAM_INDEX: %d\n", p->stream_id);
 		set_stream_index(state, p->stream_id);
-	stv091x_start_scan(state, p);
+		stv091x_start_scan(state, p);
 		break;
 	default:
 		dprintk("This function should not be called with algorithm=%d\n", p->algorithm);
@@ -2440,10 +2436,6 @@ static int tune(struct dvb_frontend *fe, bool re_tune,
 	r = read_status(fe, status);
 	if(state->timedout)
 		*status |= FE_TIMEDOUT;
-#if 0
-	else
-		*status |= FE_HAS_CARRIER| FE_HAS_VITERBI; //needed in case of transponders without DVBS1/2
-#endif
 	if (r)
 		return r;
 

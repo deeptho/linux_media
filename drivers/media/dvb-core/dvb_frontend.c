@@ -759,6 +759,7 @@ restart:
 					dev_dbg(fe->dvb->device, "%s: Sscan requested, FESTATE_SCANNING\n", __func__);
 					if (fe->ops.scan)
 						fe->ops.scan(fe, fepriv->state & FESTATE_SCAN_NEXT , &fepriv->delay, &s);
+					fepriv->state = FESTATE_IDLE;
 				}	 else if (fepriv->state & FESTATE_GETTING_SPECTRUM) {
 					dev_dbg(fe->dvb->device, "%s: Spectrum requested, DTV_SPECTRUM\n", __func__);
 					dprintk("starting spectrum scan\n");

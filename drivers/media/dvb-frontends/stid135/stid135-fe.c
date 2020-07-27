@@ -420,6 +420,130 @@ static void stid135_release(struct dvb_frontend *fe)
 	kfree(state);
 }
 
+
+
+
+static bool pls_search_list(struct dvb_frontend *fe)
+{
+	fe_lla_error_t error = FE_LLA_NO_ERROR;
+	struct stv *state = fe->demodulator_priv;
+	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
+	int i = 0;
+	int locked = 0;
+	s32 fld_value;
+	u8 matype_info;
+	u8 isi;
+	for(i=0; i<p->pls_search_codes_len;++i) {
+		u32 pls_code = p->pls_search_codes[i];
+		s32 pktdelin;
+		u8 timeout = pls_code & 0xff;
+		dprintk("Trying scrambling mode=%d code %d timeout=%d\n", (pls_code>>26) & 0x3, (pls_code>>8) & 0x3FFFF, timeout);
+		set_pls_mode_code(state, (pls_code>>26) & 0x3, (pls_code>>8) & 0x3FFFF);
+		//write_reg(state, RSTV0910_P2_DMDISTATE + state->regoff, 0x15);
+		//write_reg(state, RSTV0910_P2_DMDISTATE + state->regoff, 0x18);
+		msleep(timeout? timeout: 25); //0 means: use default
+		error =ChipGetField(state->base->ip.handle_demod,
+												FLD_FC8CODEW_DVBSX_PKTDELIN_PDELSTATUS1_PKTDELIN_LOCK(state->nr+1), &pktdelin);
+		if(error)
+			dprintk("FAILED; error=%d\n", error);
+
+
+		if (pktdelin/*packet delineator locked*/) {
+			locked=1;
+			dprintk("PLS LOCKED\n");
+		} else {
+			dprintk("PLS NOT LOCKED\n");
+		}
+		//locked = wait_for_dmdlock(fe, 1 /*require_data*/);
+		//dprintk("RESULT=%d\n", locked);
+			if(locked) {
+#ifdef TODO
+				u8 stream_id;
+				write_reg(state, RSTV0910_P2_PDELCTRL0 + state->regoff, 0);
+				msleep(40);
+				stream_id = read_reg(state, RSTV0910_P2_MATSTR1);
+				stream_id = read_reg(state, RSTV0910_P2_MATSTR0);
+				dprintk("selecting stream_id=%d\n", stream_id);
+				p->stream_id = 	(stream_id&0xff) | (pls_code & ~0xff);
+#endif
+				error = fe_stid135_read_hw_matype(state, &matype_info, &isi);
+				state->mis_mode= !fe_stid135_check_sis_or_mis(matype_info);
+				dprintk("selecting stream_id=%d\n", isi);
+				p->stream_id = 	(isi&0xff) | (pls_code & ~0xff);
+				break;
+			}
+					if (kthread_should_stop() || dvb_frontend_task_should_stop(fe)) {
+			dprintk("exiting on should stop\n");
+			break;
+		}
+
+	}
+
+	if(locked) {
+		FE_STiD135_GetFECLock(state, 200, &locked);
+		dprintk("FEC LOCK=%d\n", locked);
+	}
+	return locked;
+}
+
+
+static bool pls_search_range(struct dvb_frontend *fe)
+{
+	struct stv *state = fe->demodulator_priv;
+	fe_lla_error_t error = FE_LLA_NO_ERROR;
+	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
+	u32 pls_code = 0;
+	int locked = 0;
+	u8 timeout = p->pls_search_range_start & 0xff;
+	int count=0;
+	u8 matype_info;
+	u8 isi;
+	if(timeout==0)
+		timeout = 20;
+	atomic_set(&fe->algo_state.cur_index, 0);
+	atomic_set(&fe->algo_state.max_index, (p->pls_search_range_end - p->pls_search_range_start)>>8);
+	for(pls_code=p->pls_search_range_start; pls_code<p->pls_search_range_end; pls_code += 0xff, count++) {
+		u8 pktdelin;
+		if((count+= timeout)>=1000) {
+			dprintk("Trying scrambling mode=%d code %d timeout=%d ...\n",
+							(pls_code>>26) & 0x3, (pls_code>>8) & 0x3FFFF, timeout);
+			atomic_add(count, &fe->algo_state.cur_index);
+			count=0;
+			wake_up_interruptible(&fe->algo_state.wait_queue);
+		}
+		set_pls_mode_code(state, (pls_code>>26) & 0x3, (pls_code>>8) & 0x3FFFF);
+		//write_reg(state, RSTV0910_P2_DMDISTATE + state->regoff, 0x15);
+		//write_reg(state, RSTV0910_P2_DMDISTATE + state->regoff, 0x18);
+		msleep(timeout? timeout: 25); //0 means: use default
+#ifdef TODO
+		pktdelin = read_reg(state, RSTV0910_P2_PDELSTATUS1 + state->regoff);
+#endif
+		if (pktdelin&0x02 /*packet delineator locked*/)
+			locked=1;
+		//locked = wait_for_dmdlock(fe, 0 /*require_data*/);
+		if (kthread_should_stop() || dvb_frontend_task_should_stop(fe)) {
+			dprintk("exiting on should stop\n");
+			break;
+		}
+		dprintk("RESULT=%d\n", locked);
+		if(locked) {
+#ifdef TODO
+			u8 stream_id=0;
+				write_reg(state, RSTV0910_P2_PDELCTRL0 + state->regoff, 0);
+				msleep(40);
+				stream_id = read_reg(state, RSTV0910_P2_MATSTR1); //dummy read. Apparantly needed!
+				stream_id = read_reg(state, RSTV0910_P2_MATSTR0);
+#endif
+				error = fe_stid135_read_hw_matype(state, &matype_info, &isi);
+				dprintk("selecting stream_id=%d\n", isi);
+				p->stream_id = 	(isi&0xff) | (pls_code & ~0xff);
+				break;
+			}
+	}
+	return locked;
+}
+
+
 static int stid135_set_parameters(struct dvb_frontend *fe)
 {
 	struct stv *state = fe->demodulator_priv;
@@ -429,12 +553,12 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 	//struct fe_stid135_internal_param *p_params = &state->base->ip;
 	struct fe_sat_search_params search_params;
 	struct fe_sat_search_result search_results;
-	u32 pls_mode, pls_code;
+	u32 pls_code;
 	s32 rf_power;
 	BOOL satellite_scan =0;
 	//BOOL lock_stat=0;
 	struct fe_sat_signal_info* signal_info = &state->signal_info;
-
+	memset(signal_info, 0, sizeof(*signal_info));
 	dev_dbg(&state->base->i2c->dev,
 			"delivery_system=%u modulation=%u frequency=%u symbol_rate=%u inversion=%u stream_id=%d\n",
 			p->delivery_system, p->modulation, p->frequency,
@@ -448,6 +572,7 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 	case ALGORITHM_WARM:
 		search_params.search_algo		= FE_SAT_WARM_START;
 		satellite_scan = 0;
+			;
 		break;
 
 	case ALGORITHM_COLD:
@@ -474,18 +599,23 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 		//todo
 		break;
 	}
-
+	search_params.stream_id = p->stream_id;
 #else
 	search_params.search_algo		= FE_SAT_WARM_START;
 #endif
 	search_params.frequency		=  p->frequency*1000;
+#if 0 //LATEST
 	search_params.symbol_rate		=		(search_params.search_algo == FE_SAT_BLIND_SEARCH ||
 																	 search_params.search_algo == FE_SAT_NEXT
 																	 ) ?    30000000/*to prevent error detected*/ : p->symbol_rate;
+#else
+	search_params.symbol_rate		=		p->symbol_rate;
+	dprintk("symbol_rate=%dkS/s\n",  p->symbol_rate/1000);
+#endif
 	search_params.modulation	= FE_SAT_MOD_UNKNOWN;
 	search_params.modcode		= FE_SAT_DUMMY_PLF;
-	search_params.search_range_hz	= p->search_range > 0 ? p->search_range : 10000000;
-	//dprintk("Search range set to %d\n", search_params.search_range_hz);
+	search_params.search_range_hz	= p->search_range > 0 ? p->search_range : 1000000;
+	dprintk("SEARCH range set to %d (p=%d)\n", search_params.search_range_hz, p->search_range );
 
 	search_params.puncture_rate	= FE_SAT_PR_UNKNOWN;
 	if(	search_params.standard != FE_SAT_AUTO_SEARCH)
@@ -518,7 +648,7 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 
 	dev_dbg(&state->base->i2c->dev, "%s: demod %d + tuner %d\n", __func__, state->nr, state->rf_in);
 	err |= fe_stid135_set_rfmux_path(state, state->rf_in + 1);
-
+#if 0
 	if (p->stream_id == NO_STREAM_ID_FILTER) {
 		pls_mode = 0;
 		pls_code = 1;
@@ -546,7 +676,7 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 	dev_dbg(&state->base->i2c->dev, "%s: set pls_mode %d, pls_code %d !\n", __func__, pls_mode, pls_code);
 	err |= fe_stid135_set_pls(state, pls_mode, pls_code);
 #endif
-
+#endif
 
 	if (err != FE_LLA_NO_ERROR)
 		dev_err(&state->base->i2c->dev, "%s: fe_stid135_set_pls error %d !\n", __func__, err);
@@ -561,59 +691,67 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 	if (err != FE_LLA_NO_ERROR)
 		dev_err(&state->base->i2c->dev, "%s: fe_stid135_reset_modcodes_filter error %d !\n", __func__, err);
 #endif
+
+
 	err |= (error1=fe_stid135_search(state, &search_params, &search_results, satellite_scan));
 	if(error1!=0)
 		dprintk("fe_stid135_search returned error=%d\n", error1);
-	if (err != FE_LLA_NO_ERROR)
-	{
+	if (err != FE_LLA_NO_ERROR) {
 		mutex_unlock(&state->base->status_lock);
 		dev_err(&state->base->i2c->dev, "%s: fe_stid135_search error %d !\n", __func__, err);
 		return -1;
 	}
 
-	dprintk("set_parameters: error=%d locked=%d\n", err, search_results.locked);
-	if (search_results.locked){
-		state->signal_info.locked = 1;
-		state->signal_info.timedout = 0;
-		state->signal_info.tuned = 1;
-		dprintk("set_parameters: error=%d locked=%d\n", err, state->signal_info.locked);
+	if(!state->signal_info.has_viterbi && p->algorithm != ALGORITHM_WARM) {
+		bool locked=false;
+		print_signal_info("(before trying pls)", &state->signal_info);
+		locked=pls_search_list(fe);
+		if(!locked)
+			locked=pls_search_range(fe);
+		if(locked)
+			state->signal_info.has_lock=true;
+		dprintk("PLS locked=%d\n", locked);
+		print_signal_info("(PLS)", &state->signal_info);
+		if(locked) {
+			set_stream_index(state, p->stream_id);
+			print_signal_info("(PLS2)", &state->signal_info);
+		}
+	} else {
+
 #if 1
+	set_stream_index(state, p->stream_id);
+#endif
+	}
+
+	//state->DemodLockTime += TUNING_DELAY;
+	dprintk("setting timedout=%d\n", !state->signal_info.has_sync);
+	state->signal_info.has_timedout = !state->signal_info.has_sync;
+
+
+	dprintk("set_parameters: error=%d locked=%d vit=%d sync=%d timeout=%d\n", err, state->signal_info.has_lock,
+					state->signal_info.has_viterbi,					state->signal_info.has_sync,
+					state->signal_info.has_timedout);
+
+	if (state->signal_info.has_carrier){
+
+		dprintk("set_parameters: error=%d locked=%d\n", err, state->signal_info.has_lock);
+
 		dev_dbg(&state->base->i2c->dev, "%s: locked !\n", __func__);
 		//set maxllr,when the  demod locked ,allocation of resources
 		err |= fe_stid135_set_maxllr_rate(state, 180);
-		//for tbs6912
-#else
-		dev_warn(&state->base->i2c->dev, "%s: locked ! demod=%d tuner=%d\n", __func__,  state->nr, state->rf_in);
-#endif
+
 		state->newTP = true;
 		state->loops = 15;
 		if(state->base->set_TSsampling)
 			state->base->set_TSsampling(state->base->i2c,state->nr/2,4);   //for tbs6912
-		}
-	else {
-		state->signal_info.tuned = 1;
-		state->signal_info.timedout = 1;
-		state->signal_info.locked = 0;
+	} else {
+		//state->signal_info.has_signal = 1;
+		//state->signal_info.has_lock = 0;
 		err |= fe_stid135_get_band_power_demod_not_locked(state, &rf_power);
 		dev_dbg(&state->base->i2c->dev, "%s: not locked, band rf_power %d dBm ! demod=%d tuner=%d\n",
 						 __func__, rf_power / 1000, state->nr, state->rf_in);
 	}
-	dprintk("set_parameters: error=%d locked=%d\n", err, state->signal_info.locked);
-	/* Set ISI before search */
-	if (p->stream_id != NO_STREAM_ID_FILTER) {
-		dev_warn(&state->base->i2c->dev, "%s: set ISI %d ! demod=%d tuner=%d\n", __func__, p->stream_id & 0xFF,
-						 state->nr, state->rf_in);
-		err |= fe_stid135_set_mis_filtering(state,  TRUE, p->stream_id & 0xFF, 0xFF);
-		signal_info->isi = p->stream_id &0xff;
-	} else {
-		dev_dbg(&state->base->i2c->dev, "%s: disable ISI filtering !\n", __func__);
-		err |= fe_stid135_set_mis_filtering(state,  FALSE, 0, 0xFF);
-		signal_info->isi = 0;
-	}
-	dprintk("set_parameters: error=%d locked=%d\n", err, state->signal_info.locked);
-	if (err != FE_LLA_NO_ERROR)
-		dev_err(&state->base->i2c->dev, "%s: fe_stid135_set_mis_filtering error %d !\n", __func__, err);
-
+	dprintk("set_parameters: error=%d locked=%d\n", err, state->signal_info.has_lock);
 	mutex_unlock(&state->base->status_lock);
 	return err != FE_LLA_NO_ERROR ? -1 : 0;
 
@@ -623,8 +761,13 @@ static int stid135_get_frontend(struct dvb_frontend *fe, struct dtv_frontend_pro
 {
 	struct stv *state = fe->demodulator_priv;
 	//struct fe_stid135_internal_param *p_params = &state->base->ip;
-	if (!state->signal_info.locked)
+	if (!state->signal_info.has_viterbi) {
+		dprintk("PPPPPPPPPPPP no viterbi\n");
 		return 0;
+	}
+	dprintk("QQQQQQQQQQQQQQQQQ algo=%d\n", state->demod_search_algo);
+	//TODO: next test
+#if 0
 	if(state->demod_search_algo == FE_SAT_BLIND_SEARCH ||
 		 state->demod_search_algo == FE_SAT_NEXT) {
 		int max_isi_len= sizeof(p-> isi)/sizeof(p->isi[0]);
@@ -637,6 +780,7 @@ static int stid135_get_frontend(struct dvb_frontend *fe, struct dtv_frontend_pro
 		p->frequency = state->signal_info.frequency;
 		p->symbol_rate = state->signal_info.symbol_rate;
 	}
+#endif
 	switch (state->signal_info.standard) {
 	case FE_SAT_DSS_STANDARD:
 		p->delivery_system = SYS_DSS;
@@ -769,7 +913,7 @@ static int stid135_read_status(struct dvb_frontend *fe, enum fe_status *status)
 
 	*status = 0;
 	if (!mutex_trylock(&state->base->status_lock)) {
-		if (state->signal_info.locked)
+		if (state->signal_info.has_viterbi)
 			*status |= FE_HAS_SIGNAL | FE_HAS_CARRIER
 				| FE_HAS_VITERBI | FE_HAS_SYNC | FE_HAS_LOCK;
 		dprintk("read status=%d\n", *status);
@@ -785,7 +929,15 @@ static int stid135_read_status(struct dvb_frontend *fe, enum fe_status *status)
 	p->pre_bit_count.len =1;
 	p->pre_bit_count.stat[0].scale = FE_SCALE_NOT_AVAILABLE;
 
-	err = fe_stid135_get_lock_status(state,  &state->signal_info.locked, &state->signal_info.data_present);
+	err = fe_stid135_get_lock_status(state, NULL, NULL, NULL);
+
+	if(state->signal_info.has_carrier)
+		*status |= (FE_HAS_SIGNAL|FE_HAS_CARRIER);
+	if(state->signal_info.has_viterbi)
+		*status |= FE_HAS_VITERBI;
+	if(state->signal_info.has_sync)
+		*status |= FE_HAS_SYNC|FE_HAS_LOCK;
+
 	if (err != FE_LLA_NO_ERROR) {
 		dev_err(&state->base->i2c->dev, "fe_stid135_get_lock_status error\n");
 		mutex_unlock(&state->base->status_lock);
@@ -793,21 +945,11 @@ static int stid135_read_status(struct dvb_frontend *fe, enum fe_status *status)
 		return -EIO;
 	}
 
-	if(state->signal_info.tuned)
-		*status |= FE_HAS_SIGNAL;
-	if(state->signal_info.timedout)
-		*status |= FE_TIMEDOUT;
-	if(state->signal_info.locked)
-		*status |= FE_HAS_CARRIER | FE_HAS_VITERBI;
-	if(state->signal_info.locked)
-		*status |= FE_HAS_CARRIER | FE_HAS_VITERBI;
-	if(state->signal_info.data_present)
-		*status |= FE_HAS_SYNC | FE_HAS_LOCK;
 
-	if (!state->signal_info.locked) {
+	if (!state->signal_info.has_viterbi) {
 		/* demod not locked */
 		*status |= FE_HAS_SIGNAL;
-		dprintk("HAS_SIGNAL AND TUNED locked=%d status=%d\n", state->signal_info.locked, *status);
+		dprintk("HAS_SIGNAL AND TUNED sync=%d status=%d\n", state->signal_info.has_sync, *status);
 		err = fe_stid135_get_band_power_demod_not_locked(state,  &state->signal_info.power);
 		// if unlocked, set to lowest resource..
 		mutex_unlock(&state->base->status_lock);
@@ -824,40 +966,43 @@ static int stid135_read_status(struct dvb_frontend *fe, enum fe_status *status)
 		p->strength.stat[1].scale = FE_SCALE_RELATIVE;
 		p->strength.stat[1].uvalue = (100 + state->signal_info.power/1000) * 656;
 		return 0;
-	} else {
-		/* demod has lock */
-
-		err = fe_stid135_get_signal_quality(state, &state->signal_info, mc_auto);
-		mutex_unlock(&state->base->status_lock);
-		if (err != FE_LLA_NO_ERROR) {
-			dev_err(&state->base->i2c->dev, "fe_stid135_get_signal_quality error\n");
-			dprintk("read status=%d\n", *status);
-			return -EIO;
-		}
-
-		p->strength.len = 2;
-		p->strength.stat[0].scale = FE_SCALE_DECIBEL;
-		p->strength.stat[0].svalue = state->signal_info.power;
-
-		p->strength.stat[1].scale = FE_SCALE_RELATIVE;
-		p->strength.stat[1].uvalue = (100 + state->signal_info.power/1000) * 656;
-
-		p->cnr.len = 2;
-		p->cnr.stat[0].scale = FE_SCALE_DECIBEL;
-		p->cnr.stat[0].svalue = state->signal_info.C_N * 100;
-
-		p->cnr.stat[1].scale = FE_SCALE_RELATIVE;
-		p->cnr.stat[1].uvalue = state->signal_info.C_N * 328;
-		if (p->cnr.stat[1].uvalue > 0xffff)
-			p->cnr.stat[1].uvalue = 0xffff;
-
-		p->post_bit_error.len = 1;
-		p->post_bit_error.stat[0].scale = FE_SCALE_COUNTER;
-		p->post_bit_error.stat[0].uvalue = state->signal_info.ber;
-
-			if (err != FE_LLA_NO_ERROR)
-				dev_warn(&state->base->i2c->dev, "%s: fe_stid135_filter_forbidden_modcodes error %d !\n", __func__, err);
 	}
+
+
+	/* demod has lock */
+
+	err = fe_stid135_get_signal_quality(state, &state->signal_info, mc_auto);
+	mutex_unlock(&state->base->status_lock);
+	if (err != FE_LLA_NO_ERROR) {
+		dprintk("fe_stid135_get_signal_quality err=%d\n", err);
+		dev_err(&state->base->i2c->dev, "fe_stid135_get_signal_quality error\n");
+		dprintk("read status=%d\n", *status);
+		return -EIO;
+	}
+
+	p->strength.len = 2;
+	p->strength.stat[0].scale = FE_SCALE_DECIBEL;
+	p->strength.stat[0].svalue = state->signal_info.power;
+
+	p->strength.stat[1].scale = FE_SCALE_RELATIVE;
+	p->strength.stat[1].uvalue = (100 + state->signal_info.power/1000) * 656;
+
+	p->cnr.len = 2;
+	p->cnr.stat[0].scale = FE_SCALE_DECIBEL;
+	p->cnr.stat[0].svalue = state->signal_info.C_N * 100;
+
+	p->cnr.stat[1].scale = FE_SCALE_RELATIVE;
+	p->cnr.stat[1].uvalue = state->signal_info.C_N * 328;
+	if (p->cnr.stat[1].uvalue > 0xffff)
+		p->cnr.stat[1].uvalue = 0xffff;
+
+	p->post_bit_error.len = 1;
+	p->post_bit_error.stat[0].scale = FE_SCALE_COUNTER;
+	p->post_bit_error.stat[0].uvalue = state->signal_info.ber;
+
+	if (err != FE_LLA_NO_ERROR)
+		dev_warn(&state->base->i2c->dev, "%s: fe_stid135_filter_forbidden_modcodes error %d !\n", __func__, err);
+
 
 	//for the tbs6912 ts setting
 	if((state->base->set_TSparam)&&(state->newTP)) {
@@ -907,7 +1052,37 @@ static int stid135_tune(struct dvb_frontend *fe, bool re_tune,
 
 	}
 
+
+	if(re_tune)
+		print_signal_info("(before)", &state->signal_info);
+	else
+		print_signal_info("(before2)", &state->signal_info);
 	r = stid135_read_status(fe, status);
+
+
+	if(state->signal_info.has_timedout)
+		*status |= FE_TIMEDOUT;
+	if(re_tune) {
+		print_signal_info("(after)", &state->signal_info);
+		dprintk("TUNE STATUS=0x%x\n", *status);
+		if(state->base->ts_mode == TS_STFE){
+			//set maxllr,when the  demod locked ,allocation of resources
+			/*Deep Thought: the value should be based on the symbo rate of the currently
+			tuned mux
+			*/
+			/*DeepThought : without this code it is not possible to tune the italian multistreams on 5.0W
+
+				11230H@51.5E has a symbolrate of 45MS/s (bitrate of 119MB/s) and requires a setting of at least 135;
+				The next higher value = 180.
+				12522V@5.0W has a symbolrate of 35.5MS and requires at least 3*35.5 = 100.5, but also does not work with
+				129.
+			*/
+			dprintk("REDUCING MAXLLR_RATE\n");
+			set_maxllr_rate(__LINE__, state,	&state->signal_info);
+		}
+		print_signal_info("(after2)", &state->signal_info);
+	} else
+		print_signal_info("(after3)", &state->signal_info);
 	if (r)
 		return r;
 
@@ -1216,7 +1391,7 @@ static int stid135_get_spectrum_scan_fft(struct dvb_frontend *fe,
 	s32 lost_samples2 = fft_size/2 - useable_samples2;
 	int subsample_factor =1;
 	int mode;
-	s32 start_idx;
+	//s32 start_idx;
 	s32 pbandx1000;
 	bool double_correction;
 	for(mode=1;mode<=5; ++mode) {
@@ -1332,7 +1507,7 @@ static int stid135_get_spectrum_scan_fft(struct dvb_frontend *fe,
 
 
 
-static int stid135_get_spectrum_scan_regular(struct dvb_frontend *fe,
+static int stid135_get_spectrum_scan_sweep(struct dvb_frontend *fe,
 																						 struct dtv_fe_spectrum* s,
 																						 unsigned int *delay,  enum fe_status *status)
 {
@@ -1484,7 +1659,7 @@ static int stid135_get_spectrum_scan(struct dvb_frontend *fe,
 	switch(s->spectrum_method) {
 	case SPECTRUM_METHOD_SWEEP:
 	default:
-		return stid135_get_spectrum_scan_regular(fe, s, delay,  status);
+		return stid135_get_spectrum_scan_sweep(fe, s, delay,  status);
 		break;
 	case SPECTRUM_METHOD_FFT:
 		return stid135_get_spectrum_scan_fft(fe, s, delay,  status);
@@ -1492,83 +1667,326 @@ static int stid135_get_spectrum_scan(struct dvb_frontend *fe,
 	}
 	return -1;
 }
+#if 0
+static int scan_within_tuner_bw(struct dvb_frontend *fe, bool* locked_ret)
+{
+	//bool rising_edge_found = false;
+	bool locked=false;
+	int asperity = 0;
+	s32 frequency_jump=0;
+	struct stv *state = fe->demodulator_priv;
+	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
+#if 0
+	//BUG_ON(!state->satellite_scan);
+	state->signal_info.timedout=false;
+	//u32 IF;
+	state->signal_info.fec_locked = 0;
+	state->signal_info.demod_locked = 0;
+#if 0 //TODO
+	Stop(state);
+#endif
+	//if (fe->ops.tuner_ops.get_if_frequency)
+	//	fe->ops.tuner_ops.get_if_frequency(fe, &IF);
+		/* Set the Init Symbol rate*/
+
+
+	if (state->symbol_rate < 100000 || state->symbol_rate > 70000000)
+		return -EINVAL;
+	stv091x_compute_timeouts(&state->DemodTimeout, &state->FecTimeout, state->symbol_rate, p->algorithm);
+	stv091x_set_frequency_symbol_rate_bandwidth(state);
+
+
+	state->ReceiveMode = Mode_None;
+	state->DemodLockTime = 0;
+
+	switch(p->algorithm) {
+	case ALGORITHM_SEARCH_NEXT:
+		break;
+	default:
+		dprintk("This function should not be called with algorithm=%d\n", p->algorithm);
+		break;
+	}
+
+	asperity = stv091x_carrier_search(state, &frequency_jump);
+	dprintk("asperity=%d frequency=%d jump=%d\n", asperity, p->frequency, frequency_jump);
+	if(asperity==1 ||asperity==2) { //rising or falling edge found
+		p->frequency += frequency_jump;
+
+		state->Started = 1;
+		{ bool need_retune;
+			int ret;
+			int old = p->algorithm;
+			p->algorithm = ALGORITHM_BLIND;
+			ret = tune_once(fe, &need_retune);
+			dprintk("tune_once returned stat=%d\n", ret);
+			p->algorithm = old;
+			locked= !state->timedout;
+		}
+
+
+		if(locked) {
+			//stv091x_get_signal_info(fe); already done in tune_once
+		} else {
+			state->Started = 0;
+		}
+	} else {
+		p->frequency += ((state->tuner_bw / 3000) - 1000);
+		dprintk("frequency=%d\n", p->frequency);
+	}
+	*locked_ret = locked;
+#endif
+	return asperity;
+}
+#endif
 
 #if 0
+//check if we are on a leading or falling edge of a potential signal
+//returns 0 if nothing found, 1 on rising edge and 2 on falling edge
+static int stv091x_carrier_check(struct stv* state, s32 *FinalFreq, s32* frequency_jump)
+{
+	u32 minagc2level=0xffff,maxagc2level=0x0000,midagc2level,
+		agc2level,
+		agc2ratio;
+	s32	init_freq,freq_step;
+	u32	tmp1,tmp2,tmp3,tmp4;
+	u32 asperity=0;
+	u32 waitforfall=0;
+	u32 acculevel=0;
+	u32 div=2;
+	u32 agc2leveltab[20];
+
+	s32 i,j,k,l,nbSteps;
+
+
+	write_reg(state, RSTV0910_P2_DMDISTATE,0x1C); //stop demod
+	tmp2= read_reg(state, RSTV0910_P2_CARCFG);
+	write_reg(state, RSTV0910_P2_CARCFG,0x06); //rotator on, citroen 2
+
+#if 0
+	tmp3= read_reg(state, RSTV0910_P2_BCLC); //set beta for DVBS1/legacy DTV
+	write_reg(state, RSTV0910_P2_BCLC,0x00);
+#endif
+
+#if 0
+	tmp4= read_reg(state, RSTV0910_P2_CARFREQ);
+	write_reg(state, RSTV0910_P2_CARFREQ,0x00);
+#else
+	//TODO
+	//set carrier frquency
+#endif
+#if 0
+	//TODO
+	write_reg(state, RSTV0910_P2_AGC2REF,0x38);
+#endif
+
+#if 0
+	tmp1= read_reg(state, RSTV0910_P2_DMDCFGMD);
+
+	write_reg_fields(state, RSTV0910_P2_DMDCFGMD,
+									 {FSTV0910_P2_DVBS1_ENABLE, 1},
+									 {FSTV0910_P2_DVBS2_ENABLE, 1},
+									 {FSTV0910_P2_SCAN_ENABLE, 0}, 		/*Enable the SR SCAN*/
+									 {FSTV0910_P2_CFR_AUTOSCAN, 0} /*activate the carrier frequency search loop*/
+									 );
+#else
+	error |= ChipSetOneRegister(hChip, (u16)REG_RC8CODEW_DVBSX_DEMOD_DMDCFGMD(Demod), 0xD8);
+#endif
+	stv091x_set_symbol_rate(state, 1000000/div); /*AGC2 bandwidth is 1/div MHz */
+
+	nbSteps=(state->tuner_bw/3000000)*div;
+	if(nbSteps<=0)
+		nbSteps=1;
+
+	freq_step=((1000000<<8)/(state->base->mclk>>8))/div; /* AGC2 step is 1/div MHz */
+
+	init_freq=0;
+	j=0;	/* index after a rising edge is found */
+
+	for(i=0;i<nbSteps;i++)
+	{
+		/* Scan on the positive part of the tuner Bw */
+		//dprintk("freq=%d\n", init_freq);
+		write_reg(state, RSTV0910_P2_DMDISTATE, 0x1C); //stp demod
+		write_reg(state, RSTV0910_P2_CFRINIT1, (init_freq >>8) & 0xff);
+		write_reg(state, RSTV0910_P2_CFRINIT0, init_freq & 0xff);
+		write_reg(state, RSTV0910_P2_DMDISTATE, 0x18); //zero offset start
+		msleep(5);
+
+		agc2level=0;
+		agc2level = (read_reg_field(state, FSTV0910_P2_AGC2_INTEGRATOR1) <<8) |
+			read_reg_field(state, FSTV0910_P2_AGC2_INTEGRATOR0);
+
+		if (i == 0) {
+			minagc2level= agc2level;
+			maxagc2level= agc2level;
+			midagc2level=agc2level;
+
+			for (k=0;k<5*div;k++) {
+				agc2leveltab[k]= agc2level;
+			}
+		} else {
+
+			k= i%(5*div);
+			agc2leveltab[k]= agc2level;
+
+			minagc2level=0xffff;
+			maxagc2level=0x0000;
+			acculevel=0;
+
+			for (l=0;l<5*div;l++) {
+				/* Min and max detection */
+
+				if( agc2leveltab[l]<minagc2level ) {
+					minagc2level=agc2leveltab[l];
+				} else if(agc2leveltab[l] >maxagc2level) {
+					maxagc2level=agc2leveltab[l];
+				}
+
+				acculevel=acculevel+agc2leveltab[l];
+			}
+
+			midagc2level= acculevel/(5*div);
+
+			if (waitforfall==0) {
+				agc2ratio = (maxagc2level - minagc2level)*128/midagc2level;
+			} else {
+				agc2ratio = (agc2level - minagc2level)*128/midagc2level;
+			}
+
+			if (agc2ratio > 0xffff)
+				agc2ratio = 0xffff;
+
+
+			if ((agc2ratio > STV0910_BLIND_SEARCH_AGC2BANDWIDTH) && (agc2level==minagc2level)) {	 /* rising edge */
+				asperity=1;		 /* The first edge is rising */
+				waitforfall=1;
+				for (l=0;l<5*div;l++) {
+					agc2leveltab[l]= agc2level;
+				}
+			} else if ((agc2ratio > STV0910_BLIND_SEARCH_AGC2BANDWIDTH)) {
+				/* Falling edge */
+				if (waitforfall==0) {
+					asperity=2; /* the first edge is falling */
+				} else {
+					asperity=1;
+				}
+
+				if (j==1) {
+					for (l=0;l<5*div;l++) {
+						agc2leveltab[l]= agc2level;
+					}
+
+					j=0;				 /* All reset */
+					waitforfall=0;
+					asperity=0;
+				} else {
+					break;
+				}
+			}
+
+			if ((waitforfall==1) && j==(5*div)) {
+				break;
+			}
+			if (waitforfall==1) {
+				j+=1;
+			}
+		} /* end of i!=0 */
+
+		init_freq = init_freq + freq_step;
+
+	} /* End of for (i=0;i<nbSteps) */
+
+	//restore registers
+	write_reg(state, RSTV0910_P2_DMDCFGMD,tmp1);
+	write_reg(state, RSTV0910_P2_CARCFG,tmp2);
+	write_reg(state, RSTV0910_P2_BCLC,tmp3);
+	write_reg(state, RSTV0910_P2_CARFREQ,tmp4);
+	write_reg(state, RSTV0910_P2_DMDISTATE,0x1C);
+	write_reg(state, RSTV0910_P2_CFRINIT1,0);
+	write_reg(state, RSTV0910_P2_CFRINIT0,0);
+
+	if (asperity ==1) { /* rising edge followed by a constant level or a falling edge */
+		*frequency_jump = (1000/div)*(i-(j+2)/2);
+	} else {
+		*frequency_jump = (1000/div)*i; /* falling edge */
+	}
+
+	return asperity;
+}
+#endif
+
+
+
+
+fe_lla_error_t FE_STiD135_GetCarrierFrequency(struct stv* state, u32 MasterClock, s32* carrierFrequency_p);
 /*
 	init = 1: start the scan at the search range specified by the user
 	init = 0: start the scan just beyond the last found frequency
  */
-static int stid135_sat_scan(struct dvb_frontend *fe, bool init,
+static int stid135_scan_sat(struct dvb_frontend *fe, bool init,
 														unsigned int *delay,  enum fe_status *status)
 {
+
+ 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	struct stv *state = fe->demodulator_priv;
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
 	struct fe_stid135_internal_param * pParams = &state->base->ip;
-	int asperity;
-	bool locked = false;
-	//state->Started = 0;
-	//state->satellite_scan = true;
-	//todo: 	MinSymbolRate
-	state->search_range =  500000;
-	state->symbol_rate =  1000000;							/*	minimum symbol rate for scan = 1Msps	*/
-	dprintk("set symbol_rate=%d\n", state->symbol_rate);
+	//int asperity;
+	s32 carrier_frequency;
+	bool retune=true;
+	enum fe_status old;
+	unsigned int mode_flags=0; //not used
+	int ret;
+	dprintk("SCAN SAT delsys=%d\n", p->delivery_system);
+	p->algorithm = ALGORITHM_BLIND; //ALGORITHM_SEARCH_NEXT;
+	//p->delivery_system = SYS_DVBS2;
+	p->frequency = p->scan_start_frequency;
+	p->scan_resolution = p->scan_resolution==0 ? 100 : p->scan_resolution;
+	p->scan_fft_size = p->scan_fft_size==0 ? 512: p->scan_fft_size;
+	/*
+		A large search range seems to be ok
+	 */
+	p->search_range = p->search_range ==0 ? (p->scan_fft_size * p->scan_resolution*1000): p->search_range;
 
-	if(init) {
-		state->scan_next_frequency = p->scan_start_frequency;
-		state->scan_end_frequency = p->scan_end_frequency;
+	/*Although undocumented, a low symbol rate must be set to detect signals with SR below 1 MS/s
+		and a low value does not seem to be essential for high SR transponders
+	*/
+	p->symbol_rate = p->symbol_rate==0? 100000: p->symbol_rate;
+	dprintk("FREQ=%d search_range=%dkHz fft=%d res=%dkH srate=%dkS/s\n", 	p->frequency, p->search_range/1000,
+					p->scan_fft_size, p->scan_resolution, p->symbol_rate/1000);
+	ret = stid135_tune(fe, retune, mode_flags, delay, status);
+	old = *status;
+	dprintk("TUNE returned status=%d\n", *status);
+	{
+		int max_isi_len= sizeof(p-> isi)/sizeof(p->isi[0]);
+		state->base->ip.handle_demod->Error = FE_LLA_NO_ERROR;
+		fe_stid135_get_signal_info(state,  &state->signal_info, 0);
+		//dprintk("MIS2: num=%d\n", state->signal_info.isi_list.nb_isi);
+		p-> isi_list_len = state->signal_info.isi_list.nb_isi;
+		if(p->isi_list_len>  max_isi_len)
+			p->isi_list_len = max_isi_len;
+		memcpy(p->isi, &state->signal_info.isi_list.isi[0], p->isi_list_len);
+		p->frequency = state->signal_info.frequency;
+		p->symbol_rate = state->signal_info.symbol_rate;
 	}
 
-	while(state->scan_next_frequency < state->scan_end_frequency) {
-		*status = 0;
-		if (kthread_should_stop() || dvb_frontend_task_should_stop(fe)) {
-			dprintk("exiting on should stop\n");
-			*status =0;
-			return 0;
-		}
-		p->frequency = state->scan_next_frequency;
-		dprintk("start=%d end=%d init=%d\n",
-						state->scan_next_frequency, state->scan_end_frequency,  init);
+	return ret;
 
-		if(p->frequency >= state->scan_end_frequency) {
-			dprintk("Invalid ranged");
-			return -1;
-		}
+	error |= FE_STiD135_GetCarrierFrequency(state, pParams->master_clock, &carrier_frequency);
+	carrier_frequency /= 1000;
+	carrier_frequency += (s32) (pParams->lo_frequency / 1000);
 
-		p->algorithm = ALGORITHM_SEARCH_NEXT;
-
-		//TODO: satellitte_scan
-		asperity = scan_within_tuner_bw(fe, &locked);
-		dprintk("asperity=%d locked=%d freq=%d start=%d end=%d\n", asperity, locked,
-						p->frequency, state->scan_next_frequency, state->scan_end_frequency);
-		if(locked) {
-			//state->scan_end_frequency = p->frequency;
-			//stv091x_set_frequency_symbol_rate_bandwidth(state);
-			uint32_t step = 135*((state->symbol_rate/1000) / (2*100));
-			uint32_t next = p->frequency + step;
-			dprintk("symbol_rate=%d step=%d next-%d\n", state->symbol_rate, step, next);
-			if(next < state->scan_next_frequency) {
-				next += state->search_range/1000;
-				dprintk ("Adjusting next to prevent going backwards: new next=%d\n", next);
-			}
-			state->tune_time = jiffies;
-
-			state->scan_next_frequency = next;
-
-			*status = FE_HAS_SIGNAL|FE_HAS_CARRIER|FE_HAS_VITERBI|FE_HAS_SYNC|FE_HAS_LOCK;
-			*delay = HZ;
-
-			return 0;
-		} else {
-			*status = 0;
-		}
+	dprintk("NEW FREQ=%d pfreq=%d\n", carrier_frequency, state->signal_info.frequency);
+	p->frequency = carrier_frequency;
+#if 0
+	if(true /**status | FE_HAS_LOCK*/) {
+		dprintk("trying blindcan\n");
+		p->algorithm = ALGORITHM_BLIND;
+		return stid135_tune(fe, retune, mode_flags, delay, status);
 	}
-	if(state->scan_next_frequency >= state->scan_end_frequency) {
-		dprintk("Signaling DONE\n");
-		*status |= FE_TIMEDOUT;
-	}
+#endif
 	return 0;
 }
-#endif
 
 static struct dvb_frontend_ops stid135_ops = {
 	.delsys = { SYS_DVBS, SYS_DVBS2, SYS_DSS },
@@ -1604,7 +2022,7 @@ static struct dvb_frontend_ops stid135_ops = {
 	.read_ucblocks			= stid135_read_ucblocks,
 	.spi_read			= spi_read,
 	.spi_write			= spi_write,
-	//	.scan =  stid135_sat_scan,
+		.scan =  stid135_scan_sat,
 	.get_spectrum		= stid135_get_spectrum_scan,
 	.extended_info = {
 		.extended_caps          = FE_CAN_SPECTRUMSCAN	|
@@ -1641,20 +2059,19 @@ struct dvb_frontend *stid135_attach(struct i2c_adapter *i2c,
 		return NULL;
 
 
-	dprintk("ATTACH addr=0x%x\n", cfg->adr);
+	//dprintk("ATTACH addr=0x%x\n", cfg->adr);
 	base = match_base(i2c, cfg->adr);
-	dprintk("ATTACH here\n");
 
 
 	if (base) {
 		base->count++;
 		state->base = base;
-		dprintk("ATTACH DUP nr=%d rf_in=%d base=%p count=%d\n", nr, rf_in, base, base->count);
+		//dprintk("ATTACH DUP nr=%d rf_in=%d base=%p count=%d\n", nr, rf_in, base, base->count);
 	} else {
 		base = kzalloc(sizeof(struct stv_base), GFP_KERNEL);
 		if (!base)
 			goto fail;
-		dprintk("ATTACH NEW nr=%d rf_in=%d base=%p count=%d\n", nr, rf_in, base, base->count);
+		//dprintk("ATTACH NEW nr=%d rf_in=%d base=%p count=%d\n", nr, rf_in, base, base->count);
 		base->i2c = i2c;
 		base->adr = cfg->adr;
 		base->count = 1;
@@ -1680,7 +2097,6 @@ struct dvb_frontend *stid135_attach(struct i2c_adapter *i2c,
 
 		list_add(&base->stvlist, &stvlist);
 	}
-	dprintk("ATTACH here\n");
 
 	//pParams = &state->base->ip;
 	/* Init for PID filtering feature */

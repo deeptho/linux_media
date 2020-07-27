@@ -36,9 +36,6 @@
 #ifndef STID135_DRV_H
 #define STID135_DRV_H
 
-#ifdef __cplusplus
-		extern "C" {
-#endif
 
 /* ========================================================== */
 // Include files
@@ -367,6 +364,7 @@ struct stv {
 	/* Demod */
 	enum fe_sat_search_standard	demod_search_standard;/* Search standard:
 					Auto, DVBS1/DSS only or DVBS2 only*/
+	s32 demod_search_stream_id;
 	enum fe_sat_search_algo		demod_search_algo; /* Algorithm for
 						search Blind, Cold or Warm*/
 	enum fe_sat_search_iq_inv	demod_search_iq_inv; /* I,Q
@@ -388,6 +386,8 @@ struct stv {
 	struct modcod_data	mc_flt[NB_SAT_MODCOD];
 
 };
+
+extern void print_signal_info(const char* prefix, struct fe_sat_signal_info* i);
 
 
 extern u32 C8CODEW_TOP_CTRL[1];
@@ -514,8 +514,7 @@ fe_lla_error_t  FE_STiD135_CarrierGetQuality(STCHIP_Info_t* hChip, enum fe_stid1
 					unsigned char *Status,
 							BOOL fer_dvbs2x);
 
-fe_lla_error_t fe_stid135_get_lock_status(struct stv* state,
-																								BOOL* carrier_lock, BOOL *data);
+fe_lla_error_t fe_stid135_get_lock_status(struct stv* state, bool*carrier_lock, bool*has_viterbi, bool* has_sync);
 fe_lla_error_t fe_stid135_get_data_status(struct stv* state, BOOL* Locked_p);
 
 
@@ -652,6 +651,7 @@ fe_lla_error_t fe_stid135_get_isi(struct stv* state, u8 *p_isi_current);
 fe_lla_error_t fe_stid135_select_isi(struct stv* state, u8 isi_wanted);
 
 fe_lla_error_t fe_stid135_set_mis_filtering(struct stv* state, BOOL EnableFiltering, u8 mis_filter, u8 mis_mask);
+fe_lla_error_t  set_stream_index(struct stv *state, int mis);
 
 fe_lla_error_t fe_stid135_unlock(struct stv* state);
 
@@ -744,9 +744,9 @@ STCHIP_Error_t stvvglna_set_standby(STCHIP_Info_t* hChip, U8 StandbyOn);
 STCHIP_Error_t stvvglna_get_status(STCHIP_Info_t* hChip, U8 *Status);
 STCHIP_Error_t stvvglna_get_gain(STCHIP_Info_t* hChip,S32 *Gain);
 STCHIP_Error_t stvvglna_term(STCHIP_Info_t* hChip);
-
-#ifdef __cplusplus
-		}
-#endif
+fe_lla_error_t  set_pls_mode_code(struct stv *state, u8 pls_mode, u32 pls_code);
+fe_lla_error_t FE_STiD135_GetFECLock(struct stv* state, u32 TimeOut, BOOL* lock_bool_p);
+fe_lla_error_t fe_stid135_read_hw_matype(struct stv* state, u8 *matype, u8 *isi_read);
+bool fe_stid135_check_sis_or_mis(u8 matype);
 
 #endif  /* ndef STID135_DRV_H */
