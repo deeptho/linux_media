@@ -32,7 +32,8 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
-
+#include <linux/kernel.h>
+#include <linux/kthread.h>
 #include "stid135_drv.h"
 #include "stid135_init.h"
 #include "stid135-fft.h"
@@ -68,6 +69,8 @@ static fe_lla_error_t fe_stid135_fft_save_registers(fe_stid135_handle_t handle, 
 	Reg[i++] = fld_value;
 	error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG2_MODE_HAUTDEBIT(path), &fld_value);
 	Reg[i++] = fld_value;
+	error |= ChipGetOneRegister(pParams->handle_demod, REG_RC8CODEW_DVBSX_DEMOD_CARCFG(path), &reg_value);
+	Reg[i++] = reg_value;
 	error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DMDISTATE_I2C_DEMOD_MODE(path), &fld_value) ;
 	Reg[i++] = fld_value;
 	error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_TNRCFG2_TUN_IQSWAP(path), &fld_value);
@@ -208,11 +211,14 @@ fe_lla_error_t fe_stid135_init_fft(fe_stid135_handle_t handle, enum fe_stid135_d
 	/* ADJUSTEMENT REGISTERS BEFORE FFT  */
 
 	/* Choix du mode de fonctionnement de la cellule FFT */
-	//allow ultra blind scan to use FIFO2 RAM
+	//allow ultra blind scan\ to use FIFO2 RAM
 	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG0_FIFO2_ULTRABS(path),  0x01);
 
 	//select narrow band setting, i.e, up to  Mclk/2, which is about 60Msamples/second
 	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG2_MODE_HAUTDEBIT(path), 0x01);
+
+	//disable frequency scanning (essential!)
+	error |= ChipSetOneRegister(pParams->handle_demod, REG_RC8CODEW_DVBSX_DEMOD_CARCFG(path), 0xc6);
 
 	// UFBS block only connected to narrow-band demod, not wideband, so HDEBITCFG2/MODE_HAUTDEBIT = 01
 	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DMDISTATE_I2C_DEMOD_MODE(path), 0x02); /* set PEA to UFBS mode  */
@@ -397,6 +403,9 @@ fe_lla_error_t fe_stid135_term_fft(fe_stid135_handle_t handle, enum fe_stid135_d
 	/* Restore params */
 	error |= ChipSetField (pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG0_FIFO2_ULTRABS(path), Reg[i++]);
 	error |= ChipSetField (pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG2_MODE_HAUTDEBIT(path), Reg[i++]);
+
+	error |= ChipSetOneRegister(pParams->handle_demod, REG_RC8CODEW_DVBSX_DEMOD_CARCFG(path), Reg[i++]);
+
 	error |= ChipSetField (pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DMDISTATE_I2C_DEMOD_MODE(path), Reg[i++]);
 	error |= ChipSetField (pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_TNRCFG2_TUN_IQSWAP(path), Reg[i++]);
 
@@ -489,7 +498,8 @@ fe_lla_error_t fe_stid135_fft(struct stv* state, enum fe_stid135_demod path, u32
 	struct fe_stid135_internal_param *pParams = &state->base->ip;
 	u32 nb_words =0;
 	s32 val[4]= { 0 }, val_max;
-	u32 j=0, i=0, bin=0;
+	u32 guard=12345;
+	u32 jjj=0, iii=0, bin=0;
 	s32 f;
 	s32 memstat=0, contmode =0;
 	u32 nbr_pts =0;
@@ -502,7 +512,6 @@ fe_lla_error_t fe_stid135_fft(struct stv* state, enum fe_stid135_demod path, u32
 	//dprintk("FFT start\n");
 	if(path > FE_SAT_DEMOD_4)
 		return(FE_LLA_BAD_PARAMETER);
-
 	//pParams = (struct fe_stid135_internal_param *) handle;
 	// Set the number of fft bins (4096 or lower)
 	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_FFTCTRL_FFT_MODE(path), (s32)mode);
@@ -565,6 +574,7 @@ fe_lla_error_t fe_stid135_fft(struct stv* state, enum fe_stid135_demod path, u32
 	//dprintk("FFT calculate memory readout range\n");
 	// calculate memory readout range
 	nbr_pts = (u32)(8192 / XtoPowerY(2, (u32) mode));
+
 	error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEBUG1_MODE_FULL(path), &fld_value);
 	if(fld_value == 1) { // 32-bit mode
 		nb_words = ((u32)1<<(10-mode+1));     // memory size N/8 for memory readout
@@ -572,6 +582,8 @@ fe_lla_error_t fe_stid135_fft(struct stv* state, enum fe_stid135_demod path, u32
 		nb_words = ((u32)1<<(10-mode));     // memory size N/8 for memory readout
 	}
 	//nb_words = ((u32)1<<(10-mode));     // memory size N/8 for memory readout
+	dprintk("mode=%d buffer_size=%d nbr_pts=%d nb_words=%d 32bit=%d\n", mode, buffer_size, nbr_pts, nb_words, fld_value == 1
+					);
 	error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_EXPMAX_EXP_MAX(path), &fld_value);
 	exp = (u32)fld_value;
 	switch(path) {
@@ -596,15 +608,15 @@ fe_lla_error_t fe_stid135_fft(struct stv* state, enum fe_stid135_demod path, u32
 		break;
 	}
 
-	for (i=0; i<nb_words; i++)	{   // set the FFT memory address in multiples of words
+	for (iii=0; iii<nb_words; iii++)	{   // set the FFT memory address in multiples of words
 #if 0
 		WAIT_N_MS(5);
 #else
 		//WAIT_N_MS(1);
 #endif
 
-		error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMADDR1_MEM_ADDR(path), (i>>8) & 0x03);
-		error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMADDR0_MEM_ADDR(path), (i & 0xff));
+		error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMADDR1_MEM_ADDR(path), (iii>>8) & 0x03);
+		error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMADDR0_MEM_ADDR(path), (iii & 0xff));
 		error |= ChipSetRegisters(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_MEMADDR1(path), 2);
 		//dprintk("FFT %d/%d\n", i, nb_words);
 		// wait for end of transfer
@@ -620,13 +632,15 @@ fe_lla_error_t fe_stid135_fft(struct stv* state, enum fe_stid135_demod path, u32
 		// read & store data to create an fft list
 
 		error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEBUG1_MODE_FULL(path), &fld_value);
+		if(fld_value==0)
+			dprintk("BUG!!!! 16 bit mode guard=%d\n", guard);
 		if(fld_value == 1) { // 32-bit mode
-			for (j=0; j<4; j++) {
-				error |= ChipGetRegisters(pParams->handle_demod, (u16)(REG_RC8CODEW_DVBSX_DEMOD_MEMVA01(path) + (4 * j)), 4);
-				val[3] = ChipGetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMVA01_MEM_VAL0(path) + ((4 * j) << 16)); // 16 = address bus width for demod
-				val[2] = ChipGetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMVA00_MEM_VAL0(path) + ((4 * j) << 16));
-				val[1] = ChipGetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMVA11_MEM_VAL1(path) + ((4 * j) << 16));
-				val[0] = ChipGetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMVA10_MEM_VAL1(path) + ((4 * j) << 16));
+			for (jjj=0; jjj<4; jjj++) {
+				error |= ChipGetRegisters(pParams->handle_demod, (u16)(REG_RC8CODEW_DVBSX_DEMOD_MEMVA01(path) + (4 * jjj)), 4);
+				val[3] = ChipGetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMVA01_MEM_VAL0(path) + ((4 * jjj) << 16)); // 16 = address bus width for demod
+				val[2] = ChipGetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMVA00_MEM_VAL0(path) + ((4 * jjj) << 16));
+				val[1] = ChipGetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMVA11_MEM_VAL1(path) + ((4 * jjj) << 16));
+				val[0] = ChipGetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMVA10_MEM_VAL1(path) + ((4 * jjj) << 16));
 #if 0
 				val_max = STLog10(((val[3] & 0x7) << 24) + (val[2] << 16) + (val[1] << 8) + val[0])
 					+3010* exp;
@@ -634,24 +648,25 @@ fe_lla_error_t fe_stid135_fft(struct stv* state, enum fe_stid135_demod path, u32
 				//PSD=val*3/64 dB
 				val_max = ((((val[3] & 0x7) << 24) + (val[2] << 16) + (val[1] << 8) + val[0]) * 3000*XtoPowerY(2, exp))/64;
 #endif
-				bin = (u32)(i*4+j);
+				bin = (u32)(iii*4+jjj);
 				if(nbr_pts-bin-1 < 0 || nbr_pts-bin-1 >= buffer_size)
-					dprintk("BUG!!!! nbr_pts-bin-1=%d max=%d\n", nbr_pts-bin-1, buffer_size);
+					dprintk("BUG!!!! nbr_pts-bin-1=%d max=%d i=%d j=%d guard=%d\n", nbr_pts-bin-1, buffer_size, iii,jjj,
+									guard);
 				tab[nbr_pts-bin-1] = (u32)val_max; 	// fill the table back to front
 			}
 		} else if(fld_value == 0) { // 16-bit mode
 			// read temporary memory
-			for (j=0; j<8; j++) {
-				error |= ChipGetRegisters(pParams->handle_demod, (u16)(REG_RC8CODEW_DVBSX_DEMOD_MEMVA01(path) + (2 * j)), 2);
-				val[3] = ChipGetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMVA01_MEM_VAL0(path) + ((2 * j) << 16)); // 16 = address bus width for demod
-				val[2] = ChipGetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMVA00_MEM_VAL0(path) + ((2 * j) << 16));
+			for (jjj=0; jjj<8; jjj++) {
+				error |= ChipGetRegisters(pParams->handle_demod, (u16)(REG_RC8CODEW_DVBSX_DEMOD_MEMVA01(path) + (2 * jjj)), 2);
+				val[3] = ChipGetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMVA01_MEM_VAL0(path) + ((2 * jjj) << 16)); // 16 = address bus width for demod
+				val[2] = ChipGetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMVA00_MEM_VAL0(path) + ((2 * jjj) << 16));
 #if 0
 				val_max = STLog10((val[3] << 8) + val[2]) + 3010*exp;
 #else
 					val_max = (((val[3] << 8) + val[2]) * 3000*XtoPowerY(2, exp))/64;
 #endif
-				bin = (u32)(i*8+j);
-				if(nbr_pts-bin-1 < 0 || bin >= buffer_size)
+				bin = (u32)(iii*8+jjj);
+				if(nbr_pts - bin-1 < 0 || bin >= buffer_size)
 					dprintk("BUG!!!! bin=%d max=%d\n", bin, buffer_size);
 				tab[nbr_pts-bin-1] = (u32)val_max; 	// fil the table back to front; unit is 0.001dB
 			}
@@ -668,6 +683,426 @@ fe_lla_error_t fe_stid135_fft(struct stv* state, enum fe_stid135_demod path, u32
 
 	// Calculate beginning of data table
 	*begin = (u32)(nbr_pts-1-bin);
-
 	return(error);
 }
+
+
+/*
+	center_freq and range in kHz
+ */
+static int stid135_get_spectrum_scan_fft_one_band(struct stv *state,
+																									s32 center_freq, s32 range,
+																									s32 lo_frequency_hz,
+																									u32* freq,
+																									s32* rf_level,
+																									int fft_size, int mode, s32 pbandx1000, bool double_correction)
+{
+	fe_lla_error_t error = FE_LLA_NO_ERROR;
+	//	s32 Pbandx1000;
+	u32 nb_acquisition = 255; //average 1 samples
+	u32 begin =0;
+	int i;
+	int a=3;
+	s32 delta;
+	dprintk("Start of spectrum scan\n");
+
+	dprintk("center_freq=%dkHz lo=%dkHz range=%dkHz mode=%d fft_size=%d\n",
+					center_freq, lo_frequency_hz/1000, range, mode, fft_size);
+
+	error = fe_stid135_fft(state, state->nr+1, mode, nb_acquisition,
+												 center_freq*1000 - lo_frequency_hz, range*1000, rf_level, &begin, fft_size);
+
+	pbandx1000 += mode*6020; //compensate for FFT number of bins: 20*log10(2)
+	delta = 10*(3000 + STLog10(range) - STLog10(fft_size)); //this is a power spectral density range*1000/fft_size is the bin width in Hz
+	//dprintk("Pbandx1000=%d error=%d\n", Pbandx1000, error);
+
+	for(i=0; i< fft_size; ++i) {
+		s32 f = ((i-(signed)fft_size/2)*range)/(signed)fft_size +center_freq; //in kHz
+		s32 correction1000 = (s32)(f/1000  - 1550);
+
+		freq[i]= f;
+
+		correction1000 = (s32)(correction1000*1000/600);
+		correction1000 = (s32) (correction1000 * correction1000/1000);
+		if(double_correction)
+			correction1000 += correction1000;
+
+		rf_level[i] += pbandx1000 - delta +correction1000;
+	}
+
+	if(fft_size/2-a<0 || fft_size/2+a>= fft_size)
+		dprintk("BUG!!!! a=%d fft_size=%d\n", a, fft_size);
+	if(begin==1)
+		rf_level[0] = rf_level[1];
+	for(i=-a+1; i<a; ++i)
+		rf_level[fft_size/2+i] = (rf_level[fft_size/2-a] + rf_level[fft_size/2+a])/2;
+	return error;
+}
+
+
+int get_spectrum_scan_fft(struct dvb_frontend *fe)
+{
+	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
+	struct stv *state = fe->demodulator_priv;
+	struct spectrum_scan_state_t* ss = &state->scan_state;
+
+	u32 table_size = 8192;
+	s32 max_range= 96800;
+
+	u32* temp_freq = NULL;
+	s32* temp_rf_level = NULL;
+	s32 Reg[60];
+
+
+	fe_lla_error_t error = FE_LLA_NO_ERROR;
+	fe_lla_error_t error1 = FE_LLA_NO_ERROR;
+
+	u32 idx=0;
+	int i;
+	s32 discont, left=0, right=0;
+	int mode;
+	s32 start_frequency = p->scan_start_frequency;
+	s32 end_frequency = p->scan_end_frequency;
+	//s32 start_idx;
+	s32 pbandx1000;
+	bool double_correction;
+	s32 useable_samples2;
+	s32 lost_samples2;
+
+	if(p->scan_end_frequency < p->scan_start_frequency)
+		return -1; //fully done
+	ss->start_frequency = start_frequency;
+	ss->end_frequency = end_frequency;
+
+	ss->sample_step = p->scan_resolution==0 ? 100 : p->scan_resolution; //in kHz
+
+	ss->fft_size =  (p->scan_fft_size>0) ? p->scan_fft_size : 512;
+	if(ss->fft_size >= 4096)
+		ss->fft_size = 4096;
+	for(mode=1;mode<=5; ++mode) {
+		table_size >>=1;
+		if(table_size <= ss->fft_size)
+			break;
+	}
+	if(ss->fft_size != table_size) {
+		dprintk("Error: fft_size should be power of 2\n");
+		return -1;
+	}
+	ss->fft_size = table_size;
+
+	error = FE_STiD135_GetLoFreqHz(&state->base->ip, &ss->lo_frequency_hz);
+	if(error) {
+		dprintk("FE_STiD135_GetLoFreqHz FAILED: error=%d\n", error);
+		return error;
+	}
+	ss->lo_frequency_hz *=  1000000; //now in Hz
+
+
+ 	ss->range = ss->sample_step * ss->fft_size; //in kHz
+
+	if(ss->range >= max_range) {
+		ss->sample_step = max_range/ss->fft_size;
+		dprintk("specified resolution (%dkHz) is too large; increased to %dkHz\n",
+						p->scan_resolution, ss->sample_step);
+	}
+
+	ss->spectrum_len = (end_frequency-start_frequency + ss->sample_step-1)/ss->sample_step;
+	ss->spectrum_present = true;
+
+
+	useable_samples2 = ((ss->fft_size*6)/10+1)/2;
+	lost_samples2 = ss->fft_size/2 - useable_samples2;
+
+
+
+	dprintk("demod: %d: tuner:%d range=[%d,%d]kHz resolution=%dkHz num_freq=%d range=%dkHz lost=%d useable=%d\n",
+					state->nr, state->rf_in,
+					start_frequency, end_frequency, ss->sample_step,
+					ss->spectrum_len, ss->range, lost_samples2, useable_samples2);
+
+	ss->freq = kzalloc(ss->spectrum_len * (sizeof(ss->freq[0])), GFP_KERNEL);
+	ss->spectrum = kzalloc(ss->spectrum_len * (sizeof(ss->spectrum[0])), GFP_KERNEL);
+	temp_freq = kzalloc(8192 * (sizeof(temp_freq[0])), GFP_KERNEL);
+	temp_rf_level = kzalloc(8192 * (sizeof(temp_rf_level[0])), GFP_KERNEL);
+	if (!temp_rf_level || !temp_freq || !ss->freq || !ss->spectrum) {
+		error = -ENOMEM;
+		goto _end;
+	}
+	print_spectrum_scan_state(&state->scan_state);
+	error = fe_stid135_init_fft(&state->base->ip, state->nr+1, state->rf_in+1, mode, Reg);
+
+	error |= estimate_band_power_demod_for_fft(state, state->rf_in+1, &pbandx1000, &double_correction);
+
+	if(error) {
+		dprintk("fe_stid135_init_fft FAILED: error=%d\n", error);
+		return error;
+	}
+
+	for(idx=0; idx < ss->spectrum_len;) {
+		s32 center_freq = start_frequency + (idx + useable_samples2)* ss->sample_step;
+		if (kthread_should_stop() || dvb_frontend_task_should_stop(fe)) {
+			//@todo:  should this be moved into  stid135_get_spectrum_scan_fft_one_band?
+			dprintk("exiting on should stop\n");
+			break;
+		}
+
+		error = stid135_get_spectrum_scan_fft_one_band(state, center_freq, ss->range,
+																									 ss->lo_frequency_hz,
+																									 temp_freq, temp_rf_level,
+																									 ss->fft_size, mode, pbandx1000, double_correction);
+		if(error) {
+			dprintk("Error=%d\n", error);
+			goto _end;
+		}
+
+		i=lost_samples2;
+		left = temp_rf_level[i];
+		discont = (left-right);
+
+		//implement triangular weight for window overlap
+		if(idx>= useable_samples2)
+			for(i=1; i< useable_samples2; i++) {
+				s32 correction = ((discont* (useable_samples2+1-i))/(2*useable_samples2));
+				ss->spectrum[idx-i]+= correction;
+				//if(s->rf_band)
+				//	s->rf_band[idx]+= correction;
+			}
+
+		for(i= lost_samples2; i< ss->fft_size-lost_samples2 && idx < ss->spectrum_len; ++idx, i++ ) {
+			s32 correction = (i<lost_samples2+useable_samples2 &&right!=0) ?
+				-(discont*(useable_samples2-i+lost_samples2))/(2*useable_samples2) :0;
+			ss->freq[idx]= temp_freq[i];
+			ss->spectrum[idx] += temp_rf_level[i]+correction;
+		}
+		i = ss->fft_size - lost_samples2;
+		right = temp_rf_level[i-1];
+
+	}
+
+ _end:
+	dprintk("ending\n");
+	if(temp_freq)
+		kfree(temp_freq);
+	if(temp_rf_level)
+		kfree(temp_rf_level);
+
+	error |= (error1=fe_stid135_term_fft(&state->base->ip, state->nr+1, state->rf_in+1, Reg));
+	if(error) {
+		dprintk("fe_stid135_term_fft FAILED: error=%d\n", error);
+	}
+	return error;
+}
+
+
+
+
+enum slope_t {
+	FALLING=1,
+	RISING=2
+};
+
+#define MAXW 31
+
+static s32 max_(s32*a, int n)
+{
+	int i;
+	s32 ret=a[0];
+	for(i=0; i<n;++i)
+		if(a[i]> ret)
+			ret=a[i];
+	return ret;
+}
+
+
+
+
+/*
+	candidate right edges of transponder
+	w is window size
+	n is size of signal
+*/
+static void falling(u8* pres, s32* psig, int n, int w, int thresh)
+{
+
+	bool peak_found=false;
+	int i;
+	s32 temp[MAXW];
+	if(w >MAXW)
+		w=MAXW;
+	for(i=0;i<w;++i)
+		temp[i]=psig[n-1];
+	for(i=0; i< n; ++i) {
+		s32 s = psig[i];
+		s32 left_max;
+		temp[i%w] = s;
+		left_max = max_(temp, w);
+		if(left_max-s > thresh) {
+			//mark complete peak if not already on a peak
+			if(!peak_found) {
+				//dprintk("SET FALL\n");
+				pres[i] |=FALLING;
+			}
+			peak_found = true;
+		} else {
+			peak_found =false;
+		}
+	}
+}
+
+/*
+	candidate left edges of transponder
+	w is window size
+	n is size of signal
+*/
+static void rising(u8* pres, s32* psig, int n, int w, int thresh)
+{
+
+	bool peak_found=false;
+	int i;
+	s32 temp[MAXW];
+	if(w>MAXW)
+		w=MAXW;
+	for(i=0;i<w;++i)
+		temp[i]=psig[n-1];
+	for(i=n-1; i>=0; --i) {
+		s32 s = psig[i];
+		s32 right_max;
+		temp[i%w] = s;
+		right_max = max_(temp, w);
+		if(right_max-s > thresh) {
+			//mark complete peak if not already on a peak
+			if(!peak_found) {
+				//dprintk("SET RISE\n");
+				pres[i] |= RISING;
+			}
+			peak_found = true;
+		} else {
+			peak_found =false;
+		}
+	}
+}
+
+//returns index of a peak in the spectrum
+static int next_candidate_tp(struct spectrum_scan_state_t* ss)
+{
+	for(; ss->current_idx < ss->idx_end; ++ss->current_idx) {
+		if(ss->peak_marks[ss->current_idx] & FALLING) {
+			dprintk("FALLING FOUND at %d last_rise=%d last fall =%d\n",
+							ss->current_idx, ss->last_rise_idx, ss->last_fall_idx);
+			if(ss->last_rise_idx > ss->last_fall_idx && ss->last_rise_idx>=0) {
+				//candidate found; peak is between last_rise and current idx
+				ss->last_peak_idx = (ss->last_rise_idx + ss->current_idx)/2;
+				ss->last_peak_freq =
+					ss->freq[ss->last_peak_idx]; //in kHz
+				dprintk("CANDIDATE: %d %dkHz BW=%dkHz\n", ss->last_peak_idx, ss->last_peak_freq,
+								ss->freq[ss->current_idx] - ss->freq[ss->last_rise_idx]);
+				ss->last_fall_idx = ss->current_idx;
+				if(ss->peak_marks[ss->current_idx]& RISING)
+					ss->last_rise_idx = ss->current_idx;
+				ss->current_idx++;
+				return ss->last_peak_idx;
+			}
+
+			ss->last_fall_idx = ss->current_idx;
+		}
+
+		if(ss->peak_marks[ss->current_idx]& RISING)
+			ss->last_rise_idx = ss->current_idx;
+	}
+	return -1;
+}
+
+
+static void dump_data(const char* name, u8* data, int size)
+{
+	int i;
+	printk("%s=[ ", name);
+	for(i=0;i<size;++i)
+		printk("%d ", data[i]);
+	printk("]");
+}
+
+
+/*
+	center_freq and range in kHz
+ */
+
+/*
+	returns -1 when done or when error
+	0 on success
+ */
+
+int stid135_spectral_scan_start(struct dvb_frontend *fe)
+{
+	struct stv *state = fe->demodulator_priv;
+	struct spectrum_scan_state_t* ss = &state->scan_state;
+	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
+	fe_lla_error_t error = FE_LLA_NO_ERROR;
+
+	error = get_spectrum_scan_fft(fe);
+	if(error)
+		return error;
+
+	ss->scan_in_progress =true;
+
+	ss->idx_start =  0;
+	ss->idx_end = ss->spectrum_len;
+	ss->current_idx = 0;
+	ss->last_peak_idx = -1;
+	ss->last_rise_idx = -1;
+	ss->last_fall_idx = -1;
+
+	ss->w =17;
+	ss->threshold = 2000;
+
+	ss->peak_marks = kzalloc(ss->spectrum_len * (sizeof(ss->peak_marks[0])), GFP_KERNEL);
+	dprintk("BUFFER(peak_marks size=%d) %p-%p\n", ss->peak_marks, ss->peak_marks+ ss->fft_size * (sizeof(ss->peak_marks[0])),
+					ss->spectrum_len);
+	if (!ss->spectrum) {
+		return -ENOMEM;
+	}
+
+	memset(ss->peak_marks, 0, sizeof(ss->peak_marks[0])*ss->spectrum_len);
+	falling(ss->peak_marks, ss->spectrum, ss->spectrum_len, ss->w, ss->threshold);
+	rising(ss->peak_marks, ss->spectrum, ss->spectrum_len, ss->w, ss->threshold);
+	//dump_data("marks", ss->peak_marks, ss->spectrum_len);
+	return error;
+}
+
+
+int stid135_spectral_scan_next(struct dvb_frontend *fe,   s32 *frequency_ret)
+{
+	struct stv *state = fe->demodulator_priv;
+	struct spectrum_scan_state_t* ss = &state->scan_state;
+	int ret=-1;
+	while(ss->current_idx < ss->idx_end) {
+		print_spectrum_scan_state(ss);
+		ret = next_candidate_tp(ss);
+		if(ret>=0) {
+			dprintk("Next frequency to scan: [%d] %dkHz\n", ret, ss->last_peak_freq);
+			*frequency_ret =  ss->last_peak_freq;
+			return 0;
+		} else {
+			dprintk("Current subband fully scanned: current_idx=%d idx_end=%d\n", ss->current_idx, ss->idx_end);
+		}
+	}
+	return -1;
+}
+
+
+
+void print_spectrum_scan_state_(struct spectrum_scan_state_t*ss, const char* func, int line)
+{
+	printk(KERN_DEBUG
+				 "%s:%d\n------------------------------------\n"
+				 "in_progress=%d  idx_start=%d idx_end=%d  spectrum_len=%d  current_idx=%d\n"
+				 "last_peak_idx=%d  last_peak_freq=%d last_rise_idx=%d last_fall_idx=%d\n"
+				 "mode=%d fft_size=%d w=%d threshold=%d\n"
+				 "lo_frequency_hz=%dkHz  range=%dkHz sample_step=%dkHz\n"
+				 "-------------------------------\n",
+				 func, line,
+				 ss->scan_in_progress, ss->idx_start, ss->idx_end, ss->spectrum_len, ss->current_idx,
+				 ss->last_peak_idx, ss->last_peak_freq, ss->last_rise_idx, ss->last_fall_idx,
+				 ss->mode, ss->fft_size, ss->w, ss->threshold,
+				 ss->lo_frequency_hz/1000, ss->range, ss->sample_step);
+};

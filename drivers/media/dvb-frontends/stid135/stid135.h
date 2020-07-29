@@ -42,6 +42,7 @@ struct stid135_cfg {
 	void (*set_TSsampling)(struct i2c_adapter *i2c,int tuner,int time);
 	u32  (*set_TSparam)(struct i2c_adapter *i2c,int tuner,int time,bool  flag);
 	int vglna;
+	struct pci_dev *pci_dev; //for uniquely identifying frontend
 };
 
 #if IS_REACHABLE(CONFIG_DVB_STID135)

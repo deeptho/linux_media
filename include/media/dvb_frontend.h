@@ -324,6 +324,8 @@ struct dtv_frontend_properties;
  * struct dvb_frontend_internal_info - Frontend properties and capabilities
  *
  * @name:			Name of the frontend
+ * @dev_name:			Name of device to which frontend is attached
+ * @card_name:			Name of card to which frontend is attached
  * @frequency_min_hz:		Minimal frequency supported by the frontend.
  * @frequency_max_hz:		Minimal frequency supported by the frontend.
  * @frequency_stepsize_hz:	All frequencies are multiple of this value.
@@ -338,6 +340,8 @@ struct dtv_frontend_properties;
  *				as specified in &enum fe_caps.
  */
 struct dvb_frontend_internal_info {
+	char	card_name[128];
+	char	dev_name[128];
 	char	name[128];
 	u32	frequency_min_hz;
 	u32	frequency_max_hz;
@@ -347,6 +351,7 @@ struct dvb_frontend_internal_info {
 	u32	symbol_rate_max;
 	u32	symbol_rate_tolerance;
 	enum fe_caps caps;
+	enum fe_extended_caps extended_caps;
 };
 
 struct dvb_frame {
@@ -444,7 +449,6 @@ struct dvb_frame {
  */
 struct dvb_frontend_ops {
 	struct dvb_frontend_internal_info info;
-	struct dvb_frontend_extended_info extended_info;
 
 	u8 delsys[MAX_DELSYS];
 
@@ -464,13 +468,17 @@ struct dvb_frontend_ops {
 		    unsigned int *delay,
 		    enum fe_status *status);
 
+	int (*stop_task)(struct dvb_frontend* fe);
+
 	int (*scan)(struct dvb_frontend* fe,
 							bool init, unsigned int *delay,
 							enum fe_status *status);
 
-	int (*get_spectrum)(struct dvb_frontend *fe,
-											struct dtv_fe_spectrum* s,
-											unsigned int *delay,  enum fe_status *status);
+	int (*spectrum_start)(struct dvb_frontend *fe, struct dtv_fe_spectrum* user,
+												unsigned int *delay, enum fe_status *status);
+
+	int (*spectrum_get)(struct dvb_frontend *fe,
+											struct dtv_fe_spectrum* user);
 
 	/* get frontend tuning algorithm from the module */
 	enum dvbfe_algo (*get_frontend_algo)(struct dvb_frontend *fe);

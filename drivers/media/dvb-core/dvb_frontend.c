@@ -135,19 +135,11 @@ static void dvb_frontend_invoke_release(struct dvb_frontend *fe,
 					void (*release)(struct dvb_frontend *fe));
 
 
-static void release_dtv_fe_spectrum_scan(struct dtv_fe_spectrum* s)
+static void release_dtv_fe_spectrum_scan(struct dvb_frontend* fe)
 {
-	if(s->freq || s->rf_level)
-			dprintk("releasing memory\n");
-	if (s->freq) {
-		kfree(s->freq);
-	}
-	if (s->rf_level) {
-		kfree(s->rf_level);
-	}
-	s->freq = NULL;
-	s->rf_level = NULL;
-	s->num_freq =0;
+
+	if (fe->ops.stop_task)
+		fe->ops.stop_task(fe);
 }
 
 static void __dvb_frontend_free(struct dvb_frontend *fe)
@@ -158,7 +150,7 @@ static void __dvb_frontend_free(struct dvb_frontend *fe)
 		dvb_free_device(fepriv->dvbdev);
 
 	dvb_frontend_invoke_release(fe, fe->ops.release);
-	release_dtv_fe_spectrum_scan(&fepriv->spectrum);
+	release_dtv_fe_spectrum_scan(fe);
 
 	kfree(fepriv);
 }
@@ -763,8 +755,8 @@ restart:
 				}	 else if (fepriv->state & FESTATE_GETTING_SPECTRUM) {
 					dev_dbg(fe->dvb->device, "%s: Spectrum requested, DTV_SPECTRUM\n", __func__);
 					dprintk("starting spectrum scan\n");
-					if (fe->ops.get_spectrum)
-						fe->ops.get_spectrum(fe, &fepriv->spectrum, &fepriv->delay, &s);
+					if (fe->ops.spectrum_start)
+						fe->ops.spectrum_start(fe,  &fepriv->spectrum, &fepriv->delay, &s);
 					dprintk("spectrum scan ended\n");
 					fepriv->state = FESTATE_IDLE;
 				} else {
@@ -2248,11 +2240,6 @@ static int dtv_property_process_set(struct dvb_frontend *fe,
 static int init_dtv_fe_spectrum_scan(struct dtv_fe_spectrum* s, struct dtv_frontend_properties *p,
 																		 enum dtv_fe_spectrum_method method)
 {
-	u32 start_frequency = p->scan_start_frequency;
-	u32 end_frequency = p->scan_end_frequency;
-	u32 frequency_step = p->scan_resolution;
-	u32 bandwidth = end_frequency-start_frequency; //in kHz
-
 	switch(method) {
 	case SPECTRUM_METHOD_SWEEP:
 	case SPECTRUM_METHOD_FFT:
@@ -2262,30 +2249,6 @@ static int init_dtv_fe_spectrum_scan(struct dtv_fe_spectrum* s, struct dtv_front
 		return -EINVAL;
 		break;
 	}
-
-	s->num_freq =	 bandwidth/(frequency_step>0 ?frequency_step: 1);
-	if(s->num_freq >= 65536*2)
-		s->num_freq = 65536;
-	if(s->num_freq <1)
-		s->num_freq =1;
-	s->freq= kzalloc(s->num_freq * (sizeof(s->freq[0])), GFP_KERNEL);
-	s->rf_level= kzalloc(s->num_freq * (sizeof(s->rf_level[0])), GFP_KERNEL);
-	s->rf_band= kzalloc(s->num_freq * (sizeof(s->rf_band[0])), GFP_KERNEL);
-	if (!s->freq || !s->rf_level || !s->rf_band) {
-		if(s->freq)
-			kfree(s->freq);
-		if(s->rf_level)
-			kfree(s->rf_level);
-		if(s->rf_band)
-			kfree(s->rf_band);
-		s->num_freq = 0;
-		s->rf_level= NULL;
-		s->rf_band= NULL;
-		s->freq = NULL;
-		return -ENOMEM;
-	}
-	dprintk("spectrum: start=%dMhz end=%dMhz resolution=%dkHz points=%d\n",
-					start_frequency/1000, end_frequency/1000, frequency_step, s->num_freq);
 
 	return 0;
 }
@@ -2341,13 +2304,21 @@ static int dvb_frontend_handle_algo_ctrl_ioctl(struct file *file,
 {
 	struct dvb_device *dvbdev = file->private_data;
 	struct dvb_frontend *fe = dvbdev->priv;
+	struct dvb_frontend_private *fepriv = fe->frontend_priv;
 	int err = -ENOTSUPP;
 
 	dev_dbg(fe->dvb->device, "%s:\n", __func__);
 
 	switch (cmd) {
 	case DTV_STOP:
+		//this will request the task to stop processing
 		atomic_set(&fe->algo_state.task_should_stop, true);
+		//so
+		if (down_interruptible(&fepriv->sem))
+			return -ERESTARTSYS;
+		if (fe->ops.stop_task)
+			fe->ops.stop_task(fe);
+		up(&fepriv->sem);
 		return 0;
 		break;
 
@@ -2739,7 +2710,7 @@ static int dtv_set_spectrum(struct dvb_frontend *fe, enum dtv_fe_spectrum_method
 {
 	struct dvb_frontend_private *fepriv = fe->frontend_priv;
 	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
-	if (!fe->ops.get_spectrum)
+	if (!fe->ops.spectrum_get || !fe->ops.spectrum_start)
 		return  -ENOTSUPP;
 	int ret = init_dtv_fe_spectrum_scan(&fepriv->spectrum, c, method);
 	if(ret<0)
@@ -2754,37 +2725,19 @@ static int dtv_set_spectrum(struct dvb_frontend *fe, enum dtv_fe_spectrum_method
 	return 0;
 }
 
+
+
 static int dtv_get_spectrum(struct dvb_frontend *fe, struct dtv_fe_spectrum* user)
 {
 	int err = 0;
 	struct dvb_frontend_private *fepriv = fe->frontend_priv;
 	struct dtv_fe_spectrum* kernel = &fepriv->spectrum;
-	u32 num_freq = kernel->num_freq;
-	if(num_freq > user->num_freq)
-		num_freq = user->num_freq;
-	//copy all data (freq and rf_level, rf_band)
-	if(user->freq == NULL || user->rf_level==0 || user->rf_band==0) {
-		dev_err(fe->dvb->device,
-						"%s: called without allocated memory\n",
-						__func__);
-		user->num_freq = 0;
-	}
-	user->num_freq = num_freq;
-	dprintk("spectrum retrieved user: n=%d kernel: n=%d => n=%d\n", user->num_freq, kernel->num_freq, num_freq);
+	dprintk("spectrum retrieved user: n=%d\n", user->num_freq);
 
-	if (copy_to_user((void __user*) user->freq, kernel->freq, num_freq * sizeof(__u32))) {
-		err = -EFAULT;
-	}
-	if (copy_to_user((void __user*) user->rf_level, kernel->rf_level, num_freq * sizeof(__s32))) {
-		err = -EFAULT;
-	}
+	if(fe->ops.spectrum_get)
+		fe->ops.spectrum_get(fe, user);
 
-	if (copy_to_user((void __user*) user->rf_band, kernel->rf_band, num_freq * sizeof(__s32))) {
-		err = -EFAULT;
-	}
-
-
-	release_dtv_fe_spectrum_scan(kernel);
+	//release_dtv_fe_spectrum_scan(fe);
 
 	return err;
 }
@@ -2878,13 +2831,6 @@ static int dvb_frontend_handle_ioctl(struct file *file,
 	case FE_GET_CONSTELLATION_SAMPLES:
 		err = dvb_frontend_ioctl_get_constellation_samples(file, cmd, parg);
 		break;
-	case FE_GET_EXTENDED_INFO: {
-		struct dvb_frontend_extended_info* extended_info = parg;
-		memcpy(extended_info, &fe->ops.extended_info, sizeof(struct dvb_frontend_extended_info));
-
-		err = 0;
-		break;
-	}
 	case FE_ECP3FW_READ:
 		//printk("FE_ECP3FW_READ *****************");
 		if (fe->ops.spi_read) {
@@ -3019,6 +2965,27 @@ static int dvb_frontend_handle_ioctl(struct file *file,
 		}
 		dev_dbg(fe->dvb->device, "%s: current delivery system on cache: %d, V3 type: %d\n",
 			__func__, c->delivery_system, info->type);
+
+		/* Set CAN_INVERSION_AUTO bit on in other than oneshot mode */
+		if (!(fepriv->tune_mode_flags & FE_TUNE_MODE_ONESHOT))
+			info->caps |= FE_CAN_INVERSION_AUTO;
+		err = 0;
+		break;
+	}
+	case FE_GET_EXTENDED_INFO: {
+		struct dvb_frontend_extended_info *info = parg;
+		memset(info, 0, sizeof(*info));
+
+		strscpy(info->name, fe->ops.info.name, sizeof(info->name));
+		strscpy(info->dev_name, fe->ops.info.dev_name, sizeof(info->dev_name));
+		info->symbol_rate_min = fe->ops.info.symbol_rate_min;
+		info->symbol_rate_max = fe->ops.info.symbol_rate_max;
+		info->symbol_rate_tolerance = fe->ops.info.symbol_rate_tolerance;
+		info->caps = fe->ops.info.caps;
+		info->frequency_stepsize = dvb_frontend_get_stepsize(fe);
+		dvb_frontend_get_frequency_limits(fe, &info->frequency_min,
+							&info->frequency_max,
+							&info->frequency_tolerance);
 
 		/* Set CAN_INVERSION_AUTO bit on in other than oneshot mode */
 		if (!(fepriv->tune_mode_flags & FE_TUNE_MODE_ONESHOT))

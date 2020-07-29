@@ -121,7 +121,7 @@ static int tbs6302se_read_mac(struct tbsecp3_adapter *adap)
 		//printk(" the receiver always busy !\n");
 		//check mcu status
 		*(u32 *)tmpbuf = tbs_read( BASE_ADDRESS_24CXX,  STATUS_MAC16_24CXX );
-		if((tmpbuf[0]&0x4) == 1) // bit2==1 mcu busy
+		if((tmpbuf[0]&0x4)) // bit2==1 mcu busy
 		{
 			//printk("MCU status is busy!!!\n" );
 			// release cs;
@@ -1175,12 +1175,12 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 		break;
 
 	case TBSECP3_BOARD_TBS690a: {
+		int regdata;
+		u8 mpbuf[4];
 		adapter->fe = dvb_attach(tas2971_attach, &tbs6904_demod_cfg[adapter->nr], i2c);
 		if (adapter->fe == NULL)
 				goto frontend_atach_fail;
 		// init asi
-		int regdata;
-		u8 mpbuf[4];
 		mpbuf[0] = adapter->nr; //0--3 select value
 		tbs_write( TBSECP3_GPIO_BASE, 0x34 , *(u32 *)&mpbuf[0]); // select chip : 13*8 =104=0x68 select address
 		//u32 mpbuf = adapter->nr;
@@ -1826,6 +1826,7 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 		break;
 	}
 	strlcpy(adapter->fe->ops.info.name,dev->info->name,52);
+	strlcpy(adapter->fe->ops.info.dev_name, dev_name(&dev->pci_dev->dev),52);
 	if (adapter->fe2)
 		strlcpy(adapter->fe2->ops.info.name,dev->info->name,52);
 	return 0;

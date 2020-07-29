@@ -167,6 +167,17 @@ struct dvb_frontend_info {
 };
 
 struct dvb_frontend_extended_info {
+	char       card_name[128]; //name of card to which adapter is attached
+	char       dev_name[128]; //name device to which adapter is attached
+	char       name[128];
+	__u32      frequency_min;
+	__u32      frequency_max;
+	__u32      frequency_stepsize;
+	__u32      frequency_tolerance;
+	__u32      symbol_rate_min;
+	__u32      symbol_rate_max;
+	__u32      symbol_rate_tolerance;
+	enum fe_caps caps;
 	enum fe_extended_caps extended_caps;
 };
 

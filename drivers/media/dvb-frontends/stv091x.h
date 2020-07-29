@@ -28,6 +28,7 @@
 
 #include <linux/types.h>
 #include <linux/i2c.h>
+#include <media/dvb_frontend.h>
 
 struct stv091x_cfg {
 	u32 clk;
@@ -144,6 +145,8 @@ struct stv {
 	bool satellite_scan;
 	s32 scan_next_frequency;
 	s32 scan_end_frequency;
+
+	struct dtv_fe_spectrum spectrum;
 };
 
 struct reg_field {

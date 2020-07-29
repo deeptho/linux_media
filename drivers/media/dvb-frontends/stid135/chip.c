@@ -241,6 +241,7 @@ STCHIP_Info_t* ChipOpen(STCHIP_Info_t *hChipOpenParams)
 		}
 
 		hChip->pRegMapImage  = calloc((u32)hChipOpenParams->NbRegs, sizeof(STCHIP_Register_t));		/* Allocation of the register map	*/
+		hChip->pRegMapSnapshot  = calloc((u32)hChipOpenParams->NbRegs, sizeof(STCHIP_Register_t));		/* Allocation of the register map	*/
 
 		if(hChip->pRegMapImage != NULL)
 		{
@@ -274,6 +275,7 @@ STCHIP_Info_t* ChipOpen(STCHIP_Info_t *hChipOpenParams)
 					{
 						hChip->pRegMapImage[reg].Addr=0;
 						hChip->pRegMapImage[reg].Value=0;
+						hChip->pRegMapSnapshot[reg] = 	hChip->pRegMapImage[reg];
 						//hChip->pRegMapImage[reg].Base=0;
 					}
 
@@ -328,6 +330,7 @@ STCHIP_Error_t	ChipClose(STCHIP_Info_t* hChip)
 		node = ChipFindNode(hChip);
 		DeleteNode(node);
 		free(hChip->pRegMapImage);
+		free(hChip->pRegMapSnapshot);
 		free(hChip->pFieldMapImage);
 		free(hChip);
 	}
@@ -443,10 +446,40 @@ int dichotomy_search(STCHIP_Register_t tab[], s32 nbVal, u16 val)
 void dump(STCHIP_Info_t* hChip) {
 	int i;
 	STCHIP_Register_t *tab=hChip->pRegMapImage;
+	printk("DUMP: nbregs=%d\n", hChip->NbRegs);
 	for(i=0; i<hChip->NbRegs; ++i) {
-		printk("[%d]=%d\n", i, tab[i].Addr);
+		if(hChip->pRegMapSnapshot[i].Value!=hChip->pRegMapImage[i].Value)
+			printk("MODIFIED: [%d] addr=0x%x 0x%x => 0x%x\n", i, tab[i].Addr, hChip->pRegMapSnapshot[i].Value, tab[i].Value);
 	}
+	printk("Dump ends\n");
 }
+
+
+void snapshot(STCHIP_Info_t* hChip) {
+	int i;
+	STCHIP_Register_t *tab=hChip->pRegMapImage;
+	for(i=0; i<hChip->NbRegs; ++i) {
+		hChip->pRegMapSnapshot[i]=hChip->pRegMapImage[i];
+	}
+	printk("SNAPSHOT\n");
+}
+
+void restore(STCHIP_Info_t* hChip) {
+	int i;
+
+	STCHIP_Register_t *tab=hChip->pRegMapImage;
+	for(i=0; i<hChip->NbRegs; ++i) {
+		if( hChip->pRegMapSnapshot[i].Value != hChip->pRegMapImage[i].Value &&
+				hChip->pRegMapSnapshot[i].Addr&0x0f00 ==0x9) {
+			hChip->pRegMapImage[i].Value = hChip->pRegMapSnapshot[i].Value;
+			ChipSetRegisters(hChip, hChip->pRegMapSnapshot[i].Addr,1);
+		}
+	}
+	printk("RESTORED\n");
+}
+
+
+
 
 
 int direct_search(STCHIP_Register_t tab[], s32 nbVal, u16 val)
@@ -791,15 +824,18 @@ STCHIP_Error_t ChipGetRegisters(STCHIP_Info_t* hChip, u16 FirstReg, s32 NbRegs)
 						/* FIXME: new for 32-bit access */
 						if(hChip->Error)
 							memset (data, 0xFF, nbdata);
-						if ((hChip->pRegMapImage[firstRegIndex].Size) == 0) hChip->pRegMapImage[firstRegIndex].Size = 1;  /* also throw a message here */
+						if ((hChip->pRegMapImage[firstRegIndex].Size) == 0) {
+							hChip->pRegMapImage[firstRegIndex].Size = 1;  /* also throw a message here */
+						}
 						for(i=0;i<NbRegs; i++)	        /* FIXME: trial, do not forget it ! register's loop */
 						{
 							hChip->pRegMapImage[firstRegIndex+i].Value=0x00000000;				/* reset register's value */
 
 							for(j=0;j<(s32)(hChip->pRegMapImage[firstRegIndex+i].Size);j++)				/* byte's loop */
 								if (hChip->ChipMode == STCHIP_MODE_I2C2STBUS)                   /* gb hware can also be little endian */
-									 hChip->pRegMapImage[firstRegIndex+i].Value = (hChip->pRegMapImage[firstRegIndex+i].Value << 8) + (data[i+j]); /* fill register value, big endian, new */
+									hChip->pRegMapImage[firstRegIndex+i].Value = (hChip->pRegMapImage[firstRegIndex+i].Value << 8) + (data[i+j]); /* fill register value, big endian, new */
 								else hChip->pRegMapImage[firstRegIndex+i].Value = hChip->pRegMapImage[firstRegIndex+i].Value + (u32)(data[i+j]<<(8*j)); /* fill register value, little endian, classic */
+
 						}
 					#endif
 				}
@@ -837,6 +873,7 @@ STCHIP_Error_t  ChipUpdateDefaultValues(STCHIP_Info_t* hChip,STCHIP_Register_t  
 		{
 			hChip->pRegMapImage[reg].Addr=pRegMap[reg].Addr;
 			hChip->pRegMapImage[reg].Value=pRegMap[reg].Value;
+			hChip->pRegMapSnapshot[reg]= hChip->pRegMapImage[reg];
 		}
 	}
 	else

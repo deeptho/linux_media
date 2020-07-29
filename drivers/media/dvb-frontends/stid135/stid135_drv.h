@@ -339,6 +339,47 @@ struct stv_base {
 	int vglna;
 };
 
+
+/*
+	state for spectrum scan
+*/
+
+struct spectrum_scan_state_t {
+	bool spectrum_present;
+	bool scan_in_progress;
+
+	s32* freq;
+	s32* spectrum;
+	int spectrum_len;
+	int fft_size; //for fft
+	s32 sample_step; //bandwithj of one spectral bin in kHz
+	s32 start_frequency;
+	s32 end_frequency;
+	s32 range; //bandwidth of current fft in kHz (covers the whole spectrum, not just the useable part)
+	int mode; //for fft
+
+	int idx_start ;//analysis starts at spectrum[idx_start]
+	int idx_end ;//analysis end at spectrum[idx_end]-1
+	int current_idx; //position at which we last stopped processing
+	s32 next_frequency; // If we found a transponder last time, this is the frequency just above the transponder bandwidth
+
+	int last_peak_idx; //index at which we last found a peak
+	s32 last_peak_freq; //frequency of current peak
+
+	int last_rise_idx; //location of last processed rising peak
+	int last_fall_idx; //location of last processed falling peak
+
+
+	int w; //window_size
+	int threshold; //minimum peak amplitude required
+
+	s32 lo_frequency_hz;
+
+
+	u8* peak_marks;
+
+};
+
 /*
 	state per adapter
  */
@@ -384,6 +425,8 @@ struct stv {
 	struct gse_ram_byte		gse_flt;
 	BOOL	mis_mode; /* Memorisation of MIS mode */
 	struct modcod_data	mc_flt[NB_SAT_MODCOD];
+
+	struct spectrum_scan_state_t scan_state;
 
 };
 
@@ -748,5 +791,18 @@ fe_lla_error_t  set_pls_mode_code(struct stv *state, u8 pls_mode, u32 pls_code);
 fe_lla_error_t FE_STiD135_GetFECLock(struct stv* state, u32 TimeOut, BOOL* lock_bool_p);
 fe_lla_error_t fe_stid135_read_hw_matype(struct stv* state, u8 *matype, u8 *isi_read);
 bool fe_stid135_check_sis_or_mis(u8 matype);
+
+int stid135_spectral_scan_start(struct dvb_frontend *fe);
+int stid135_spectral_scan_next(struct dvb_frontend *fe,   s32 *frequency_ret);
+int get_spectrum_scan_fft(struct dvb_frontend *fe);
+
+
+void print_spectrum_scan_state_(struct spectrum_scan_state_t*ss, const char* func, int line);
+#define print_spectrum_scan_state(ss)																					\
+	print_spectrum_scan_state_(ss, __func__, __LINE__)
+
+void dump_regs(struct stv*state);
+void snapshot_regs(struct stv*state);
+void restore_regs(struct stv*state);
 
 #endif  /* ndef STID135_DRV_H */

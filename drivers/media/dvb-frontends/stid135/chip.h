@@ -254,6 +254,7 @@ typedef enum
 		int			NbRegs;           /* Number of registers in the chip */
 		u32			NbFields;         /* Number of fields in the chip */
 		STCHIP_Register_t	*pRegMapImage;     /* Pointer to register map */
+		STCHIP_Register_t	*pRegMapSnapshot;     /* xxx */
 		STCHIP_Field_t		*pFieldMapImage;   /* Pointer to field map */
 		STCHIP_Instance_t	*pInstMap;         /* Pointer to an Instances Map */
 		STCHIP_Error_t		Error;            /* Error state */

@@ -332,6 +332,8 @@ static u8 get_optim_cloop(struct stv *state,
 	return S2CarLoop[i];
 }
 
+static int stv091x_stop_task(struct dvb_frontend *fe);
+
 static int stv091x_symbol_rate(struct stv *state, u32 *p_symbol_rate, bool coarse)
 {
 	int status = 0;
@@ -1496,7 +1498,7 @@ static int stv091x_isi_scan(struct dvb_frontend *fe)
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
 	struct stv *state = fe->demodulator_priv;
 	u8 CurrentISI;
-	u8 i;
+	int i;
 	u32 j=0, n;
 	u8 tmp;
 	u8 regs[2];
@@ -2417,6 +2419,7 @@ static int tune(struct dvb_frontend *fe, bool re_tune,
 	dprintk("tune called with freq=%d srate=%d => %d re_tune=%d\n", p->frequency, p->symbol_rate,
 					state->symbol_rate, re_tune);
 	if (re_tune) {
+		stv091x_stop_task(fe);
 		r = tune_once(fe, &need_retune);
 		if (r)
 			return r;
@@ -2679,9 +2682,9 @@ static void spi_write(struct dvb_frontend *fe,struct ecp3_info *ecp3inf)
 
 
 
-static int stv091x_get_spectrum_scan(struct dvb_frontend *fe,
-																		 struct dtv_fe_spectrum* s,
-																		 unsigned int *delay,  enum fe_status *status)
+static int stv091x_spectrum_start(struct dvb_frontend *fe,
+																	struct dtv_fe_spectrum* s,
+																	unsigned int *delay, enum fe_status *status)
 {
 	struct stv *state = fe->demodulator_priv;
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
@@ -2756,9 +2759,44 @@ static int stv091x_get_spectrum_scan(struct dvb_frontend *fe,
 		//usleep_range(12000, 13000);
 		s->rf_level[i] = stv091x_narrow_band_signal_power_dbm(fe);
 	}
-	*status =  FE_HAS_SIGNAL|FE_HAS_CARRIER|FE_HAS_VITERBI|FE_HAS_SYNC|FE_HAS_LOCK;
 	return 0;
 }
+
+
+static int stv091x_stop_task(struct dvb_frontend *fe)
+{
+	struct stv *state = fe->demodulator_priv;
+	struct dtv_fe_spectrum* ss = &state->spectrum;
+	if(ss->freq)
+		kfree(ss->freq);
+	if(ss->rf_level)
+		kfree(ss->rf_level);
+	dprintk("Freed memory\n");
+	return 0;
+}
+
+int stv091x_spectrum_get(struct dvb_frontend *fe, struct dtv_fe_spectrum* user)
+{
+	struct stv *state = fe->demodulator_priv;
+	int error=0;
+	if(user->num_freq > state->spectrum.num_freq)
+		user->num_freq = state->spectrum.num_freq;
+	if(state->spectrum.freq && state->spectrum.rf_level) {
+	if (copy_to_user((void __user*) user->freq, state->spectrum.freq, user->num_freq * sizeof(__u32))) {
+			error = -EFAULT;
+		}
+		if (copy_to_user((void __user*) user->rf_level, state->spectrum.rf_level, user->num_freq * sizeof(__s32))) {
+			error = -EFAULT;
+		}
+		error = 0;
+	}
+	else
+		error = -EFAULT;
+	stv091x_stop_task(fe);
+	return error;
+}
+
+
 
 static int stv091x_get_constellation_samples(struct dvb_frontend *fe, struct dvb_fe_constellation_samples *s)
 {
@@ -2779,6 +2817,7 @@ static int stv091x_get_constellation_samples(struct dvb_frontend *fe, struct dvb
 }
 
 
+
 static struct dvb_frontend_ops stv091x_ops = {
 	.delsys = { SYS_DVBS, SYS_DVBS2, SYS_DSS },
 	.info = {
@@ -2791,9 +2830,7 @@ static struct dvb_frontend_ops stv091x_ops = {
 					 FE_CAN_FEC_AUTO |
 					 FE_CAN_QPSK |
 					 FE_CAN_2G_MODULATION |
-					 FE_CAN_MULTISTREAM
-	},
-	.extended_info = {
+		       FE_CAN_MULTISTREAM,
 		.extended_caps = FE_CAN_SPECTRUMSCAN	| FE_CAN_IQ
 	},
 	.init				= init,
@@ -2817,7 +2854,9 @@ static struct dvb_frontend_ops stv091x_ops = {
 	.spi_read			= spi_read,
 	.spi_write			= spi_write,
 	.scan =  stv091x_sat_scan,
-	.get_spectrum = stv091x_get_spectrum_scan,
+	.stop_task = stv091x_stop_task,
+	.spectrum_start = stv091x_spectrum_start,
+	.spectrum_get = stv091x_spectrum_get,
 	.get_constellation_samples	= stv091x_get_constellation_samples,
 };
 
