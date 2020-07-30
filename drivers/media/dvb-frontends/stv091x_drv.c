@@ -1045,9 +1045,10 @@ int stv091x_set_frequency_symbol_rate_bandwidth(struct stv* state)
 	if(state->satellite_scan) {
 		state->tuner_bw = 2*36000000; 	/* Use maximal bandwidth */
 		/* If Blind search set the init symbol rate to 1Msps*/
+		dprintk("requesting stv6120 to set: freq=%dkHz bw=%dkHz\n", p->frequency, state->tuner_bw/1000);
 		if(state->fe.ops.tuner_ops.set_frequency_and_bandwidth)
 			state->fe.ops.tuner_ops.set_frequency_and_bandwidth(&state->fe, p->frequency, state->tuner_bw);
-		dprintk("set symbol_rate to %d\n", state->symbol_rate);
+		dprintk("set symbol_rate to %dkHz\n", state->symbol_rate/1000);
 		stv091x_set_symbol_rate(state, state->symbol_rate);
 	} else {
 		dprintk("symrate1=%d bw=%d\n", state->symbol_rate, state->tuner_bw);
@@ -1090,7 +1091,7 @@ static int stv091x_set_search_range(struct stv *state, struct dtv_frontend_prope
 		//set limits on how far we can search for a carrier
 		//default search_range=16 000 000; make it less for lower symbol rate
 			range = (state->search_range / 2000);
-			range = (range << 16) / (state->base->mclk / 1000);
+			//range = (range << 16) / (state->base->mclk / 1000);
 		} else {
 			range = state->search_range; //for regular blindscan
 			dprintk("RANGE=%d\n", range);
@@ -1101,6 +1102,7 @@ static int stv091x_set_search_range(struct stv *state, struct dtv_frontend_prope
 		//default search_range=16 000 000; make it less for lower symbol rate
 		range = (state->search_range / 2000);
 	}
+	dprintk("RANGE= set to %dkHz state->search_range=%dkHz\n", range, state->search_range);
 	range = (range<<16)/(state->base->mclk/1000); //1Mhz
 	write_reg(state, RSTV0910_P2_CFRUP1 + state->regoff,
 						(range >> 8) & 0xff);
@@ -2119,7 +2121,6 @@ static int stv091x_carrier_check(struct stv* state, s32 *FinalFreq, s32* frequen
 
 			if ((agc2ratio > STV0910_BLIND_SEARCH_AGC2BANDWIDTH) && (agc2level==minagc2level)) {	 /* rising edge */
 				asperity=1;		 /* The first edge is rising */
-				//never triggered!
 				waitforfall=1;
 				for (l=0;l<5*div;l++) {
 					agc2leveltab[l]= agc2level;
@@ -2270,10 +2271,12 @@ static int scan_within_tuner_bw(struct dvb_frontend *fe, bool* locked_ret)
 	}
 
 	asperity = stv091x_carrier_search(state, &frequency_jump);
-	dprintk("asperity=%d frequency=%d jump=%d\n", asperity, p->frequency, frequency_jump);
+	dprintk("asperity=%d frequency=%dkHz jump=%dkHz\n", asperity, p->frequency, frequency_jump);
 	if(asperity==1 ||asperity==2) { //rising or falling edge found
 		p->frequency += frequency_jump;
 
+		dprintk("BEFORE state->srate=%d p->srate=%d p->search_range=%d state->search_range=%d\n",
+						state->symbol_rate/1000, p->symbol_rate/1000, p->search_range/1000, state->search_range/10000);
 		state->Started = 1;
 		{ bool need_retune;
 			int ret;
@@ -2284,7 +2287,8 @@ static int scan_within_tuner_bw(struct dvb_frontend *fe, bool* locked_ret)
 			p->algorithm = old;
 			locked= !state->timedout;
 		}
-
+		dprintk("AFTER state->srate=%d p->srate=%d p->search_range=%d state->search_range=%d\n",
+						state->symbol_rate/1000, p->symbol_rate/1000, p->search_range/1000, state->search_range/10000);
 
 		if(locked) {
 			//stv091x_get_signal_info(fe); already done in tune_once
@@ -2462,6 +2466,10 @@ static int stv091x_sat_scan(struct dvb_frontend *fe, bool init,
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
 	int asperity;
 	bool locked = false;
+	if(init) {
+		stv091x_stop_task(fe);
+		//clean up any left over spectrum
+	}
 	state->Started = 0;
 	state->satellite_scan = true;
 	//todo: 	MinSymbolRate
@@ -2492,11 +2500,10 @@ static int stv091x_sat_scan(struct dvb_frontend *fe, bool init,
 
 		p->algorithm = ALGORITHM_SEARCH_NEXT;
 		asperity = scan_within_tuner_bw(fe, &locked);
-		dprintk("asperity=%d locked=%d freq=%d start=%d end=%d\n", asperity, locked,
-						p->frequency, state->scan_next_frequency, state->scan_end_frequency);
+		dprintk("asperity=%d locked=%d freq=%dkHz start_freq=%dkHz end_freq=%dkHz\n", asperity, locked,
+						p->frequency/1000, state->scan_next_frequency/1000, state->scan_end_frequency);
 		if(locked) {
 			//state->scan_end_frequency = p->frequency;
-			//stv091x_set_frequency_symbol_rate_bandwidth(state);
 			uint32_t step = 135*((state->symbol_rate/1000) / (2*100));
 			uint32_t next = p->frequency + step;
 			dprintk("symbol_rate=%d step=%d next-%d\n", state->symbol_rate, step, next);
@@ -2518,7 +2525,7 @@ static int stv091x_sat_scan(struct dvb_frontend *fe, bool init,
 	}
 	if(state->scan_next_frequency >= state->scan_end_frequency) {
 		dprintk("Signaling DONE\n");
-		*status |= FE_TIMEDOUT;
+		*status =  FE_TIMEDOUT|FE_HAS_SIGNAL|FE_HAS_CARRIER|FE_HAS_VITERBI|FE_HAS_SYNC|FE_HAS_LOCK;
 	}
 	return 0;
 }
@@ -2688,15 +2695,20 @@ static int stv091x_spectrum_start(struct dvb_frontend *fe,
 {
 	struct stv *state = fe->demodulator_priv;
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
-
+	struct spectrum_scan_state* ss = &state->scan_state;
 	int i;
 	u32 start_frequency = p->scan_start_frequency;
 	u32 end_frequency = p->scan_end_frequency;
 	//u32 bandwidth = end_frequency-start_frequency; //in kHz
-	u32 num_freq =	s->num_freq;
 	uint32_t frequency;
 	uint32_t resolution =  (p->scan_resolution>0) ? p->scan_resolution : p->symbol_rate/1000; //in kHz
 	uint32_t bandwidth =  (p->symbol_rate>0) ? p->symbol_rate : p->scan_resolution*1000; //in Hz
+	u32 num_freq = (p->scan_end_frequency-p->scan_start_frequency+ resolution-1)/resolution;
+	stv091x_stop_task(fe);
+	s->num_freq = num_freq;
+	ss->spectrum_len = num_freq;
+	ss->freq = kzalloc(ss->spectrum_len * (sizeof(ss->freq[0])), GFP_KERNEL);
+	ss->spectrum = kzalloc(ss->spectrum_len * (sizeof(ss->spectrum[0])), GFP_KERNEL);
 
 	state->tuner_bw = stv091x_bandwidth(ROLLOFF_AUTO, bandwidth);
 	s->scale =  FE_SCALE_DECIBEL; //in units of 0.001dB
@@ -2747,8 +2759,8 @@ static int stv091x_spectrum_start(struct dvb_frontend *fe,
 		write_reg(state, RSTV0910_P2_DMDISTATE, 0x1C); //stop demod
 		write_reg(state, RSTV0910_P2_DMDISTATE, 0x18); //warm
 
-		s->freq[i]= start_frequency +i*resolution;
-		frequency = s->freq[i];
+		ss->freq[i]= start_frequency +i*resolution;
+		frequency = ss->freq[i];
 #if 1
 		p->frequency = frequency;
 		if(fe->ops.tuner_ops.set_frequency_and_bandwidth)
@@ -2757,8 +2769,9 @@ static int stv091x_spectrum_start(struct dvb_frontend *fe,
 			fe->ops.tuner_ops.set_params(fe); //todo: check that this sets the proper bandwidth
 #endif
 		//usleep_range(12000, 13000);
-		s->rf_level[i] = stv091x_narrow_band_signal_power_dbm(fe);
+		ss->spectrum[i] = stv091x_narrow_band_signal_power_dbm(fe);
 	}
+	*status =  FE_HAS_SIGNAL|FE_HAS_CARRIER|FE_HAS_VITERBI|FE_HAS_SYNC|FE_HAS_LOCK;
 	return 0;
 }
 
@@ -2766,11 +2779,12 @@ static int stv091x_spectrum_start(struct dvb_frontend *fe,
 static int stv091x_stop_task(struct dvb_frontend *fe)
 {
 	struct stv *state = fe->demodulator_priv;
-	struct dtv_fe_spectrum* ss = &state->spectrum;
+	struct spectrum_scan_state* ss = &state->scan_state;
 	if(ss->freq)
 		kfree(ss->freq);
-	if(ss->rf_level)
-		kfree(ss->rf_level);
+	if(ss->spectrum)
+		kfree(ss->spectrum);
+	memset(ss, 0, sizeof(*ss));
 	dprintk("Freed memory\n");
 	return 0;
 }
@@ -2779,20 +2793,19 @@ int stv091x_spectrum_get(struct dvb_frontend *fe, struct dtv_fe_spectrum* user)
 {
 	struct stv *state = fe->demodulator_priv;
 	int error=0;
-	if(user->num_freq > state->spectrum.num_freq)
-		user->num_freq = state->spectrum.num_freq;
-	if(state->spectrum.freq && state->spectrum.rf_level) {
-	if (copy_to_user((void __user*) user->freq, state->spectrum.freq, user->num_freq * sizeof(__u32))) {
+	if(user->num_freq > state->scan_state.spectrum_len)
+		user->num_freq = state->scan_state.spectrum_len;
+	if(state->scan_state.freq && state->scan_state.spectrum) {
+	if (copy_to_user((void __user*) user->freq, state->scan_state.freq, user->num_freq * sizeof(__u32))) {
 			error = -EFAULT;
 		}
-		if (copy_to_user((void __user*) user->rf_level, state->spectrum.rf_level, user->num_freq * sizeof(__s32))) {
+		if (copy_to_user((void __user*) user->rf_level, state->scan_state.spectrum, user->num_freq * sizeof(__s32))) {
 			error = -EFAULT;
 		}
 		error = 0;
 	}
 	else
 		error = -EFAULT;
-	stv091x_stop_task(fe);
 	return error;
 }
 

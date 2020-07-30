@@ -108,6 +108,17 @@ enum FE_STV0910_ModCod {
 
 enum FE_STV0910_RollOff { FE_SAT_35, FE_SAT_25, FE_SAT_20, FE_SAT_15 };
 
+struct spectrum_scan_state {
+	bool spectrum_present;
+	bool scan_in_progress;
+
+	s32* freq;
+	s32* spectrum;
+	int spectrum_len;
+
+};
+
+
 struct stv {
 	struct stv_base     *base;
 	struct dvb_frontend  fe;
@@ -146,7 +157,7 @@ struct stv {
 	s32 scan_next_frequency;
 	s32 scan_end_frequency;
 
-	struct dtv_fe_spectrum spectrum;
+	struct spectrum_scan_state scan_state;
 };
 
 struct reg_field {
