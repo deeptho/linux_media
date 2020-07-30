@@ -607,7 +607,7 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 	mutex_lock(&state->base->status_lock);
 
 	/* Search parameters */
-#if 1
+
 	switch(p->algorithm) {
 	case ALGORITHM_WARM:
 		search_params.search_algo		= FE_SAT_WARM_START;
@@ -640,18 +640,10 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 		break;
 	}
 	search_params.stream_id = p->stream_id;
-#else
-	search_params.search_algo		= FE_SAT_WARM_START;
-#endif
+
 	search_params.frequency		=  p->frequency*1000;
-#if 0 //LATEST
-	search_params.symbol_rate		=		(search_params.search_algo == FE_SAT_BLIND_SEARCH ||
-																	 search_params.search_algo == FE_SAT_NEXT
-																	 ) ?    30000000/*to prevent error detected*/ : p->symbol_rate;
-#else
 	search_params.symbol_rate		=		p->symbol_rate;
 	dprintk("symbol_rate=%dkS/s\n",  p->symbol_rate/1000);
-#endif
 	search_params.modulation	= FE_SAT_MOD_UNKNOWN;
 	search_params.modcode		= FE_SAT_DUMMY_PLF;
 	search_params.search_range_hz	= p->search_range > 0 ? p->search_range : 2000000; //TODO => check during blindscan
@@ -2106,7 +2098,7 @@ static int stid135_scan_sat(struct dvb_frontend *fe, bool init,
 #if 0
 		p->symbol_rate = p->symbol_rate==0? 100000: p->symbol_rate;
 #else
-		p->symbol_rate = 100000; //otherwise it may be set to low based on last transponder
+		p->symbol_rate = 1000000; //otherwise it may be set to low based on last transponder
 		p->stream_id = -1;
 #endif
 		dprintk("FREQ=%d search_range=%dkHz fft=%d res=%dkH srate=%dkS/s\n", 	p->frequency, p->search_range/1000,
