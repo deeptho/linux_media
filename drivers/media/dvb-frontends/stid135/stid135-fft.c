@@ -897,8 +897,8 @@ int get_spectrum_scan_fft(struct dvb_frontend *fe)
 
 
 enum slope_t {
-	FALLING=1,
-	RISING=2
+	FALLING = 1,
+	RISING = 2
 };
 
 #define MAXW 31
@@ -921,9 +921,9 @@ static s32 max_(s32*a, int n)
 	w is window size
 	n is size of signal
 */
-static void falling(u8* pres, s32* psig, int n, int w, int thresh)
+static void falling(u8* pres, s32* psig, int n, int w, int thresh, int mincount)
 {
-
+	int count=0;
 	bool peak_found=false;
 	int i;
 	s32 temp[MAXW];
@@ -936,7 +936,11 @@ static void falling(u8* pres, s32* psig, int n, int w, int thresh)
 		s32 left_max;
 		temp[i%w] = s;
 		left_max = max_(temp, w);
-		if(left_max-s > thresh) {
+		if (left_max-s > thresh)
+			count++;
+		else
+			count =0;
+		if(count>=mincount) {
 			//mark complete peak if not already on a peak
 			if(!peak_found) {
 				//dprintk("SET FALL\n");
@@ -954,9 +958,9 @@ static void falling(u8* pres, s32* psig, int n, int w, int thresh)
 	w is window size
 	n is size of signal
 */
-static void rising(u8* pres, s32* psig, int n, int w, int thresh)
+static void rising(u8* pres, s32* psig, int n, int w, int thresh, int mincount)
 {
-
+	int count=0;
 	bool peak_found=false;
 	int i;
 	s32 temp[MAXW];
@@ -969,7 +973,11 @@ static void rising(u8* pres, s32* psig, int n, int w, int thresh)
 		s32 right_max;
 		temp[i%w] = s;
 		right_max = max_(temp, w);
-		if(right_max-s > thresh) {
+		if (right_max-s > thresh)
+			count++;
+		else
+			count =0;
+		if(count>=mincount) {
 			//mark complete peak if not already on a peak
 			if(!peak_found) {
 				//dprintk("SET RISE\n");
@@ -981,6 +989,38 @@ static void rising(u8* pres, s32* psig, int n, int w, int thresh)
 		}
 	}
 }
+
+
+/*
+	Fix some cases in which there is no rising edge between two falling edges,
+	or vice versa
+ */
+static void fix(u8* pres, s32* psig, int n, int w, int thresh, int mincount)
+{
+
+	//bool peak_found=false;
+	int i;
+	//s32 temp[MAXW];
+	int last=0;
+	if(w>MAXW)
+		w=MAXW;
+
+
+	for(i=0; i<n; ++i) {
+		if(i>0) {
+			if(pres[i]!=0) {
+				if((pres[i] & RISING ) && (pres[last] &RISING)) {
+					falling(pres+last, psig+last, i-last+1, w, thresh, mincount);
+				}
+				if((pres[i] & FALLING ) && (pres[last] & FALLING)) {
+					rising(pres+last, psig+last, i-last+1, w, thresh, mincount);
+				}
+				last = i;
+			}
+		}
+	}
+}
+
 
 //returns index of a peak in the spectrum
 static int next_candidate_tp(struct spectrum_scan_state_t* ss)
@@ -994,8 +1034,9 @@ static int next_candidate_tp(struct spectrum_scan_state_t* ss)
 				ss->last_peak_idx = (ss->last_rise_idx + ss->current_idx)/2;
 				ss->last_peak_freq =
 					ss->freq[ss->last_peak_idx]; //in kHz
+				ss->last_peak_bw = ss->freq[ss->current_idx] - ss->freq[ss->last_rise_idx]; //in kHz
 				dprintk("CANDIDATE: %d %dkHz BW=%dkHz\n", ss->last_peak_idx, ss->last_peak_freq,
-								ss->freq[ss->current_idx] - ss->freq[ss->last_rise_idx]);
+								ss->last_peak_bw);
 				ss->last_fall_idx = ss->current_idx;
 				if(ss->peak_marks[ss->current_idx]& RISING)
 					ss->last_rise_idx = ss->current_idx;
@@ -1036,7 +1077,7 @@ int stid135_spectral_scan_start(struct dvb_frontend *fe)
 {
 	struct stv *state = fe->demodulator_priv;
 	struct spectrum_scan_state_t* ss = &state->scan_state;
-	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
+	//	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 
 	error = get_spectrum_scan_fft(fe);
@@ -1054,17 +1095,18 @@ int stid135_spectral_scan_start(struct dvb_frontend *fe)
 
 	ss->w =17;
 	ss->threshold = 2000;
+	ss->mincount = 3;
 
 	ss->peak_marks = kzalloc(ss->spectrum_len * (sizeof(ss->peak_marks[0])), GFP_KERNEL);
-	dprintk("BUFFER(peak_marks size=%d) %p-%p\n", ss->peak_marks, ss->peak_marks+ ss->fft_size * (sizeof(ss->peak_marks[0])),
-					ss->spectrum_len);
+	dprintk("BUFFER(peak_marks size=%d) %p-%p\n", ss->spectrum_len, ss->peak_marks, ss->peak_marks+ ss->fft_size * (sizeof(ss->peak_marks[0])));
 	if (!ss->spectrum) {
 		return -ENOMEM;
 	}
 
 	memset(ss->peak_marks, 0, sizeof(ss->peak_marks[0])*ss->spectrum_len);
-	falling(ss->peak_marks, ss->spectrum, ss->spectrum_len, ss->w, ss->threshold);
-	rising(ss->peak_marks, ss->spectrum, ss->spectrum_len, ss->w, ss->threshold);
+	falling(ss->peak_marks, ss->spectrum, ss->spectrum_len, ss->w, ss->threshold, ss->mincount);
+	rising(ss->peak_marks, ss->spectrum, ss->spectrum_len, ss->w, ss->threshold, ss->mincount);
+	fix(ss->peak_marks, ss->spectrum, ss->spectrum_len, ss->w, ss->threshold, ss->mincount);
 	//dump_data("marks", ss->peak_marks, ss->spectrum_len);
 	return error;
 }

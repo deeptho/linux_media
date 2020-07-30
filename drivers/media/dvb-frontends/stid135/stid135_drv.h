@@ -365,6 +365,7 @@ struct spectrum_scan_state_t {
 
 	int last_peak_idx; //index at which we last found a peak
 	s32 last_peak_freq; //frequency of current peak
+	s32 last_peak_bw; //bandwidth of current peak
 
 	int last_rise_idx; //location of last processed rising peak
 	int last_fall_idx; //location of last processed falling peak
@@ -372,6 +373,7 @@ struct spectrum_scan_state_t {
 
 	int w; //window_size
 	int threshold; //minimum peak amplitude required
+	int mincount; //minimum number of above threshold detections to count as rise/fall
 
 	s32 lo_frequency_hz;
 
