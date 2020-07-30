@@ -344,7 +344,7 @@ struct stv_base {
 	state for spectrum scan
 */
 
-struct spectrum_scan_state_t {
+struct spectrum_scan_state {
 	bool spectrum_present;
 	bool scan_in_progress;
 
@@ -352,7 +352,7 @@ struct spectrum_scan_state_t {
 	s32* spectrum;
 	int spectrum_len;
 	int fft_size; //for fft
-	s32 sample_step; //bandwithj of one spectral bin in kHz
+	s32 sample_step; //bandwidth of one spectral bin in kHz
 	s32 start_frequency;
 	s32 end_frequency;
 	s32 range; //bandwidth of current fft in kHz (covers the whole spectrum, not just the useable part)
@@ -428,7 +428,7 @@ struct stv {
 	BOOL	mis_mode; /* Memorisation of MIS mode */
 	struct modcod_data	mc_flt[NB_SAT_MODCOD];
 
-	struct spectrum_scan_state_t scan_state;
+	struct spectrum_scan_state scan_state;
 
 };
 
@@ -799,7 +799,7 @@ int stid135_spectral_scan_next(struct dvb_frontend *fe,   s32 *frequency_ret);
 int get_spectrum_scan_fft(struct dvb_frontend *fe);
 
 
-void print_spectrum_scan_state_(struct spectrum_scan_state_t*ss, const char* func, int line);
+void print_spectrum_scan_state_(struct spectrum_scan_state*ss, const char* func, int line);
 #define print_spectrum_scan_state(ss)																					\
 	print_spectrum_scan_state_(ss, __func__, __LINE__)
 

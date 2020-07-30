@@ -1404,7 +1404,7 @@ static int stid135_get_spectrum_scan_fft_one_band(struct stv *state,
 
 static int stid135_get_spectrum_scan_fft(struct dvb_frontend *fe, unsigned int *delay,  enum fe_status *status)
 {
-#if 1
+
 	fe_lla_error_t error = get_spectrum_scan_fft(fe);
 	if(!error) {
 		*status =  FE_HAS_SIGNAL|FE_HAS_CARRIER|FE_HAS_VITERBI|FE_HAS_SYNC|FE_HAS_LOCK;
@@ -1414,147 +1414,7 @@ static int stid135_get_spectrum_scan_fft(struct dvb_frontend *fe, unsigned int *
 		*status =  FE_TIMEDOUT|FE_HAS_SIGNAL|FE_HAS_CARRIER|FE_HAS_VITERBI|FE_HAS_SYNC|FE_HAS_LOCK;
 		return error;
 	}
-#else
-	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
-	struct stv *state = fe->demodulator_priv;
-	s32 Reg[60];
-	//	s32 center_freq; //in kHz
-	fe_lla_error_t error = FE_LLA_NO_ERROR;
-	fe_lla_error_t error1 = FE_LLA_NO_ERROR;
-	u32 idx=0;
-	int i;
-	s32 discont, left=0, right=0;
-	u32* temp_freq = NULL;
-	s32* temp_rf_level = NULL;
-	s32* temp_rf_band = NULL;
-	u32 table_size = 8192;
-	s32 fft_size =  (p->scan_fft_size>0) ? p->scan_fft_size : 256;
-	s32 max_range= 96800;
-	s32 start_frequency = p->scan_start_frequency;
-	s32 end_frequency = p->scan_end_frequency;
-	//uint32_t resolution =  p->scan_resolution>0 ? p->scan_resolution : 100; //in kHz
-	/*resolution is used by the ioctl call which sets the parameter; it cannot be changed
-		here without affecting the buffer size s->num_freq, which determines how much memory
-		we can fill.
-	*/
-	s32 sample_step = (end_frequency - start_frequency +s->num_freq-1)/s->num_freq;
-	u32 range = sample_step * fft_size; //in kHz
-	s32 useable_samples2 = ((fft_size*6)/10+1)/2;
-	s32 lost_samples2 = fft_size/2 - useable_samples2;
-	int subsample_factor =1;
-	int mode;
-	//s32 start_idx;
-	s32 pbandx1000;
-	bool double_correction;
-	for(mode=1;mode<=5; ++mode) {
-		table_size >>=1;
-		if(table_size <= fft_size)
-			break;
-	}
-	if(fft_size != table_size)
-		dprintk("Error: fft_size should be power of 2\n");
-	fft_size = table_size;
 
-	if(range >= max_range) {
-		subsample_factor = (range+ max_range-1)/max_range;
-		dprintk("specified resolution (%dkHz) must be lower for this fft size (%d) Will subsample by %d\n",
-						p->scan_resolution/1000, fft_size, subsample_factor);
-		//error= -EINVAL;
-		//goto _end;
-	}
-
-	dprintk("demod: %d: tuner:%d range=[%d,%d]kHz resolution=%dkHz num_freq=%d range=%dkHz lost=%d useable=%d\n",
-					state->nr, state->rf_in,
-					start_frequency, end_frequency, sample_step,
-					s->num_freq, range, lost_samples2, useable_samples2);
-	s->scale = FE_SCALE_RELATIVE;
-
-	temp_freq = kzalloc(MAX_FFT_SIZE * (sizeof(temp_freq[0])), GFP_KERNEL);
-	dprintk("BUFFER1 freq=%p-%p\n", temp_freq , temp_freq+8192 * (sizeof(temp_freq[0])));
-
-	temp_rf_level = kzalloc(8192 * (sizeof(temp_rf_level[0])), GFP_KERNEL);
-	dprintk("BUFFER2 rf_level-%p-%p\n", temp_rf_level, temp_rf_level+8192 * (sizeof(temp_rf_level[0])));
-	if (!temp_rf_level || !temp_freq) {
-		error = -ENOMEM;
-		goto _end;
-	}
-
-	temp_rf_band = kzalloc(8192 * (sizeof(temp_rf_band[0])), GFP_KERNEL);
-	dprintk("BUFFER3 rf_band-%p-%p\n", temp_rf_band, temp_rf_band+8192 * (sizeof(temp_rf_band[0])));
-	if (!temp_rf_band ) {
-		error = -ENOMEM;
-		goto _end;
-	}
-
-
-	error = fe_stid135_init_fft(&state->base->ip, state->nr+1, state->rf_in+1, mode, Reg);
-
-	error |= estimate_band_power_demod_for_fft(state, state->rf_in+1, &pbandx1000, &double_correction);
-
-	if(error) {
-		dprintk("fe_stid135_init_fft FAILED: error=%d\n", error);
-		return error;
-	}
-
-	for(idx=0; idx < s->num_freq;) {
-		s32 center_freq = start_frequency + (idx + useable_samples2)* sample_step;
-		if (kthread_should_stop() || dvb_frontend_task_should_stop(fe)) {
-			//@todo:  should this be moved into  stid135_get_spectrum_scan_fft_one_band?
-			dprintk("exiting on should stop\n");
-			break;
-		}
-
-		error = stid135_get_spectrum_scan_fft_one_band(state, s, center_freq, range,
-																									 temp_freq, temp_rf_level, temp_rf_band,
-																									 fft_size, mode, pbandx1000, double_correction);
-		if(error) {
-			dprintk("Error=%d\n", error);
-			goto _end;
-		}
-#if 1
-		i=lost_samples2;
-		left = temp_rf_level[i];
-		discont = (left-right);
-
-		//implement triangular weight for window overlap
-		if(idx>= useable_samples2)
-			for(i=1; i< useable_samples2; i+=subsample_factor ) {
-				s32 correction = ((discont* (useable_samples2+1-i))/(2*useable_samples2));
-				s->rf_level[idx-i]+= correction;
-				//if(s->rf_band)
-				//	s->rf_band[idx]+= correction;
-			}
-#endif
-		for(i= lost_samples2; i<fft_size-lost_samples2 && idx<s->num_freq; ++idx, i+=subsample_factor ) {
-			s32 correction = (i<lost_samples2+useable_samples2 &&right!=0) ?-(discont*(useable_samples2-i+lost_samples2))/(2*useable_samples2) :0;
-			s->freq[idx]= temp_freq[i];
-			s->rf_level[idx] += temp_rf_level[i]+correction;
-			if(s->rf_band)
-				s->rf_band[idx]= temp_rf_band[i];
-		}
-		i=fft_size-lost_samples2;
-		right = temp_rf_level[i-1];
-
-	}
-
- _end:
-	dprintk("ending\n");
-	if(temp_freq)
-		kfree(temp_freq);
-	if(temp_rf_level)
-		kfree(temp_rf_level);
-	if(temp_rf_band)
-		kfree(temp_rf_band);
-	error |= (error1=fe_stid135_term_fft(&state->base->ip, state->nr+1, state->rf_in+1, Reg));
-	if(error) {
-		dprintk("fe_stid135_term_fft FAILED: error=%d\n", error);
-	}
-	*status =  FE_HAS_SIGNAL|FE_HAS_CARRIER|FE_HAS_VITERBI|FE_HAS_SYNC|FE_HAS_LOCK;
-	return 0;
-	dprintk("encountered error\n");
-	*status =  FE_TIMEDOUT|FE_HAS_SIGNAL|FE_HAS_CARRIER|FE_HAS_VITERBI|FE_HAS_SYNC|FE_HAS_LOCK;
-	return error;
-#endif
 }
 
 
@@ -1564,7 +1424,7 @@ static int stid135_get_spectrum_scan_sweep(struct dvb_frontend *fe,
 																						 unsigned int *delay,  enum fe_status *status)
 {
 	struct stv *state = fe->demodulator_priv;
-	struct spectrum_scan_state_t* ss = &state->scan_state;
+	struct spectrum_scan_state* ss = &state->scan_state;
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
 	struct fe_stid135_internal_param * pParams = (struct fe_stid135_internal_param *) &state->base->ip;
 	s32 lo_frequency;
@@ -1717,7 +1577,7 @@ static int stid135_get_spectrum_scan_sweep(struct dvb_frontend *fe,
 static int stid135_stop_task(struct dvb_frontend *fe)
 {
 	struct stv *state = fe->demodulator_priv;
-	struct spectrum_scan_state_t* ss = &state->scan_state;
+	struct spectrum_scan_state* ss = &state->scan_state;
 	if(ss->freq)
 		kfree(ss->freq);
 	if(ss->spectrum)
@@ -1733,15 +1593,20 @@ static int stid135_spectrum_start(struct dvb_frontend *fe,
 																	struct dtv_fe_spectrum* s,
 																	unsigned int *delay, enum fe_status *status)
 {
+	struct stv *state = fe->demodulator_priv;
+	struct spectrum_scan_state* ss = &state->scan_state;
+	int ret=0;
 	stid135_stop_task(fe);
 	s->scale =  FE_SCALE_DECIBEL; //in units of 0.001dB
 	switch(s->spectrum_method) {
 	case SPECTRUM_METHOD_SWEEP:
 	default:
-		return stid135_get_spectrum_scan_sweep(fe,  delay,  status);
+		ret=stid135_get_spectrum_scan_sweep(fe,  delay,  status);
+		s->num_freq = ss->spectrum_len;
 		break;
 	case SPECTRUM_METHOD_FFT:
-		return stid135_get_spectrum_scan_fft(fe, delay, status);
+		ret=stid135_get_spectrum_scan_fft(fe, delay, status);
+		s->num_freq = ss->spectrum_len;
 		break;
 	}
 	return -1;
@@ -2036,7 +1901,7 @@ static int stid135_scan_sat(struct dvb_frontend *fe, bool init,
 	bool retune=true;
 	enum fe_status old;
 	unsigned int mode_flags=0; //not used
-	int ret;
+	int ret=0;
 	bool found=false;
 	s32 minfreq=0;
 	if(init) {

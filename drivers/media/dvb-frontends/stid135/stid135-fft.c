@@ -744,7 +744,7 @@ int get_spectrum_scan_fft(struct dvb_frontend *fe)
 {
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
 	struct stv *state = fe->demodulator_priv;
-	struct spectrum_scan_state_t* ss = &state->scan_state;
+	struct spectrum_scan_state* ss = &state->scan_state;
 
 	u32 table_size = 8192;
 	s32 max_range= 96800;
@@ -1023,7 +1023,7 @@ static void fix(u8* pres, s32* psig, int n, int w, int thresh, int mincount)
 
 
 //returns index of a peak in the spectrum
-static int next_candidate_tp(struct spectrum_scan_state_t* ss)
+static int next_candidate_tp(struct spectrum_scan_state* ss)
 {
 	for(; ss->current_idx < ss->idx_end; ++ss->current_idx) {
 		if(ss->peak_marks[ss->current_idx] & FALLING) {
@@ -1076,7 +1076,7 @@ static void dump_data(const char* name, u8* data, int size)
 int stid135_spectral_scan_start(struct dvb_frontend *fe)
 {
 	struct stv *state = fe->demodulator_priv;
-	struct spectrum_scan_state_t* ss = &state->scan_state;
+	struct spectrum_scan_state* ss = &state->scan_state;
 	//	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 
@@ -1115,7 +1115,7 @@ int stid135_spectral_scan_start(struct dvb_frontend *fe)
 int stid135_spectral_scan_next(struct dvb_frontend *fe,   s32 *frequency_ret)
 {
 	struct stv *state = fe->demodulator_priv;
-	struct spectrum_scan_state_t* ss = &state->scan_state;
+	struct spectrum_scan_state* ss = &state->scan_state;
 	int ret=-1;
 	while(ss->current_idx < ss->idx_end) {
 		print_spectrum_scan_state(ss);
@@ -1133,7 +1133,7 @@ int stid135_spectral_scan_next(struct dvb_frontend *fe,   s32 *frequency_ret)
 
 
 
-void print_spectrum_scan_state_(struct spectrum_scan_state_t*ss, const char* func, int line)
+void print_spectrum_scan_state_(struct spectrum_scan_state*ss, const char* func, int line)
 {
 	printk(KERN_DEBUG
 				 "%s:%d\n------------------------------------\n"

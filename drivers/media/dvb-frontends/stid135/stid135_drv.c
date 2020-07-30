@@ -2231,7 +2231,7 @@ static fe_lla_error_t FE_STiD135_GetDemodLock (struct stv* state, u32 TimeOut, B
 	u32 headerField, lockField, symbFreq1, symbFreq2;
 	s32 lock = 0;
 	u16 symbFreqRegister;
-	u32 symbolRate ;
+	//u32 symbolRate ;
 	u32 TimeOut_SymbRate, SRate_1MSymb_Sec ;
 	u32 timer = 0;
 	s32 fld_value, slc_min, slc_max, slc_sel;
@@ -2529,7 +2529,7 @@ void tst(struct stv* state)
 	fe_lla_error_t error1;
 	u32 reg1,reg2,reg3;
 	int Demod = state->nr+1;
-	error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CARCFG(Demod), 0xc6);
+	error = ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CARCFG(Demod), 0xc6);
 	return;
 	if(state->nr !=0)
 		return;
@@ -10455,7 +10455,7 @@ fe_lla_error_t fe_stid135_set_mis_filtering(struct stv* state, BOOL EnableFilter
 
 fe_lla_error_t  set_pls_mode_code(struct stv *state, u8 pls_mode, u32 pls_code)
 {
-	fe_lla_error_t  err = FE_LLA_NO_ERROR;
+	//	fe_lla_error_t  err = FE_LLA_NO_ERROR;
 	if (pls_mode == 0 && pls_code == 0)
 		pls_code = 1;
 	pls_mode &= 0x03;
