@@ -412,7 +412,7 @@ static int TrackingOptimization(struct stv *state)
 		tmp |= 0xC0; break;
 	}
 	write_reg(state, RSTV0910_P2_DMDCFGMD + state->regoff, tmp);
-
+	dprintk("RECEIVEMODE =%d\n", state->ReceiveMode);
 	if (state->ReceiveMode == Mode_DVBS2) {
 		u8 reg;
 		/* force to PRE BCH Rate */
@@ -763,9 +763,10 @@ static int wait_for_dmdlock(struct dvb_frontend *fe, bool require_data)
 	u8 lock = 0;
 	u8 dstatus, dmdstate, vstatusvit, pktdelin;
 	bool tst=false;
+	u8 tsstatus = 0;
 	state->demod_locked = 0;
 	state->fec_locked = 0;
-#if 1
+#if 0
 //	fprintk("demod: %d", state->nr);
 	if(p->algorithm != ALGORITHM_WARM)
 		timeout = 1000;
@@ -776,8 +777,10 @@ static int wait_for_dmdlock(struct dvb_frontend *fe, bool require_data)
 	else
 		timeout = 200;
 #else
-	if (state->symbol_rate <= 1000000) {         /*          SR <=  1Msps */
-		timeout = 5000;
+	if(p->algorithm != ALGORITHM_WARM)
+		timeout = 8000;
+	else if (state->symbol_rate <= 1000000) {         /*          SR <=  1Msps */
+		timeout = 16000;
 	} else if (state->symbol_rate <= 2000000) {  /*  1Msps < SR <=  2Msps */
 		timeout = 4500;
 	} else if (state->symbol_rate <= 5000000) {  /*  2Msps < SR <=  5Msps */
@@ -808,11 +811,12 @@ static int wait_for_dmdlock(struct dvb_frontend *fe, bool require_data)
 			if (dstatus&0x08 /*LOCK_DEFINITIF*/) {
 				state->demod_locked = 1;
 				if(!tst)
-					dprintk("LOCK_DEFINITIF achieved\n");
+					dprintk("LOCK_DEFINITIF achieved timing: %d/%d\n", timer, timeout);
 				tst=true;
-				if(!require_data)
-					return lock;
-
+				if(!require_data) {
+					lock =1;
+					break;
+				}
 				vstatusvit = read_reg(state, RSTV0910_P2_VSTATUSVIT + state->regoff);
 				//dprintk("vstatusvit=%d\n", vstatusvit);
 
@@ -827,10 +831,12 @@ static int wait_for_dmdlock(struct dvb_frontend *fe, bool require_data)
 			if (dstatus&0x8 /*LOCK_DEFINITIF*/) {
 				state->demod_locked = 1;
 				if(!tst)
-					dprintk("LOCK_DEFINITIF achieved\n");
+					dprintk("LOCK_DEFINITIF achieved timing: %d/%d\n", timer, timeout);
 				tst=true;
-				if(!require_data)
-					return lock;
+				if(!require_data) {
+					lock=1;
+					break;
+				}
 				pktdelin = read_reg(state, RSTV0910_P2_PDELSTATUS1 + state->regoff);
 				//dprintk("pktdelin=%d\n", pktdelin);
 				if (pktdelin&0x02 /*packet delineator locked*/) {
@@ -841,6 +847,7 @@ static int wait_for_dmdlock(struct dvb_frontend *fe, bool require_data)
 
 #else
 					state->fec_locked = 1;
+					dprintk("VITERBI lock achieved: timing=%d/%d\n",  timer, timeout);
 					lock=1;
 #endif
 				}
@@ -851,7 +858,6 @@ static int wait_for_dmdlock(struct dvb_frontend *fe, bool require_data)
 			break;
 		}
 		if(lock && require_data) {
-			u8 tsstatus;
 			tsstatus = read_reg(state, RSTV0910_P2_TSSTATUS + state->regoff);
 			lock= ((tsstatus&0x80) /*TSFIFO_LINEOK*/!=0);
 			//dprintk("tsstatus=%d\n", tsstatus);
@@ -862,8 +868,9 @@ static int wait_for_dmdlock(struct dvb_frontend *fe, bool require_data)
 		timer += 10;
 	}
 
-	dprintk("initial lock: %s dstatus=0x%x dmdstate=0x%x require_data=%d\n", lock ? "LOCKED" : "NO LOCK",
-					dstatus, dmdstate, require_data);
+	dprintk("initial lock: %s dstatus=0x%x dmdstate=0x%x vit=0x%x tsstatus=0x%x require_data=%d timing: %d/%d\n",
+					lock ? "LOCKED" : "NO LOCK",
+					dstatus, dmdstate, vstatusvit, tsstatus, require_data, timer, timeout);
 	return lock;
 }
 
@@ -2081,7 +2088,7 @@ static int stv091x_carrier_check(struct stv* state, s32 *FinalFreq, s32* frequen
 		if (i == 0) {
 			minagc2level= agc2level;
 			maxagc2level= agc2level;
-			midagc2level=agc2level;
+			midagc2level= agc2level;
 
 			for (k=0;k<5*div;k++) {
 				agc2leveltab[k]= agc2level;
@@ -2304,8 +2311,6 @@ static int scan_within_tuner_bw(struct dvb_frontend *fe, bool* locked_ret)
 }
 
 
-
-
 static int tune_once(struct dvb_frontend *fe, bool* need_retune)
 {
 
@@ -2420,9 +2425,9 @@ static int tune(struct dvb_frontend *fe, bool re_tune,
 		/*= (p->algorithm == ALGORITHM_SEARCH
 													 ||p->algorithm == ALGORITHM_SEARCH_NEXT);
 		*/
-	dprintk("tune called with freq=%d srate=%d => %d re_tune=%d\n", p->frequency, p->symbol_rate,
-					state->symbol_rate, re_tune);
 	if (re_tune) {
+		dprintk("tune called with freq=%d srate=%d => %d re_tune=%d\n", p->frequency, p->symbol_rate,
+						state->symbol_rate, re_tune);
 		stv091x_stop_task(fe);
 		r = tune_once(fe, &need_retune);
 		if (r)
