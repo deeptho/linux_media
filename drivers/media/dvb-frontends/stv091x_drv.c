@@ -1066,6 +1066,7 @@ int stv091x_set_frequency_symbol_rate_bandwidth(struct stv* state)
 		if(p->algorithm == ALGORITHM_BLIND || p->algorithm == ALGORITHM_BLIND_BEST_GUESS)
 			state->tuner_bw += state->search_range;
 #endif
+
 		dprintk("symrate=%d bw=%d\n", state->symbol_rate, state->tuner_bw);
 		if(state->fe.ops.tuner_ops.set_frequency_and_bandwidth) {
 			dprintk("requesting stv6120 to set: freq=%d bw=%d\n", p->frequency, state->tuner_bw);
@@ -1081,35 +1082,42 @@ int stv091x_set_frequency_symbol_rate_bandwidth(struct stv* state)
 static int stv091x_set_search_range(struct stv *state, struct dtv_frontend_properties *p)
 {
 	s32 range;
-	if(p->algorithm == ALGORITHM_WARM) {
-		range = 1000;
-	} else if(p->algorithm == ALGORITHM_COLD || p->algorithm == ALGORITHM_COLD_BEST_GUESS) {
+	dprintk("ALGO=%d\n", p->algorithm);
+	if(p->algorithm == ALGORITHM_WARM || p->algorithm == ALGORITHM_COLD || p->algorithm == ALGORITHM_COLD_BEST_GUESS) {
 		/* CFR min =- (search_range/2 + margin )
 			 CFR max = +(search_range/2 + margin)
 			 (80KHz margin if SR <=5Msps else margin =600KHz )*/
-
-		if(state->symbol_rate <=5000000)
-			range=(state->search_range/2000)+80;
+		if(p->search_range==0)
+			state->search_range_hz =  160000000;
 		else
-			range=(state->search_range/2000)+1600;
+			state->search_range_hz = p->search_range;
+		range = state->search_range_hz/2000;
+		if(state->symbol_rate >=5000000)
+			range +=  600;
+		else
+			range += 80;
 	} else if(p->algorithm == ALGORITHM_BLIND || ALGORITHM_SEARCH_NEXT||
 						p->algorithm == ALGORITHM_BLIND_BEST_GUESS) {
 		if(state->satellite_scan) {
-		//set limits on how far we can search for a carrier
-		//default search_range=16 000 000; make it less for lower symbol rate
-			range = (state->search_range / 2000);
+			//set limits on how far we can search for a carrier
+			//default search_range=16 000 000; make it less for lower symbol rate
+			state->search_range_hz =
+				(p->max_symbol_rate==0) ? 60000000 : p->max_symbol_rate;
+			dprintk("search range p=%d => s=%d\n", p->max_symbol_rate, state->search_range_hz);
+
+			range = (state->search_range_hz / 2000);
 			//range = (range << 16) / (state->base->mclk / 1000);
 		} else {
-			range = state->search_range; //for regular blindscan
+			range = state->search_range_hz / 2000; //for regular blindscan
 			dprintk("RANGE=%d\n", range);
 		}
 	} else {
 		BUG_ON(1);
 		//set limits on how far we can search for a carrier
 		//default search_range=16 000 000; make it less for lower symbol rate
-		range = (state->search_range / 2000);
+		range = (state->search_range_hz / 2000);
 	}
-	dprintk("RANGE= set to %dkHz state->search_range=%dkHz\n", range, state->search_range);
+	dprintk("RANGE= set to %dkHz state->search_range=%dkHz\n", range, state->search_range_hz);
 	range = (range<<16)/(state->base->mclk/1000); //1Mhz
 	write_reg(state, RSTV0910_P2_CFRUP1 + state->regoff,
 						(range >> 8) & 0xff);
@@ -1225,6 +1233,7 @@ static int stv091x_set_search_standard(struct stv *state, struct dtv_frontend_pr
 	write_reg(state, RSTV0910_P2_BCLC2S2Q + state->regoff, 0x84);
 	write_reg(state, RSTV0910_P2_BCLC2S28 + state->regoff, 0x84);
 	write_reg(state, RSTV0910_P2_CARHDR + state->regoff, 0x1C);
+	//	write_reg(state, RSTV0910_P2_CARCFG + state->regoff, 0x46);
 
 	/* Reset demod */
 	write_reg(state, RSTV0910_P2_DMDISTATE + state->regoff, 0x1F);
@@ -1865,7 +1874,7 @@ static int read_status(struct dvb_frontend *fe, enum fe_status *status)
 	*status = FE_HAS_SIGNAL;
 
 	DmdState = read_reg(state, RSTV0910_P2_DMDSTATE + state->regoff);
-	dprintk("DMDSTATE=0x%x\n", DmdState);
+	//	dprintk("DMDSTATE=0x%x\n", DmdState);
 	if (DmdState & 0x40) { //DVBS1 or DVBS2 found
 		DStatus = read_reg(state, RSTV0910_P2_DSTATUS + state->regoff);
 		dprintk("DStatus=%d\n", DStatus);
@@ -1875,14 +1884,14 @@ static int read_status(struct dvb_frontend *fe, enum fe_status *status)
 			CurReceiveMode = (DmdState & 0x20) ?
 				Mode_DVBS : Mode_DVBS2;
 	}
-	dprintk("receive_mode =%d\n", CurReceiveMode);
+	//dprintk("receive_mode =%d\n", CurReceiveMode);
 	if (CurReceiveMode == Mode_None)
 	{
  		if (state->base->set_lock_led)
 			state->base->set_lock_led(fe, 0);
 		return 0;
 	}
-	dprintk("state->receive_mode =%d\n", state->ReceiveMode);
+	//dprintk("state->receive_mode =%d\n", state->ReceiveMode);
 	if (state->ReceiveMode == Mode_None) {
 		state->ReceiveMode = CurReceiveMode;
 		state->DemodLockTime = jiffies;
@@ -2227,9 +2236,9 @@ static int stv091x_carrier_search(struct stv *state,  s32* frequency_jump)
 		}
 	}
 	state->scan_next_frequency += *frequency_jump;
-	state->search_range = 24000000 + *frequency_jump *1000;
-	if (state->search_range >40000000)
-		state->search_range = 40000000;
+	state->search_range_hz = 24000000 + *frequency_jump *1000;
+	if (state->search_range_hz >40000000)
+		state->search_range_hz = 40000000;
 
 	write_reg(state, RSTV0910_P2_DMDISTATE,0x5C); /* Demod Stop*/
 
@@ -2283,7 +2292,7 @@ static int scan_within_tuner_bw(struct dvb_frontend *fe, bool* locked_ret)
 		p->frequency += frequency_jump;
 
 		dprintk("BEFORE state->srate=%d p->srate=%d p->search_range=%d state->search_range=%d\n",
-						state->symbol_rate/1000, p->symbol_rate/1000, p->search_range/1000, state->search_range/10000);
+						state->symbol_rate/1000, p->symbol_rate/1000, p->max_symbol_rate/1000, state->search_range_hz/1000);
 		state->Started = 1;
 		{ bool need_retune;
 			int ret;
@@ -2295,7 +2304,7 @@ static int scan_within_tuner_bw(struct dvb_frontend *fe, bool* locked_ret)
 			locked= !state->timedout;
 		}
 		dprintk("AFTER state->srate=%d p->srate=%d p->search_range=%d state->search_range=%d\n",
-						state->symbol_rate/1000, p->symbol_rate/1000, p->search_range/1000, state->search_range/10000);
+						state->symbol_rate/1000, p->symbol_rate/1000, p->max_symbol_rate/1000, state->search_range_hz/1000);
 
 		if(locked) {
 			//stv091x_get_signal_info(fe); already done in tune_once
@@ -2337,7 +2346,6 @@ static int tune_once(struct dvb_frontend *fe, bool* need_retune)
 
 	dprintk("now symbol_rate=%d\n", state->symbol_rate);
 	stv091x_set_frequency_symbol_rate_bandwidth(state);
-
 	state->ReceiveMode = Mode_None;
 	state->DemodLockTime = 0;
 
@@ -2408,13 +2416,6 @@ static int tune(struct dvb_frontend *fe, bool re_tune,
 	if(blind) {
 		if(p->delivery_system== SYS_UNDEFINED)
 			p->delivery_system = SYS_AUTO;
-		//search_range is used during blind scan to determine how far frequency may shift
-		state->search_range =
-			(p->search_range==0) ? 2*30000000 :
-			(p->search_range< 1000000) ?  1000000 : p->search_range;
-		dprintk("search range p=%d => s=%d\n", p->search_range, state->search_range);
-	} else {
-		state->search_range = 16000000;
 	}
 
 	state->symbol_rate =
@@ -2478,7 +2479,7 @@ static int stv091x_sat_scan(struct dvb_frontend *fe, bool init,
 	state->Started = 0;
 	state->satellite_scan = true;
 	//todo: 	MinSymbolRate
-	state->search_range =  500000;
+	state->search_range_hz =  500000;
 	state->symbol_rate =  1000000;							/*	minimum symbol rate for scan = 1Msps	*/
 	dprintk("set symbol_rate=%d\n", state->symbol_rate);
 
@@ -2513,7 +2514,7 @@ static int stv091x_sat_scan(struct dvb_frontend *fe, bool init,
 			uint32_t next = p->frequency + step;
 			dprintk("symbol_rate=%d step=%d next-%d\n", state->symbol_rate, step, next);
 			if(next < state->scan_next_frequency) {
-				next += state->search_range/1000;
+				next += state->search_range_hz/1000;
 				dprintk ("Adjusting next to prevent going backwards: new next=%d\n", next);
 			}
 			state->tune_time = jiffies;
@@ -2904,7 +2905,7 @@ struct dvb_frontend *stv091x_attach(struct i2c_adapter *i2c,
 	state->i2crpt = 0x0A | ((cfg->rptlvl & 0x07) << 4);
 	state->nr = nr;
 	state->regoff = state->nr ? 0 : 0x200;
-	state->search_range = 16000000;
+	state->search_range_hz = 16000000;
 	state->DEMOD = 0x10; /* Inversion : Auto with reset to 0 */
 	state->ReceiveMode = Mode_None;
 	state->Started = 0;
@@ -2988,5 +2989,8 @@ digital_gain GDig is proportional to  agc2?
 		 GvDig= ((agc2/165.8) * (1550/12)); for demod 1,3
 		 log(a/b) = log(a) - log(b)
 		 10xlog( PchAGC2 / GvDig^2) =  10xlog( PchAGC2)-10xlog(GvDig^2)
+
+To check: d Px_VAVSRVIT .HYPVIT (faster lock)
+ TSFIFO_MANSPEED
 
 */

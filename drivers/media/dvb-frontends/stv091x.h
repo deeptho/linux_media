@@ -130,7 +130,7 @@ struct stv {
 	unsigned long        tune_time;
 
 	s32		tuner_bw;
-	s32   search_range;
+	s32   search_range_hz;
 	u32                  Started;
 	u32                  DemodLockTime;
 	enum ReceiveMode     ReceiveMode;

@@ -641,6 +641,7 @@ struct dtv_frontend_properties {
 	enum fe_guard_interval	guard_interval;
 	enum fe_hierarchy	hierarchy;
 	u32			symbol_rate;
+	u32			max_symbol_rate; //for sat search
 	enum fe_code_rate	code_rate_HP;
 	enum fe_code_rate	code_rate_LP;
 

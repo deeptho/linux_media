@@ -1161,6 +1161,10 @@ static struct dtv_cmds_h dtv_cmds[DTV_MAX_COMMAND + 1] = {
 	_DTV_CMD(DTV_SCAN_START_FREQUENCY, 1, 0),
 	_DTV_CMD(DTV_SCAN_END_FREQUENCY, 1, 0),
 	_DTV_CMD(DTV_SCAN_RESOLUTION, 1, 0),
+	_DTV_CMD(DTV_SEARCH_RANGE, 1, 0),
+	_DTV_CMD(DTV_MAX_SYMBOL_RATE, 1, 0),
+
+
 	_DTV_CMD(DTV_SCAN_FFT_SIZE, 1, 0),
 	_DTV_CMD(DTV_ISI_LIST, 0, 0),
 	_DTV_CMD(DTV_PLS_SEARCH_RANGE, 1, 0),
@@ -1466,6 +1470,9 @@ static int dtv_property_process_get(struct dvb_frontend *fe,
 		break;
 	case DTV_SEARCH_RANGE:
 		tvp->u.data = c->search_range;
+		break;
+	case DTV_MAX_SYMBOL_RATE:
+		tvp->u.data = c->max_symbol_rate;
 		break;
 	case DTV_PLS_SEARCH_RANGE: {
 		int i=0;
@@ -1983,6 +1990,9 @@ static int dtv_property_process_set_int(struct dvb_frontend *fe,
 
 	case DTV_SEARCH_RANGE:
 		c->search_range = data;
+		break;
+	case DTV_MAX_SYMBOL_RATE:
+		c->max_symbol_rate = data;
 		break;
 	case DTV_MODULATION:
 		c->modulation = data;
