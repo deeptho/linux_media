@@ -1500,6 +1500,16 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 				i2c_unregister_device(client_demod);
 				goto frontend_atach_fail;
 		}
+
+
+		/*This needs to be repeated from above, because the dvb code
+			will decrease module refcnt once for each adapter and the
+			sat tuner would not have taken a reference*/
+		if (!try_module_get(client_demod->dev.driver->owner)) {
+				i2c_unregister_device(client_demod);
+				goto frontend_atach_fail;
+		}
+
 		adapter->i2c_client_demod = client_demod;
 
 		/* dvb core doesn't support 2 tuners for 1 demod so
@@ -1832,7 +1842,6 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 	return 0;
 
 frontend_atach_fail:
-	tbsecp3_i2c_remove_clients(adapter);
 	if (adapter->fe != NULL)
 			dvb_frontend_detach(adapter->fe);
 	adapter->fe = NULL;
@@ -1969,28 +1978,28 @@ err0:
 
 void tbsecp3_dvb_exit(struct tbsecp3_adapter *adapter)
 {
-		struct dvb_adapter *adap = &adapter->dvb_adapter;
-		struct dvb_demux *dvbdemux = &adapter->demux;
+	struct dvb_adapter *adap = &adapter->dvb_adapter;
+	struct dvb_demux *dvbdemux = &adapter->demux;
 
-		if (adapter->fe) {
-				tbsecp3_ca_release(adapter);
-				dvb_unregister_frontend(adapter->fe);
-				tbsecp3_release_sec(adapter->fe);
-				dvb_frontend_detach(adapter->fe);
-				adapter->fe = NULL;
+	if (adapter->fe) {
+		tbsecp3_ca_release(adapter);
+		dvb_unregister_frontend(adapter->fe);
+		tbsecp3_release_sec(adapter->fe);
+		dvb_frontend_detach(adapter->fe);
+		adapter->fe = NULL;
 
-				if (adapter->fe2 != NULL) {
-						dvb_unregister_frontend(adapter->fe2);
-						tbsecp3_release_sec(adapter->fe2);
-						dvb_frontend_detach(adapter->fe2);
-						adapter->fe2 = NULL;
-				}
+		if (adapter->fe2 != NULL) {
+			dvb_unregister_frontend(adapter->fe2);
+			tbsecp3_release_sec(adapter->fe2);
+			dvb_frontend_detach(adapter->fe2);
+			adapter->fe2 = NULL;
 		}
-		dvb_net_release(&adapter->dvbnet);
-		dvbdemux->dmx.close(&dvbdemux->dmx);
-		dvbdemux->dmx.remove_frontend(&dvbdemux->dmx, &adapter->fe_mem);
-		dvbdemux->dmx.remove_frontend(&dvbdemux->dmx, &adapter->fe_hw);
-		dvb_dmxdev_release(&adapter->dmxdev);
-		dvb_dmx_release(&adapter->demux);
-		dvb_unregister_adapter(adap);
+	}
+	dvb_net_release(&adapter->dvbnet);
+	dvbdemux->dmx.close(&dvbdemux->dmx);
+	dvbdemux->dmx.remove_frontend(&dvbdemux->dmx, &adapter->fe_mem);
+	dvbdemux->dmx.remove_frontend(&dvbdemux->dmx, &adapter->fe_hw);
+	dvb_dmxdev_release(&adapter->dmxdev);
+	dvb_dmx_release(&adapter->demux);
+	dvb_unregister_adapter(adap);
 }

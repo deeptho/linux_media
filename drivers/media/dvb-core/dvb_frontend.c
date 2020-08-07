@@ -149,7 +149,7 @@ static void __dvb_frontend_free(struct dvb_frontend *fe)
 	if (fepriv)
 		dvb_free_device(fepriv->dvbdev);
 
-	dvb_frontend_invoke_release(fe, fe->ops.release);
+	dvb_frontend_invoke_release(fe, fe->ops.release); //decreases demod refcount by 1
 	release_dtv_fe_spectrum_scan(fe);
 
 	kfree(fepriv);

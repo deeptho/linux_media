@@ -51,7 +51,7 @@ static int i2c_xfer(struct i2c_adapter *adapter, struct i2c_msg *msg, int num)
 		i2c_ctrl.raw.ctrl = 0;
 		i2c_ctrl.bits.start = 1;
 		i2c_ctrl.bits.addr = msg[i].addr;
-		
+
 		if (msg[i].flags & I2C_M_RD) {
 			i2c_ctrl.bits.read = 1;
 			xfer_max = 4;
@@ -93,7 +93,7 @@ static int i2c_xfer(struct i2c_adapter *adapter, struct i2c_msg *msg, int num)
 				memcpy(b, &i2c_ctrl.raw.data, len);
 				b += len;
 			}
-			
+
 			i2c_ctrl.bits.start = 0;
 			remaining -= len;
 		} while (remaining);
@@ -129,7 +129,7 @@ static int tbsecp3_i2c_register(struct tbsecp3_i2c *bus)
 	adap->algo_data = (void*) bus;
 	adap->dev.parent = &dev->pci_dev->dev;
 	adap->owner = THIS_MODULE;
-	
+
 	strcpy(bus->i2c_client.name, "tbsecp3cli");
 	bus->i2c_client.adapter = adap;
 
@@ -144,28 +144,6 @@ static void tbsecp3_i2c_unregister(struct tbsecp3_i2c *bus)
 
 /* ----------------------------------------------------------------------- */
 
-void tbsecp3_i2c_remove_clients(struct tbsecp3_adapter *adapter)
-{
-#if 0
-	struct i2c_client *client_demod, *client_tuner;
-
-	/* remove tuner I2C client */
-	client_tuner = adapter->i2c_client_tuner;
-	if (client_tuner) {
-		module_put(client_tuner->dev.driver->owner);
-		i2c_unregister_device(client_tuner);
-		adapter->i2c_client_tuner = NULL;
-	}
-
-	/* remove demodulator I2C client */
-	client_demod = adapter->i2c_client_demod;
-	if (client_demod) {
-		module_put(client_demod->dev.driver->owner);
-		i2c_unregister_device(client_demod);
-		adapter->i2c_client_demod = NULL;
-	}
-#endif
-}
 
 void tbsecp3_i2c_reg_init(struct tbsecp3_dev *dev)
 {
@@ -211,4 +189,3 @@ void tbsecp3_i2c_exit(struct tbsecp3_dev *dev)
 	for (i = 0; i < 4; i++)
 		tbsecp3_i2c_unregister(&dev->i2c_bus[i]);
 }
-
