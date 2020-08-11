@@ -282,19 +282,9 @@ s16         Si2183_convert_to_int  (const unsigned char* buffer, unsigned char s
 }
 
 
-struct si2183_scan_status_t {
-	s32 buzint;
-	s32 reqint;
-	s32 buz;
-	s32 req;
-	s32 scan_status;
-	s32 rf_freq;
-	s32 symb_rate;
-	s32 modulation;
-};
 
 static int si2183_scan_status_(const char*func, int line,
-															struct i2c_client *client, u8 intack, struct si2183_scan_status_t*s)
+															 struct i2c_client *client, u8 intack, struct si2183_scan_status_t*s)
 {
 	 struct si2183_cmd cmd = {
 		 .args={Si2183_SCAN_STATUS_CMD,
@@ -331,7 +321,10 @@ static int si2183_scan_status_(const char*func, int line,
 	si2183_scan_status_(__func__, __LINE__, client, intack, s)
 
 
-static int si2183_check_status(struct i2c_client *client, u8*status)
+/*
+	check if device wants interaction from driver
+ */
+static int si2183_check_interaction(struct i2c_client *client, bool* scanint)
 {
 	 struct si2183_cmd cmd = {
 		 .args={0x0,
@@ -343,10 +336,18 @@ static int si2183_check_status(struct i2c_client *client, u8*status)
 	 int ret =si2183_cmd_execute_unlocked(client, &cmd);
 	 if(ret) {
 		 dprintk("check status failed: ret=%d\n", ret);
+		 *scanint = false;
+		 return ret;
 	 }
-	 *status =cmd.args[0];
+
+	 //ddint   =     cmd.args[0] & 0x1;
+	 *scanint =     (cmd.args[0] >>1)&0x1;
+	 //err     =     (cmd.args[0] >>6)&0x1;
+		 //cts     =     (cmd.args[0] >>7)&0x1;
+
+
 	 return ret;
- }
+}
 
 
 
@@ -371,83 +372,28 @@ static int si2183_scan_abort(struct i2c_client *client)
 /*
 	init = 1: start the scan at the search range specified by the user
 	init = 0: start the scan just beyond the last found frequency
-
-	tuner_rf_freq 4 bytes, used by  Si2183_L1_SCAN_CTRL
-	seek_freq in kHz
-	Si2183_L1_SCAN_CTRL  uses		seek_freq in kHz
-	scan_status.rf_freq is in kHz
-
-	tune_unit_HZ=1000
 */
-int si2183_scan_sat(struct dvb_frontend *fe, bool init,
-													 unsigned int *delay,  enum fe_status *status)
+static int si2183_set_scan_limits(struct i2c_client *client,	struct dtv_frontend_properties *p)
 {
-	struct i2c_client *client = fe->demodulator_priv;
-	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
-
-	s32 bandwidth = 40000;
-	bool start_resume = 1;
-	bool skip_resume = 0;
- struct si2183_scan_status_t scan_status;
- s32 action = Si2183_SCAN_CTRL_CMD_ACTION_START;
- //s32 tuned_rf_freq; // = (950000/65536)*1000;//same as start frequency
- s32  seek_freq=0;
-
-	if(init) {
-		si2183_stop_task(fe);
-		//clean up any left over spectrum
-	}
-
-
-	if(fe->ops.tuner_ops.set_bandwidth) {
-		fe->ops.tuner_ops.set_bandwidth(fe, bandwidth);
-	}
-	si2183_scan_abort(client);
-
-
-	{
-		//scan_fmin: 2 bytes Frequency in Hz/65536, max= 4Ghz
-		u16 scan_fmin= (((uint32_t)p->scan_start_frequency)*1000)>>16;
-		//Si2183_L1_SetProperty2(front_end->demod, Si2183_SCAN_FMIN_PROP_CODE);
-		si2183_set_property(client,  Si2183_SCAN_FMIN_PROP_CODE, scan_fmin);
-	}
-
-	{
-		s32 scan_fmax=(((uint32_t)p->scan_end_frequency)*1000)>>16;
-		//Si2183_L1_SetProperty2(front_end->demod, Si2183_SCAN_FMAX_PROP_CODE);
-	//*data = (prop->scan_fmax.scan_fmax & Si2183_SCAN_FMAX_PROP_SCAN_FMAX_MASK) << Si2183_SCAN_FMAX_PROP_SCAN_FMAX_LSB ;
-	//Si2183_L1_SetProperty (api, prop_code & 0xffff, data);
-		si2183_set_property(client,  Si2183_SCAN_FMAX_PROP_CODE, scan_fmax);
-	}
-
-	{
-	s32 sym_rate_min=1000000/1000;
-	//Si2183_L1_SetProperty2(front_end->demod, Si2183_SCAN_SYMB_RATE_MIN_PROP_CODE);
-	//prop->scan_symb_rate_min.scan_symb_rate_min = (data >> Si2183_SCAN_SYMB_RATE_MIN_PROP_SCAN_SYMB_RATE_MIN_LSB) & Si2183_SCAN_SYMB_RATE_MIN_PROP_SCAN_SYMB_RATE_MIN_MASK;
-	//Si2183_L1_SetProperty (api, prop_code & 0xffff, data);
-	si2183_set_property(client,  Si2183_SCAN_SYMB_RATE_MIN_PROP_CODE, sym_rate_min);
-	}
-
-	{
+	int ret=0;
+	u16 scan_fmin= (((uint32_t)p->scan_start_frequency)*1000)>>16;
+	s32 scan_fmax=(((uint32_t)p->scan_end_frequency)*1000)>>16;
+	s32 sym_rate_min=100000/1000;
 	s32 sym_rate_max=45000000/1000;
-	//Si2183_L1_SetProperty2(front_end->demod, Si2183_SCAN_SYMB_RATE_MAX_PROP_CODE);
-	si2183_set_property(client,  Si2183_SCAN_SYMB_RATE_MAX_PROP_CODE, sym_rate_max);
-	}
 
+	ret |= si2183_set_property(client,  Si2183_SCAN_FMIN_PROP_CODE, scan_fmin);
+	ret |= si2183_set_property(client,  Si2183_SCAN_FMAX_PROP_CODE, scan_fmax);
+	ret |= si2183_set_property(client,  Si2183_SCAN_SYMB_RATE_MIN_PROP_CODE, sym_rate_min);
+	ret |= si2183_set_property(client,  Si2183_SCAN_SYMB_RATE_MAX_PROP_CODE, sym_rate_max);
+	if(ret)
+		dprintk("FAILED to set limits\n");
+	return ret;
+}
 
-	{
-		s32 buzien=1;
-		s32 reqien =1;
-		//Si2183_L1_SetProperty2(front_end->demod, Si2183_SCAN_IEN_PROP_CODE);
-		//*data = (prop->scan_ien.buzien & Si2183_SCAN_IEN_PROP_BUZIEN_MASK) << Si2183_SCAN_IEN_PROP_BUZIEN_LSB  |
-		//	(prop->scan_ien.reqien & Si2183_SCAN_IEN_PROP_REQIEN_MASK) << Si2183_SCAN_IEN_PROP_REQIEN_LSB ;
-		//Si2183_L1_SetProperty (api, prop_code & 0xffff, data);
-		si2183_set_property(client,  Si2183_SCAN_IEN_PROP_CODE, (buzien&0x1) | ((reqien&0x1)<<1));
-	}
-
-
-	{
-
+static int 	si2183_enable_interaction(struct i2c_client *client)
+{
+	s32 buzien=1;
+	s32 reqien =1;
 	s32 reqnegen = 0;
 	s32 reqposen = 1;
 	s32 buznegen = 1;
@@ -456,124 +402,186 @@ int si2183_scan_sat(struct dvb_frontend *fe, bool init,
 		(reqnegen & 0x01) << 1 |
 		(buzposen & 0x01) << 8  |
 		(reqposen & 0x01) << 9 ;
-	si2183_set_property(client, Si2183_SCAN_INT_SENSE_PROP_CODE, int_sense);
+	int ret=0;
+
+	ret |= si2183_set_property(client,  Si2183_SCAN_IEN_PROP_CODE, (buzien&0x1) | ((reqien&0x1)<<1));
+	ret |= si2183_set_property(client, Si2183_SCAN_INT_SENSE_PROP_CODE, int_sense);
+	if(ret)
+		dprintk("FAILED to enable interaction\n");
+	return ret;
 }
 
-	{
-		s32 bw = bandwidth/1000; //only important for dvb-t
-		s32 modulation = 15;  //autodetect
-		s32 invert_spectrum = 0; //not inverted
-		s32 auto_detect = Si2183_DD_MODE_PROP_AUTO_DETECT_AUTO_DVB_S_S2; //detect any dvb-s
+static int si2183_set_scan_bandwidth(struct i2c_client *client, s32 bandwidth)
+{
+	s32 bw = bandwidth/1000; //only important for dvb-t
+	s32 modulation = 15;  //autodetect
+	s32 invert_spectrum = 0; //not inverted
+	s32 auto_detect = Si2183_DD_MODE_PROP_AUTO_DETECT_AUTO_DVB_S_S2; //detect any dvb-s
 
-		s32 dd_mode = (bw& 0x0f) << 0 |
+	s32 dd_mode = (bw& 0x0f) << 0 |
 			(modulation      & 0x0f) << 4  |
-			(invert_spectrum & 0x01) << 8  |
-			(auto_detect     & 0x07  ) << 9;
-		si2183_set_property(client, Si2183_DD_MODE_PROP_CODE, dd_mode);
-	}
+		(invert_spectrum & 0x01) << 8  |
+		(auto_detect     & 0x07  ) << 9;
+	int ret= si2183_set_property(client, Si2183_DD_MODE_PROP_CODE, dd_mode);
+	if(ret)
+		dprintk("Error setting bandwidth\n");
+	return ret;
+}
 
-	{
+static int si2183_set_scan_mode(struct i2c_client *client, s32 debug)
+{
+	s32 analog_detect = 1; //enabled
+	s32 reserved1     =  0;
+	s32 reserved2     = 12;
+	s32 scan_debug = 0x0; //0x03; use 3 for spectrum scan?
+	//Si2183_L1_SetProperty2(front_end->demod, Si2183_SCAN_SAT_CONFIG_PROP_CODE);
+	s32 sat_config = (analog_detect & 0x01) << 0 |
+		(reserved1     & 0x1f   ) << 1  |
+		(reserved2     & 0x7f  ) << 6 |
+		(scan_debug    & 0x07   ) << 13 ;
+	int ret=si2183_set_property(client, Si2183_SCAN_SAT_CONFIG_PROP_CODE, sat_config);
+	if(ret)
+		dprintk("Error setting scan mode\n");
+	return ret;
+}
 
-		s32 analog_detect = 1; //enabled
-		s32 reserved1     =  0;
-		s32 reserved2     = 12;
-		s32 scan_debug = 0x0; //0x03; use 3 for spectrum scan?
-		//Si2183_L1_SetProperty2(front_end->demod, Si2183_SCAN_SAT_CONFIG_PROP_CODE);
-		s32 sat_config = (analog_detect & 0x01) << 0 |
-			(reserved1     & 0x1f   ) << 1  |
-			(reserved2     & 0x7f  ) << 6 |
-			(scan_debug    & 0x07   ) << 13 ;
-		si2183_set_property(client, Si2183_SCAN_SAT_CONFIG_PROP_CODE, sat_config);
-	}
-
+static int si2183_restart(struct i2c_client *client)
  {
-
-
 	 struct si2183_cmd cmd = {
 		 .args={Si2183_DD_RESTART_CMD},
 		 .wlen=1,
 		 .rlen=1
 	 };
-	 //   Si2183_L1_DD_RESTART  (front_end->demod);
-	 int ret =si2183_cmd_execute_unlocked(client, &cmd);
-	 if(ret) {
-		 dprintk("set property failed: ret=%d\n", ret);
-	 }
 
+	 int ret =si2183_cmd_execute_unlocked(client, &cmd);
+	 if(ret)
+		 dprintk("Error setting scan mode\n");
+	 return ret;
  }
 
-		 /* Checking blindscan status before issuing a 'start' or 'resume' */
- si2183_scan_status(client, Si2183_SCAN_STATUS_CMD_INTACK_OK, &scan_status);
+static int si2183_scan_action(struct i2c_client *client, s32 action, s32 seek_freq)
+{
+	struct si2183_cmd cmd = {
+		.args={Si2183_SCAN_CTRL_CMD, action, 0x00, 0x00, seek_freq & 0xff ,
+					 (seek_freq>>8)&0xff, (seek_freq>>16)&0xff, (seek_freq>>24)&0xff},
+		.wlen=8,
+		.rlen=1};
+	int ret = si2183_cmd_execute(client, &cmd);
+	dprintk(" Si2183_SCAN_CTRL_CMD_ACTION_START freq=%dkHz\n", seek_freq);
+	//action = Si2183_SCAN_CTRL_CMD_ACTION_RESUME;
+	if(ret)
+		dprintk("scan action failed\n");
+	return ret;
+}
+
+
+static int si2183_scan_sat_start(struct dvb_frontend *fe,  struct blindscan_state * blindscan_state)
+{
+	struct i2c_client *client = fe->demodulator_priv;
+	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
+	struct si2183_scan_status_t* scan_status = &blindscan_state->scan_status;
+
+	s32 bandwidth = 40000;
+	memset(blindscan_state, 0, sizeof(struct blindscan_state));
+	si2183_stop_task(fe); //clean up
+
+	blindscan_state->start_resume = 1;
+	blindscan_state->skip_resume = 0;
+
+	blindscan_state->action = Si2183_SCAN_CTRL_CMD_ACTION_START;
+
+ //s32 tuned_rf_freq; // = (950000/65536)*1000;//same as start frequency
+
+
+	if(fe->ops.tuner_ops.set_bandwidth)
+		fe->ops.tuner_ops.set_bandwidth(fe, bandwidth);
+
+	si2183_scan_abort(client);
+	si2183_set_scan_limits(client, p);
+	si2183_enable_interaction(client);
+	si2183_set_scan_bandwidth(client, bandwidth);
+
+	si2183_set_scan_mode(client, 0x0 /*use 3 for spectrum*/);
+	si2183_restart(client);
+
+	/* Load blindscan status at start */
+ si2183_scan_status(client, Si2183_SCAN_STATUS_CMD_INTACK_OK, scan_status);
+ return 0;
+}
+
+
+int si2183_scan_sat(struct dvb_frontend *fe, bool init,
+													 unsigned int *delay,  enum fe_status *status)
+{
+	struct i2c_client *client = fe->demodulator_priv;
+	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
+	struct si2183_dev *state = i2c_get_clientdata(client);
+	struct blindscan_state * bs = &state->blindscan_state;
+	struct si2183_scan_status_t* scan_status = &bs->scan_status;
+	s32 bandwidth = 40000;
+
+
+ //s32 tuned_rf_freq; // = (950000/65536)*1000;//same as start frequency
+ s32  seek_freq=0;
+
+ if(init) {
+	 si2183_scan_sat_start(fe,  bs);
+ }
+
+
+
 
  for(p->frequency = p->scan_start_frequency; p->frequency < p->scan_end_frequency; )
 	 {
-	 seek_freq = p->frequency;
-	 if(start_resume) {
-		 int count=0;
-		 while (scan_status.buz == Si2183_SCAN_STATUS_RESPONSE_BUZ_BUSY) {
-			 if ((count% 20==19) &&  (kthread_should_stop() || dvb_frontend_task_should_stop(fe))) {
-				 goto _exit;
-			 }
-			 si2183_scan_status(client, Si2183_SCAN_STATUS_CMD_INTACK_OK, &scan_status);
-			 msleep(200);
-			 if(++count%20==19) {
-				 dprintk("here count=%d\n", count);
-			 }
-		 }
-		 {
-			 struct si2183_cmd cmd = {
-				 .args={Si2183_SCAN_CTRL_CMD, action, 0x00, 0x00, seek_freq & 0xff ,
-								(seek_freq>>8)&0xff, (seek_freq>>16)&0xff, (seek_freq>>24)&0xff},
-				 .wlen=8,
-				 .rlen=1};
-			 int ret = si2183_cmd_execute(client, &cmd);
-			 dprintk(" Si2183_SCAN_CTRL_CMD_ACTION_START freq=%dkHz\n", seek_freq);
-			 action = Si2183_SCAN_CTRL_CMD_ACTION_RESUME;
-			 if(ret) {
-				 goto _exit;
+		 seek_freq = p->frequency;
+		 if(bs->start_resume) {
+			 int count=0;
+			 while (scan_status->buz == Si2183_SCAN_STATUS_RESPONSE_BUZ_BUSY) {
+				 if ((count% 20==19) &&  (kthread_should_stop() || dvb_frontend_task_should_stop(fe))) {
+					 goto _exit;
+				 }
+				 si2183_scan_status(client, Si2183_SCAN_STATUS_CMD_INTACK_OK, scan_status);
+				 msleep(200);
+				 if(++count%20==19) {
+					 dprintk("here count=%d\n", count);
+				 }
 			 }
 
-		 }
-	 }
-	 action = Si2183_SCAN_CTRL_CMD_ACTION_RESUME;
+			 if(si2183_scan_action(client, bs->action, seek_freq))
+					goto _exit;
 
-	 /* The actual search loop... */
-	 for (;;) {
-		 u8 check_status;
-		 bool ddint;
+		 }
+		 bs-> action = Si2183_SCAN_CTRL_CMD_ACTION_RESUME;
+
+		 /* The actual search loop... */
+		 for (;;) {
 		 bool scanint;
-		 bool err;
-		 bool cts;
-		 si2183_check_status(client, &check_status);
-		 ddint   =     check_status & 0x1;
-		 scanint =     (check_status >>1)&0x1;
-		 err     =     (check_status >>6)&0x1;
-		 cts     =     (check_status >>7)&0x1;
+		 si2183_check_interaction(client, &scanint);
 		 //dprintk("ddint=%d scanint=%d err=%d cts=%d\n", ddint, scanint, err, cts);
 		 //si2183_scan_status(client, Si2183_SCAN_STATUS_CMD_INTACK_CLEAR, &scan_status);//test
 		 if((kthread_should_stop() || dvb_frontend_task_should_stop(fe))) {
-				 goto _exit;
-			 }
+			 goto _exit;
+		 }
 
 
 		 if ( (scanint == 1) ) {
 			 /* There is an interaction with the FW, refresh the timeoutStartTime */
 			 //front_end->timeoutStartTime = system_time();
-			 si2183_scan_status(client, Si2183_SCAN_STATUS_CMD_INTACK_CLEAR, &scan_status);
-			 skip_resume = 0;
+			 si2183_scan_status(client, Si2183_SCAN_STATUS_CMD_INTACK_CLEAR, scan_status);
+			 bs->skip_resume = false;
 			 //buzyStartTime = system_time();
-			 while (scan_status.buz == 1) {
-				 si2183_scan_status(client, Si2183_SCAN_STATUS_CMD_INTACK_OK, &scan_status);
+			 while (scan_status->buz == 1) {
+				 si2183_scan_status(client, Si2183_SCAN_STATUS_CMD_INTACK_OK, scan_status);
 
 				 if ((kthread_should_stop() || dvb_frontend_task_should_stop(fe))) {
 					 goto _exit;
 				 }
 			 }
-			 dprintk("SCAN status=%d\n", scan_status.scan_status);
-			 switch (scan_status.scan_status) {
+			 dprintk("SCAN status=%d\n", scan_status->scan_status);
+			 switch (scan_status->scan_status) {
 			 case  Si2183_SCAN_STATUS_RESPONSE_SCAN_STATUS_TUNE_REQUEST          : {
 				 int old_seek_freq= seek_freq;
-				 seek_freq = scan_status.rf_freq;
+				 seek_freq = scan_status->rf_freq;
 				 if(fe->ops.tuner_ops.set_bandwidth) {
 					 fe->ops.tuner_ops.set_frequency(fe, seek_freq);
 				 } else if (fe->ops.tuner_ops.set_frequency_and_bandwidth) {
@@ -588,13 +596,13 @@ int si2183_scan_sat(struct dvb_frontend *fe, bool init,
 					break;
 			 }
 			 case  Si2183_SCAN_STATUS_RESPONSE_SCAN_STATUS_DIGITAL_CHANNEL_FOUND : {
-				 s32 standard        = scan_status.modulation;
+				 s32 standard        = scan_status->modulation;
 				 s32 symbol_rate;
-				 s32 frequency            = scan_status.rf_freq;
-				 symbol_rate = scan_status.symb_rate*1000;
+				 s32 frequency            = scan_status->rf_freq;
+				 symbol_rate = scan_status->symb_rate*1000;
 
 					/* When locked, clear scanint before returning from SeekNext, to avoid seeing it again on the 'RESUME', with fast i2c platforms */
-					si2183_scan_status(client, Si2183_SCAN_STATUS_CMD_INTACK_CLEAR, &scan_status);
+					si2183_scan_status(client, Si2183_SCAN_STATUS_CMD_INTACK_CLEAR, scan_status);
 					dprintk("FOUND freq=%d symrate=%d standard=%d\n", frequency, symbol_rate, standard);
 					goto _found;
 					break;
@@ -608,7 +616,7 @@ int si2183_scan_sat(struct dvb_frontend *fe, bool init,
 				 static int count=0;
 				 count++;
 				 dprintk("searching count=%d\n", count);
-				 skip_resume = 1;
+				 bs->skip_resume = true;
 						break;
 			 }
 			 case  Si2183_SCAN_STATUS_RESPONSE_SCAN_STATUS_ENDED                 : {
@@ -618,37 +626,24 @@ int si2183_scan_sat(struct dvb_frontend *fe, bool init,
 			 }
 
 			 case  Si2183_SCAN_STATUS_RESPONSE_SCAN_STATUS_DEBUG                 :
-				 dprintk("DEBUG!!!!!!!!!!!!!!! type=%d: %s\n", scan_status.symb_rate, scan_status.symb_rate==4 ? "spectrum" :
-								 scan_status.symb_rate ==9 ? "trylock" : "other");
+				 dprintk("DEBUG!!!!!!!!!!!!!!! type=%d: %s\n", scan_status->symb_rate,
+								 scan_status->symb_rate == 4 ? "spectrum" :
+								 scan_status->symb_rate == 9 ? "trylock" : "other");
 
 				 break;
 			 default : {
-				 dprintk("unknown scan_status %d\n", scan_status.scan_status);
-				 skip_resume = 1;
+				 dprintk("unknown scan_status %d\n", scan_status->scan_status);
+				 bs->skip_resume = true;
 				 break;
 			 }
 			 }
-			 dprintk("here skip_resume=%d\n", skip_resume);
-			 if (skip_resume == 0) {
-
-				 {
-					 struct si2183_cmd cmd = {
-						 .args={Si2183_SCAN_CTRL_CMD, action, 0x00, 0x00, seek_freq & 0xff ,
-										(seek_freq>>8)&0xff, (seek_freq>>16)&0xff, (seek_freq>>24)&0xff},
-						 .wlen=8,
-						 .rlen=1};
-					 int ret = si2183_cmd_execute(client, &cmd);
-					 dprintk(" action=%d freq=%dkHz\n", action, seek_freq);
-					 if(ret) {
-						 goto _exit;
-					 }
-				 }
+			 dprintk("here skip_resume=%d\n", bs->skip_resume);
+			 if (bs->skip_resume == false) {
+				 if(si2183_scan_action(client, bs->action, seek_freq))
+					 goto _exit;
 
 			 }
 		 }
-
-
-
 
 			/* Check status every 100 ms */
 			msleep(100);

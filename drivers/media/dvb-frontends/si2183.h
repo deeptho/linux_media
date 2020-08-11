@@ -98,6 +98,24 @@ struct spectrum_scan_state {
 	int spectrum_max_len;
 };
 
+struct si2183_scan_status_t {
+	s32 buzint;
+	s32 reqint;
+	s32 buz;
+	s32 req;
+	s32 scan_status;
+	s32 rf_freq;
+	s32 symb_rate;
+	s32 modulation;
+};
+
+struct blindscan_state {
+	struct si2183_scan_status_t scan_status;
+	bool start_resume;
+	bool skip_resume;
+	s32 action;
+};
+
 struct constellation_scan_state {
 	bool constallation_present;
 	bool in_progress;
@@ -135,7 +153,7 @@ struct si2183_dev {
 
 	struct spectrum_scan_state scan_state;
 	struct constellation_scan_state constellation_scan_state;
-
+	struct blindscan_state blindscan_state;
 };
 
 int si2183_cmd_execute(struct i2c_client *client, struct si2183_cmd *cmd);
