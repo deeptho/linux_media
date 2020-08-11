@@ -1891,7 +1891,6 @@ fe_lla_error_t FE_STiD135_GetCarrierFrequency(struct stv* state, u32 MasterClock
 static int stid135_scan_sat(struct dvb_frontend *fe, bool init,
 														unsigned int *delay,  enum fe_status *status)
 {
-	//TODO: fee memory when devide is closed, or when DTV_ABORT is called
  	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	struct stv *state = fe->demodulator_priv;
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;

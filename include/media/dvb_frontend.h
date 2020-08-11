@@ -673,6 +673,7 @@ struct dtv_frontend_properties {
 	} layer[3];
 
 	/* Multistream specifics */
+	bool    vcm; //1 if vcm else ccm
 	u32			stream_id;
 	u32			matype;
 

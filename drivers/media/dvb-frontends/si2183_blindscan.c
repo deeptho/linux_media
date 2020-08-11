@@ -1,15 +1,15 @@
 /*
- *    Silicon Labs Si2183(2) DVB-T/T2/C/C2/S/S2 blindscan code
- *    (c) Deep Thought <deeptho@gmail.com>
- *    This program is free software; you can redistribute it and/or modify
- *    it under the terms of the GNU General Public License as published by
- *    the Free Software Foundation; either version 2 of the License, or
- *    (at your option) any later version.
+ * Silicon Labs Si2183(2) DVB-T/T2/C/C2/S/S2 blindscan code
+ * (c) Deep Thought <deeptho@gmail.com>
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
- *    This program is distributed in the hope that it will be useful,
- *    but WITHOUT ANY WARRANTY; without even the implied warranty of
- *    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *    GNU General Public License for more details.
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
  */
 
 #include "si2183.h"
@@ -35,8 +35,8 @@
 #define SI2183_PROP_DVBT2_MODE	0x1304
 #define SI2183_PROP_DVBS2_SR	0x1401
 #define SI2183_PROP_DVBS_SR	0x1501
-#define SI2183_PROP_MCNS_CONST  0x1601
-#define SI2183_PROP_MCNS_SR     0x1602
+#define SI2183_PROP_MCNS_CONST 0x1601
+#define SI2183_PROP_MCNS_SR 0x1602
 #define Si2183_SCAN_FMIN_PROP_CODE 0x000303
 #define Si2183_SCAN_FMAX_PROP_CODE 0x000304
 #define Si2183_SCAN_SYMB_RATE_MIN_PROP_CODE 0x000305
@@ -49,26 +49,26 @@
 #define Si2183_SCAN_SAT_CONFIG_PROP_CODE 0x000302
 #define Si2183_DD_RESTART_CMD 0x85
 
-#define Si2183_SCAN_CTRL_CMD_ACTION_ABORT   3
-#define Si2183_SCAN_CTRL_CMD_ACTION_RESUME  2
-#define Si2183_SCAN_CTRL_CMD_ACTION_START   1
+#define Si2183_SCAN_CTRL_CMD_ACTION_ABORT 3
+#define Si2183_SCAN_CTRL_CMD_ACTION_RESUME 2
+#define Si2183_SCAN_CTRL_CMD_ACTION_START 1
 
 #define Si2183_SCAN_STATUS_RESPONSE_BUZ_BUSY 1
 #define ADDR3(a,b,c) (a|(b<<8)|(c<<16))
 
 #define Si2183_SCAN_CTRL_CMD_ACTION_ABORT 3
-#define   Si2183_SCAN_CTRL_CMD 0x31
+#define Si2183_SCAN_CTRL_CMD 0x31
 #define Si2183_SCAN_STATUS_CMD 0x30
-#define Si2183_SCAN_STATUS_CMD_INTACK_OK     0
-#define Si2183_SCAN_STATUS_CMD_INTACK_CLEAR  1
-#define Si2183_SCAN_STATUS_RESPONSE_SCAN_STATUS_ANALOG_CHANNEL_FOUND   6
-#define Si2183_SCAN_STATUS_RESPONSE_SCAN_STATUS_DEBUG                  63
-#define Si2183_SCAN_STATUS_RESPONSE_SCAN_STATUS_DIGITAL_CHANNEL_FOUND  5
-#define Si2183_SCAN_STATUS_RESPONSE_SCAN_STATUS_ENDED                  2
-#define Si2183_SCAN_STATUS_RESPONSE_SCAN_STATUS_ERROR                  3
-#define Si2183_SCAN_STATUS_RESPONSE_SCAN_STATUS_IDLE                   0
-#define Si2183_SCAN_STATUS_RESPONSE_SCAN_STATUS_SEARCHING              1
-#define Si2183_SCAN_STATUS_RESPONSE_SCAN_STATUS_TUNE_REQUEST           4
+#define Si2183_SCAN_STATUS_CMD_INTACK_OK 0
+#define Si2183_SCAN_STATUS_CMD_INTACK_CLEAR 1
+#define Si2183_SCAN_STATUS_RESPONSE_SCAN_STATUS_ANALOG_CHANNEL_FOUND 6
+#define Si2183_SCAN_STATUS_RESPONSE_SCAN_STATUS_DEBUG 63
+#define Si2183_SCAN_STATUS_RESPONSE_SCAN_STATUS_DIGITAL_CHANNEL_FOUND 5
+#define Si2183_SCAN_STATUS_RESPONSE_SCAN_STATUS_ENDED 2
+#define Si2183_SCAN_STATUS_RESPONSE_SCAN_STATUS_ERROR 3
+#define Si2183_SCAN_STATUS_RESPONSE_SCAN_STATUS_IDLE 0
+#define Si2183_SCAN_STATUS_RESPONSE_SCAN_STATUS_SEARCHING 1
+#define Si2183_SCAN_STATUS_RESPONSE_SCAN_STATUS_TUNE_REQUEST 4
 
 
 
@@ -76,7 +76,7 @@
 
 
 
-static s32 si2183_narrow_band_signal_power_dbm(struct dvb_frontend *fe)
+s32 si2183_narrow_band_signal_power_dbm(struct dvb_frontend *fe)
 {
 	//		struct si2183_dev *state = fe->demodulator_priv;
 	struct i2c_client *client = fe->demodulator_priv;
@@ -97,7 +97,7 @@ static s32 si2183_narrow_band_signal_power_dbm(struct dvb_frontend *fe)
 	if (ret<0) {
 		dprintk("signal_power fe%d cmd_exec failed=%d\n", fe->id, ret);
 		dev_err(&client->dev, "signal_power fe%d cmd_exec failed=%d\n", fe->id, ret);
-			return 0;
+		return 0;
 	}
 
 	agc1 = cmd.args[1];
@@ -107,7 +107,7 @@ static s32 si2183_narrow_band_signal_power_dbm(struct dvb_frontend *fe)
 	else if (fe->ops.tuner_ops.get_rf_strength) {
 		gain1 = fe->ops.tuner_ops.get_rf_strength(fe, &agc1); //could be anything (drivers inconsistent)
 	}
-
+	dprintk("STRENGTH: %d => %d\n", agc1, gain1);
 	return -gain1;
 	//missing: agc ref gain
 }
@@ -137,11 +137,11 @@ int si2183_stop_task(struct dvb_frontend *fe)
 
 
 int si2183_constellation_start(struct dvb_frontend *fe,
-																			struct dtv_fe_constellation* user,
-																			unsigned int *delay, enum fe_status *status)
+															 struct dtv_fe_constellation* user,
+															 unsigned int *delay, enum fe_status *status)
 {
 #if 0
-	struct si2183_dev *state  = fe->demodulator_priv;
+	struct si2183_dev *state = fe->demodulator_priv;
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
 	struct constellation_scan_state* cs = &state->constellation_scan_state;
 	s8 buff[2];
@@ -149,14 +149,14 @@ int si2183_constellation_start(struct dvb_frontend *fe,
 
 	si2183_stop_task(fe);
 	cs->num_samples = 0;
-	cs->constel_select =  user->constel_select;
+	cs->constel_select = user->constel_select;
 	cs->samples_len = user->num_samples;
 	dprintk("demod: %d: constellation %d samples mode=%d\n", state->nr, cs->samples_len, (int)cs->constel_select);
 	if(cs->samples_len ==0)
 		return -EINVAL;
 	cs->samples = kzalloc(cs->samples_len * (sizeof(cs->samples[0])), GFP_KERNEL);
 	if (!cs->samples) {
-		return  -ENOMEM;
+		return -ENOMEM;
 	}
 
 	write_reg_fields(state, RSTV0910_P2_IQCONST,
@@ -165,7 +165,7 @@ int si2183_constellation_start(struct dvb_frontend *fe,
 									 );
 	//	write_reg(state, RSTV0910_P2_AGC2REF,0x10);
 	for (cs->num_samples = 0; cs->num_samples < cs->samples_len; ++cs->num_samples) {
-		if ((cs->num_samples% 20==19) &&  (kthread_should_stop() || dvb_frontend_task_should_stop(fe))) {
+		if ((cs->num_samples% 20==19) && (kthread_should_stop() || dvb_frontend_task_should_stop(fe))) {
 			dprintk("exiting on should stop\n");
 			break;
 		}
@@ -175,7 +175,7 @@ int si2183_constellation_start(struct dvb_frontend *fe,
 		cs->samples[cs->num_samples].real = buff[1];
 	}
 
-	*status =  FE_HAS_SIGNAL|FE_HAS_CARRIER|FE_HAS_VITERBI|FE_HAS_SYNC|FE_HAS_LOCK;
+	*status = FE_HAS_SIGNAL|FE_HAS_CARRIER|FE_HAS_VITERBI|FE_HAS_SYNC|FE_HAS_LOCK;
 #endif
 	return 0;
 }
@@ -183,7 +183,7 @@ int si2183_constellation_start(struct dvb_frontend *fe,
 int si2183_constellation_get(struct dvb_frontend *fe, struct dtv_fe_constellation* user)
 {
 #if 0
-	struct si2183_dev *state  = fe->demodulator_priv;
+	struct si2183_dev *state = fe->demodulator_priv;
 	struct constellation_scan_state* cs = &state->constellation_scan_state;
 	int error = 0;
 	if(user->num_samples > cs->num_samples)
@@ -205,7 +205,7 @@ int si2183_constellation_get(struct dvb_frontend *fe, struct dtv_fe_constellatio
 #if 0
 static int si2183_get_register_unlocked(struct i2c_client *client, u32 address, s32* value_ret)
 {
-	 //Si2183_READ  (front_end->demod, gp_reg16_0);
+	 //Si2183_READ (front_end->demod, gp_reg16_0);
 	struct si2183_cmd cmd		= {{0x8f, /*get reg*/
 															address &0xff,
 															(address>>8)&0xff,
@@ -274,10 +274,10 @@ u8 Si2183_convert_to_byte (const u8* buffer, u8 shift, u8 mask) {
 u32 Si2183_convert_to_ulong(const unsigned char* buffer, unsigned char shift, unsigned long mask) {
 	return ((( ( (unsigned long)buffer[0]) | ((unsigned long)buffer[1] << 8) | ((unsigned long)buffer[2]<<16) | ((unsigned long)buffer[3]<<24)) >> shift) & mask );
 }
-u32  Si2183_convert_to_uint (const unsigned char* buffer, unsigned char shift, unsigned int  mask) {
+u32 Si2183_convert_to_uint (const unsigned char* buffer, unsigned char shift, unsigned int mask) {
 	return (( ( (unsigned int)buffer[0]) | (((unsigned int)buffer[1]) << 8) >> shift) & mask);
 }
-s16         Si2183_convert_to_int  (const unsigned char* buffer, unsigned char shift, unsigned int  mask) {
+s16 Si2183_convert_to_int (const unsigned char* buffer, unsigned char shift, unsigned int mask) {
 	return (( ( (unsigned int)buffer[0]) | (((unsigned int)buffer[1]) << 8) >> shift) & mask);
 }
 
@@ -308,10 +308,11 @@ static int si2183_scan_status_(const char*func, int line,
 	 s->rf_freq = Si2183_convert_to_ulong (&cmd.args[ 4], 0, 0xffffffff );
 	 s->symb_rate = Si2183_convert_to_uint (&cmd.args[ 8], 0, 0xffffffff );
 	 s->modulation = Si2183_convert_to_byte (&cmd.args[10], 0, 0x0f );
+
 #if 0
 	 printk("%s:%d: buzint=%d reqint=%d buz=%d req=%d scan_status=%d rf_freq=%d symb_rate=%d modulation=%d\n",
 					func, line,
-					s->buzint,  s->reqint, s->buz, s->req, s->scan_status, s->rf_freq, s->symb_rate, s->modulation);
+					s->buzint, s->reqint, s->buz, s->req, s->scan_status, s->rf_freq, s->symb_rate, s->modulation);
 #endif
 	 return ret;
 }
@@ -340,10 +341,10 @@ static int si2183_check_interaction(struct i2c_client *client, bool* scanint)
 		 return ret;
 	 }
 
-	 //ddint   =     cmd.args[0] & 0x1;
-	 *scanint =     (cmd.args[0] >>1)&0x1;
-	 //err     =     (cmd.args[0] >>6)&0x1;
-		 //cts     =     (cmd.args[0] >>7)&0x1;
+	 //ddint = cmd.args[0] & 0x1;
+	 *scanint = (cmd.args[0] >>1)&0x1;
+	 //err = (cmd.args[0] >>6)&0x1;
+		 //cts = (cmd.args[0] >>7)&0x1;
 
 
 	 return ret;
@@ -381,16 +382,16 @@ static int si2183_set_scan_limits(struct i2c_client *client,	struct dtv_frontend
 	s32 sym_rate_min=100000/1000;
 	s32 sym_rate_max=45000000/1000;
 
-	ret |= si2183_set_property(client,  Si2183_SCAN_FMIN_PROP_CODE, scan_fmin);
-	ret |= si2183_set_property(client,  Si2183_SCAN_FMAX_PROP_CODE, scan_fmax);
-	ret |= si2183_set_property(client,  Si2183_SCAN_SYMB_RATE_MIN_PROP_CODE, sym_rate_min);
-	ret |= si2183_set_property(client,  Si2183_SCAN_SYMB_RATE_MAX_PROP_CODE, sym_rate_max);
+	ret |= si2183_set_property(client, Si2183_SCAN_FMIN_PROP_CODE, scan_fmin);
+	ret |= si2183_set_property(client, Si2183_SCAN_FMAX_PROP_CODE, scan_fmax);
+	ret |= si2183_set_property(client, Si2183_SCAN_SYMB_RATE_MIN_PROP_CODE, sym_rate_min);
+	ret |= si2183_set_property(client, Si2183_SCAN_SYMB_RATE_MAX_PROP_CODE, sym_rate_max);
 	if(ret)
 		dprintk("FAILED to set limits\n");
 	return ret;
 }
 
-static int 	si2183_enable_interaction(struct i2c_client *client)
+static int	si2183_enable_interaction(struct i2c_client *client)
 {
 	s32 buzien=1;
 	s32 reqien =1;
@@ -400,11 +401,11 @@ static int 	si2183_enable_interaction(struct i2c_client *client)
 	s32 buzposen = 0;
 	s32 int_sense =(buznegen & 0x01) << 0 |
 		(reqnegen & 0x01) << 1 |
-		(buzposen & 0x01) << 8  |
+		(buzposen & 0x01) << 8 |
 		(reqposen & 0x01) << 9 ;
 	int ret=0;
 
-	ret |= si2183_set_property(client,  Si2183_SCAN_IEN_PROP_CODE, (buzien&0x1) | ((reqien&0x1)<<1));
+	ret |= si2183_set_property(client, Si2183_SCAN_IEN_PROP_CODE, (buzien&0x1) | ((reqien&0x1)<<1));
 	ret |= si2183_set_property(client, Si2183_SCAN_INT_SENSE_PROP_CODE, int_sense);
 	if(ret)
 		dprintk("FAILED to enable interaction\n");
@@ -414,14 +415,14 @@ static int 	si2183_enable_interaction(struct i2c_client *client)
 static int si2183_set_scan_bandwidth(struct i2c_client *client, s32 bandwidth)
 {
 	s32 bw = bandwidth/1000; //only important for dvb-t
-	s32 modulation = 15;  //autodetect
+	s32 modulation = 15; //autodetect
 	s32 invert_spectrum = 0; //not inverted
 	s32 auto_detect = Si2183_DD_MODE_PROP_AUTO_DETECT_AUTO_DVB_S_S2; //detect any dvb-s
 
 	s32 dd_mode = (bw& 0x0f) << 0 |
-			(modulation      & 0x0f) << 4  |
-		(invert_spectrum & 0x01) << 8  |
-		(auto_detect     & 0x07  ) << 9;
+			(modulation & 0x0f) << 4 |
+		(invert_spectrum & 0x01) << 8 |
+		(auto_detect & 0x07 ) << 9;
 	int ret= si2183_set_property(client, Si2183_DD_MODE_PROP_CODE, dd_mode);
 	if(ret)
 		dprintk("Error setting bandwidth\n");
@@ -431,14 +432,14 @@ static int si2183_set_scan_bandwidth(struct i2c_client *client, s32 bandwidth)
 static int si2183_set_scan_mode(struct i2c_client *client, s32 debug)
 {
 	s32 analog_detect = 1; //enabled
-	s32 reserved1     =  0;
-	s32 reserved2     = 12;
+	s32 reserved1 = 0;
+	s32 reserved2 = 12;
 	s32 scan_debug = 0x0; //0x03; use 3 for spectrum scan?
 	//Si2183_L1_SetProperty2(front_end->demod, Si2183_SCAN_SAT_CONFIG_PROP_CODE);
 	s32 sat_config = (analog_detect & 0x01) << 0 |
-		(reserved1     & 0x1f   ) << 1  |
-		(reserved2     & 0x7f  ) << 6 |
-		(scan_debug    & 0x07   ) << 13 ;
+		(reserved1 & 0x1f ) << 1 |
+		(reserved2 & 0x7f ) << 6 |
+		(scan_debug & 0x07 ) << 13 ;
 	int ret=si2183_set_property(client, Si2183_SCAN_SAT_CONFIG_PROP_CODE, sat_config);
 	if(ret)
 		dprintk("Error setting scan mode\n");
@@ -475,31 +476,30 @@ static int si2183_scan_action(struct i2c_client *client, s32 action, s32 seek_fr
 }
 
 
-static int si2183_scan_sat_start(struct dvb_frontend *fe,  struct blindscan_state * blindscan_state)
+static int si2183_scan_sat_start(struct dvb_frontend *fe, struct blindscan_state * bs)
 {
 	struct i2c_client *client = fe->demodulator_priv;
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
-	struct si2183_scan_status_t* scan_status = &blindscan_state->scan_status;
+	struct si2183_scan_status_t* scan_status = &bs->scan_status;
 
-	s32 bandwidth = 40000;
-	memset(blindscan_state, 0, sizeof(struct blindscan_state));
+	memset(bs, 0, sizeof(struct blindscan_state));
 	si2183_stop_task(fe); //clean up
+	bs->bandwidth = 40000;
+	bs->start_resume = 1;
+	bs->skip_resume = 0;
 
-	blindscan_state->start_resume = 1;
-	blindscan_state->skip_resume = 0;
-
-	blindscan_state->action = Si2183_SCAN_CTRL_CMD_ACTION_START;
-
+	bs->action = Si2183_SCAN_CTRL_CMD_ACTION_START;
+	bs->seek_freq = p->scan_start_frequency;
  //s32 tuned_rf_freq; // = (950000/65536)*1000;//same as start frequency
 
 
 	if(fe->ops.tuner_ops.set_bandwidth)
-		fe->ops.tuner_ops.set_bandwidth(fe, bandwidth);
+		fe->ops.tuner_ops.set_bandwidth(fe, bs->bandwidth);
 
 	si2183_scan_abort(client);
 	si2183_set_scan_limits(client, p);
 	si2183_enable_interaction(client);
-	si2183_set_scan_bandwidth(client, bandwidth);
+	si2183_set_scan_bandwidth(client, bs->bandwidth);
 
 	si2183_set_scan_mode(client, 0x0 /*use 3 for spectrum*/);
 	si2183_restart(client);
@@ -511,33 +511,31 @@ static int si2183_scan_sat_start(struct dvb_frontend *fe,  struct blindscan_stat
 
 
 int si2183_scan_sat(struct dvb_frontend *fe, bool init,
-													 unsigned int *delay,  enum fe_status *status)
+													 unsigned int *delay, enum fe_status *status)
 {
 	struct i2c_client *client = fe->demodulator_priv;
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
 	struct si2183_dev *state = i2c_get_clientdata(client);
 	struct blindscan_state * bs = &state->blindscan_state;
 	struct si2183_scan_status_t* scan_status = &bs->scan_status;
-	s32 bandwidth = 40000;
-
+	bool found = false;
 
  //s32 tuned_rf_freq; // = (950000/65536)*1000;//same as start frequency
- s32  seek_freq=0;
-
+ //s32 seek_freq=0;
+	dprintk("init=%d start=%dkHz end=%dkHz\n", init, p->scan_start_frequency, p->scan_end_frequency);
  if(init) {
-	 si2183_scan_sat_start(fe,  bs);
+	 si2183_scan_sat_start(fe, bs);
  }
 
 
 
 
- for(p->frequency = p->scan_start_frequency; p->frequency < p->scan_end_frequency; )
+ // while(1)
 	 {
-		 seek_freq = p->frequency;
-		 if(bs->start_resume) {
-			 int count=0;
-			 while (scan_status->buz == Si2183_SCAN_STATUS_RESPONSE_BUZ_BUSY) {
-				 if ((count% 20==19) &&  (kthread_should_stop() || dvb_frontend_task_should_stop(fe))) {
+	 if(bs->start_resume) {
+		 int count=0;
+		 while (scan_status->buz == Si2183_SCAN_STATUS_RESPONSE_BUZ_BUSY) {
+				 if ((count% 20==19) && (kthread_should_stop() || dvb_frontend_task_should_stop(fe))) {
 					 goto _exit;
 				 }
 				 si2183_scan_status(client, Si2183_SCAN_STATUS_CMD_INTACK_OK, scan_status);
@@ -545,16 +543,16 @@ int si2183_scan_sat(struct dvb_frontend *fe, bool init,
 				 if(++count%20==19) {
 					 dprintk("here count=%d\n", count);
 				 }
-			 }
-
-			 if(si2183_scan_action(client, bs->action, seek_freq))
-					goto _exit;
-
 		 }
-		 bs-> action = Si2183_SCAN_CTRL_CMD_ACTION_RESUME;
 
-		 /* The actual search loop... */
-		 for (;;) {
+		 if(si2183_scan_action(client, bs->action, bs->seek_freq))
+			 goto _exit;
+
+	 }
+	 bs-> action = Si2183_SCAN_CTRL_CMD_ACTION_RESUME;
+
+	 /* The actual search loop... */
+	 for (;;) {
 		 bool scanint;
 		 si2183_check_interaction(client, &scanint);
 		 //dprintk("ddint=%d scanint=%d err=%d cts=%d\n", ddint, scanint, err, cts);
@@ -579,59 +577,61 @@ int si2183_scan_sat(struct dvb_frontend *fe, bool init,
 			 }
 			 dprintk("SCAN status=%d\n", scan_status->scan_status);
 			 switch (scan_status->scan_status) {
-			 case  Si2183_SCAN_STATUS_RESPONSE_SCAN_STATUS_TUNE_REQUEST          : {
-				 int old_seek_freq= seek_freq;
-				 seek_freq = scan_status->rf_freq;
+			 case Si2183_SCAN_STATUS_RESPONSE_SCAN_STATUS_TUNE_REQUEST: {
+				 int old_seek_freq= bs->seek_freq;
+				 bs->seek_freq = scan_status->rf_freq;
 				 if(fe->ops.tuner_ops.set_bandwidth) {
-					 fe->ops.tuner_ops.set_frequency(fe, seek_freq);
+					 fe->ops.tuner_ops.set_frequency(fe, bs->seek_freq);
 				 } else if (fe->ops.tuner_ops.set_frequency_and_bandwidth) {
-					 fe->ops.tuner_ops.set_frequency_and_bandwidth(fe, seek_freq, bandwidth);
+					 fe->ops.tuner_ops.set_frequency_and_bandwidth(fe, bs->seek_freq, bs->bandwidth);
 				 }
-				 p->frequency = seek_freq;
-				 dprintk("SCAN tune request freq=%d, was %d Now %dkHz\n", seek_freq, old_seek_freq, p->frequency);
+
+				 dprintk("SCAN tune request freq=%d, was %d\n", bs->seek_freq, old_seek_freq);
 				 //*freq = front_end->rangeMin = seek_freq;
 				 /* as we will not lock in less than min_lock_time_ms, wait a while... */
 				 //system_wait(min_lock_time_ms);
 					msleep(100);
 					break;
 			 }
-			 case  Si2183_SCAN_STATUS_RESPONSE_SCAN_STATUS_DIGITAL_CHANNEL_FOUND : {
-				 s32 standard        = scan_status->modulation;
+			 case Si2183_SCAN_STATUS_RESPONSE_SCAN_STATUS_DIGITAL_CHANNEL_FOUND: {
+				 s32 standard = scan_status->modulation;
 				 s32 symbol_rate;
-				 s32 frequency            = scan_status->rf_freq;
+				 s32 frequency = scan_status->rf_freq;
 				 symbol_rate = scan_status->symb_rate*1000;
 
 					/* When locked, clear scanint before returning from SeekNext, to avoid seeing it again on the 'RESUME', with fast i2c platforms */
-					si2183_scan_status(client, Si2183_SCAN_STATUS_CMD_INTACK_CLEAR, scan_status);
-					dprintk("FOUND freq=%d symrate=%d standard=%d\n", frequency, symbol_rate, standard);
-					goto _found;
-					break;
-				}
-			 case  Si2183_SCAN_STATUS_RESPONSE_SCAN_STATUS_ERROR                 : {
-				 dprintk("ERROR\n");
+				 si2183_scan_status(client, Si2183_SCAN_STATUS_CMD_INTACK_CLEAR, scan_status);
+				 p->delivery_system = si2183_delsys(standard);
+				 state->delivery_system = p->delivery_system;
+				 dprintk("FOUND freq=%d symrate=%d standard=%d => %d\n", frequency, symbol_rate, standard, p->delivery_system);
+					p->frequency = frequency;
+					p->symbol_rate = symbol_rate;
+					si2183_read_status(fe, status);
+					found= true;
 					goto _exit;
 					break;
 				}
-			 case  Si2183_SCAN_STATUS_RESPONSE_SCAN_STATUS_SEARCHING             : {
-				 static int count=0;
-				 count++;
-				 dprintk("searching count=%d\n", count);
+			 case Si2183_SCAN_STATUS_RESPONSE_SCAN_STATUS_ERROR:
+				 dprintk("ERROR\n");
+				 goto _exit;
+				 break;
+
+			 case Si2183_SCAN_STATUS_RESPONSE_SCAN_STATUS_SEARCHING:
+				 dprintk("searching count\n");
 				 bs->skip_resume = true;
 						break;
-			 }
-			 case  Si2183_SCAN_STATUS_RESPONSE_SCAN_STATUS_ENDED                 : {
+			 case Si2183_SCAN_STATUS_RESPONSE_SCAN_STATUS_ENDED:
 				 dprintk("ended\n");
-					goto _done;
-					break;
-			 }
+				 goto _exit;
+				 break;
 
-			 case  Si2183_SCAN_STATUS_RESPONSE_SCAN_STATUS_DEBUG                 :
+			 case Si2183_SCAN_STATUS_RESPONSE_SCAN_STATUS_DEBUG:
 				 dprintk("DEBUG!!!!!!!!!!!!!!! type=%d: %s\n", scan_status->symb_rate,
-								 scan_status->symb_rate == 4 ? "spectrum" :
-								 scan_status->symb_rate == 9 ? "trylock" : "other");
+								 scan_status->symb_rate == 4 ? "spectrum":
+								 scan_status->symb_rate == 9 ? "trylock": "other");
 
 				 break;
-			 default : {
+			 default: {
 				 dprintk("unknown scan_status %d\n", scan_status->scan_status);
 				 bs->skip_resume = true;
 				 break;
@@ -639,29 +639,28 @@ int si2183_scan_sat(struct dvb_frontend *fe, bool init,
 			 }
 			 dprintk("here skip_resume=%d\n", bs->skip_resume);
 			 if (bs->skip_resume == false) {
-				 if(si2183_scan_action(client, bs->action, seek_freq))
+				 if(si2183_scan_action(client, bs->action, bs->seek_freq))
 					 goto _exit;
 
 			 }
 		 }
-
 			/* Check status every 100 ms */
 			msleep(100);
-
 	 }
-	 _found:
-	 p->scan_start_frequency = p->frequency;
+	 // p->scan_start_frequency = frequency;
  }
 
- _done:
-
  _exit:
- si2183_scan_abort(client);
+ if(!found) {
+	 si2183_scan_abort(client);
+	 *status = FE_TIMEDOUT;
+	 	dprintk("Signaling DONE\n");
+ } else {
+	 p->scan_start_frequency = p->frequency;
+	 *status |= FE_HAS_LOCK;
+ }
 
-	dprintk("Signaling DONE\n");
-	*status =  FE_TIMEDOUT|FE_HAS_SIGNAL|FE_HAS_CARRIER|FE_HAS_VITERBI|FE_HAS_SYNC|FE_HAS_LOCK;
-
-return 0;
+ return 0;
 }
 
 int si2183_spectrum_start(struct dvb_frontend *fe,
@@ -680,8 +679,8 @@ int si2183_spectrum_start(struct dvb_frontend *fe,
 	u32 end_frequency = p->scan_end_frequency;
 	//u32 bandwidth = end_frequency-start_frequency; //in kHz
 	//uint32_t frequency;
-	uint32_t resolution =  (p->scan_resolution>0) ? p->scan_resolution : 1000; //in kHz
-	uint32_t bandwidth =  resolution; //in kHz
+	uint32_t resolution = (p->scan_resolution>0) ? p->scan_resolution: 1000; //in kHz
+	uint32_t bandwidth = resolution; //in kHz
 	u32 num_freq = (p->scan_end_frequency-p->scan_start_frequency+ resolution-1)/resolution;
 	s32 frequency;
 
@@ -700,10 +699,10 @@ int si2183_spectrum_start(struct dvb_frontend *fe,
 	ss->freq = kzalloc(ss->spectrum_len * (sizeof(ss->freq[0])), GFP_KERNEL);
 	ss->spectrum = kzalloc(ss->spectrum_len * (sizeof(ss->spectrum[0])), GFP_KERNEL);
 	if (!ss->freq || !ss->spectrum) {
-		return  -ENOMEM;
+		return -ENOMEM;
 	}
 	if(!fe->ops.tuner_ops.set_frequency_and_bandwidth ||
-		 !(fe->ops.tuner_ops.set_frequency &&  fe->ops.tuner_ops.set_frequency)) {
+		 !(fe->ops.tuner_ops.set_frequency && fe->ops.tuner_ops.set_frequency)) {
 		dprintk("No tuner support %p %p %p\n", fe->ops.tuner_ops.set_frequency_and_bandwidth,
 						fe->ops.tuner_ops.set_frequency,fe->ops.tuner_ops.set_frequency);
 	 return -EINVAL; //TODO
@@ -731,7 +730,7 @@ int si2183_spectrum_start(struct dvb_frontend *fe,
 
 
 	 //state->tuner_bw = resolution;
-	s->scale =  FE_SCALE_DECIBEL; //in units of 0.001dB
+	s->scale = FE_SCALE_DECIBEL; //in units of 0.001dB
 
 	//	p->algorithm = ALGORITHM_NONE;
 	//p->symbol_rate = frequency_step; //set bandwidth equal to frequency_step
@@ -764,7 +763,7 @@ int si2183_spectrum_start(struct dvb_frontend *fe,
 	 dprintk("here num_freq=%d\n", num_freq);
 	 for (i = 0; i < num_freq; i++) {
 		 dprintk("ITER i=%d\n", i);
-		 if ((i% 20==19) &&  (kthread_should_stop() || dvb_frontend_task_should_stop(fe))) {
+		 if ((i% 20==19) && (kthread_should_stop() || dvb_frontend_task_should_stop(fe))) {
 			 dprintk("exiting on should stop i=%d\n", i);
 			 break;
 		 }
@@ -784,7 +783,7 @@ int si2183_spectrum_start(struct dvb_frontend *fe,
 		 usleep_range(12000, 13000);
 		 ss->spectrum[i] = si2183_narrow_band_signal_power_dbm(fe);
 	 }
-	 *status =  FE_HAS_SIGNAL|FE_HAS_CARRIER|FE_HAS_VITERBI|FE_HAS_SYNC|FE_HAS_LOCK;
+	 *status = FE_HAS_SIGNAL|FE_HAS_CARRIER|FE_HAS_VITERBI|FE_HAS_SYNC|FE_HAS_LOCK;
 	return 0;
 
  }
@@ -812,4 +811,68 @@ int si2183_spectrum_get(struct dvb_frontend *fe, struct dtv_fe_spectrum* user)
 	else
 		error = -EFAULT;
 	return error;
+}
+
+enum fe_delivery_system si2183_delsys(int val)
+{
+	switch(val) {
+	case 8: return SYS_DVBS;
+	case 9: return SYS_DVBS2;
+	case 2: return SYS_DVBT;
+	case 3: return SYS_DVBC_ANNEX_A;
+	case 4: return SYS_ISDBT;
+	case 7: return SYS_DVBT2;
+	case 10: return SYS_DSS;
+	case 11: return SYS_DVBC2;
+	}
+	return SYS_UNDEFINED;
+}
+
+enum fe_modulation si2183_modulation(int val)
+{
+	switch(val) {
+	case 20: return APSK_16;
+	case 24: return APSK_16L;
+	case 21: return APSK_32;
+	case 26: return APSK_32;
+	case 25: return APSK_32L;
+	case 23: return APSK_8L;
+	case 14: return PSK_8;
+	case 3: return QPSK;
+	}
+	return -1;
+}
+
+enum fe_rolloff si2183_rolloff(int val)
+{
+	switch(val) {
+	case 0: return ROLLOFF_35;
+	case 6: return ROLLOFF_5;
+	case 5: return ROLLOFF_10;
+	case 4: return ROLLOFF_15;
+	case 2: return ROLLOFF_20;
+	case 1: return ROLLOFF_25;
+	case 3: return ROLLOFF_AUTO;
+	}
+	return ROLLOFF_AUTO;
+}
+
+
+enum fe_code_rate si2183_code_rate(int val)
+{
+	switch(val) {
+	case 1: return FEC_1_2;
+	case 2: return FEC_2_3;
+	case 3: return FEC_3_4;
+	case 4: return FEC_4_5;
+	case 5: return FEC_5_6;
+	case 6: return FEC_6_7;
+	case 8: return FEC_8_9;
+	case 9: return FEC_9_10;
+	case 10: return FEC_1_3;
+	case 11: return FEC_1_4;
+	case 12: return FEC_2_5;
+	case 13: return FEC_3_5;
+	}
+	return FEC_AUTO;
 }

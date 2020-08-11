@@ -201,7 +201,7 @@ static int si2183_get_prop(struct i2c_client *client, u16 prop, u16 *val)
 
 
 
-static int si2183_read_status(struct dvb_frontend *fe, enum fe_status *status)
+int si2183_read_status(struct dvb_frontend *fe, enum fe_status *status)
 {
 	struct i2c_client *client = fe->demodulator_priv;
 	struct si2183_dev *dev = i2c_get_clientdata(client);
@@ -218,8 +218,7 @@ static int si2183_read_status(struct dvb_frontend *fe, enum fe_status *status)
 		goto err;
 	}
 
-	if ((dev->delivery_system != c->delivery_system) ||
-			(dev->delivery_system == 0)) {
+	if ((dev->delivery_system != c->delivery_system) || (dev->delivery_system == 0)) {
 		dprintk("delsys differ: %d %d\n", dev->delivery_system ,c->delivery_system);
 		return 0;
 	}
@@ -301,27 +300,31 @@ static int si2183_read_status(struct dvb_frontend *fe, enum fe_status *status)
 		break;
 	}
 
+	c->modulation = si2183_modulation(cmd.args[8] &0x3f);
+	dprintk("MODU: %d =>%d\n", cmd.args[8] &0x3f, 	c->modulation);
+	c->inversion = ((cmd.args[8] >> 6) &1)? INVERSION_ON: INVERSION_OFF;
+	c->pilot =  ((cmd.args[8] >> 7) &1) ? PILOT_ON: PILOT_OFF;
+	c->fec_inner = si2183_code_rate(cmd.args[9] &0x1f);
+	c->rolloff = si2183_rolloff(cmd.args[10] &0x07);
+	dprintk("ROLL: %d =>%d\n", cmd.args[10] &0x07, c->rolloff);
+	c->vcm =  (cmd.args[10]>>3) & 0x1;
+	c->matype =  (cmd.args[10]>>5) & 0x3;
+	if((cmd.args[10]>>4) & 0x1)
+		c->stream_id = cmd.args[12]; 		//multistream
+	else
+		c->stream_id = -1;
+	c->isi_list_len = 1;
+	memset(c->isi, 0xff, c->isi_list_len);
+	c->isi[0]= c->stream_id;
+
 	dev->fe_status = *status;
 
 	dev_dbg(&client->dev, "status=%02x args=%*ph\n",
 					*status, cmd.rlen, cmd.args);
+	c->strength.len = 1;
+	c->strength.stat[0].scale = FE_SCALE_DECIBEL;
+	c->strength.stat[0].svalue =  si2183_narrow_band_signal_power_dbm(fe);
 
-	if (fe->ops.tuner_ops.get_rf_strength)
-		{
-			memcpy(cmd.args, "\x8a\x00\x00\x00\x00\x00", 6);
-			cmd.wlen = 6;
-			cmd.rlen = 3;
-			ret = si2183_cmd_execute(client, &cmd);
-			if (ret) {
-				dev_err(&client->dev, "read_status fe%d cmd_exec failed=%d\n", fe->id, ret);
-				goto err;
-			}
-			dev_dbg(&client->dev, "status=%02x args=%*ph\n",
-							*status, cmd.rlen, cmd.args);
-
-			agc = cmd.args[1];
-			fe->ops.tuner_ops.get_rf_strength(fe, &agc);
-		}
 	dprintk("read_status: returned status=%d agc=%d\n", *status, agc);
 	return 0;
  err:

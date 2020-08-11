@@ -114,6 +114,8 @@ struct blindscan_state {
 	bool start_resume;
 	bool skip_resume;
 	s32 action;
+	s32 bandwidth;
+	s32 seek_freq;
 };
 
 struct constellation_scan_state {
@@ -171,4 +173,11 @@ int si2183_constellation_start(struct dvb_frontend *fe,
 															 unsigned int *delay, enum fe_status *status);
 int si2183_constellation_get(struct dvb_frontend *fe, struct dtv_fe_constellation* user);
 int si2183_stop_task(struct dvb_frontend *fe);
+int si2183_read_status(struct dvb_frontend *fe, enum fe_status *status);
+enum fe_delivery_system si2183_delsys(int val);
+enum fe_modulation si2183_modulation(int val);
+enum fe_rolloff si2183_rolloff(int val);
+enum fe_code_rate si2183_code_rate(int val);
+s32 si2183_narrow_band_signal_power_dbm(struct dvb_frontend *fe);
+
 #endif
