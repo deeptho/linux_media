@@ -382,6 +382,17 @@ struct spectrum_scan_state {
 
 };
 
+
+struct constellation_scan_state {
+	bool constallation_present;
+	bool in_progress;
+
+	struct dtv_fe_constellation_sample* samples;
+	int num_samples;
+	int samples_len;
+	int constel_select;
+};
+
 /*
 	state per adapter
  */
@@ -429,7 +440,7 @@ struct stv {
 	struct modcod_data	mc_flt[NB_SAT_MODCOD];
 
 	struct spectrum_scan_state scan_state;
-
+	struct constellation_scan_state constellation_scan_state;
 };
 
 extern void print_signal_info(const char* prefix, struct fe_sat_signal_info* i);

@@ -11,6 +11,10 @@ ifdef CONFIG_DVB_RTL2832_SDR
 endif
 
 stb0899-objs := stb0899_drv.o stb0899_algo.o
+
+si2183-objs := si2183_drv.o si2183_blindscan.o
+
+
 stv0900-objs := stv0900_core.o stv0900_sw.o
 drxd-objs := drxd_firm.o drxd_hard.o
 cxd2820r-objs := cxd2820r_core.o cxd2820r_c.o cxd2820r_t.o cxd2820r_t2.o

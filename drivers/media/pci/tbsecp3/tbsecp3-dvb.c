@@ -40,6 +40,10 @@
 #include "stid135.h"
 #include "rda5816.h"
 
+#define dprintk(fmt, arg...)																					\
+	printk(KERN_DEBUG pr_fmt("%s:%d " fmt), __func__, __LINE__, ##arg)
+
+
 DVB_DEFINE_MOD_OPT_ADAPTER_NR(adapter_nr);
 
 struct sec_priv {
@@ -409,6 +413,7 @@ static int tbsecp3_set_voltage(struct dvb_frontend* fe,
 	default:
 		;
 	}
+	dprintk("Set voltage voltage=%d\n", voltage);
 	if(is_slave)
 		return 0;
 	switch (voltage) {

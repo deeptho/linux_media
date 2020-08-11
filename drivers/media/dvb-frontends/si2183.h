@@ -14,8 +14,18 @@
 
 #ifndef SI2183_H
 #define SI2183_H
-
+#include <media/dvb_frontend.h>
 #include <linux/dvb/frontend.h>
+
+#define SI2183_ARGLEN      30
+struct si2183_cmd {
+	u8 args[SI2183_ARGLEN];
+	unsigned wlen;
+	unsigned rlen;
+};
+
+
+
 /*
  * I2C address
  * 0x64
@@ -42,7 +52,7 @@ struct si2183_config {
 	bool ts_clock_inv;
 
 	int  start_clk_mode;  //0 terrestrial mode 1: satellite mode
-	
+
 	/* TS clock gapped */
 	bool ts_clock_gapped;
 	/*agc*/
@@ -60,4 +70,87 @@ struct si2183_config {
 	void (*read_properties) (struct i2c_adapter *i2c,u8 reg, u32 *buf);
 };
 
+struct si_base {
+	struct mutex i2c_mutex;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 7, 0)
+	struct i2c_mux_core *muxc;
+#endif
+	struct list_head     silist;
+
+	u8                   adr;
+	struct i2c_adapter  *i2c;
+	u32                  count;
+
+	struct i2c_adapter  *tuner_adapter;
+
+#ifndef SI2183_USE_I2C_MUX
+	struct i2c_client *i2c_gate_client;
+#endif
+};
+
+struct spectrum_scan_state {
+	bool spectrum_present;
+	bool scan_in_progress;
+
+	s32* freq;
+	s32* spectrum;
+	int spectrum_len;
+	int spectrum_max_len;
+};
+
+struct constellation_scan_state {
+	bool constallation_present;
+	bool in_progress;
+
+	struct dtv_fe_constellation_sample* samples;
+	int num_samples;
+	int samples_len;
+	int constel_select;
+};
+
+
+
+/* state struct */
+struct si2183_dev {
+	struct dvb_frontend fe;
+	enum fe_delivery_system delivery_system;
+	enum fe_status fe_status;
+	u8 stat_resp;
+	u16 snr;
+	bool fw_loaded;
+	u8 ts_mode;
+	bool ts_clock_inv;
+	bool ts_clock_gapped;
+	int start_clk_mode;
+	u8 agc_mode;
+	struct si_base *base;
+	void (*RF_switch)(struct i2c_adapter * i2c,u8 rf_in,u8 flag);
+	u8 rf_in;
+	u8 active_fe;
+	void (*TS_switch)(struct i2c_adapter * i2c,u8 flag);
+	void (*LED_switch)(struct i2c_adapter * i2c,u8 flag);
+
+	void (*write_properties) (struct i2c_adapter *i2c,u8 reg, u32 buf);
+	void (*read_properties) (struct i2c_adapter *i2c,u8 reg, u32 *buf);
+
+	struct spectrum_scan_state scan_state;
+	struct constellation_scan_state constellation_scan_state;
+
+};
+
+int si2183_cmd_execute(struct i2c_client *client, struct si2183_cmd *cmd);
+int si2183_cmd_execute_unlocked(struct i2c_client *client,
+																struct si2183_cmd *cmd);
+int si2183_set_frontend(struct dvb_frontend *fe);
+int si2183_spectrum_start(struct dvb_frontend *fe,
+																 struct dtv_fe_spectrum* s,
+													unsigned int *delay, enum fe_status *status);
+int si2183_spectrum_get(struct dvb_frontend *fe, struct dtv_fe_spectrum* user);
+int si2183_scan_sat(struct dvb_frontend *fe, bool init,
+										unsigned int *delay,  enum fe_status *status);
+int si2183_constellation_start(struct dvb_frontend *fe,
+															 struct dtv_fe_constellation* user,
+															 unsigned int *delay, enum fe_status *status);
+int si2183_constellation_get(struct dvb_frontend *fe, struct dtv_fe_constellation* user);
+int si2183_stop_task(struct dvb_frontend *fe);
 #endif

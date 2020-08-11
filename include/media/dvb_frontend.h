@@ -248,6 +248,7 @@ struct dvb_tuner_ops {
 #define TUNER_STATUS_STEREO 2
 	int (*get_status)(struct dvb_frontend *fe, u32 *status);
 	int (*get_rf_strength)(struct dvb_frontend *fe, u16 *strength);
+	int (*agc_to_gain_dbm)(struct dvb_frontend *fe, s32 agc);//returns gain in dB (units 0.001dB)
 	int (*get_afc)(struct dvb_frontend *fe, s32 *afc);
 
 	/*
@@ -480,6 +481,12 @@ struct dvb_frontend_ops {
 	int (*spectrum_get)(struct dvb_frontend *fe,
 											struct dtv_fe_spectrum* user);
 
+	int (*constellation_start)(struct dvb_frontend *fe, struct dtv_fe_constellation* user,
+												unsigned int *delay, enum fe_status *status);
+
+	int (*constellation_get)(struct dvb_frontend *fe,
+											struct dtv_fe_constellation* user);
+
 	/* get frontend tuning algorithm from the module */
 	enum dvbfe_algo (*get_frontend_algo)(struct dvb_frontend *fe);
 
@@ -520,7 +527,6 @@ struct dvb_frontend_ops {
 	struct analog_demod_ops analog_ops;
 
 	int (*set_property)(struct dvb_frontend* fe, u32 cmd, u32 data);
-	int (*get_constellation_samples)(struct dvb_frontend* fe, struct dvb_fe_constellation_samples* s);
 
 	int (*set_frame_ops)(struct dvb_frontend* fe, struct dvb_frame frame_ops);
 	int (*dtv_tune)(struct dvb_frontend* fe);

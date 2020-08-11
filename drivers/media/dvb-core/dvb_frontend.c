@@ -71,6 +71,7 @@ MODULE_PARM_DESC(dvb_mfe_wait_time, "Wait up to <mfe_wait_time> seconds on open(
 #define FESTATE_SCAN_FIRST 512
 #define FESTATE_SCAN_NEXT 1024
 #define FESTATE_GETTING_SPECTRUM 2048
+#define FESTATE_GETTING_CONSTELLATION 4096
 #define FESTATE_WAITFORLOCK (FESTATE_TUNING_FAST | FESTATE_TUNING_SLOW | FESTATE_ZIGZAG_FAST | FESTATE_ZIGZAG_SLOW | FESTATE_DISEQC)
 #define FESTATE_SEARCHING_FAST (FESTATE_TUNING_FAST | FESTATE_ZIGZAG_FAST)
 #define FESTATE_SEARCHING_SLOW (FESTATE_TUNING_SLOW | FESTATE_ZIGZAG_SLOW)
@@ -126,6 +127,7 @@ struct dvb_frontend_private {
 	unsigned int check_wrapped;
 	enum dvbfe_search algo_status;
 	struct dtv_fe_spectrum spectrum;
+	struct dtv_fe_constellation constellation;
 #if defined(CONFIG_MEDIA_CONTROLLER_DVB)
 	struct media_pipeline pipe;
 #endif
@@ -759,6 +761,13 @@ restart:
 						fe->ops.spectrum_start(fe,  &fepriv->spectrum, &fepriv->delay, &s);
 					dprintk("spectrum scan ended\n");
 					fepriv->state = FESTATE_IDLE;
+				}	else if (fepriv->state & FESTATE_GETTING_CONSTELLATION) {
+					dev_dbg(fe->dvb->device, "%s: Spectrum requested, DTV_CMDS_H\n", __func__);
+					dprintk("starting constellation scan\n");
+					if (fe->ops.constellation_start)
+						fe->ops.constellation_start(fe,  &fepriv->constellation, &fepriv->delay, &s);
+					dprintk("constellation scan ended\n");
+					fepriv->state = FESTATE_IDLE;
 				} else {
 					if (fepriv->state & FESTATE_RETUNE) {
 						dev_dbg(fe->dvb->device, "%s: Retune requested, FESTATE_RETUNE\n", __func__);
@@ -1155,6 +1164,7 @@ static struct dtv_cmds_h dtv_cmds[DTV_MAX_COMMAND + 1] = {
 	_DTV_CMD(DTV_TUNE, 1, 0),
 	_DTV_CMD(DTV_SCAN, 1, 0),
 	_DTV_CMD(DTV_SPECTRUM, 1, 0),
+	_DTV_CMD(DTV_CONSTELLATION, 1, 0),
 	_DTV_CMD(DTV_CLEAR, 1, 0),
 	/* Set */
 	_DTV_CMD(DTV_FREQUENCY, 1, 0),
@@ -1431,6 +1441,8 @@ static int dvb_frontend_handle_algo_ctrl_ioctl(struct file *file,
 static int dtv_set_sat_scan(struct dvb_frontend *fe, bool scan_continue);
 static int dtv_set_spectrum(struct dvb_frontend *fe, enum dtv_fe_spectrum_method method);
 static int dtv_get_spectrum(struct dvb_frontend *fe, struct dtv_fe_spectrum*user);
+static int dtv_set_constellation(struct dvb_frontend *fe, struct dtv_fe_constellation* constellation);
+static int dtv_get_constellation(struct dvb_frontend *fe, struct dtv_fe_constellation* user);
 
 static int dtv_property_process_get(struct dvb_frontend *fe,
 						const struct dtv_frontend_properties *c,
@@ -1465,8 +1477,11 @@ static int dtv_property_process_get(struct dvb_frontend *fe,
 	case DTV_SCAN_FFT_SIZE:
 		tvp->u.data = c->scan_fft_size;
 		break;
-	case DTV_SPECTRUM:
+ 	case DTV_SPECTRUM:
 		dtv_get_spectrum(fe, &tvp->u.spectrum);
+		break;
+ 	case DTV_CONSTELLATION:
+		dtv_get_constellation(fe, &tvp->u.constellation);
 		break;
 	case DTV_SEARCH_RANGE:
 		tvp->u.data = c->search_range;
@@ -2171,6 +2186,7 @@ static int dtv_property_process_set(struct dvb_frontend *fe,
 	dev_dbg(fe->dvb->device,
 					"%s: SET cmd 0x%08x (%s) to 0x%08x\n",
 					__func__, cmd, dtv_cmds[cmd].name, tvp->u.data);
+	dprintk("XXX SET cmd 0x%08x (%s) to 0x%08x\n",  cmd, dtv_cmds[cmd].name, tvp->u.data);
 
 	switch(cmd) {
 	case DTV_CLEAR:
@@ -2215,6 +2231,17 @@ static int dtv_property_process_set(struct dvb_frontend *fe,
 			"%s: Setting the frontend from property cache\n",
 			__func__);
 		r = dtv_set_spectrum(fe, tvp->u.data);
+		break;
+	case DTV_CONSTELLATION:
+		/*
+		 * Use the cached Digital TV properties to scan the
+		 * frontend
+		 */
+		dprintk("set constellation  called\n");
+		dev_dbg(fe->dvb->device,
+			"%s: Setting the frontend from property cache\n",
+			__func__);
+		r = dtv_set_constellation(fe, &tvp->u.constellation);
 		break;
 	case DTV_PLS_SEARCH_RANGE:
 		if(tvp->u.buffer.len == sizeof(c->pls_search_range_start) + sizeof(c->pls_search_range_start)) {
@@ -2265,46 +2292,6 @@ static int init_dtv_fe_spectrum_scan(struct dtv_fe_spectrum* s, struct dtv_front
 
 
 
-static int dvb_frontend_ioctl_get_constellation_samples(struct file *file,
-			unsigned int cmd, void *parg)
-{
-	struct dvb_device *dvbdev = file->private_data;
-	struct dvb_frontend *fe = dvbdev->priv;
-
-	struct dvb_fe_constellation_samples *s_user = parg;
-	struct dvb_fe_constellation_samples s_kernel;
-
-	int err = -EOPNOTSUPP;
-
-	if (fe->ops.get_constellation_samples)
-	{
-		// make sure samples are within range
-		if ((s_user->num == 0) || (s_user->num > DTV_MAX_CONSTELLATION_SAMPLES))
-			return -EINVAL;
-
-		// create kernel memory structure
-		s_kernel.num = s_user->num;
-		s_kernel.options = s_user->options;
-		s_kernel.samples = kmalloc(s_user->num * sizeof(struct dvb_fe_constellation_sample), GFP_KERNEL);
-
-		if (!s_kernel.samples) {
-			return -ENOMEM;
-		}
-
-		// call user function
-		err = fe->ops.get_constellation_samples(fe, &s_kernel);
-
-		// copy results to userspace
-		if (copy_to_user(s_user->samples, s_kernel.samples, s_kernel.num * sizeof(struct dvb_fe_constellation_sample))) {
-			err = -EFAULT;
-		}
-
-		// free kernel allocated memory
-		kfree(s_kernel.samples);
-	}
-
-	return err;
-}
 
 /*
 	This handles all ioctls which can access data without locking the fe_priv structure
@@ -2720,9 +2707,10 @@ static int dtv_set_spectrum(struct dvb_frontend *fe, enum dtv_fe_spectrum_method
 {
 	struct dvb_frontend_private *fepriv = fe->frontend_priv;
 	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
+	int ret;
 	if (!fe->ops.spectrum_get || !fe->ops.spectrum_start)
 		return  -ENOTSUPP;
-	int ret = init_dtv_fe_spectrum_scan(&fepriv->spectrum, c, method);
+	ret = init_dtv_fe_spectrum_scan(&fepriv->spectrum, c, method);
 	if(ret<0)
 		return ret;
  	/* Request the search algorithm to search */
@@ -2740,8 +2728,6 @@ static int dtv_set_spectrum(struct dvb_frontend *fe, enum dtv_fe_spectrum_method
 static int dtv_get_spectrum(struct dvb_frontend *fe, struct dtv_fe_spectrum* user)
 {
 	int err = 0;
-	struct dvb_frontend_private *fepriv = fe->frontend_priv;
-	struct dtv_fe_spectrum* kernel = &fepriv->spectrum;
 	dprintk("spectrum retrieved user: n=%d\n", user->num_freq);
 
 	if(fe->ops.spectrum_get)
@@ -2749,6 +2735,35 @@ static int dtv_get_spectrum(struct dvb_frontend *fe, struct dtv_fe_spectrum* use
 
 	//release_dtv_fe_spectrum_scan(fe);
 
+	return err;
+}
+
+static int dtv_set_constellation(struct dvb_frontend *fe, struct dtv_fe_constellation* constellation)
+{
+	struct dvb_frontend_private *fepriv = fe->frontend_priv;
+	if (!fe->ops.constellation_get || !fe->ops.constellation_start)
+		return  -ENOTSUPP;
+	fepriv->constellation = * constellation;
+	dprintk("SET constellation: num_samples=%d constel_select=%d\n", constellation->num_samples, constellation->constel_select);
+ 	/* Request the search algorithm to search */
+	fepriv->state = FESTATE_GETTING_CONSTELLATION;
+	dvb_frontend_clear_events(fe);
+	dvb_frontend_add_event(fe, 0);
+	dvb_frontend_wakeup(fe);
+	fepriv->status = 0;
+
+	return 0;
+}
+
+
+
+static int dtv_get_constellation(struct dvb_frontend *fe, struct dtv_fe_constellation* user)
+{
+	int err = 0;
+	dprintk("constellation retrieved user: n=%d\n", user->num_samples);
+
+	if(fe->ops.constellation_get)
+		fe->ops.constellation_get(fe, user);
 	return err;
 }
 
@@ -2785,7 +2800,7 @@ static int dvb_get_property(struct dvb_frontend *fe, struct file *file,
 	 * before updating the properties cache.
 	 */
 	if (fepriv->state != FESTATE_IDLE) {
-		if(tvps->num > 1 || tvp[0].cmd != DTV_SPECTRUM) {
+		if(tvps->num > 1 || (tvp[0].cmd != DTV_SPECTRUM || tvp[0].cmd != DTV_CONSTELLATION)) {
 			err = dtv_get_frontend(fe, &getp, NULL);
 			if (err < 0)
 				goto out;
@@ -2838,9 +2853,6 @@ static int dvb_frontend_handle_ioctl(struct file *file,
 	dev_dbg(fe->dvb->device, "%s:\n", __func__);
 
 	switch (cmd) {
-	case FE_GET_CONSTELLATION_SAMPLES:
-		err = dvb_frontend_ioctl_get_constellation_samples(file, cmd, parg);
-		break;
 	case FE_ECP3FW_READ:
 		//printk("FE_ECP3FW_READ *****************");
 		if (fe->ops.spi_read) {
@@ -3057,6 +3069,7 @@ static int dvb_frontend_handle_ioctl(struct file *file,
 
 	case FE_SET_TONE:
 		if (fe->ops.set_tone) {
+			dprintk("FE_SET_TONE %d\n", parg);
 			err = fe->ops.set_tone(fe,
 								 (enum fe_sec_tone_mode)parg);
 			fepriv->tone = (enum fe_sec_tone_mode)parg;

@@ -21,6 +21,10 @@
 #include "av201x.h"
 #include "av201x_priv.h"
 
+#define dprintk(fmt, arg...)																					\
+	printk(KERN_DEBUG pr_fmt("%s:%d " fmt), __func__, __LINE__, ##arg)
+
+
 /* write multiple (continuous) registers */
 static int av201x_wrm(struct av201x_priv *priv, u8 *buf, int len)
 {
@@ -164,17 +168,14 @@ static int av201x_sleep(struct dvb_frontend *fe)
 	return ret;
 }
 
-static int av201x_set_params(struct dvb_frontend *fe)
+//frequency in kHz
+static int av201x_set_frequency(struct dvb_frontend *fe, u32 frequency)
 {
 	struct av201x_priv *priv = fe->tuner_priv;
-	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
-	u32 n, bw, bf;
 	u8 buf[5];
-	int ret;
-
-	dev_dbg(&priv->i2c->dev, "%s() delivery_system=%d frequency=%d " \
-			"symbol_rate=%d\n", __func__,
-			c->delivery_system, c->frequency, c->symbol_rate);
+	int ret=0;
+	u32 n;
+	dev_dbg(&priv->i2c->dev, "%s() frequency=%d\n", __func__, frequency);
 
 	/*
 	   ** PLL setup **
@@ -184,17 +185,71 @@ static int av201x_set_params(struct dvb_frontend *fe)
 	   REG_FN = pll_M<24:0>
 	*/
 	buf[0] = REG_FN;
-	n = DIV_ROUND_CLOSEST(c->frequency, priv->cfg->xtal_freq);
+	n = DIV_ROUND_CLOSEST(frequency, priv->cfg->xtal_freq);
 	buf[1] = (n > 0xff) ? 0xff : (u8) n;
-	n = DIV_ROUND_CLOSEST((c->frequency / 1000) << 17, priv->cfg->xtal_freq / 1000);
+	n = DIV_ROUND_CLOSEST((frequency / 1000) << 17, priv->cfg->xtal_freq / 1000);
 	buf[2] = (u8) (n >> 9);
 	buf[3] = (u8) (n >> 1);
 	buf[4] = (u8) (((n << 7) & 0x80) | 0x50);
 	ret = av201x_wrm(priv, buf, 5);
 	if (ret)
 		goto exit;
+ exit:
+	if (ret)
+		dev_dbg(&priv->i2c->dev, "%s() failed\n", __func__);
+	return ret;
+}
 
+
+// bw in kHz
+static int av201x_set_bandwith(struct dvb_frontend *fe, u32 bandwidth)
+{
+	struct av201x_priv *priv = fe->tuner_priv;
+	int ret=0;
+	u32 bf;
+	u32 bw = bandwidth;
+	/* check limits (4MHz < bandwidth < 40MHz) */
+	if (bw > 40000) {
+		dprintk("Bandwidth %dkHz too large! reduced to 40000\n", bw);
+		bw = 40000;
+	}
+	else if (bw < 4000) {
+		dprintk("Bandwidth %dkHz too small! increased to 4000\n", bw);
+		bw = 4000;
+	}
+	/* bandwidth step = 211kHz */
+	bf = DIV_ROUND_CLOSEST(bandwidth * 127, 21100);
+	ret = av201x_wr(priv, REG_BWFILTER, (u8) bf);
+
+	/* enable fine tune agc */
+	ret |= av201x_wr(priv, REG_FT_CTRL, AV201X_FT_EN | AV201X_FT_BLK);
+
+	ret |= av201x_wr(priv, REG_TUNER_CTRL, 0x96);
+
+	if (ret)
+		dev_dbg(&priv->i2c->dev, "%s() failed\n", __func__);
+	return ret;
+}
+
+//frequency and bandwith in kHz
+static int av201x_set_frequency_and_bandwidth(struct dvb_frontend *fe, u32 frequency, u32 bandwidth)
+{
+	struct av201x_priv *priv = fe->tuner_priv;
+	int ret = 0;
+	dev_dbg(&priv->i2c->dev, "%s() frequency=%d \n", __func__, frequency);
+
+	ret= av201x_set_frequency(fe, frequency);
+	if(ret)
+		return ret;
 	msleep(20);
+	return av201x_set_bandwith(fe, bandwidth);
+}
+
+static int av201x_set_params(struct dvb_frontend *fe)
+{
+	u32 bw;
+	int ret=0;
+	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
 
 	/* set bandwidth */
 	bw = (c->symbol_rate / 1000) * 135/200;
@@ -203,42 +258,25 @@ static int av201x_set_params(struct dvb_frontend *fe)
 	bw += 2000;
 	bw *= 108/100;
 
-	/* check limits (4MHz < bw < 40MHz) */
-	if (bw > 40000)
-		bw = 40000;
-	else if (bw < 4000)
-		bw = 4000;
 
-	/* bandwidth step = 211kHz */
-	bf = DIV_ROUND_CLOSEST(bw * 127, 21100);
-	ret = av201x_wr(priv, REG_BWFILTER, (u8) bf);
-
-	/* enable fine tune agc */
-	ret |= av201x_wr(priv, REG_FT_CTRL, AV201X_FT_EN | AV201X_FT_BLK);
-
-	ret |= av201x_wr(priv, REG_TUNER_CTRL, 0x96);
+	ret = av201x_set_frequency_and_bandwidth(fe, c->frequency, bw);
 	msleep(20);
-exit:
-	if (ret)
-		dev_dbg(&priv->i2c->dev, "%s() failed\n", __func__);
 	return ret;
 }
 
-static  int   AV201x_agc         [] = {     0,  82,   100,  116,  140,  162,  173,  187,  210,  223,  254,  255};
-static  int   AV201x_level_dBm_10[] = {    90, -50,  -263, -361, -463, -563, -661, -761, -861, -891, -904, -910};
+static  s32   AV201x_agc         [] = {     0,  82,   100,  116,  140,  162,  173,  187,  210,  223,  254,  255};
+static  s32   AV201x_level_dBm_10[] = {    90, -50,  -263, -361, -463, -563, -661, -761, -861, -891, -904, -910};
 
-static int av201x_get_rf_strength(struct dvb_frontend *fe, u16 *st)
+static int av201x_agc_to_gain_dbm(struct dvb_frontend *fe, s32 if_agc)
 {
-	struct av201x_priv *priv = fe->tuner_priv;
-	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
-	int   if_agc, index, table_length, slope, *x, *y;
+	int   index, table_length, slope, *x, *y;
+	s32 gain;
 
-	if_agc = *st;
 	x = AV201x_agc;
 	y = AV201x_level_dBm_10;
 	table_length = sizeof(AV201x_agc)/sizeof(int);
 
-	
+
 	/* Finding in which segment the if_agc value is */
 	for (index = 0; index < table_length; index ++)
 		if (x[index] > if_agc ) break;
@@ -246,11 +284,20 @@ static int av201x_get_rf_strength(struct dvb_frontend *fe, u16 *st)
 	/* Computing segment slope */
 	slope =  ((y[index]-y[index-1])*1000)/(x[index]-x[index-1]);
 	/* Linear approximation of rssi value in segment (rssi values will be in 0.1dBm unit: '-523' means -52.3 dBm) */
-	*st = 1000 + ((y[index-1] + ((if_agc - x[index-1])*slope + 500)/1000))/10;
+	gain = ((y[index-1] + ((if_agc - x[index-1])*slope + 500)/1000)) * 100;
 
+	return -gain;
+}
+
+static int av201x_get_rf_strength(struct dvb_frontend *fe, u16 *st)
+{
+	struct av201x_priv *priv = fe->tuner_priv;
+	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
+	s32 gain = av201x_agc_to_gain_dbm(fe, *st);
+	*st = 1000 + gain/1000;
 	c->strength.len = 1;
 	c->strength.stat[0].scale = FE_SCALE_DECIBEL;
-	c->strength.stat[0].svalue = ((y[index-1] + ((if_agc - x[index-1])*slope + 500)/1000)) * 100;
+	c->strength.stat[0].svalue = gain;
 
 	return 0;
 }
@@ -267,8 +314,12 @@ static const struct dvb_tuner_ops av201x_tuner_ops = {
 
 	.init = av201x_init,
 	.sleep = av201x_sleep,
+	.set_frequency_and_bandwidth = av201x_set_frequency_and_bandwidth,
+	.set_bandwidth     = av201x_set_bandwith,
+	.set_frequency     = av201x_set_frequency,
 	.set_params = av201x_set_params,
 	.get_rf_strength = av201x_get_rf_strength,
+	.agc_to_gain_dbm   = av201x_agc_to_gain_dbm,
 };
 
 struct dvb_frontend *av201x_attach(struct dvb_frontend *fe,

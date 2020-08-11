@@ -773,6 +773,11 @@ err:
 	return ret;
 }
 
+static void si2157_release(struct dvb_frontend *fe)
+{
+	dprintk("release called. NOOP\n");
+}
+
 static const struct dvb_tuner_ops si2157_ops = {
 	.info = {
 		.name             = "Silicon Labs Si2141/Si2146/2147/2148/2157/2158",
@@ -782,6 +787,8 @@ static const struct dvb_tuner_ops si2157_ops = {
 
 	.init = si2157_init,
 	.sleep = si2157_sleep,
+	.release = si2157_release,
+
 	.set_params = si2157_set_params,
 	.set_analog_params = si2157_set_analog_params,
 	.get_frequency     = si2157_get_frequency,

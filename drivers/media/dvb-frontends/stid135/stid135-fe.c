@@ -1994,6 +1994,66 @@ static int stid135_scan_sat(struct dvb_frontend *fe, bool init,
 	return ret;
 }
 
+int stid135_constellation_start(struct dvb_frontend *fe,
+																			 struct dtv_fe_constellation* user,
+																			 unsigned int *delay, enum fe_status *status)
+{
+	struct stv *state = fe->demodulator_priv;
+	struct constellation_scan_state* cs = &state->constellation_scan_state;
+	struct fe_stid135_internal_param * pParams = &state->base->ip;
+	fe_lla_error_t error = FE_LLA_NO_ERROR;
+	int i;
+
+	stid135_stop_task(fe);
+	cs->num_samples = 0;
+	cs->constel_select =  user->constel_select;
+	cs->samples_len = user->num_samples;
+	dprintk("demod: %d: constellation %d samples mode=%d\n", state->nr, cs->samples_len, (int)cs->constel_select);
+	if(cs->samples_len ==0)
+		 return -EINVAL;
+	cs->samples = kzalloc(cs->samples_len * (sizeof(cs->samples[0])), GFP_KERNEL);
+	if (!cs->samples) {
+		return  -ENOMEM;
+	}
+
+	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_IQCONST_CONSTEL_SELECT(state->nr+1),
+												cs->constel_select);
+	for (cs->num_samples = 0; cs->num_samples < cs->samples_len; ++cs->num_samples) {
+		if ((cs->num_samples% 20==19) &&  (kthread_should_stop() || dvb_frontend_task_should_stop(fe))) {
+			dprintk("exiting on should stop\n");
+			break;
+		}
+		error |= ChipGetRegisters(pParams->handle_demod, REG_RC8CODEW_DVBSX_DEMOD_ISYMB(state->nr+1), 2);
+		cs->samples[cs->num_samples].imag = ChipGetFieldImage(pParams->handle_demod,
+																													FLD_FC8CODEW_DVBSX_DEMOD_ISYMB_I_SYMBOL(state->nr+1));
+		cs->samples[cs->num_samples].real = ChipGetFieldImage(pParams->handle_demod,
+																													FLD_FC8CODEW_DVBSX_DEMOD_QSYMB_Q_SYMBOL(state->nr+1));
+	}
+
+	*status =  FE_HAS_SIGNAL|FE_HAS_CARRIER|FE_HAS_VITERBI|FE_HAS_SYNC|FE_HAS_LOCK;
+	return 0;
+}
+
+
+static int stid135_constellation_get(struct dvb_frontend *fe, struct dtv_fe_constellation* user)
+{
+	struct stv *state = fe->demodulator_priv;
+	struct constellation_scan_state* cs = &state->constellation_scan_state;
+	int error = 0;
+	if(user->num_samples > cs->num_samples)
+		user->num_samples = cs->num_samples;
+	if(cs->samples) {
+		if (copy_to_user((void __user*) user->samples, cs->samples,
+										 user->num_samples * sizeof(cs->samples[0]))) {
+			error = -EFAULT;
+		}
+	}
+	else
+		error = -EFAULT;
+	return error;
+}
+
+
 static struct dvb_frontend_ops stid135_ops = {
 	.delsys = { SYS_DVBS, SYS_DVBS2, SYS_DSS },
 	.info = {
@@ -2035,6 +2095,9 @@ static struct dvb_frontend_ops stid135_ops = {
 	.scan =  stid135_scan_sat,
 	.spectrum_start		= stid135_spectrum_start,
 	.spectrum_get		= stid135_spectrum_get,
+	.constellation_start	= stid135_constellation_start,
+	.constellation_get	= stid135_constellation_get,
+
 };
 
 static struct stv_base *match_base(struct i2c_adapter  *i2c, u8 adr)

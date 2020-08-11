@@ -34,6 +34,7 @@ enum fe_extended_caps {
 	FE_CAN_SPECTRUMSCAN        = 0x01,
 	FE_CAN_IQ                  = 0x02,
 	FE_CAN_BLINDSEARCH         = 0x04,
+	FE_CAN_CONSTELLATION       = 0x10,
 	FE_CAN_MODCOD		   = 0x08
 };
 
@@ -155,14 +156,14 @@ enum fe_type {
 struct dvb_frontend_info {
 	char       name[128];
 	enum fe_type type;	/* DEPRECATED. Use DTV_ENUM_DELSYS instead */
-	__u32      frequency_min;
-	__u32      frequency_max;
-	__u32      frequency_stepsize;
-	__u32      frequency_tolerance;
-	__u32      symbol_rate_min;
-	__u32      symbol_rate_max;
-	__u32      symbol_rate_tolerance;
-	__u32      notifier_delay;		/* DEPRECATED */
+	u32      frequency_min;
+	u32      frequency_max;
+	u32      frequency_stepsize;
+	u32      frequency_tolerance;
+	u32      symbol_rate_min;
+	u32      symbol_rate_max;
+	u32      symbol_rate_tolerance;
+	u32      notifier_delay;		/* DEPRECATED */
 	enum fe_caps caps;
 };
 
@@ -170,13 +171,13 @@ struct dvb_frontend_extended_info {
 	char       card_name[128]; //name of card to which adapter is attached
 	char       dev_name[128]; //name device to which adapter is attached
 	char       name[128];
-	__u32      frequency_min;
-	__u32      frequency_max;
-	__u32      frequency_stepsize;
-	__u32      frequency_tolerance;
-	__u32      symbol_rate_min;
-	__u32      symbol_rate_max;
-	__u32      symbol_rate_tolerance;
+	u32      frequency_min;
+	u32      frequency_max;
+	u32      frequency_stepsize;
+	u32      frequency_tolerance;
+	u32      symbol_rate_min;
+	u32      symbol_rate_max;
+	u32      symbol_rate_tolerance;
 	enum fe_caps caps;
 	enum fe_extended_caps extended_caps;
 };
@@ -195,8 +196,8 @@ struct dvb_frontend_extended_info {
  * the possible messages that can be used.
  */
 struct dvb_diseqc_master_cmd {
-	__u8 msg[6];
-	__u8 msg_len;
+	u8 msg[6];
+	u8 msg_len;
 };
 
 /**
@@ -217,8 +218,8 @@ struct dvb_diseqc_master_cmd {
  * the possible messages that can be used.
  */
 struct dvb_diseqc_slave_reply {
-	__u8 msg[4];
-	__u8 msg_len;
+	u8 msg[4];
+	u8 msg_len;
 	int  timeout;
 };
 
@@ -511,7 +512,6 @@ enum fe_interleaving {
 #define DTV_INVERSION		6
 #define DTV_DISEQC_MASTER	7
 #define DTV_SYMBOL_RATE		8
-#define DTV_MAX_SYMBOL_RATE		8 //same as DTV_SYMBOL_RATE
 #define DTV_INNER_FEC		9
 #define DTV_VOLTAGE		10
 #define DTV_TONE		11
@@ -611,7 +611,8 @@ enum fe_interleaving {
 #define DTV_SCAN 83
 #define DTV_SPECTRUM 84
 #define DTV_MAX_SYMBOL_RATE	85 //for blindscan
-#define DTV_MAX_COMMAND	 DTV_MAX_SYMBOL_RATE
+#define DTV_CONSTELLATION 86
+#define DTV_MAX_COMMAND	 DTV_CONSTELLATION
 
 //commands for controlling long running algorithms via FE_ALGO_CTRL ioctl
 #define DTV_STOP 1
@@ -905,10 +906,10 @@ enum fecap_scale_params {
  *	u.st.len = 4;
  */
 struct dtv_stats {
-	__u8 scale;	/* enum fecap_scale_params type */
+	u8 scale;	/* enum fecap_scale_params type */
 	union {
-		__u64 uvalue;	/* for counters and relative scales */
-		__s64 svalue;	/* for 0.001 dB measures */
+		u64 uvalue;	/* for counters and relative scales */
+		s64 svalue;	/* for 0.001 dB measures */
 	};
 } __attribute__ ((packed));
 
@@ -924,12 +925,16 @@ enum dtv_fe_spectrum_method {
 	SPECTRUM_METHOD_FFT
 };
 
+enum dtv_fe_constellation_method {
+	CONSTELLATION_METHOD_DEFAULT,
+};
+
 
 /**
  * struct dtv_fe_spectrum - decriptor for a spectrum scan buffer
  * This is passed as an input to FE_GET_PROPERTY
  * The caller should initialise the fields as followed
- * @spectrum_method: method ti use for creating the spectrum
+ * @spectrum_method: method to use for creating the spectrum
  * @freq: buffer created by caller with num_freq elements; will be filled with data and should have
  *  room for @num_freq elements
  * @rf_level: buffer created by caller with num_freq elements; will be filled with data and should have
@@ -940,12 +945,12 @@ enum dtv_fe_spectrum_method {
  *
  */
 struct dtv_fe_spectrum {
-	__u32 *freq;
-	__s32 *rf_level;
-	__s32 *rf_band;
-	__u32 num_freq;
-	__u32 scale; //FE_SCALE_DECIBEL; or FE_SCALE_RELATIVE
-	__u8 spectrum_method;
+	u32 *freq;
+	s32 *rf_level;
+	s32 *rf_band;
+	u32 num_freq;
+	u32 scale; //FE_SCALE_DECIBEL; or FE_SCALE_RELATIVE
+	u8 spectrum_method;
 };
 
 
@@ -961,9 +966,23 @@ struct dtv_fe_spectrum {
  * Indexes 1 to 3 means layer A to B.
  */
 struct dtv_fe_stats {
-	__u8 len;
+	u8 len;
 	struct dtv_stats stat[MAX_DTV_STATS];
 } __attribute__ ((packed));
+
+
+struct dtv_fe_constellation_sample {
+	s16 real;
+	s16 imag;
+};
+
+struct dtv_fe_constellation {
+	u32 num_samples;
+	struct dtv_fe_constellation_sample *samples;
+	u8 method;
+	u8 constel_select;
+};
+
 
 /**
  * struct dtv_property - store one of frontend command and its value
@@ -983,16 +1002,17 @@ struct dtv_fe_stats {
  *
  */
 struct dtv_property {
-	__u32 cmd;
-	__u32 reserved[3];
+	u32 cmd;
+	u32 reserved[3];
 	union {
-		__u32 data;
+		u32 data;
 		struct dtv_fe_stats st;
 		struct dtv_fe_spectrum spectrum;
+		struct dtv_fe_constellation constellation;
 		struct {
-			__u8 data[32];
-			__u32 len;
-			__u32 reserved1[3];
+			u8 data[32];
+			u32 len;
+			u32 reserved1[3];
 			void *reserved2;
 		} buffer;
 	} u;
@@ -1009,7 +1029,7 @@ struct dtv_property {
  * @props:	a pointer to &struct dtv_property.
  */
 struct dtv_properties {
-	__u32 num;
+	u32 num;
 	struct dtv_property *props;
 };
 
@@ -1023,10 +1043,10 @@ struct dtv_progress {
  *
  */
 struct dtv_algo_ctrl {
-	__u32 cmd;
-	__u32 reserved[3];
+	u32 cmd;
+	u32 reserved[3];
 	union {
-		__u32 data;
+		u32 data;
 		struct dtv_progress progress;
 	} u;
 };
@@ -1054,10 +1074,10 @@ struct dtv_algo_ctrl {
 #define FE_ENABLE_HIGH_LNB_VOLTAGE _IO('o', 68)  /* int */
 
 #define FE_READ_STATUS		   _IOR('o', 69, fe_status_t)
-#define FE_READ_BER		   _IOR('o', 70, __u32)
-#define FE_READ_SIGNAL_STRENGTH    _IOR('o', 71, __u16)
-#define FE_READ_SNR		   _IOR('o', 72, __u16)
-#define FE_READ_UNCORRECTED_BLOCKS _IOR('o', 73, __u32)
+#define FE_READ_BER		   _IOR('o', 70, u32)
+#define FE_READ_SIGNAL_STRENGTH    _IOR('o', 71, u16)
+#define FE_READ_SNR		   _IOR('o', 72, u16)
+#define FE_READ_UNCORRECTED_BLOCKS _IOR('o', 73, u32)
 
 #define FE_SET_FRONTEND_TUNE_MODE  _IO('o', 81) /* unsigned int */
 #define FE_GET_EVENT		   _IOR('o', 78, struct dvb_frontend_event)
@@ -1068,19 +1088,6 @@ struct dtv_algo_ctrl {
 #define FE_GET_PROPERTY		   _IOR('o', 83, struct dtv_properties)
 #define FE_ALGO_CTRL		     _IOW('o', 84) struct dtv_algo_ctrl)
 
-struct dvb_fe_constellation_sample {
-        __s8           real;
-        __s8           imaginary;
-};
-
-struct dvb_fe_constellation_samples {
-	__u32 num;
-	__u8  options;
-        struct dvb_fe_constellation_sample *samples;
-};
-
-#define DTV_MAX_CONSTELLATION_SAMPLES 1000
-#define FE_GET_CONSTELLATION_SAMPLES    _IOR('o', 84, struct dvb_fe_constellation_samples)
 
 #define FE_GET_EXTENDED_INFO		_IOR('o', 86, struct dvb_frontend_extended_info)
 
@@ -1135,12 +1142,12 @@ typedef enum fe_algorithm fe_algorithm_t;
 /* DVBv3 structs */
 
 struct dvb_qpsk_parameters {
-	__u32		symbol_rate;  /* symbol rate in Symbols per second */
+	u32		symbol_rate;  /* symbol rate in Symbols per second */
 	fe_code_rate_t	fec_inner;    /* forward error correction (see above) */
 };
 
 struct dvb_qam_parameters {
-	__u32		symbol_rate; /* symbol rate in Symbols per second */
+	u32		symbol_rate; /* symbol rate in Symbols per second */
 	fe_code_rate_t	fec_inner;   /* forward error correction (see above) */
 	fe_modulation_t	modulation;  /* modulation type (see above) */
 };
@@ -1160,7 +1167,7 @@ struct dvb_ofdm_parameters {
 };
 
 struct dvb_frontend_parameters {
-	__u32 frequency;  /* (absolute) frequency in Hz for DVB-C/DVB-T/ATSC */
+	u32 frequency;  /* (absolute) frequency in Hz for DVB-C/DVB-T/ATSC */
 			  /* intermediate frequency in kHz for DVB-S */
 	fe_spectral_inversion_t inversion;
 	union {
@@ -1185,23 +1192,23 @@ struct dvb_frontend_event {
 
 struct ecp3_info
 {
-	__u8 reg;
-	__u32 data;
+	u8 reg;
+	u32 data;
 };
 
 struct mcu24cxx_info
 {
-	__u32 bassaddr;
-	__u8 reg;
-	__u32 data;
+	u32 bassaddr;
+	u8 reg;
+	u32 data;
 };
 
 struct usbi2c_access
 {
-	__u8 chip_addr;
-	__u8 reg;
-	__u8 num;
-	__u8 buf[8];
+	u8 chip_addr;
+	u8 reg;
+	u8 num;
+	u8 buf[8];
 };
 
 #define FE_ECP3FW_READ    _IOR('o', 90, struct ecp3_info)

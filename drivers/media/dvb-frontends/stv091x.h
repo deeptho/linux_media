@@ -108,7 +108,7 @@ enum FE_STV0910_ModCod {
 
 enum FE_STV0910_RollOff { FE_SAT_35, FE_SAT_25, FE_SAT_20, FE_SAT_15 };
 
-struct spectrum_scan_state {
+struct stv_spectrum_scan_state {
 	bool spectrum_present;
 	bool scan_in_progress;
 
@@ -116,6 +116,16 @@ struct spectrum_scan_state {
 	s32* spectrum;
 	int spectrum_len;
 
+};
+
+struct stv_constellation_scan_state {
+	bool constallation_present;
+	bool in_progress;
+
+	struct dtv_fe_constellation_sample* samples;
+	int num_samples;
+	int samples_len;
+	int constel_select;
 };
 
 
@@ -157,7 +167,8 @@ struct stv {
 	s32 scan_next_frequency;
 	s32 scan_end_frequency;
 
-	struct spectrum_scan_state scan_state;
+	struct stv_spectrum_scan_state scan_state;
+	struct stv_constellation_scan_state constellation_scan_state;
 };
 
 struct reg_field {

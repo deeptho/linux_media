@@ -761,7 +761,8 @@ static int wait_for_dmdlock(struct dvb_frontend *fe, bool require_data)
 	u16 timeout = 0;
 	u16 timer = 0;
 	u8 lock = 0;
-	u8 dstatus, dmdstate, vstatusvit, pktdelin;
+	u8 dstatus, dmdstate, pktdelin;
+	u8 vstatusvit =0;
 	bool tst=false;
 	u8 tsstatus = 0;
 	state->demod_locked = 0;
@@ -1791,9 +1792,10 @@ static s32 stv091x_agc1_power_gain(struct stv *state)
 static s32 stv091x_agc1_power_gain_dbm(struct stv *state)
 {
 	u16 agc_gain = stv091x_agc1_power_gain(state); //u16 because of stv6120 interface (todo)
-	if (state->fe.ops.tuner_ops.get_rf_strength)
-		state->fe.ops.tuner_ops.get_rf_strength(&state->fe, &agc_gain);//in units of 0.01dB
-	return 10*(s32)agc_gain;
+	s32 gain = agc_gain;
+	if (state->fe.ops.tuner_ops.agc_to_gain_dbm)
+		gain = state->fe.ops.tuner_ops.agc_to_gain_dbm(&state->fe, agc_gain);//in units of 0.01dB
+	return 10*gain;
 }
 
 
@@ -2701,20 +2703,23 @@ static int stv091x_spectrum_start(struct dvb_frontend *fe,
 {
 	struct stv *state = fe->demodulator_priv;
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
-	struct spectrum_scan_state* ss = &state->scan_state;
+	struct stv_spectrum_scan_state* ss = &state->scan_state;
 	int i;
 	u32 start_frequency = p->scan_start_frequency;
 	u32 end_frequency = p->scan_end_frequency;
 	//u32 bandwidth = end_frequency-start_frequency; //in kHz
 	uint32_t frequency;
-	uint32_t resolution =  (p->scan_resolution>0) ? p->scan_resolution : p->symbol_rate/1000; //in kHz
-	uint32_t bandwidth =  (p->symbol_rate>0) ? p->symbol_rate : p->scan_resolution*1000; //in Hz
+	uint32_t resolution =  (p->scan_resolution>0) ? p->scan_resolution : 1000; //in kHz
+	uint32_t bandwidth =  resolution; //in kHz
 	u32 num_freq = (p->scan_end_frequency-p->scan_start_frequency+ resolution-1)/resolution;
 	stv091x_stop_task(fe);
 	s->num_freq = num_freq;
 	ss->spectrum_len = num_freq;
 	ss->freq = kzalloc(ss->spectrum_len * (sizeof(ss->freq[0])), GFP_KERNEL);
 	ss->spectrum = kzalloc(ss->spectrum_len * (sizeof(ss->spectrum[0])), GFP_KERNEL);
+	if (!ss->freq || !ss->spectrum) {
+		return  -ENOMEM;
+	}
 
 	state->tuner_bw = stv091x_bandwidth(ROLLOFF_AUTO, bandwidth);
 	s->scale =  FE_SCALE_DECIBEL; //in units of 0.001dB
@@ -2781,16 +2786,60 @@ static int stv091x_spectrum_start(struct dvb_frontend *fe,
 	return 0;
 }
 
+static int stv091x_constellation_start(struct dvb_frontend *fe,
+																			 struct dtv_fe_constellation* user,
+																			 unsigned int *delay, enum fe_status *status)
+{
+	struct stv *state = fe->demodulator_priv;
+	struct stv_constellation_scan_state* cs = &state->constellation_scan_state;
+	s8 buff[2];
+
+	stv091x_stop_task(fe);
+	cs->num_samples = 0;
+	cs->constel_select =  user->constel_select;
+	cs->samples_len = user->num_samples;
+	dprintk("demod: %d: constellation %d samples mode=%d\n", state->nr, cs->samples_len, (int)cs->constel_select);
+	if(cs->samples_len ==0)
+		 return -EINVAL;
+	cs->samples = kzalloc(cs->samples_len * (sizeof(cs->samples[0])), GFP_KERNEL);
+	if (!cs->samples) {
+		return  -ENOMEM;
+	}
+
+	write_reg_fields(state, RSTV0910_P2_IQCONST,
+									 {FSTV0910_P2_CONSTEL_SELECT, 0}, //inverse mode
+									 {FSTV0910_P2_IQSYMB_SEL, cs->constel_select}
+									 );
+	//	write_reg(state, RSTV0910_P2_AGC2REF,0x10);
+	for (cs->num_samples = 0; cs->num_samples < cs->samples_len; ++cs->num_samples) {
+		if ((cs->num_samples% 20==19) &&  (kthread_should_stop() || dvb_frontend_task_should_stop(fe))) {
+			dprintk("exiting on should stop\n");
+			break;
+		}
+
+		read_regs(state, RSTV0910_P2_ISYMB, buff, 2);
+		cs->samples[cs->num_samples].imag = buff[0];
+		cs->samples[cs->num_samples].real = buff[1];
+	}
+
+	*status =  FE_HAS_SIGNAL|FE_HAS_CARRIER|FE_HAS_VITERBI|FE_HAS_SYNC|FE_HAS_LOCK;
+	return 0;
+}
+
 
 static int stv091x_stop_task(struct dvb_frontend *fe)
 {
 	struct stv *state = fe->demodulator_priv;
-	struct spectrum_scan_state* ss = &state->scan_state;
+	struct stv_spectrum_scan_state* ss = &state->scan_state;
+	struct stv_constellation_scan_state* cs = &state->constellation_scan_state;
 	if(ss->freq)
 		kfree(ss->freq);
 	if(ss->spectrum)
 		kfree(ss->spectrum);
+	if(cs->samples)
+		kfree(cs->samples);
 	memset(ss, 0, sizeof(*ss));
+	memset(cs, 0, sizeof(*cs));
 	dprintk("Freed memory\n");
 	return 0;
 }
@@ -2808,7 +2857,6 @@ int stv091x_spectrum_get(struct dvb_frontend *fe, struct dtv_fe_spectrum* user)
 		if (copy_to_user((void __user*) user->rf_level, state->scan_state.spectrum, user->num_freq * sizeof(__s32))) {
 			error = -EFAULT;
 		}
-		error = 0;
 	}
 	else
 		error = -EFAULT;
@@ -2816,25 +2864,23 @@ int stv091x_spectrum_get(struct dvb_frontend *fe, struct dtv_fe_spectrum* user)
 }
 
 
-
-static int stv091x_get_constellation_samples(struct dvb_frontend *fe, struct dvb_fe_constellation_samples *s)
+static int stv091x_constellation_get(struct dvb_frontend *fe, struct dtv_fe_constellation* user)
 {
-#if 0
 	struct stv *state = fe->demodulator_priv;
-	u32 x;
-	u8 buf[2];
-
-	write_reg(state, IQCONST, s->options);
-
-	for (x = 0; x < s->num; x++) {
-		STV091X_READ_REGS(state, ISYMB, buf, 2);
-		s->samples[x].imaginary = buf[0];
-		s->samples[x].real = buf[1];
+	struct stv_constellation_scan_state* cs = &state->constellation_scan_state;
+	int error = 0;
+	if(user->num_samples > cs->num_samples)
+		user->num_samples = cs->num_samples;
+	if(cs->samples) {
+		if (copy_to_user((void __user*) user->samples, cs->samples,
+										 user->num_samples * sizeof(cs->samples[0]))) {
+			error = -EFAULT;
+		}
 	}
-#endif
-	return 0;
+	else
+		error = -EFAULT;
+	return error;
 }
-
 
 
 static struct dvb_frontend_ops stv091x_ops = {
@@ -2876,7 +2922,8 @@ static struct dvb_frontend_ops stv091x_ops = {
 	.stop_task = stv091x_stop_task,
 	.spectrum_start = stv091x_spectrum_start,
 	.spectrum_get = stv091x_spectrum_get,
-	.get_constellation_samples	= stv091x_get_constellation_samples,
+	.constellation_start	= stv091x_constellation_start,
+	.constellation_get	= stv091x_constellation_get,
 };
 
 static struct stv_base *match_base(struct i2c_adapter *i2c, u8 adr)

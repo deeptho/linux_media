@@ -526,7 +526,7 @@ static int set_params(struct dvb_frontend *fe)
 
 
 /*
-	frequency in kHz, bandwidth in Hz
+	frequency in kHz, bandwidth in kHz
  */
 static int set_frequency_and_bandwidth(struct dvb_frontend *fe, u32 frequency, u32 bandwidth)
 {
@@ -534,7 +534,7 @@ static int set_frequency_and_bandwidth(struct dvb_frontend *fe, u32 frequency, u
 
 	if (fe->ops.i2c_gate_ctrl)
 		fe->ops.i2c_gate_ctrl(fe, 1);
-	set_lof(state, frequency*1000, bandwidth);
+	set_lof(state, frequency*1000, bandwidth*1000);
 	if(fe->ops.i2c_gate_ctrl)
 		fe->ops.i2c_gate_ctrl(fe, 0);
 	return 0;
@@ -573,14 +573,14 @@ static s32 TableLookup(struct SLookup *Table, int TableSize, u16 RegValue)
 }
 
 
-static int get_rf_strength(struct dvb_frontend *fe, u16 *agc)
+static int agc_to_gain_dbm(struct dvb_frontend *fe, s32 agc)
 {
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
 	s32 bbgain = 2*tuner_init[1]&0xf; //CTRL2; value is 6
 	s32 gain = 1, ref_bbgain = 12, tilt = 6;
 	s32 freq;
 
-	gain = TableLookup(Gain_RFAGC_LookUp, ARRAY_SIZE(Gain_RFAGC_LookUp), *agc);
+	gain = TableLookup(Gain_RFAGC_LookUp, ARRAY_SIZE(Gain_RFAGC_LookUp), agc);
 
 	gain += 100 * (bbgain - ref_bbgain);
 
@@ -591,8 +591,12 @@ static int get_rf_strength(struct dvb_frontend *fe, u16 *agc)
 
 	gain -= (((freq-155)*tilt)/12)*10;
 
-	*agc = gain;
 
+	return gain;
+}
+static int get_rf_strength(struct dvb_frontend *fe, u16 *agc)
+{
+	*agc = agc_to_gain_dbm(fe, *agc);
 	return 0;
 }
 
@@ -607,6 +611,7 @@ static struct dvb_tuner_ops tuner_ops = {
 	.set_params        = set_params,
 	.release           = release,
 	.get_rf_strength   = get_rf_strength,
+	.agc_to_gain_dbm   = agc_to_gain_dbm,
 	.set_frequency_and_bandwidth = set_frequency_and_bandwidth
 #if 0
 	.set_bandwidth     = set_bandwidth,
