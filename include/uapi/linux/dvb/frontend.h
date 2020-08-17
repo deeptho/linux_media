@@ -717,6 +717,7 @@ enum fe_delivery_system {
 	SYS_TURBO,
 	SYS_DVBC_ANNEX_C,
 	SYS_DVBC2,
+	SYS_DVBS2X,
 	SYS_DCII,
 	SYS_AUTO
 };

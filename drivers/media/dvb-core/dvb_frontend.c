@@ -1837,39 +1837,34 @@ static int dvbv5_set_delivery_system(struct dvb_frontend *fe,
 	 * supported
 	 */
 	ncaps = 0;
-	if(desired_system != SYS_AUTO) {
-		while (ncaps < MAX_DELSYS && fe->ops.delsys[ncaps]) {
-			dprintk("delsys [%d]=%d <> %d\n", ncaps, fe->ops.delsys[ncaps], desired_system);
-			if (fe->ops.delsys[ncaps] == desired_system) {
-				c->delivery_system = desired_system;
-				dev_dbg(fe->dvb->device,
-								"%s: Changing delivery system to %d\n",
+
+	while (ncaps < MAX_DELSYS && fe->ops.delsys[ncaps]) {
+		dprintk("delsys [%d]=%d <> %d\n", ncaps, fe->ops.delsys[ncaps], desired_system);
+		if (fe->ops.delsys[ncaps] == desired_system) {
+			c->delivery_system = desired_system;
+			dev_dbg(fe->dvb->device,
+							"%s: Changing delivery system to %d\n",
 								__func__, desired_system);
-				return 0;
-			}
-			ncaps++;
+			return 0;
 		}
+		ncaps++;
+	}
 
 	/*
-		 * The requested delivery system isn't supported. Maybe userspace
+	 * The requested delivery system isn't supported. Maybe userspace
 		 * is requesting a DVBv3 compatible delivery system.
 		 *
 		 * The emulation only works if the desired system is one of the
-			 * delivery systems supported by DVBv3 API
+		 * delivery systems supported by DVBv3 API
 			 */
-			if (!is_dvbv3_delsys(desired_system)) {
-				dev_dbg(fe->dvb->device,
-								"%s: Delivery system %d not supported.\n",
-								__func__, desired_system);
-				return -EINVAL;
-			}
-
-			type = dvbv3_type(desired_system);
-	} else {
-		delsys = desired_system;
-		c->delivery_system = desired_system;
-		type = dvbv3_type(SYS_DVBS2);
+	if (!is_dvbv3_delsys(desired_system)) {
+		dev_dbg(fe->dvb->device,
+						"%s: Delivery system %d not supported.\n",
+						__func__, desired_system);
+		return -EINVAL;
 	}
+
+	type = dvbv3_type(desired_system);
 	dprintk("c->delivery_system=%d\n", c->delivery_system);
 	/*
 	* Get the last non-DVBv3 delivery system that has the same type

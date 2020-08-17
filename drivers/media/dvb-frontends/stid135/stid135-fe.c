@@ -2001,7 +2001,6 @@ int stid135_constellation_start(struct dvb_frontend *fe,
 	struct constellation_scan_state* cs = &state->constellation_scan_state;
 	struct fe_stid135_internal_param * pParams = &state->base->ip;
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
-	int i;
 
 	stid135_stop_task(fe);
 	cs->num_samples = 0;
@@ -2054,9 +2053,8 @@ static int stid135_constellation_get(struct dvb_frontend *fe, struct dtv_fe_cons
 
 
 static struct dvb_frontend_ops stid135_ops = {
-	.delsys = { SYS_DVBS, SYS_DVBS2, SYS_DSS },
+	.delsys = { SYS_DVBS, SYS_DVBS2, SYS_DVBS2X, SYS_DSS, SYS_AUTO },
 	.info = {
-		.dev_name  = "unknow device",
 		.name			= "STiD135 Multistandard",
 		.frequency_min_hz	 = 950 * MHz,
 		.frequency_max_hz		= 2150 * MHz,
