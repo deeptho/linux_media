@@ -327,6 +327,7 @@ struct dtv_frontend_properties;
  * @name:			Name of the frontend
  * @dev_name:			Name of device to which frontend is attached
  * @card_name:			Name of card to which frontend is attached
+ * @adapter_name:			Name of adapter to which frontend is attached
  * @frequency_min_hz:		Minimal frequency supported by the frontend.
  * @frequency_max_hz:		Minimal frequency supported by the frontend.
  * @frequency_stepsize_hz:	All frequencies are multiple of this value.
@@ -341,9 +342,11 @@ struct dtv_frontend_properties;
  *				as specified in &enum fe_caps.
  */
 struct dvb_frontend_internal_info {
-	char	card_name[128];
-	char	dev_name[128];
-	char	name[128];
+	char	card_name[64];
+	char	adapter_name[64];
+	char	card_address[64];
+	char	adapter_address[64];
+	char	name[64];
 	u32	frequency_min_hz;
 	u32	frequency_max_hz;
 	u32	frequency_stepsize_hz;

@@ -2181,7 +2181,6 @@ static int dtv_property_process_set(struct dvb_frontend *fe,
 	dev_dbg(fe->dvb->device,
 					"%s: SET cmd 0x%08x (%s) to 0x%08x\n",
 					__func__, cmd, dtv_cmds[cmd].name, tvp->u.data);
-	dprintk("XXX SET cmd 0x%08x (%s) to 0x%08x\n",  cmd, dtv_cmds[cmd].name, tvp->u.data);
 
 	switch(cmd) {
 	case DTV_CLEAR:
@@ -2921,9 +2920,10 @@ static int dvb_frontend_handle_ioctl(struct file *file,
 
 		for (i = 0; i < tvps->num; i++) {
 			err = dtv_property_process_set(fe, file,
-									 (tvp + i)->cmd,
-									 (tvp + i));
+																		 (tvp + i)->cmd,
+																		 (tvp + i));
 			if (err < 0) {
+				dprintk("FE_SET_PROPERTY %d failed\n",  (tvp + i)->cmd);
 				kfree(tvp);
 				return err;
 			}
@@ -2994,11 +2994,15 @@ static int dvb_frontend_handle_ioctl(struct file *file,
 		memset(info, 0, sizeof(*info));
 
 		strscpy(info->name, fe->ops.info.name, sizeof(info->name));
-		strscpy(info->dev_name, fe->ops.info.dev_name, sizeof(info->dev_name));
+		strscpy(info->card_address, fe->ops.info.card_address, sizeof(info->card_address));
+		strscpy(info->adapter_address, fe->ops.info.adapter_address, sizeof(info->adapter_address));
+		strscpy(info->card_name, fe->ops.info.card_name, sizeof(info->card_name));
+		strscpy(info->adapter_name, fe->ops.info.adapter_name, sizeof(info->adapter_name));
 		info->symbol_rate_min = fe->ops.info.symbol_rate_min;
 		info->symbol_rate_max = fe->ops.info.symbol_rate_max;
 		info->symbol_rate_tolerance = fe->ops.info.symbol_rate_tolerance;
 		info->caps = fe->ops.info.caps;
+		info->extended_caps = fe->ops.info.extended_caps;
 		info->frequency_stepsize = dvb_frontend_get_stepsize(fe);
 		dvb_frontend_get_frequency_limits(fe, &info->frequency_min,
 							&info->frequency_max,

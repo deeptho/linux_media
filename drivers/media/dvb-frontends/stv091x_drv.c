@@ -1061,6 +1061,7 @@ int stv091x_set_frequency_symbol_rate_bandwidth(struct stv* state)
 	} else {
 		dprintk("symrate1=%d bw=%d\n", state->symbol_rate, state->tuner_bw);
 		state->tuner_bw = stv091x_bandwidth(p->rolloff, state->symbol_rate);
+		state->tuner_bw = 2*36000000; 	/* Use maximal bandwidth */
 		dprintk("symrate2=%d bw=%d\n", state->symbol_rate, state->tuner_bw);
 #if 0
 		//bug!
@@ -2848,6 +2849,7 @@ int stv091x_spectrum_get(struct dvb_frontend *fe, struct dtv_fe_spectrum* user)
 {
 	struct stv *state = fe->demodulator_priv;
 	int error=0;
+	dprintk("num_freq= %d %d\n", user->num_freq ,  state->scan_state.spectrum_len);
 	if(user->num_freq > state->scan_state.spectrum_len)
 		user->num_freq = state->scan_state.spectrum_len;
 	if(state->scan_state.freq && state->scan_state.spectrum) {
@@ -2884,7 +2886,7 @@ static int stv091x_constellation_get(struct dvb_frontend *fe, struct dtv_fe_cons
 
 
 static struct dvb_frontend_ops stv091x_ops = {
-	.delsys = { SYS_DVBS, SYS_DVBS2, SYS_DSS },
+	.delsys = { SYS_DVBS, SYS_DVBS2, SYS_DSS, SYS_AUTO },
 	.info = {
 		.name			= "STV091x Multistandard",
 		.frequency_min_hz	 = 950 * MHz,
@@ -2896,7 +2898,7 @@ static struct dvb_frontend_ops stv091x_ops = {
 					 FE_CAN_QPSK |
 					 FE_CAN_2G_MODULATION |
 		       FE_CAN_MULTISTREAM,
-		.extended_caps = FE_CAN_SPECTRUMSCAN	| FE_CAN_IQ
+		.extended_caps = FE_CAN_SPECTRUMSCAN	| FE_CAN_IQ | FE_CAN_BLINDSEARCH
 	},
 	.init				= init,
 	.sleep				= sleep,

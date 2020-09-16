@@ -1530,6 +1530,7 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 		adapter->fe->ops.delsys[2] = SYS_DVBC_ANNEX_A;
 		adapter->fe->ops.delsys[3] = SYS_ISDBT;
 		adapter->fe->ops.delsys[4] = SYS_DVBC_ANNEX_B;
+		adapter->fe->ops.delsys[5] = SYS_AUTO;
 
 		/* attach tuner */
 		memset(&si2157_config, 0, sizeof(si2157_config));
@@ -1558,6 +1559,7 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 		adapter->fe2->ops.delsys[0] = SYS_DVBS;
 		adapter->fe2->ops.delsys[1] = SYS_DVBS2;
 		adapter->fe2->ops.delsys[2] = SYS_DSS;
+		adapter->fe2->ops.delsys[3] = SYS_AUTO;
 		adapter->fe2->id = 1;
 		if (dvb_attach(av201x_attach, adapter->fe2, &tbs6522_av201x_cfg[(adapter->nr %2)],
 					i2c) == NULL) {
@@ -1840,10 +1842,21 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 		return -ENODEV;
 		break;
 	}
-	strlcpy(adapter->fe->ops.info.name,dev->info->name,52);
-	strlcpy(adapter->fe->ops.info.dev_name, dev_name(&dev->pci_dev->dev),52);
-	if (adapter->fe2)
-		strlcpy(adapter->fe2->ops.info.name,dev->info->name,52);
+	strlcpy(adapter->fe->ops.info.card_name, dev->info->name, sizeof(adapter->fe->ops.info.card_name));
+	strlcpy(adapter->fe->ops.info.card_address, dev_name(&dev->pci_dev->dev), sizeof(adapter->fe->ops.info.card_address));
+	snprintf(adapter->fe->ops.info.adapter_address, sizeof(adapter->fe->ops.info.adapter_address),
+					 "%s:%d", adapter->fe->ops.info.card_address, adapter->nr);
+	snprintf(adapter->fe->ops.info.adapter_name, sizeof(adapter->fe->ops.info.adapter_name),
+					 "%s #%d", adapter->fe->ops.info.card_name, adapter->nr);
+	if (adapter->fe2) {
+		strlcpy(adapter->fe2->ops.info.card_name, dev->info->name, sizeof(adapter->fe2->ops.info.card_name));
+		strlcpy(adapter->fe2->ops.info.card_address, dev_name(&dev->pci_dev->dev), sizeof(adapter->fe2->ops.info.card_address));
+		snprintf(adapter->fe2->ops.info.adapter_address, sizeof(adapter->fe2->ops.info.adapter_address),
+						 "%s:%d", adapter->fe->ops.info.card_address, adapter->nr);
+		snprintf(adapter->fe2->ops.info.adapter_name, sizeof(adapter->fe2->ops.info.adapter_name),
+						 "%s #%d", adapter->fe2->ops.info.card_name,
+						 adapter->nr);
+	}
 	return 0;
 
 frontend_atach_fail:

@@ -161,6 +161,7 @@ struct si2183_dev {
 int si2183_cmd_execute(struct i2c_client *client, struct si2183_cmd *cmd);
 int si2183_cmd_execute_unlocked(struct i2c_client *client,
 																struct si2183_cmd *cmd);
+
 int si2183_set_frontend(struct dvb_frontend *fe);
 int si2183_spectrum_start(struct dvb_frontend *fe,
 																 struct dtv_fe_spectrum* s,

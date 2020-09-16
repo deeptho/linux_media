@@ -296,6 +296,14 @@ static int tbs5927_frontend_attach(struct dvb_usb_adapter *d)
 					buf, 2, TBS5927_WRITE_MSG);
 
 			strlcpy(d->fe_adap->fe->ops.info.name,u->props.devices[0].name,52);
+			strlcpy(d->fe_adap->fe->ops.info.card_name, u->props.devices[0].name ,
+							sizeof(d->fe_adap->fe->ops.info.card_name));
+			strlcpy(d->fe_adap->fe->ops.info.card_address, dev_name(&d->dev->udev->dev),
+							sizeof(d->fe_adap->fe->ops.info.card_address));
+			snprintf(d->fe_adap->fe->ops.info.adapter_address, sizeof(d->fe_adap->fe->ops.info.adapter_address),
+							 "%s:%d", d->fe_adap->fe->ops.info.card_address, 0/*d->fe_adap->nr*/);
+			snprintf(d->fe_adap->fe->ops.info.adapter_name, sizeof(d->fe_adap->fe->ops.info.adapter_name),
+							 "%s #%d", d->fe_adap->fe->ops.info.card_name, 0/*d->fe_adap->nr*/);
 
 			return 0;
 		}
