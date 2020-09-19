@@ -26,6 +26,27 @@ enum tas2101_algo {
 	TAS2101_TUNE,
 };
 
+
+struct tas2101_spectrum_scan_state {
+	bool spectrum_present;
+	bool scan_in_progress;
+
+	s32* freq;
+	s32* spectrum;
+	int spectrum_len;
+
+};
+
+struct tas2101_constellation_scan_state {
+	bool constallation_present;
+	bool in_progress;
+
+	struct dtv_fe_constellation_sample* samples;
+	int num_samples;
+	int samples_len;
+	int constel_select;
+};
+
 struct tas2101_priv {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 7, 0)
 	struct i2c_mux_core *muxc;
@@ -44,6 +65,10 @@ struct tas2101_priv {
 	struct dvb_frontend fe;
 	const struct tas2101_config *cfg;
 	enum tas2101_algo algo;
+
+	struct tas2101_spectrum_scan_state scan_state;
+	struct tas2101_constellation_scan_state constellation_scan_state;
+
 };
 
 /* demod registers */
@@ -273,7 +298,7 @@ static struct tas2101_dbmtable_pair tas2101_dbmtable[] =  {
 	{ -1000, 0xfff},
 	{ -900, 0x778},
 	{ -800, 0x621},
-	{ -700, 0x55c},  
+	{ -700, 0x55c},
 	{ -600, 0x40e},
 	{ -500, 0x343},
 	{ -400, 0x2b7},

@@ -24,17 +24,14 @@
 #include <linux/moduleparam.h>
 #include <linux/init.h>
 #include <linux/i2c-mux.h>
-
+#include <linux/kthread.h>
 #include <media/dvb_frontend.h>
 
 #include "tas2101.h"
 #include "tas2101_priv.h"
 
-#define dprintk(args...) \
-	do { \
-			printk(KERN_DEBUG "max2165: " args); \
-	} while (0)
-
+#define dprintk(fmt, arg...)																					\
+	printk(KERN_DEBUG pr_fmt("%s:%d " fmt), __func__, __LINE__, ##arg)
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 7, 0)
 #if IS_ENABLED(CONFIG_I2C_MUX)
@@ -150,6 +147,43 @@ static int tas2101_wrtable(struct tas2101_priv *priv,
 	return 0;
 }
 
+/*
+	signal power in the stv6120 tuner bandwidth (not representative for narrow band signals)
+	unit: 0.001dB
+ */
+static s32 stv091x_signal_power_dbm(struct dvb_frontend *fe)
+{
+	struct tas2101_priv *priv = fe->demodulator_priv;
+	long val;
+	int ret;
+	u16 raw;
+	u8 buf[2];
+	int i;
+	val = -1000;
+
+	/* Read signal strength */
+	ret = tas2101_rdm(priv, SIGSTR_0, buf, 2);
+	if (ret)
+		return ret;
+
+	raw = (((u16)buf[1] & 0xf0) << 4) | buf[0];
+
+	for (i = 0; i < ARRAY_SIZE(tas2101_dbmtable) - 1; i++)
+		if (tas2101_dbmtable[i].raw < raw)
+			break;
+	if( i == 0 )
+		val = tas2101_dbmtable[i].dbm;
+	else
+	{
+		/* linear interpolation between two calibrated values */
+		val = (raw - tas2101_dbmtable[i].raw) * tas2101_dbmtable[i-1].dbm;
+		val += (tas2101_dbmtable[i-1].raw - raw) * tas2101_dbmtable[i].dbm;
+		val /= (tas2101_dbmtable[i-1].raw - tas2101_dbmtable[i].raw);
+	}
+
+	return val*100;
+}
+
 static int tas2101_read_status(struct dvb_frontend *fe, enum fe_status *status)
 {
 	struct tas2101_priv *priv = fe->demodulator_priv;
@@ -180,33 +214,14 @@ static int tas2101_read_status(struct dvb_frontend *fe, enum fe_status *status)
 	val = -1000;
 	c->strength.len = 1;
 	c->strength.stat[0].scale = FE_SCALE_NOT_AVAILABLE;
-
-	/* Read signal strength */
-	ret = tas2101_rdm(priv, SIGSTR_0, buf, 2);
-	if (ret)
-		return ret;
-
-	raw = (((u16)buf[1] & 0xf0) << 4) | buf[0];
-
-	for (i = 0; i < ARRAY_SIZE(tas2101_dbmtable) - 1; i++)
-		if (tas2101_dbmtable[i].raw < raw)
-			break;
-	if( i == 0 )
-		val = tas2101_dbmtable[i].dbm;
-	else
-	{
-		/* linear interpolation between two calibrated values */
-		val = (raw - tas2101_dbmtable[i].raw) * tas2101_dbmtable[i-1].dbm;
-		val += (tas2101_dbmtable[i-1].raw - raw) * tas2101_dbmtable[i].dbm;
-		val /= (tas2101_dbmtable[i-1].raw - tas2101_dbmtable[i].raw);
-	}
+	val = stv091x_signal_power_dbm(fe);
 
 	c->strength.len = 2;
 	c->strength.stat[0].scale = FE_SCALE_DECIBEL;
-	c->strength.stat[0].svalue = val *100;
+	c->strength.stat[0].svalue = val;
 
 	c->strength.stat[1].scale = FE_SCALE_RELATIVE;
-	c->strength.stat[1].uvalue = (100 + val/10) * 656;
+	c->strength.stat[1].uvalue = (100 + val/1000) * 656;
 
 	val = 0;
 	c->cnr.len = 1;
@@ -666,7 +681,6 @@ err2:
 	i2c_del_mux_adapter(priv->i2c_demod);
 #endif
 #endif
-err1:
 	kfree(priv);
 err:
 	dev_err(&i2c->dev, "%s: Error attaching frontend\n", KBUILD_MODNAME);
@@ -874,22 +888,7 @@ static int tas2101_tune(struct dvb_frontend *fe, bool re_tune,
 
 static enum dvbfe_algo tas2101_get_algo(struct dvb_frontend *fe)
 {
-	struct tas2101_priv *priv = fe->demodulator_priv;
-
-	if (priv->algo == TAS2101_NOTUNE) {
-		return DVBFE_ALGO_NOTUNE;
-	} else {
-		return DVBFE_ALGO_CUSTOM;
-	}
-}
-
-static int tas2101_dtv_tune(struct dvb_frontend *fe)
-{
-	struct tas2101_priv *priv = fe->demodulator_priv;
-
-	priv->algo = TAS2101_TUNE;
-
-	return 0;
+	return DVBFE_ALGO_HW;
 }
 
 static enum dvbfe_search tas2101_search(struct dvb_frontend *fe)
@@ -937,30 +936,47 @@ error:
 	return DVBFE_ALGO_SEARCH_ERROR;
 }
 
- static int tas2101_get_spectrum_scan(struct dvb_frontend *fe, struct dtv_fe_spectrum *s)
+ static int tas2101_stop_task(struct dvb_frontend *fe);
+
+ static int tas2101_spectrum_start(struct dvb_frontend *fe,
+																	 struct dtv_fe_spectrum *s,
+																	 unsigned int *delay, enum fe_status *status)
 {
-	struct tas2101_priv *priv = fe->demodulator_priv;
-	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
+	struct tas2101_priv* state = fe->demodulator_priv;
+	struct dtv_frontend_properties* p = &fe->dtv_property_cache;
+	struct tas2101_spectrum_scan_state* ss = &state->scan_state;
 	long dbm_raw;
-	int ret, x;
+	int ret, i;
 	u32 sr;
 	u8 buf[3];
+	u32 start_frequency = p->scan_start_frequency;
+	uint32_t resolution =  (p->scan_resolution>0) ? p->scan_resolution : 1000; //in kHz
+	u32 num_freq = (p->scan_end_frequency-p->scan_start_frequency+ resolution-1)/resolution;
+	dprintk("tas2101 start spectrum scan\n");
+	tas2101_stop_task(fe);
+	s->num_freq = num_freq;
+	ss->spectrum_len = num_freq;
+	ss->freq = kzalloc(ss->spectrum_len * (sizeof(ss->freq[0])), GFP_KERNEL);
+	ss->spectrum = kzalloc(ss->spectrum_len * (sizeof(ss->spectrum[0])), GFP_KERNEL);
+	if (!ss->freq || !ss->spectrum) {
+		return  -ENOMEM;
+	}
 
-	priv->algo = TAS2101_NOTUNE;
+	state->algo = TAS2101_NOTUNE;
 
-	ret = tas2101_wrtable(priv, tas2101_setfe, ARRAY_SIZE(tas2101_setfe));
+	ret = tas2101_wrtable(state, tas2101_setfe, ARRAY_SIZE(tas2101_setfe));
 	if (ret)
 		return ret;
 
-	c->symbol_rate		= 1000000;
-	c->delivery_system	= SYS_DVBS;
+	p->symbol_rate		= 1000000;
+	p->delivery_system	= SYS_DVBS;
 
 	/* set symbol rate */
-	sr = c->symbol_rate / 1000;
+	sr = p->symbol_rate / 1000;
 	buf[0] = SET_SRATE0;
 	buf[1] = (u8) sr;
 	buf[2] = (u8) (sr >> 8);
-	ret = tas2101_wrm(priv, buf, 3);
+	ret = tas2101_wrm(state, buf, 3);
 	if (ret)
 		return ret;
 
@@ -968,28 +984,76 @@ error:
 	buf[0] = FREQ_OS0;
 	buf[1] = 0;
 	buf[2] = 0;
-	ret = tas2101_wrm(priv, buf, 3);
+	ret = tas2101_wrm(state, buf, 3);
 	if (ret)
 		return ret;
 
-	for (x = 0 ; x < s->num_freq ; x++)
-	{
-		c->frequency = *(s->freq + x);
+	for (i = 0 ; i < num_freq ; i++) {
+		if ((i%20==19) &&  (kthread_should_stop() || dvb_frontend_task_should_stop(fe))) {
+			dprintk("exiting on should stop\n");
+			break;
+		}
+
+		ss->freq[i]= start_frequency +i*resolution;
+		p->frequency = ss->freq[i];
 
 		if (fe->ops.tuner_ops.set_params) {
+#ifndef TAS2101_USE_I2C_MUX
+			if (fe->ops.i2c_gate_ctrl)
+				fe->ops.i2c_gate_ctrl(fe, 1);
+#endif
 			fe->ops.tuner_ops.set_params(fe);
+#ifndef TAS2101_USE_I2C_MUX
+		if (fe->ops.i2c_gate_ctrl)
+			fe->ops.i2c_gate_ctrl(fe, 0);
+#endif
 
-			msleep(100);
+		msleep(20);
 
-			ret = tas2101_rdm(priv, SIGSTR_0, buf, 2);
-			if (ret)
-				return ret;
-			dbm_raw = (((u16)buf[1] & 0x0f) << 8) | buf[0];
-			dbm_raw = 4095 - dbm_raw;
-			*(s->rf_level + x) = dbm_raw;
+		ss->spectrum[i] = stv091x_signal_power_dbm(fe);;
 		}
 	}
+	*status =  FE_HAS_SIGNAL|FE_HAS_CARRIER|FE_HAS_VITERBI|FE_HAS_SYNC|FE_HAS_LOCK;
 	return 0;
+}
+
+
+static int tas2101_stop_task(struct dvb_frontend *fe)
+{
+	struct tas2101_priv *state = fe->demodulator_priv;
+	struct tas2101_spectrum_scan_state* ss = &state->scan_state;
+	struct tas2101_constellation_scan_state* cs = &state->constellation_scan_state;
+
+	if(ss->freq)
+		kfree(ss->freq);
+	if(ss->spectrum)
+		kfree(ss->spectrum);
+	if(cs->samples)
+		kfree(cs->samples);
+	memset(ss, 0, sizeof(*ss));
+	memset(cs, 0, sizeof(*cs));
+	dprintk("Freed memory\n");
+	return 0;
+}
+
+int tas2101_spectrum_get(struct dvb_frontend *fe, struct dtv_fe_spectrum* user)
+{
+	struct tas2101_priv *state = fe->demodulator_priv;
+	int error=0;
+	dprintk("num_freq= %d %d\n", user->num_freq ,  state->scan_state.spectrum_len);
+	if(user->num_freq > state->scan_state.spectrum_len)
+		user->num_freq = state->scan_state.spectrum_len;
+	if(state->scan_state.freq && state->scan_state.spectrum) {
+	if (copy_to_user((void __user*) user->freq, state->scan_state.freq, user->num_freq * sizeof(__u32))) {
+			error = -EFAULT;
+		}
+		if (copy_to_user((void __user*) user->rf_level, state->scan_state.spectrum, user->num_freq * sizeof(__s32))) {
+			error = -EFAULT;
+		}
+	}
+	else
+		error = -EFAULT;
+	return error;
 }
 
 
@@ -1052,10 +1116,8 @@ static struct dvb_frontend_ops tas2101_ops = {
 	.spi_write			= tas2101_spi_write,
 
 	.search = tas2101_search,
-	.dtv_tune = tas2101_dtv_tune,
-#if 0
-	.get_spectrum_scan = tas2101_get_spectrum_scan,
-#endif
+	.spectrum_start = tas2101_spectrum_start,
+	.spectrum_get = tas2101_spectrum_get,
 };
 
 MODULE_DESCRIPTION("DVB Frontend module for Tmax TAS2101");
