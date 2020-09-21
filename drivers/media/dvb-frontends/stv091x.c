@@ -1,4 +1,4 @@
-/*
+c/*
  * Driver for the ST STV091x DVB-S/S2 demodulator.
  *
  * Copyright (C) 2014-2015 Ralph Metzler <rjkm@metzlerbros.de>
@@ -105,9 +105,9 @@ struct stv_base {
 
 	u32                  extclk;
 	u32                  mclk;
-	
+
 	u8                   dual_tuner;
-	
+
 	/* Hook for Lock LED */
 	void (*set_lock_led) (struct dvb_frontend *fe, int offon);
 	void (*write_properties) (struct i2c_adapter *i2c,u8 reg, u32 buf);
@@ -349,7 +349,7 @@ struct SLookup PADC_Lookup[] = {
 	{-2000, 1179 }, /*PADC=-20dBm*/
 	{-2100, 1000 }, /*PADC=-21dBm*/
 };
-  
+
 
 /*********************************************************************
 Tracking carrier loop carrier QPSK 1/4 to 8PSK 9/10 long Frame
@@ -615,8 +615,8 @@ static s32 TableLookup(struct SLookup *Table,
 	int imax = TableSize - 1;
 	int i;
 	s32 RegDiff;
-	
-	// Assumes Table[0].RegValue > Table[imax].RegValue 
+
+	// Assumes Table[0].RegValue > Table[imax].RegValue
 	if( RegValue >= Table[0].RegValue )
 		Value = Table[0].Value;
 	else if( RegValue <= Table[imax].RegValue )
@@ -631,14 +631,14 @@ static s32 TableLookup(struct SLookup *Table,
 			else
 				imin = i;
 		}
-		
+
 		RegDiff = Table[imax].RegValue - Table[imin].RegValue;
 		Value = Table[imin].Value;
 		if( RegDiff != 0 )
 			Value += ((s32)(RegValue - Table[imin].RegValue) *
 				  (s32)(Table[imax].Value - Table[imin].Value))/(RegDiff);
 	}
-	
+
 	return Value;
 }
 
@@ -960,7 +960,7 @@ static int Start(struct stv *state, struct dtv_frontend_properties *p)
 		state->DemodTimeout = 300;
 		state->FecTimeout = 200;
 	}
-	
+
 	SetMIS(state, p->stream_id);
 
 	/* Set Gold code > 0 */
@@ -998,9 +998,10 @@ static int Start(struct stv *state, struct dtv_frontend_properties *p)
 
 	write_reg(state, RSTV0910_P2_CARCFG + state->regoff, 0x46);
 
-	Freq = (state->SearchRange / 2000) + 600;
+	//Freq is the search range
+	Freq = (state->SearchRange / 2000) + 600; //8600
 	if (p->symbol_rate <= 5000000)
-		Freq -= (600 + 80);
+		Freq -= (600 + 80); //8080
 	Freq = (Freq << 16) / (state->base->mclk / 1000);
 
 	write_reg(state, RSTV0910_P2_CFRUP1 + state->regoff,
@@ -1065,7 +1066,7 @@ static int probe(struct stv *state)
 	write_reg(state, RSTV0910_SYNTCTRL,  0x02);  /* SYNTCTRL */
 	write_reg(state, RSTV0910_TSGENERAL, state->tsgeneral);  /* TSGENERAL */
 	write_reg(state, RSTV0910_CFGEXT,    0x02);  /* CFGEXT */
-	
+
 	reg = single ? 0x14 : 0x15; /* Single or dual mode */
 	if (ldpc_mode)
 		reg &= ~0x10; /* LDPC ASAP mode */
@@ -1105,10 +1106,10 @@ static int probe(struct stv *state)
 	write_reg(state, RSTV0910_P2_TSSPEED , 0x20);
 
 	/* Reset stream merger */
-	write_reg(state, RSTV0910_P1_TSCFGH , state->tscfgh | 0x01);	
+	write_reg(state, RSTV0910_P1_TSCFGH , state->tscfgh | 0x01);
 	write_reg(state, RSTV0910_P1_TSCFGH , state->tscfgh);
 	write_reg(state, RSTV0910_P2_TSCFGH , state->tscfgh | 0x01);
-	write_reg(state, RSTV0910_P2_TSCFGH , state->tscfgh);	
+	write_reg(state, RSTV0910_P2_TSCFGH , state->tscfgh);
 
 	write_reg(state, RSTV0910_P1_I2CRPT, state->i2crpt);
 	write_reg(state, RSTV0910_P2_I2CRPT, state->i2crpt);
@@ -1131,7 +1132,7 @@ static int gate_ctrl(struct dvb_frontend *fe, int enable)
 		i2crpt |= 0x80;
 	else
 		i2crpt |= 0x02;
-	
+
 	switch (state->base->dual_tuner)
 	{
 	  case 1:
@@ -1162,7 +1163,7 @@ static void release(struct dvb_frontend *fe)
 
 	if (state->base->set_lock_led)
 		state->base->set_lock_led(fe, 0);
-	
+
 	state->base->count--;
 	if (state->base->count == 0) {
 		list_del(&state->base->stvlist);
@@ -1183,7 +1184,7 @@ static int set_parameters(struct dvb_frontend *fe)
 		fe->ops.tuner_ops.set_params(fe);
 	if (fe->ops.tuner_ops.get_if_frequency)
 		fe->ops.tuner_ops.get_if_frequency(fe, &IF);
-	state->SymbolRate = p->symbol_rate;	
+	state->SymbolRate = p->symbol_rate;
 	stat = Start(state, p);
 	return stat;
 }
@@ -1203,7 +1204,7 @@ static int get_frontend(struct dvb_frontend *fe, struct dtv_frontend_properties 
 			PSK_8, PSK_8, APSK_16, APSK_16,
 			APSK_16, APSK_16, APSK_16, APSK_16,
 			APSK_32, APSK_32, APSK_32, APSK_32,
-			APSK_32, 
+			APSK_32,
 		};
 		enum fe_code_rate modcod2fec[0x20] = {
 			FEC_NONE, FEC_1_4, FEC_1_3, FEC_2_5,
@@ -1214,12 +1215,12 @@ static int get_frontend(struct dvb_frontend *fe, struct dtv_frontend_properties 
 			FEC_4_5, FEC_5_6, FEC_8_9, FEC_9_10,
 			FEC_3_4, FEC_4_5, FEC_5_6, FEC_8_9,
 			FEC_9_10
-		};		
+		};
 		read_reg(state, RSTV0910_P2_DMDMODCOD + state->regoff, &tmp);
 		mc = ((tmp & 0x7c) >> 2);
 		p->pilot = (tmp & 0x01) ? PILOT_ON : PILOT_OFF;
 		p->modulation = modcod2mod[mc];
-		p->fec_inner = modcod2fec[mc];	
+		p->fec_inner = modcod2fec[mc];
         } else if (state->ReceiveMode == Mode_DVBS) {
 		read_reg(state, RSTV0910_P2_VITCURPUN + state->regoff, &tmp);
 		switch( tmp & 0x1F ) {
@@ -1244,9 +1245,9 @@ static int get_frontend(struct dvb_frontend *fe, struct dtv_frontend_properties 
 		}
 		p->rolloff = ROLLOFF_35;
 	} else {
-		
+
 	}
-	
+
 	return 0;
 }
 
@@ -1265,11 +1266,11 @@ static int read_status(struct dvb_frontend *fe, enum fe_status *status)
 	u16 agc;
 	s32 power = 0, Padc = 0;
 	int i;
-	
+
 	read_regs(state, RSTV0910_P2_AGCIQIN1 + state->regoff, Reg, 2);
-	
+
 	agc = (((u32) Reg[0]) << 8) | Reg[1];
-	
+
 	if (fe->ops.tuner_ops.get_rf_strength)
 		fe->ops.tuner_ops.get_rf_strength(fe, &agc);
 
@@ -1280,17 +1281,17 @@ static int read_status(struct dvb_frontend *fe, enum fe_status *status)
 	}
 	power /= 5;
 
-	Padc = TableLookup(PADC_Lookup, ARRAY_SIZE(PADC_Lookup), power) + 352;	
+	Padc = TableLookup(PADC_Lookup, ARRAY_SIZE(PADC_Lookup), power) + 352;
 
 	/*pr_warn("%s: agc = %d power = %d  Padc = %d\n", __func__, agc, power, Padc);*/
-	
+
 	p->strength.len = 2;
 	p->strength.stat[0].scale = FE_SCALE_DECIBEL;
 	p->strength.stat[0].svalue = (Padc - agc) * 10;
-	
+
 	p->strength.stat[1].scale = FE_SCALE_RELATIVE;
 	p->strength.stat[1].uvalue = (100 + (Padc - agc)/100) * 656;
-	
+
 	*status = FE_HAS_SIGNAL;
 
 	read_reg(state, RSTV0910_P2_DMDSTATE + state->regoff, &DmdState);
@@ -1356,7 +1357,7 @@ static int read_status(struct dvb_frontend *fe, enum fe_status *status)
 	}
 
 	*status |= FE_HAS_VITERBI | FE_HAS_SYNC | FE_HAS_LOCK;
-	
+
 	if (state->base->set_lock_led)
 		state->base->set_lock_led(fe, *status & FE_HAS_LOCK);
 
@@ -1578,7 +1579,7 @@ static int read_ber(struct dvb_frontend *fe, u32 *ber)
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
 
 	if ( p->post_bit_error.stat[0].scale == FE_SCALE_COUNTER &&
-		p->post_bit_count.stat[0].scale == FE_SCALE_COUNTER )	  
+		p->post_bit_count.stat[0].scale == FE_SCALE_COUNTER )
 	      *ber = (u32)p->post_bit_count.stat[0].uvalue ? (u32)p->post_bit_error.stat[0].uvalue / (u32)p->post_bit_count.stat[0].uvalue : 0;
 
 	return 0;
