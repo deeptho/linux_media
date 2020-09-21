@@ -1,4 +1,4 @@
-c/*
+/*
  * Driver for the ST STV091x DVB-S/S2 demodulator.
  *
  * Copyright (C) 2014-2015 Ralph Metzler <rjkm@metzlerbros.de>
