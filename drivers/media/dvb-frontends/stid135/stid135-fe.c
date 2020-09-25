@@ -1596,7 +1596,12 @@ static int stid135_spectrum_start(struct dvb_frontend *fe,
 	struct stv *state = fe->demodulator_priv;
 	struct spectrum_scan_state* ss = &state->scan_state;
 	int ret=0;
+	fe_lla_error_t err = FE_LLA_NO_ERROR;
 	stid135_stop_task(fe);
+	err = fe_stid135_set_rfmux_path(state, state->rf_in + 1);
+	if(err) {
+		dprintk("Could not set rfpath error=%d\n", err);
+	}
 	s->scale =  FE_SCALE_DECIBEL; //in units of 0.001dB
 	switch(s->spectrum_method) {
 	case SPECTRUM_METHOD_SWEEP:

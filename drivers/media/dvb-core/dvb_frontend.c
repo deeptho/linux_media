@@ -3079,6 +3079,7 @@ static int dvb_frontend_handle_ioctl(struct file *file,
 
 	case FE_SET_VOLTAGE:
 		if (fe->ops.set_voltage) {
+			dprintk("FE_SET_VOLTAGE %d\n", parg);
 			err = fe->ops.set_voltage(fe,
 							(enum fe_sec_voltage)parg);
 			fepriv->voltage = (enum fe_sec_voltage)parg;
