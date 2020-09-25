@@ -704,11 +704,10 @@ static int stid135_get_spectrum_scan_fft_one_band(struct stv *state,
 	int i;
 	int a=3;
 	s32 delta;
-	dprintk("Start of spectrum scan\n");
-
-	dprintk("center_freq=%dkHz lo=%dkHz range=%dkHz mode=%d fft_size=%d\n",
+#if 0
+	dprintk("sepctrum scan: center_freq=%dkHz lo=%dkHz range=%dkHz mode=%d fft_size=%d\n",
 					center_freq, lo_frequency_hz/1000, range, mode, fft_size);
-
+#endif
 	error = fe_stid135_fft(state, state->nr+1, mode, nb_acquisition,
 												 center_freq*1000 - lo_frequency_hz, range*1000, rf_level, &begin, fft_size);
 

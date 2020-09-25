@@ -260,9 +260,9 @@ static int stid135_probe(struct stv *state_demod1)
 	SAT_VGLNA_InitParams_t pVGLNAInit1;
 	SAT_VGLNA_InitParams_t pVGLNAInit2;
 	SAT_VGLNA_InitParams_t pVGLNAInit3;
-	dprintk("HERE state_demod1=%p\n", state_demod1);
-	dprintk("HERE state->base=%p\n", state_demod1->base);
-	dprintk("HERE state->base=%p\n", state_demod1->base->i2c);
+	//dprintk("HERE state_demod1=%p\n", state_demod1);
+	//dprintk("HERE state->base=%p\n", state_demod1->base);
+	//dprintk("HERE state->base=%p\n", state_demod1->base->i2c);
 	p_params = &state_demod1->base->ip;
 	dev_warn(&state_demod1->base->i2c->dev, "%s\n", FE_STiD135_GetRevision());
 	strcpy(init_params.demod_name,"STiD135");
@@ -1585,7 +1585,7 @@ static int stid135_stop_task(struct dvb_frontend *fe)
 	if(ss->peak_marks)
 		kfree(ss->peak_marks);
 	memset(ss, 0, sizeof(*ss));
-	dprintk("Freed memory\n");
+	//dprintk("Freed memory\n");
 	return 0;
 }
 
