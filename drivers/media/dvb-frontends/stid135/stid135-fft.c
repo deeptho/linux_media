@@ -746,7 +746,7 @@ int get_spectrum_scan_fft(struct dvb_frontend *fe)
 	struct spectrum_scan_state* ss = &state->scan_state;
 
 	u32 table_size = 8192;
-	s32 max_range= 96800;
+	s32 max_range= 60000;//96800;
 
 	u32* temp_freq = NULL;
 	s32* temp_rf_level = NULL;
@@ -801,8 +801,9 @@ int get_spectrum_scan_fft(struct dvb_frontend *fe)
 
 	if(ss->range >= max_range) {
 		ss->sample_step = max_range/ss->fft_size;
-		dprintk("specified resolution (%dkHz) is too large; increased to %dkHz\n",
+		dprintk("specified resolution (%dkHz) is too large; decreased to %dkHz\n",
 						p->scan_resolution, ss->sample_step);
+		ss->range = ss->sample_step * ss->fft_size; //in kHz
 	}
 
 	ss->spectrum_len = (end_frequency-start_frequency + ss->sample_step-1)/ss->sample_step;
