@@ -1511,7 +1511,7 @@ static int dtv_property_process_get(struct dvb_frontend *fe,
 	case DTV_ISI_LIST:
 		tvp->u.buffer.len = (c->isi_list_len <  sizeof(tvp->u.buffer.data)/ sizeof(tvp->u.buffer.data[0])) ?
 			c->isi_list_len :  sizeof(tvp->u.buffer.data)/ sizeof(tvp->u.buffer.data[0]);
-		dprintk("MIS3: num=%d-%d\n", c->isi_list_len, tvp->u.buffer.len);
+		//dprintk("MIS3: num=%d-%d\n", c->isi_list_len, tvp->u.buffer.len);
 		memcpy(&tvp->u.buffer.data[0], &c->isi[0], tvp->u.buffer.len  * sizeof(__u8));
 		break;
 	case DTV_MODULATION:

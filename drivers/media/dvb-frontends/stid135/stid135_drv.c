@@ -12248,6 +12248,7 @@ STCHIP_Error_t stvvglna_term(STCHIP_Info_t* hChip)
 }
 void print_signal_info(const char* prefix, struct fe_sat_signal_info* i)
 {
+#if 0
 	printk("LOCK %s: fec=%d dmd=%d signal=%d carr=%d vit=%d sync=%d timedout=%d lock=%d\n",
 				 prefix,
 				 i->fec_locked,
@@ -12259,6 +12260,7 @@ void print_signal_info(const char* prefix, struct fe_sat_signal_info* i)
 				 i->has_timedout,
 				 i->has_lock
 				 );
+#endif
 }
 
 /*

@@ -55,6 +55,11 @@ static unsigned int mc_auto;
 module_param(mc_auto, int, 0644);
 MODULE_PARM_DESC(mc_auto, "Enable auto modcode filtering depend from current C/N (default:0 - disabled)");
 
+static int blindscan_always=0; //always use blindscan
+module_param(blindscan_always, int, 0644);
+MODULE_PARM_DESC(blidscan_always, "Always tune using blindscan (default:0 - disabled)");
+
+
 
 /*for debugging only: assumes only a single card is in use; otherwise wrong debug output
 	will be printed, but apart from that behaviour will still be correct
@@ -150,19 +155,23 @@ fe_lla_error_t set_maxllr_rate(int line, struct stv *state,	struct fe_sat_signal
 				err |= fe_stid135_set_maxllr_rate(state, 90);
 		} else {
 			err |= fe_stid135_set_maxllr_rate(state, max_llr_rate);
-		}
+			}
+#if 0
 		dev_warn(&state->base->i2c->dev, "line %d: demod %d: set_maxllr_rate=%d (was %d tot=%d) "
 						 "modulation=%d symbol_rate=%d\n",
 						 line, state->nr,
 						 max_llr_rate,
 						 state->current_max_llr_rate, tot,
 						 info->modulation, info->symbol_rate);
+#endif
 	} else {
+#if 0
 		dev_warn(&state->base->i2c->dev, "line %d: demod %d + tuner %d: set_maxllr_rate=%d (tot=%d) UNCHANGED "
 						 "modulation=%d symbol_rate=%d\n",
 						 line, state->nr, state->rf_in,
 						 max_llr_rate, tot,
 						 info->modulation, info->symbol_rate);
+#endif
 	}
 	state->current_max_llr_rate = max_llr_rate;
 	state->current_llr_rate = llr_rate;
@@ -605,7 +614,11 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 	else
 		release_maxllr_rate(__LINE__, state);
 	mutex_lock(&state->base->status_lock);
-
+	if(blindscan_always) {
+		p->algorithm = ALGORITHM_WARM;
+		p->delivery_system = SYS_AUTO;
+		p->symbol_rate = p->symbol_rate ==0 ? 22000000 : p->symbol_rate;
+	}
 	/* Search parameters */
 
 	switch(p->algorithm) {
@@ -798,10 +811,10 @@ static int stid135_get_frontend(struct dvb_frontend *fe, struct dtv_frontend_pro
 	struct stv *state = fe->demodulator_priv;
 	//struct fe_stid135_internal_param *p_params = &state->base->ip;
 	if (!state->signal_info.has_viterbi) {
-		dprintk("PPPPPPPPPPPP no viterbi\n");
+		dprintk("no viterbi\n");
 		return 0;
 	}
-	dprintk("QQQQQQQQQQQQQQQQQ algo=%d\n", state->demod_search_algo);
+	//dprintk("algo=%d\n", state->demod_search_algo);
 	//TODO: next test
 #if 1
 	if(state->demod_search_algo == FE_SAT_BLIND_SEARCH ||
@@ -946,15 +959,15 @@ static int stid135_read_status(struct dvb_frontend *fe, enum fe_status *status)
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
 	fe_lla_error_t err = FE_LLA_NO_ERROR;
 	u32 speed;
-	dprintk("set *status=0\n");
+	//dprintk("set *status=0\n");
 	*status = 0;
 	if (!mutex_trylock(&state->base->status_lock)) {
 		if (state->signal_info.has_viterbi) {
 			*status |= FE_HAS_SIGNAL | FE_HAS_CARRIER
 				| FE_HAS_VITERBI | FE_HAS_SYNC | FE_HAS_LOCK;
-			dprintk("set *status=0x%x\n", *status);
+			//dprintk("set *status=0x%x\n", *status);
 		}
-		dprintk("read status=%d\n", *status);
+		//dprintk("read status=%d\n", *status);
 		return 0;
 	}
 	//dprintk("read_status locked=%d status=%d\n", state->signal_info.locked, *status);
@@ -975,11 +988,11 @@ static int stid135_read_status(struct dvb_frontend *fe, enum fe_status *status)
 		*status |= FE_HAS_VITERBI|FE_HAS_LOCK;
 	if(state->signal_info.has_sync)
 		*status |= FE_HAS_SYNC|FE_HAS_LOCK;
-	dprintk("set *status=0x%x\n", *status);
+	//dprintk("set *status=0x%x\n", *status);
 	if (err != FE_LLA_NO_ERROR) {
 		dev_err(&state->base->i2c->dev, "fe_stid135_get_lock_status error\n");
 		mutex_unlock(&state->base->status_lock);
-		dprintk("read status=%d\n", *status);
+		//dprintk("read status=%d\n", *status);
 		return -EIO;
 	}
 
@@ -1101,11 +1114,11 @@ static int stid135_tune(struct dvb_frontend *fe, bool re_tune,
 	if(state->signal_info.has_timedout) {
 		*status |= FE_TIMEDOUT;
 		*status &= FE_HAS_LOCK;
-		dprintk("set *status=0x%x\n", *status);
+		//dprintk("set *status=0x%x\n", *status);
 	}
 	if(re_tune) {
 		print_signal_info("(after)", &state->signal_info);
-		dprintk("TUNE STATUS=0x%x\n", *status);
+		//dprintk("TUNE STATUS=0x%x\n", *status);
 		if(state->base->ts_mode == TS_STFE){
 			//set maxllr,when the  demod locked ,allocation of resources
 			/*Deep Thought: the value should be based on the symbo rate of the currently
@@ -1118,7 +1131,7 @@ static int stid135_tune(struct dvb_frontend *fe, bool re_tune,
 				12522V@5.0W has a symbolrate of 35.5MS and requires at least 3*35.5 = 100.5, but also does not work with
 				129.
 			*/
-			dprintk("REDUCING MAXLLR_RATE\n");
+			//dprintk("REDUCING MAXLLR_RATE\n");
 			set_maxllr_rate(__LINE__, state,	&state->signal_info);
 		}
 		print_signal_info("(after2)", &state->signal_info);
@@ -2138,15 +2151,15 @@ struct dvb_frontend *stid135_attach(struct i2c_adapter *i2c,
 	if (base) {
 		base->count++;
 		state->base = base;
-		//dprintk("ATTACH DUP nr=%d rf_in=%d base=%p count=%d\n", nr, rf_in, base, base->count);
+		dprintk("ATTACH DUP nr=%d rf_in=%d base=%p count=%d\n", nr, rf_in, base, base->count);
 	} else {
 		base = kzalloc(sizeof(struct stv_base), GFP_KERNEL);
 		if (!base)
 			goto fail;
-		//dprintk("ATTACH NEW nr=%d rf_in=%d base=%p count=%d\n", nr, rf_in, base, base->count);
 		base->i2c = i2c;
 		base->adr = cfg->adr;
 		base->count = 1;
+		dprintk("ATTACH NEW nr=%d rf_in=%d base=%p count=%d\n", nr, rf_in, base, base->count);
 		base->extclk = cfg->clk;
 		base->ts_mode = cfg->ts_mode;
 		base->set_voltage = cfg->set_voltage;
