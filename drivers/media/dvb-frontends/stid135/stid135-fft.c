@@ -582,8 +582,7 @@ fe_lla_error_t fe_stid135_fft(struct stv* state, enum fe_stid135_demod path, u32
 		nb_words = ((u32)1<<(10-mode));     // memory size N/8 for memory readout
 	}
 	//nb_words = ((u32)1<<(10-mode));     // memory size N/8 for memory readout
-	dprintk("mode=%d buffer_size=%d nbr_pts=%d nb_words=%d 32bit=%d\n", mode, buffer_size, nbr_pts, nb_words, fld_value == 1
-					);
+	//dprintk("mode=%d buffer_size=%d nbr_pts=%d nb_words=%d 32bit=%d\n", mode, buffer_size, nbr_pts, nb_words, fld_value == 1);
 	error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_EXPMAX_EXP_MAX(path), &fld_value);
 	exp = (u32)fld_value;
 	switch(path) {

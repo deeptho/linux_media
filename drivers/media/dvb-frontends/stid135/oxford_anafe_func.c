@@ -391,7 +391,7 @@ STCHIP_Error_t Oxford_EnableLO(STCHIP_Info_t* hTuner, FE_OXFORD_TunerPath_t 	Tun
 
 	switch (TunerNb) {
 		case AFE_TUNER1:
-			error|=ChipSetOneRegister(hTuner,RAFE_RX1_CTRL,0x82);
+			error|=ChipSetOneRegister(hTuner,RAFE_RX1_CTRL,0x82); //enable lo
 		break;
 		case AFE_TUNER2:
 			error|=ChipSetOneRegister(hTuner,RAFE_RX2_CTRL,0x82);
@@ -432,11 +432,11 @@ STCHIP_Error_t Oxford_TunerDisable(STCHIP_Info_t* hTuner, FE_OXFORD_TunerPath_t 
 	STCHIP_Error_t error=CHIPERR_NO_ERROR;
 	switch (TunerNb) {
 		case AFE_TUNER1:
-			error|=ChipSetOneRegister(hTuner,RAFE_RX1_CTRL,0xba);
+			error|=ChipSetOneRegister(hTuner,RAFE_RX1_CTRL,0xba); //disable ADC
 			ChipWaitOrAbort(hTuner,1);
-			error|=ChipSetOneRegister(hTuner,RAFE_RX1_CTRL,0x9a);
+			error|=ChipSetOneRegister(hTuner,RAFE_RX1_CTRL,0x9a); //disable baseband
 			ChipWaitOrAbort(hTuner,1);
-			error|=ChipSetOneRegister(hTuner,RAFE_RX1_CTRL,0x2);
+			error|=ChipSetOneRegister(hTuner,RAFE_RX1_CTRL,0x2); //disable LO and VGLNA
 		break;
 		case AFE_TUNER2:
 			error|=ChipSetOneRegister(hTuner,RAFE_RX2_CTRL,0xba);
@@ -482,9 +482,9 @@ STCHIP_Error_t Oxford_TunerStartUp(STCHIP_Info_t* hTuner, FE_OXFORD_TunerPath_t 
 
 	switch (TunerNb) {
 		case AFE_TUNER1:
-			error|=ChipSetOneRegister(hTuner,RAFE_RX1_CTRL,0x9a);
+			error|=ChipSetOneRegister(hTuner,RAFE_RX1_CTRL,0x9a); //baseband and adc disabled
 			ChipWaitOrAbort(hTuner,1);
-			error|=ChipSetOneRegister(hTuner,RAFE_RX1_CTRL,0xba);
+			error|=ChipSetOneRegister(hTuner,RAFE_RX1_CTRL,0xba); //only adc disabled
 			ChipWaitOrAbort(hTuner,1);
 		break;
 		case AFE_TUNER2:

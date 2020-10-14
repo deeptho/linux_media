@@ -22,7 +22,12 @@ module_param_array(dma_pkts, int, NULL, 0444); /* No /sys/module write access */
 MODULE_PARM_DESC(dma_pkts, "DMA buffer size in TS packets (16-256), default 128");
 
 #define TS_PACKET_SIZE		188
+#define dprintk(fmt, arg...)																					\
+	printk(KERN_DEBUG pr_fmt("%s:%d " fmt),  __func__, __LINE__, ##arg)
 
+static int old_bad_count=0;
+volatile int bad_count=0;
+volatile u32 bad_stat =0;
 
 static void tbsecp3_dma_tasklet(unsigned long adap)
 {
@@ -35,7 +40,10 @@ static void tbsecp3_dma_tasklet(unsigned long adap)
 
 	spin_lock(&adapter->adap_lock);
 	no_dvb = adapter->no_dvb;
-
+	if(bad_count!=old_bad_count) {
+		dprintk("Badcount=%d badstat=%d\n", bad_count, bad_stat);
+		old_bad_count=bad_count;
+	}
 	if(no_dvb)
 		adapter->dma.offset =0;
 
@@ -97,7 +105,7 @@ void tbsecp3_dma_enable(struct tbsecp3_adapter *adap)
 	adap->dma.cnt = 0;
 	adap->dma.next_buffer= 0;
 	tbs_read(adap->dma.base, TBSECP3_DMA_STAT);
-	tbs_write(TBSECP3_INT_BASE, TBSECP3_DMA_IE(adap->cfg->ts_in), 1); 
+	tbs_write(TBSECP3_INT_BASE, TBSECP3_DMA_IE(adap->cfg->ts_in), 1);
 	tbs_write(adap->dma.base, TBSECP3_DMA_EN, 1);
 
 //	tmp=tbs_read(TBSECP3_INT_BASE, 8); //add for test
@@ -174,7 +182,7 @@ int tbsecp3_dma_init(struct tbsecp3_dev *dev)
 			goto err;
 
 		dev_dbg(&dev->pci_dev->dev,
-			"TS in %d: DMA page %d bytes, %d bytes (%d TS packets) per %d buffers\n", adapter->cfg->ts_in, 
+			"TS in %d: DMA page %d bytes, %d bytes (%d TS packets) per %d buffers\n", adapter->cfg->ts_in,
 			 adapter->dma.page_size, adapter->dma.buffer_size, adapter->dma.buffer_pkts, TBSECP3_DMA_BUFFERS);
 
 		adapter->dma.base = TBSECP3_DMA_BASE(adapter->cfg->ts_in);
