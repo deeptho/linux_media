@@ -918,6 +918,7 @@ static int stid135_get_frontend(struct dvb_frontend *fe, struct dtv_frontend_pro
 			p->fec_inner = modcod2fec[state->signal_info.modcode];
 		else
 			p->fec_inner = FEC_AUTO;
+		//dprintk("FEC:  %d %d\n", state->signal_info.modcode, p->fec_inner);
 		p->pilot = state->signal_info.pilots == FE_SAT_PILOTS_ON ? PILOT_ON : PILOT_OFF;
 	}
 	else {
@@ -943,6 +944,7 @@ static int stid135_get_frontend(struct dvb_frontend *fe, struct dtv_frontend_pro
 		default:
 			p->fec_inner = FEC_NONE;
 		}
+		//dprintk("FEC:  %d %d\n", state->signal_info.puncture_rate, p->fec_inner);
 	}
 	p->stream_id = state->signal_info.isi;
 	//printk("XXXXX stream_id=%d\n",p->stream_id);
@@ -1103,11 +1105,12 @@ static int stid135_tune(struct dvb_frontend *fe, bool re_tune,
 
 	}
 
+	if(re_tune) {
+		dprintk("RETUNE: GET SIGNAL\n");
+		fe_stid135_get_signal_info(state,  &state->signal_info, 0);
+		//dprintk("MIS2: num=%d\n", state->signal_info.isi_list.nb_isi);
+	}
 
-	if(re_tune)
-		print_signal_info("(before)", &state->signal_info);
-	else
-		print_signal_info("(before2)", &state->signal_info);
 	r = stid135_read_status(fe, status);
 
 
