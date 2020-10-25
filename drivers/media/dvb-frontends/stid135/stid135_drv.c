@@ -3707,7 +3707,7 @@ fe_lla_error_t fe_stid135_get_signal_info(struct stv* state,
 						&pInfo->modcode,
 						&pInfo->frame_length,
 						&pInfo->pilots);
-
+			//dprintk("GOT MODCODE %d\n", &pInfo->modcode);
 			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_TMGOBS_ROLLOFF_STATUS(Demod), &(fld_value[0]));
 			pInfo->roll_off = (enum fe_sat_rolloff)(fld_value[0]);
 

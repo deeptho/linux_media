@@ -659,7 +659,7 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 	dprintk("symbol_rate=%dkS/s\n",  p->symbol_rate/1000);
 	search_params.modulation	= FE_SAT_MOD_UNKNOWN;
 	search_params.modcode		= FE_SAT_DUMMY_PLF;
-	search_params.search_range_hz	= p->search_range > 0 ? p->search_range : 2000000; //TODO => check during blindscan
+	search_params.search_range_hz	= p->search_range > 0 ? p->search_range : 10000000; //TODO => check during blindscan
 	dprintk("SEARCH range set to %d (p=%d)\n", search_params.search_range_hz, p->search_range );
 
 	search_params.puncture_rate	= FE_SAT_PR_UNKNOWN;
@@ -818,7 +818,7 @@ static int stid135_get_frontend(struct dvb_frontend *fe, struct dtv_frontend_pro
 	//TODO: next test
 #if 1
 	if(state->demod_search_algo == FE_SAT_BLIND_SEARCH ||
-		 state->demod_search_algo == FE_SAT_NEXT) {
+							state->demod_search_algo == FE_SAT_NEXT) {
 		int max_isi_len= sizeof(p->isi)/sizeof(p->isi[0]);
 		fe_stid135_get_signal_info(state,  &state->signal_info, 0);
 		//dprintk("MIS2: num=%d\n", state->signal_info.isi_list.nb_isi);
@@ -879,7 +879,7 @@ static int stid135_get_frontend(struct dvb_frontend *fe, struct dtv_frontend_pro
 		p->modulation = QPSK;
 			}
 
-			switch (state->signal_info.roll_off) {
+	switch (state->signal_info.roll_off) {
 		case FE_SAT_05:
 		p->rolloff = ROLLOFF_5;
 		break;
@@ -1980,7 +1980,7 @@ static int stid135_scan_sat(struct dvb_frontend *fe, bool init,
 #if 0
 		p->symbol_rate = p->symbol_rate==0? 100000: p->symbol_rate;
 #else
-		p->symbol_rate = 1000000; //otherwise it may be set to low based on last transponder
+		p->symbol_rate = 1000000; //otherwise it may be set too low based on last transponder
 		p->stream_id = -1;
 #endif
 		dprintk("FREQ=%d search_range=%dkHz fft=%d res=%dkH srate=%dkS/s\n", 	p->frequency, p->search_range/1000,
