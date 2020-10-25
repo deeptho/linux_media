@@ -2657,7 +2657,7 @@ static int dtv_set_frontend(struct dvb_frontend *fe)
 			break;
 		default:
 			/*
-			 * FIXME: This sounds wrong! if freqency_stepsize is
+			 * FIXME: This sounds wrong! if frequency_stepsize is
 			 * defined by the frontend, why not use it???
 			 */
 			fepriv->min_delay = HZ / 20;
