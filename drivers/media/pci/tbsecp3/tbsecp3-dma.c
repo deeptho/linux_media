@@ -17,7 +17,12 @@
 
 #include "tbsecp3.h"
 
+#if 0
 static unsigned int dma_pkts[16] = {128, 128, 128, 128, 128, 128, 128, 128,128, 128, 128, 128, 128, 128, 128, 128};
+#else
+static unsigned int dma_pkts[16] = {256, 256, 256, 256, 256, 256, 256, 256,256, 256, 256, 256, 256, 256, 256, 256};
+#endif
+
 module_param_array(dma_pkts, int, NULL, 0444); /* No /sys/module write access */
 MODULE_PARM_DESC(dma_pkts, "DMA buffer size in TS packets (16-256), default 128");
 
