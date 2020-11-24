@@ -1849,7 +1849,7 @@ static s32 stv091x_narrow_band_signal_power_dbm(struct dvb_frontend *fe)
 	s32	agc2ref = read_reg(state, RSTV0910_P2_AGC2REF);
 	s32 x =  20*(s32)STLog10((u32)(agc2ref)); //unit is 0.001dB
 	s32 y =  20*(s32)STLog10(agc2level); //unit is 0.001dB
-	return (x-y) + (-520 - stv091x_agc1_power_gain_dbm(state)) +17991; //unit is 0.001dB
+	return (x-y) + (-520 - stv091x_agc1_power_gain_dbm(state)) +7991; //unit is 0.001dB
 }
 
 
