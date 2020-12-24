@@ -613,6 +613,12 @@ static int ip_cmp(void *priv, struct list_head *a, struct list_head *b)
 	return 0;
 }
 
+static void __ordered_del_inode(struct gfs2_inode *ip)
+{
+	if (!list_empty(&ip->i_ordered))
+		list_del_init(&ip->i_ordered);
+}
+
 static void gfs2_ordered_write(struct gfs2_sbd *sdp)
 {
 	struct gfs2_inode *ip;
@@ -623,8 +629,7 @@ static void gfs2_ordered_write(struct gfs2_sbd *sdp)
 	while (!list_empty(&sdp->sd_log_ordered)) {
 		ip = list_first_entry(&sdp->sd_log_ordered, struct gfs2_inode, i_ordered);
 		if (ip->i_inode.i_mapping->nrpages == 0) {
-			test_and_clear_bit(GIF_ORDERED, &ip->i_flags);
-			list_del(&ip->i_ordered);
+			__ordered_del_inode(ip);
 			continue;
 		}
 		list_move(&ip->i_ordered, &written);
@@ -643,8 +648,7 @@ static void gfs2_ordered_wait(struct gfs2_sbd *sdp)
 	spin_lock(&sdp->sd_ordered_lock);
 	while (!list_empty(&sdp->sd_log_ordered)) {
 		ip = list_first_entry(&sdp->sd_log_ordered, struct gfs2_inode, i_ordered);
-		list_del(&ip->i_ordered);
-		WARN_ON(!test_and_clear_bit(GIF_ORDERED, &ip->i_flags));
+		__ordered_del_inode(ip);
 		if (ip->i_inode.i_mapping->nrpages == 0)
 			continue;
 		spin_unlock(&sdp->sd_ordered_lock);
@@ -659,8 +663,7 @@ void gfs2_ordered_del_inode(struct gfs2_inode *ip)
 	struct gfs2_sbd *sdp = GFS2_SB(&ip->i_inode);
 
 	spin_lock(&sdp->sd_ordered_lock);
-	if (test_and_clear_bit(GIF_ORDERED, &ip->i_flags))
-		list_del(&ip->i_ordered);
+	__ordered_del_inode(ip);
 	spin_unlock(&sdp->sd_ordered_lock);
 }
 
@@ -899,6 +902,36 @@ static void empty_ail1_list(struct gfs2_sbd *sdp)
 }
 
 /**
+ * drain_bd - drain the buf and databuf queue for a failed transaction
+ * @tr: the transaction to drain
+ *
+ * When this is called, we're taking an error exit for a log write that failed
+ * but since we bypassed the after_commit functions, we need to remove the
+ * items from the buf and databuf queue.
+ */
+static void trans_drain(struct gfs2_trans *tr)
+{
+	struct gfs2_bufdata *bd;
+	struct list_head *head;
+
+	if (!tr)
+		return;
+
+	head = &tr->tr_buf;
+	while (!list_empty(head)) {
+		bd = list_first_entry(head, struct gfs2_bufdata, bd_list);
+		list_del_init(&bd->bd_list);
+		kmem_cache_free(gfs2_bufdata_cachep, bd);
+	}
+	head = &tr->tr_databuf;
+	while (!list_empty(head)) {
+		bd = list_first_entry(head, struct gfs2_bufdata, bd_list);
+		list_del_init(&bd->bd_list);
+		kmem_cache_free(gfs2_bufdata_cachep, bd);
+	}
+}
+
+/**
  * gfs2_log_flush - flush incore transaction(s)
  * @sdp: the filesystem
  * @gl: The glock structure to flush.  If NULL, flush the whole incore log
@@ -1002,6 +1035,17 @@ void gfs2_log_flush(struct gfs2_sbd *sdp, struct gfs2_glock *gl, u32 flags)
 
 out:
 	if (gfs2_withdrawn(sdp)) {
+		trans_drain(tr);
+		/**
+		 * If the tr_list is empty, we're withdrawing during a log
+		 * flush that targets a transaction, but the transaction was
+		 * never queued onto any of the ail lists. Here we add it to
+		 * ail1 just so that ail_drain() will find and free it.
+		 */
+		spin_lock(&sdp->sd_ail_lock);
+		if (tr && list_empty(&tr->tr_list))
+			list_add(&tr->tr_list, &sdp->sd_ail1_list);
+		spin_unlock(&sdp->sd_ail_lock);
 		ail_drain(sdp); /* frees all transactions */
 		tr = NULL;
 	}
@@ -1079,7 +1123,7 @@ static void log_refund(struct gfs2_sbd *sdp, struct gfs2_trans *tr)
  * or the total number of used blocks (pinned blocks plus AIL blocks)
  * is greater than thresh2.
  *
- * At mount time thresh1 is 1/3rd of journal size, thresh2 is 2/3rd of
+ * At mount time thresh1 is 2/5ths of journal size, thresh2 is 4/5ths of
  * journal size.
  *
  * Returns: errno

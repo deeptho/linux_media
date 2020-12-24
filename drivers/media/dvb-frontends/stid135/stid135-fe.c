@@ -528,7 +528,10 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 #if 0
 	s32 current_llr;
 #endif
-	dev_dbg(&state->base->i2c->dev,
+    u32 i, j, m;
+    struct fe_sat_dvbs2_mode_t modcode_mask[FE_SAT_MODCODE_UNKNOWN*4];
+
+    dev_dbg(&state->base->i2c->dev,
 			"delivery_system=%u modulation=%u frequency=%u symbol_rate=%u inversion=%u stream_id=%d\n",
 			p->delivery_system, p->modulation, p->frequency,
 					 p->symbol_rate, p->inversion, p->stream_id);
@@ -661,7 +664,37 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 						 __func__, rf_power / 1000, state->nr, state->rf_in);
 	}
 
-	/* Set ISI before search */
+	/* Set modcode after search */
+	if (p->modcode != MODCODE_ALL) {
+        m = p->modcode;
+        j = 0;
+        dev_dbg(&state->base->i2c->dev, "%s: set Modcode mask %x!\n", __func__, p->modcode);
+        m >>= 1;
+        for (i=FE_SAT_QPSK_14; i < FE_SAT_MODCODE_UNKNOWN; i ++) {
+            if (m & 1) {
+                dev_dbg(&state->base->i2c->dev, "%s: Modcode %02x enabled!\n", __func__, i);
+                modcode_mask[j].mod_code = i;
+                modcode_mask[j].pilots = FE_SAT_PILOTS_OFF;
+                modcode_mask[j].frame_length = FE_SAT_NORMAL_FRAME;
+                modcode_mask[j+1].mod_code = i;
+                modcode_mask[j+1].pilots = FE_SAT_PILOTS_ON;
+                modcode_mask[j+1].frame_length = FE_SAT_NORMAL_FRAME;
+                modcode_mask[j+2].mod_code = i;
+                modcode_mask[j+2].pilots = FE_SAT_PILOTS_OFF;
+                modcode_mask[j+2].frame_length = FE_SAT_SHORT_FRAME;
+                modcode_mask[j+3].mod_code = i;
+                modcode_mask[j+3].pilots = FE_SAT_PILOTS_ON;
+                modcode_mask[j+3].frame_length = FE_SAT_SHORT_FRAME;
+                j+=4;
+            }
+            m >>= 1;
+        }
+        err |= fe_stid135_set_modcodes_filter(state->base->handle, state->nr + 1, modcode_mask, j);
+        if (err != FE_LLA_NO_ERROR)
+            dev_err(&state->base->i2c->dev, "%s: fe_stid135_set_modcodes_filter error %d !\n", __func__, err);
+	}
+
+	/* Set ISI after search */
 	if (p->stream_id != NO_STREAM_ID_FILTER) {
 		dev_warn(&state->base->i2c->dev, "%s: set ISI %d ! demod=%d tuner=%d\n", __func__, p->stream_id & 0xFF,
 						 state->nr, state->rf_in);
@@ -1161,6 +1194,21 @@ static void eeprom_write(struct dvb_frontend *fe,struct eeprom_info *eepinf)
 	return ;
 }
 
+static int stid135_read_temp(struct dvb_frontend *fe, s16 *temp)
+{
+	struct stv *state = fe->demodulator_priv;
+	fe_lla_error_t err = FE_LLA_NO_ERROR;
+
+	mutex_lock(&state->base->status_lock);
+	err = fe_stid135_get_soc_temperature(state->base->handle, temp);
+	mutex_unlock(&state->base->status_lock);
+
+	if (err != FE_LLA_NO_ERROR)
+		dev_warn(&state->base->i2c->dev, "%s: fe_stid135_get_soc_temperature error %d !\n", __func__, err);
+	return 0;
+}
+
+
 static struct dvb_frontend_ops stid135_ops = {
 	.delsys = { SYS_DVBS, SYS_DVBS2, SYS_DSS },
 	.info = {
@@ -1197,6 +1245,7 @@ static struct dvb_frontend_ops stid135_ops = {
 	.spi_write			= spi_write,
 	.eeprom_read			= eeprom_read,
 	.eeprom_write			= eeprom_write,
+    .read_temp			= stid135_read_temp,
 };
 
 static struct stv_base *match_base(struct i2c_adapter  *i2c, u8 adr)

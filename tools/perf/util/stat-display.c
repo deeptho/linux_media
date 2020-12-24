@@ -117,7 +117,7 @@ static void aggr_printout(struct perf_stat_config *config,
 				cpu_map__id_to_die(id),
 				config->csv_output ? 0 : -3,
 				cpu_map__id_to_cpu(id), config->csv_sep);
-		} else {
+		} else if (id > -1) {
 			fprintf(config->output, "CPU%*d%s",
 				config->csv_output ? 0 : -7,
 				evsel__cpus(evsel)->map[id],
@@ -668,7 +668,7 @@ static void print_aggr(struct perf_stat_config *config,
 	int s;
 	bool first;
 
-	if (!(config->aggr_map || config->aggr_get_id))
+	if (!config->aggr_map || !config->aggr_get_id)
 		return;
 
 	aggr_update_shadow(config, evlist);
@@ -1169,7 +1169,7 @@ static void print_percore(struct perf_stat_config *config,
 	int s;
 	bool first = true;
 
-	if (!(config->aggr_map || config->aggr_get_id))
+	if (!config->aggr_map || !config->aggr_get_id)
 		return;
 
 	if (config->percore_show_thread)
