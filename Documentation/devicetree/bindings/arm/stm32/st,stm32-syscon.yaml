@@ -14,9 +14,9 @@ properties:
   compatible:
     oneOf:
       - items:
-        - enum:
-          - st,stm32mp157-syscfg
-        - const: syscon
+          - enum:
+              - st,stm32mp157-syscfg
+          - const: syscon
 
   reg:
     maxItems: 1
@@ -28,6 +28,8 @@ required:
   - compatible
   - reg
   - clocks
+
+additionalProperties: false
 
 examples:
   - |

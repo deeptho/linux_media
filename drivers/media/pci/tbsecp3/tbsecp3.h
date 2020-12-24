@@ -68,7 +68,7 @@
 #define TBSECP3_BOARD_TBS6912 		24
 #define TBSECP3_BOARD_TBS6504		25
 #define TBSECP3_BOARD_TBS6508	26
-#define TBSECP3_BOARD_TBS6916	27
+#define TBSECP3_BOARD_TBS6302SE	27
 
 #define TBSECP3_MAX_ADAPTERS	(16)
 #define TBSECP3_MAX_I2C_BUS	(4)
@@ -191,7 +191,7 @@ struct tbsecp3_dev {
 
 	/* i2c */
 	struct tbsecp3_i2c i2c_bus[TBSECP3_MAX_I2C_BUS];
-	
+
 	u8 mac_num;
 };
 

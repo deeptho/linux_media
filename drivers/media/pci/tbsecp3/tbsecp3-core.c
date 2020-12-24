@@ -192,7 +192,7 @@ static int tbsecp3_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		dev_err(&pdev->dev, "32-bit PCI DMA not supported\n");
 		goto err0;
 	}
-	
+
 	pci_set_master(pdev);
 
 	dev = kzalloc(sizeof(struct tbsecp3_dev), GFP_KERNEL);
@@ -248,7 +248,7 @@ static int tbsecp3_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	ret = tbsecp3_adapters_attach(dev);
 	if (ret < 0)
 		goto err5;
-	
+
 	dev_info(&pdev->dev, "%s: PCI %s, IRQ %d, MMIO 0x%lx\n",
 		dev->info->name, pci_name(pdev), pdev->irq,
 		(unsigned long) pci_resource_start(pdev, 0));
@@ -286,7 +286,7 @@ static void tbsecp3_remove(struct pci_dev *pdev)
 	struct tbsecp3_dev *dev = pci_get_drvdata(pdev);
 
 	/* disable interrupts */
-	tbs_write(TBSECP3_INT_BASE, TBSECP3_INT_EN, 0); 
+	tbs_write(TBSECP3_INT_BASE, TBSECP3_INT_EN, 0);
 	free_irq(pdev->irq, dev);
 	if (dev->msi) {
 		pci_disable_msi(pdev);
@@ -325,8 +325,11 @@ static const struct pci_device_id tbsecp3_id_table[] = {
 	TBSECP3_ID(TBSECP3_BOARD_TBS6209,0x6209,PCI_ANY_ID),
 	TBSECP3_ID(TBSECP3_BOARD_TBS6522,0x6522,PCI_ANY_ID),
 	TBSECP3_ID(TBSECP3_BOARD_TBS6528,0x6528,PCI_ANY_ID),
-	TBSECP3_ID(TBSECP3_BOARD_TBS6590,0x6590,PCI_ANY_ID),
-	TBSECP3_ID(TBSECP3_BOARD_TBS6902,0x6902,PCI_ANY_ID),
+	TBSECP3_ID(TBSECP3_BOARD_TBS6590,0x6590,0x0001),
+	TBSECP3_ID(TBSECP3_BOARD_TBS6902,0x6902,0x1132),
+	TBSECP3_ID(TBSECP3_BOARD_TBS6902,0x6902,0x0001),
+	TBSECP3_ID(TBSECP3_BOARD_TBS6902,0x6902,0x0002),
+	TBSECP3_ID(TBSECP3_BOARD_TBS6902,0x6902,0x0003),
 	TBSECP3_ID(TBSECP3_BOARD_TBS6903,0x6903,0x0001),
 	TBSECP3_ID(TBSECP3_BOARD_TBS6904,0x6904,0x0001),
 	TBSECP3_ID(TBSECP3_BOARD_TBS6904,0x6904,0x1131),
@@ -342,13 +345,15 @@ static const struct pci_device_id tbsecp3_id_table[] = {
 	TBSECP3_ID(TBSECP3_BOARD_TBS6304,0x6304,PCI_ANY_ID),
 	TBSECP3_ID(TBSECP3_BOARD_TBS6308,0x6308,PCI_ANY_ID),
 	TBSECP3_ID(TBSECP3_BOARD_TBS6909X,0x6909,0x0010),
+	TBSECP3_ID(TBSECP3_BOARD_TBS6909X,0x6909,0x0009),
 	TBSECP3_ID(TBSECP3_BOARD_TBS6903X,0x6903,0x0020),
+	TBSECP3_ID(TBSECP3_BOARD_TBS6903X,0x6903,0x0021),
 	TBSECP3_ID(TBSECP3_BOARD_TBS6904X,0x6904,0x2000),
-	TBSECP3_ID(TBSECP3_BOARD_TBS6912,0x6912,0x0020),	
+	TBSECP3_ID(TBSECP3_BOARD_TBS6912,0x6912,0x0020),
 	TBSECP3_ID(TBSECP3_BOARD_TBS6504,0x6504,0x0001),
 	TBSECP3_ID(TBSECP3_BOARD_TBS6508,0x6508,0x0001),
-	TBSECP3_ID(TBSECP3_BOARD_TBS6916,0x6916,0x0001),
-	TBSECP3_ID(TBSECP3_BOARD_TBS6909X,0x6909,0x0009),
+	TBSECP3_ID(TBSECP3_BOARD_TBS6302SE,0x6302,PCI_ANY_ID),
+	TBSECP3_ID(TBSECP3_BOARD_TBS6304,0x2605,PCI_ANY_ID),
 	{0}
 };
 MODULE_DEVICE_TABLE(pci, tbsecp3_id_table);

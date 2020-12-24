@@ -20,6 +20,7 @@
 #include <linux/hw_random.h>
 #include <linux/ccp.h>
 #include <linux/firmware.h>
+#include <linux/gfp.h>
 
 #include <asm/smp.h>
 
@@ -43,6 +44,14 @@ MODULE_PARM_DESC(psp_probe_timeout, " default timeout value, in seconds, during 
 
 static bool psp_dead;
 static int psp_timeout;
+
+/* Trusted Memory Region (TMR):
+ *   The TMR is a 1MB area that must be 1MB aligned.  Use the page allocator
+ *   to allocate the memory, which will return aligned memory for the specified
+ *   allocation order.
+ */
+#define SEV_ES_TMR_SIZE		(1024 * 1024)
+static void *sev_es_tmr;
 
 static inline bool sev_version_greater_or_equal(u8 maj, u8 min)
 {
@@ -214,6 +223,20 @@ static int __sev_platform_init_locked(int *error)
 	if (sev->state == SEV_STATE_INIT)
 		return 0;
 
+	if (sev_es_tmr) {
+		u64 tmr_pa;
+
+		/*
+		 * Do not include the encryption mask on the physical
+		 * address of the TMR (firmware should clear it anyway).
+		 */
+		tmr_pa = __pa(sev_es_tmr);
+
+		sev->init_cmd_buf.flags |= SEV_INIT_FLAGS_SEV_ES;
+		sev->init_cmd_buf.tmr_address = tmr_pa;
+		sev->init_cmd_buf.tmr_len = SEV_ES_TMR_SIZE;
+	}
+
 	rc = __sev_do_cmd_locked(SEV_CMD_INIT, &sev->init_cmd_buf, error);
 	if (rc)
 		return rc;
@@ -283,11 +306,11 @@ static int sev_get_platform_state(int *state, int *error)
 	return rc;
 }
 
-static int sev_ioctl_do_reset(struct sev_issue_cmd *argp)
+static int sev_ioctl_do_reset(struct sev_issue_cmd *argp, bool writable)
 {
 	int state, rc;
 
-	if (!capable(CAP_SYS_ADMIN))
+	if (!writable)
 		return -EPERM;
 
 	/*
@@ -331,12 +354,12 @@ static int sev_ioctl_do_platform_status(struct sev_issue_cmd *argp)
 	return ret;
 }
 
-static int sev_ioctl_do_pek_pdh_gen(int cmd, struct sev_issue_cmd *argp)
+static int sev_ioctl_do_pek_pdh_gen(int cmd, struct sev_issue_cmd *argp, bool writable)
 {
 	struct sev_device *sev = psp_master->sev_data;
 	int rc;
 
-	if (!capable(CAP_SYS_ADMIN))
+	if (!writable)
 		return -EPERM;
 
 	if (sev->state == SEV_STATE_UNINIT) {
@@ -348,7 +371,7 @@ static int sev_ioctl_do_pek_pdh_gen(int cmd, struct sev_issue_cmd *argp)
 	return __sev_do_cmd_locked(cmd, NULL, &argp->error);
 }
 
-static int sev_ioctl_do_pek_csr(struct sev_issue_cmd *argp)
+static int sev_ioctl_do_pek_csr(struct sev_issue_cmd *argp, bool writable)
 {
 	struct sev_device *sev = psp_master->sev_data;
 	struct sev_user_data_pek_csr input;
@@ -356,7 +379,7 @@ static int sev_ioctl_do_pek_csr(struct sev_issue_cmd *argp)
 	void *blob = NULL;
 	int ret;
 
-	if (!capable(CAP_SYS_ADMIN))
+	if (!writable)
 		return -EPERM;
 
 	if (copy_from_user(&input, (void __user *)argp->data, sizeof(input)))
@@ -371,8 +394,7 @@ static int sev_ioctl_do_pek_csr(struct sev_issue_cmd *argp)
 		goto cmd;
 
 	/* allocate a physically contiguous buffer to store the CSR blob */
-	if (!access_ok(input.address, input.length) ||
-	    input.length > SEV_FW_BLOB_MAX_SIZE) {
+	if (input.length > SEV_FW_BLOB_MAX_SIZE) {
 		ret = -EFAULT;
 		goto e_free;
 	}
@@ -539,7 +561,7 @@ fw_err:
 	return ret;
 }
 
-static int sev_ioctl_do_pek_import(struct sev_issue_cmd *argp)
+static int sev_ioctl_do_pek_import(struct sev_issue_cmd *argp, bool writable)
 {
 	struct sev_device *sev = psp_master->sev_data;
 	struct sev_user_data_pek_cert_import input;
@@ -547,7 +569,7 @@ static int sev_ioctl_do_pek_import(struct sev_issue_cmd *argp)
 	void *pek_blob, *oca_blob;
 	int ret;
 
-	if (!capable(CAP_SYS_ADMIN))
+	if (!writable)
 		return -EPERM;
 
 	if (copy_from_user(&input, (void __user *)argp->data, sizeof(input)))
@@ -607,12 +629,6 @@ static int sev_ioctl_do_get_id2(struct sev_issue_cmd *argp)
 		return -ENOTSUPP;
 
 	if (copy_from_user(&input, (void __user *)argp->data, sizeof(input)))
-		return -EFAULT;
-
-	/* Check if we have write access to the userspace buffer */
-	if (input.address &&
-	    input.length &&
-	    !access_ok(input.address, input.length))
 		return -EFAULT;
 
 	data = kzalloc(sizeof(*data), GFP_KERNEL);
@@ -698,7 +714,7 @@ static int sev_ioctl_do_get_id(struct sev_issue_cmd *argp)
 	return ret;
 }
 
-static int sev_ioctl_do_pdh_export(struct sev_issue_cmd *argp)
+static int sev_ioctl_do_pdh_export(struct sev_issue_cmd *argp, bool writable)
 {
 	struct sev_device *sev = psp_master->sev_data;
 	struct sev_user_data_pdh_cert_export input;
@@ -708,7 +724,7 @@ static int sev_ioctl_do_pdh_export(struct sev_issue_cmd *argp)
 
 	/* If platform is not in INIT state then transition it to INIT. */
 	if (sev->state != SEV_STATE_INIT) {
-		if (!capable(CAP_SYS_ADMIN))
+		if (!writable)
 			return -EPERM;
 
 		ret = __sev_platform_init_locked(&argp->error);
@@ -730,15 +746,13 @@ static int sev_ioctl_do_pdh_export(struct sev_issue_cmd *argp)
 		goto cmd;
 
 	/* Allocate a physically contiguous buffer to store the PDH blob. */
-	if ((input.pdh_cert_len > SEV_FW_BLOB_MAX_SIZE) ||
-	    !access_ok(input.pdh_cert_address, input.pdh_cert_len)) {
+	if (input.pdh_cert_len > SEV_FW_BLOB_MAX_SIZE) {
 		ret = -EFAULT;
 		goto e_free;
 	}
 
 	/* Allocate a physically contiguous buffer to store the cert chain blob. */
-	if ((input.cert_chain_len > SEV_FW_BLOB_MAX_SIZE) ||
-	    !access_ok(input.cert_chain_address, input.cert_chain_len)) {
+	if (input.cert_chain_len > SEV_FW_BLOB_MAX_SIZE) {
 		ret = -EFAULT;
 		goto e_free;
 	}
@@ -801,6 +815,7 @@ static long sev_ioctl(struct file *file, unsigned int ioctl, unsigned long arg)
 	void __user *argp = (void __user *)arg;
 	struct sev_issue_cmd input;
 	int ret = -EFAULT;
+	bool writable = file->f_mode & FMODE_WRITE;
 
 	if (!psp_master || !psp_master->sev_data)
 		return -ENODEV;
@@ -819,25 +834,25 @@ static long sev_ioctl(struct file *file, unsigned int ioctl, unsigned long arg)
 	switch (input.cmd) {
 
 	case SEV_FACTORY_RESET:
-		ret = sev_ioctl_do_reset(&input);
+		ret = sev_ioctl_do_reset(&input, writable);
 		break;
 	case SEV_PLATFORM_STATUS:
 		ret = sev_ioctl_do_platform_status(&input);
 		break;
 	case SEV_PEK_GEN:
-		ret = sev_ioctl_do_pek_pdh_gen(SEV_CMD_PEK_GEN, &input);
+		ret = sev_ioctl_do_pek_pdh_gen(SEV_CMD_PEK_GEN, &input, writable);
 		break;
 	case SEV_PDH_GEN:
-		ret = sev_ioctl_do_pek_pdh_gen(SEV_CMD_PDH_GEN, &input);
+		ret = sev_ioctl_do_pek_pdh_gen(SEV_CMD_PDH_GEN, &input, writable);
 		break;
 	case SEV_PEK_CSR:
-		ret = sev_ioctl_do_pek_csr(&input);
+		ret = sev_ioctl_do_pek_csr(&input, writable);
 		break;
 	case SEV_PEK_CERT_IMPORT:
-		ret = sev_ioctl_do_pek_import(&input);
+		ret = sev_ioctl_do_pek_import(&input, writable);
 		break;
 	case SEV_PDH_CERT_EXPORT:
-		ret = sev_ioctl_do_pdh_export(&input);
+		ret = sev_ioctl_do_pdh_export(&input, writable);
 		break;
 	case SEV_GET_ID:
 		pr_warn_once("SEV_GET_ID command is deprecated, use SEV_GET_ID2\n");
@@ -896,9 +911,9 @@ EXPORT_SYMBOL_GPL(sev_guest_df_flush);
 
 static void sev_exit(struct kref *ref)
 {
-	struct sev_misc_dev *misc_dev = container_of(ref, struct sev_misc_dev, refcount);
-
 	misc_deregister(&misc_dev->misc);
+	kfree(misc_dev);
+	misc_dev = NULL;
 }
 
 static int sev_misc_init(struct sev_device *sev)
@@ -916,7 +931,7 @@ static int sev_misc_init(struct sev_device *sev)
 	if (!misc_dev) {
 		struct miscdevice *misc;
 
-		misc_dev = devm_kzalloc(dev, sizeof(*misc_dev), GFP_KERNEL);
+		misc_dev = kzalloc(sizeof(*misc_dev), GFP_KERNEL);
 		if (!misc_dev)
 			return -ENOMEM;
 
@@ -1011,6 +1026,7 @@ EXPORT_SYMBOL_GPL(sev_issue_cmd_external_user);
 void sev_pci_init(void)
 {
 	struct sev_device *sev = psp_master->sev_data;
+	struct page *tmr_page;
 	int error, rc;
 
 	if (!sev)
@@ -1039,6 +1055,16 @@ void sev_pci_init(void)
 	if (sev_version_greater_or_equal(0, 15) &&
 	    sev_update_firmware(sev->dev) == 0)
 		sev_get_api_version();
+
+	/* Obtain the TMR memory area for SEV-ES use */
+	tmr_page = alloc_pages(GFP_KERNEL, get_order(SEV_ES_TMR_SIZE));
+	if (tmr_page) {
+		sev_es_tmr = page_address(tmr_page);
+	} else {
+		sev_es_tmr = NULL;
+		dev_warn(sev->dev,
+			 "SEV: TMR allocation failed, SEV-ES support unavailable\n");
+	}
 
 	/* Initialize the platform */
 	rc = sev_platform_init(&error);
@@ -1074,4 +1100,13 @@ void sev_pci_exit(void)
 		return;
 
 	sev_platform_shutdown(NULL);
+
+	if (sev_es_tmr) {
+		/* The TMR area was encrypted, flush it from the cache */
+		wbinvd_on_all_cpus();
+
+		free_pages((unsigned long)sev_es_tmr,
+			   get_order(SEV_ES_TMR_SIZE));
+		sev_es_tmr = NULL;
+	}
 }

@@ -26,6 +26,7 @@
 #define I915_REQUEST_H
 
 #include <linux/dma-fence.h>
+#include <linux/irq_work.h>
 #include <linux/lockdep.h>
 
 #include "gem/i915_gem_context_types.h"
@@ -69,6 +70,32 @@ enum {
 	 * See i915_request_is_active()
 	 */
 	I915_FENCE_FLAG_ACTIVE = DMA_FENCE_FLAG_USER_BITS,
+
+	/*
+	 * I915_FENCE_FLAG_PQUEUE - this request is ready for execution
+	 *
+	 * Using the scheduler, when a request is ready for execution it is put
+	 * into the priority queue, and removed from that queue when transferred
+	 * to the HW runlists. We want to track its membership within the
+	 * priority queue so that we can easily check before rescheduling.
+	 *
+	 * See i915_request_in_priority_queue()
+	 */
+	I915_FENCE_FLAG_PQUEUE,
+
+	/*
+	 * I915_FENCE_FLAG_HOLD - this request is currently on hold
+	 *
+	 * This request has been suspended, pending an ongoing investigation.
+	 */
+	I915_FENCE_FLAG_HOLD,
+
+	/*
+	 * I915_FENCE_FLAG_INITIAL_BREADCRUMB - this request has the initial
+	 * breadcrumb that marks the end of semaphore waits and start of the
+	 * user payload.
+	 */
+	I915_FENCE_FLAG_INITIAL_BREADCRUMB,
 
 	/*
 	 * I915_FENCE_FLAG_SIGNAL - this request is currently on signal_list
@@ -279,10 +306,15 @@ static inline bool dma_fence_is_i915(const struct dma_fence *fence)
 	return fence->ops == &i915_fence_ops;
 }
 
+struct kmem_cache *i915_request_slab_cache(void);
+
 struct i915_request * __must_check
 __i915_request_create(struct intel_context *ce, gfp_t gfp);
 struct i915_request * __must_check
 i915_request_create(struct intel_context *ce);
+
+void i915_request_set_error_once(struct i915_request *rq, int error);
+void __i915_request_skip(struct i915_request *rq);
 
 struct i915_request *__i915_request_commit(struct i915_request *request);
 void __i915_request_queue(struct i915_request *rq,
@@ -333,8 +365,6 @@ void i915_request_add(struct i915_request *rq);
 bool __i915_request_submit(struct i915_request *request);
 void i915_request_submit(struct i915_request *request);
 
-void i915_request_skip(struct i915_request *request, int error);
-
 void __i915_request_unsubmit(struct i915_request *request);
 void i915_request_unsubmit(struct i915_request *request);
 
@@ -361,6 +391,17 @@ static inline bool i915_request_is_active(const struct i915_request *rq)
 	return test_bit(I915_FENCE_FLAG_ACTIVE, &rq->fence.flags);
 }
 
+static inline bool i915_request_in_priority_queue(const struct i915_request *rq)
+{
+	return test_bit(I915_FENCE_FLAG_PQUEUE, &rq->fence.flags);
+}
+
+static inline bool
+i915_request_has_initial_breadcrumb(const struct i915_request *rq)
+{
+	return test_bit(I915_FENCE_FLAG_INITIAL_BREADCRUMB, &rq->fence.flags);
+}
+
 /**
  * Returns true if seq1 is later than seq2.
  */
@@ -371,7 +412,9 @@ static inline bool i915_seqno_passed(u32 seq1, u32 seq2)
 
 static inline u32 __hwsp_seqno(const struct i915_request *rq)
 {
-	return READ_ONCE(*rq->hwsp_seqno);
+	const u32 *hwsp = READ_ONCE(rq->hwsp_seqno);
+
+	return READ_ONCE(*hwsp);
 }
 
 /**
@@ -454,6 +497,27 @@ static inline bool i915_request_is_running(const struct i915_request *rq)
 	return __i915_request_has_started(rq);
 }
 
+/**
+ * i915_request_is_ready - check if the request is ready for execution
+ * @rq: the request
+ *
+ * Upon construction, the request is instructed to wait upon various
+ * signals before it is ready to be executed by the HW. That is, we do
+ * not want to start execution and read data before it is written. In practice,
+ * this is controlled with a mixture of interrupts and semaphores. Once
+ * the submit fence is completed, the backend scheduler will place the
+ * request into its queue and from there submit it for execution. So we
+ * can detect when a request is eligible for execution (and is under control
+ * of the scheduler) by querying where it is in any of the scheduler's lists.
+ *
+ * Returns true if the request is ready for execution (it may be inflight),
+ * false otherwise.
+ */
+static inline bool i915_request_is_ready(const struct i915_request *rq)
+{
+	return !list_empty(&rq->sched.link);
+}
+
 static inline bool i915_request_completed(const struct i915_request *rq)
 {
 	if (i915_request_signaled(rq))
@@ -464,7 +528,8 @@ static inline bool i915_request_completed(const struct i915_request *rq)
 
 static inline void i915_request_mark_complete(struct i915_request *rq)
 {
-	rq->hwsp_seqno = (u32 *)&rq->fence.seqno; /* decouple from HWSP */
+	WRITE_ONCE(rq->hwsp_seqno, /* decouple from HWSP */
+		   (u32 *)&rq->fence.seqno);
 }
 
 static inline bool i915_request_has_waitboost(const struct i915_request *rq)
@@ -481,6 +546,21 @@ static inline bool i915_request_has_nopreempt(const struct i915_request *rq)
 static inline bool i915_request_has_sentinel(const struct i915_request *rq)
 {
 	return unlikely(test_bit(I915_FENCE_FLAG_SENTINEL, &rq->fence.flags));
+}
+
+static inline bool i915_request_on_hold(const struct i915_request *rq)
+{
+	return unlikely(test_bit(I915_FENCE_FLAG_HOLD, &rq->fence.flags));
+}
+
+static inline void i915_request_set_hold(struct i915_request *rq)
+{
+	set_bit(I915_FENCE_FLAG_HOLD, &rq->fence.flags);
+}
+
+static inline void i915_request_clear_hold(struct i915_request *rq)
+{
+	clear_bit(I915_FENCE_FLAG_HOLD, &rq->fence.flags);
 }
 
 static inline struct intel_timeline *
