@@ -179,7 +179,7 @@ fe_lla_error_t set_maxllr_rate(int line, struct stv *state,	struct fe_sat_signal
 }
 
 /*
-	select a high maxll_rate because we hae too little info on the signal
+	select a high maxll_rate because we have too little info on the signal
  */
 fe_lla_error_t set_maxllr_rate_blind(int line, struct stv *state)
 {
@@ -1106,9 +1106,11 @@ static int stid135_tune(struct dvb_frontend *fe, bool re_tune,
 	}
 
 	if(re_tune) {
+#if y1
 		dprintk("RETUNE: GET SIGNAL\n");
 		fe_stid135_get_signal_info(state,  &state->signal_info, 0);
 		//dprintk("MIS2: num=%d\n", state->signal_info.isi_list.nb_isi);
+#endif
 	}
 
 	r = stid135_read_status(fe, status);
@@ -2087,7 +2089,7 @@ static struct dvb_frontend_ops stid135_ops = {
 						FE_CAN_2G_MODULATION  |
 		        FE_CAN_MULTISTREAM,
 		.extended_caps          = FE_CAN_SPECTRUMSCAN	|
-		FE_CAN_IQ
+		FE_CAN_IQ | FE_CAN_BLINDSEARCH
 	},
 	.init				= stid135_init,
 	.sleep				= stid135_sleep,

@@ -30,9 +30,12 @@ MODULE_PARM_DESC(dma_pkts, "DMA buffer size in TS packets (16-256), default 128"
 #define dprintk(fmt, arg...)																					\
 	printk(KERN_DEBUG pr_fmt("%s:%d " fmt),  __func__, __LINE__, ##arg)
 
-static int old_bad_count=0;
 volatile int bad_count=0;
 volatile u32 bad_stat =0;
+//#define DTTEST
+#ifdef DTTEST
+static int old_bad_count=0;
+#endif
 
 static void tbsecp3_dma_tasklet(unsigned long adap)
 {
@@ -45,10 +48,12 @@ static void tbsecp3_dma_tasklet(unsigned long adap)
 
 	spin_lock(&adapter->adap_lock);
 	no_dvb = adapter->no_dvb;
+#ifdef DTTEST
 	if(bad_count!=old_bad_count) {
 		dprintk("Badcount=%d badstat=%d\n", bad_count, bad_stat);
 		old_bad_count=bad_count;
 	}
+#endif
 	if(no_dvb)
 		adapter->dma.offset =0;
 
