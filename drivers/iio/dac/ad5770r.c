@@ -525,7 +525,7 @@ static int ad5770r_channel_config(struct ad5770r_state *st)
 		ret = fwnode_property_read_u32(child, "num", &num);
 		if (ret)
 			return ret;
-		if (num > AD5770R_MAX_CHANNELS)
+		if (num >= AD5770R_MAX_CHANNELS)
 			return -EINVAL;
 
 		ret = fwnode_property_read_u32_array(child,
@@ -651,7 +651,6 @@ static int ad5770r_probe(struct spi_device *spi)
 		}
 	}
 
-	indio_dev->dev.parent = &spi->dev;
 	indio_dev->name = spi_get_device_id(spi)->name;
 	indio_dev->info = &ad5770r_info;
 	indio_dev->modes = INDIO_DIRECT_MODE;

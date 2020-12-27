@@ -205,13 +205,14 @@ static snd_pcm_sframes_t calc_dst_frames(struct snd_pcm_substream *plug,
 	plugin = snd_pcm_plug_first(plug);
 	while (plugin && frames > 0) {
 		plugin_next = plugin->next;
+		if (check_size && plugin->buf_frames &&
+		    frames > plugin->buf_frames)
+			frames = plugin->buf_frames;
 		if (plugin->dst_frames) {
 			frames = plugin->dst_frames(plugin, frames);
 			if (frames < 0)
 				return frames;
 		}
-		if (check_size && frames > plugin->buf_frames)
-			frames = plugin->buf_frames;
 		plugin = plugin_next;
 	}
 	return frames;
@@ -225,14 +226,15 @@ static snd_pcm_sframes_t calc_src_frames(struct snd_pcm_substream *plug,
 
 	plugin = snd_pcm_plug_last(plug);
 	while (plugin && frames > 0) {
-		if (check_size && frames > plugin->buf_frames)
-			frames = plugin->buf_frames;
 		plugin_prev = plugin->prev;
 		if (plugin->src_frames) {
 			frames = plugin->src_frames(plugin, frames);
 			if (frames < 0)
 				return frames;
 		}
+		if (check_size && plugin->buf_frames &&
+		    frames > plugin->buf_frames)
+			frames = plugin->buf_frames;
 		plugin = plugin_prev;
 	}
 	return frames;
@@ -355,7 +357,7 @@ snd_pcm_format_t snd_pcm_plug_slave_format(snd_pcm_format_t format,
 				if (snd_mask_test(format_mask, (__force int)format1))
 					return format1;
 			}
-			/* fall through */
+			fallthrough;
 		default:
 			return (__force snd_pcm_format_t)-EINVAL;
 		}

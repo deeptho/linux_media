@@ -485,6 +485,9 @@ static int anx6345_get_modes(struct drm_connector *connector)
 
 	num_modes += drm_add_edid_modes(connector, anx6345->edid);
 
+	/* Driver currently supports only 6bpc */
+	connector->display_info.bpc = 6;
+
 unlock:
 	if (power_off)
 		anx6345_poweroff(anx6345);
@@ -585,6 +588,7 @@ static int anx6345_bridge_attach(struct drm_bridge *bridge,
 
 static enum drm_mode_status
 anx6345_bridge_mode_valid(struct drm_bridge *bridge,
+			  const struct drm_display_info *info,
 			  const struct drm_display_mode *mode)
 {
 	if (mode->flags & DRM_MODE_FLAG_INTERLACE)

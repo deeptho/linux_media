@@ -71,7 +71,7 @@ static unsigned int rpcrdma_max_call_header_size(unsigned int maxsegs)
 	size = RPCRDMA_HDRLEN_MIN;
 
 	/* Maximum Read list size */
-	size = maxsegs * rpcrdma_readchunk_maxsz * sizeof(__be32);
+	size += maxsegs * rpcrdma_readchunk_maxsz * sizeof(__be32);
 
 	/* Minimal Read chunk size */
 	size += sizeof(__be32);	/* segment count */
@@ -94,7 +94,7 @@ static unsigned int rpcrdma_max_reply_header_size(unsigned int maxsegs)
 	size = RPCRDMA_HDRLEN_MIN;
 
 	/* Maximum Write list size */
-	size = sizeof(__be32);		/* segment count */
+	size += sizeof(__be32);		/* segment count */
 	size += maxsegs * rpcrdma_segment_maxsz * sizeof(__be32);
 	size += sizeof(__be32);	/* list discriminator */
 
@@ -275,14 +275,6 @@ out:
 	return n;
 }
 
-static void
-xdr_encode_rdma_segment(__be32 *iptr, struct rpcrdma_mr *mr)
-{
-	*iptr++ = cpu_to_be32(mr->mr_handle);
-	*iptr++ = cpu_to_be32(mr->mr_length);
-	xdr_encode_hyper(iptr, mr->mr_offset);
-}
-
 static int
 encode_rdma_segment(struct xdr_stream *xdr, struct rpcrdma_mr *mr)
 {
@@ -292,7 +284,7 @@ encode_rdma_segment(struct xdr_stream *xdr, struct rpcrdma_mr *mr)
 	if (unlikely(!p))
 		return -EMSGSIZE;
 
-	xdr_encode_rdma_segment(p, mr);
+	xdr_encode_rdma_segment(p, mr->mr_handle, mr->mr_length, mr->mr_offset);
 	return 0;
 }
 
@@ -307,8 +299,8 @@ encode_read_segment(struct xdr_stream *xdr, struct rpcrdma_mr *mr,
 		return -EMSGSIZE;
 
 	*p++ = xdr_one;			/* Item present */
-	*p++ = cpu_to_be32(position);
-	xdr_encode_rdma_segment(p, mr);
+	xdr_encode_read_segment(p, position, mr->mr_handle, mr->mr_length,
+				mr->mr_offset);
 	return 0;
 }
 
@@ -388,7 +380,9 @@ static int rpcrdma_encode_read_list(struct rpcrdma_xprt *r_xprt,
 	} while (nsegs);
 
 done:
-	return xdr_stream_encode_item_absent(xdr);
+	if (xdr_stream_encode_item_absent(xdr) < 0)
+		return -EMSGSIZE;
+	return 0;
 }
 
 /* Register and XDR encode the Write list. Supports encoding a list
@@ -454,7 +448,9 @@ static int rpcrdma_encode_write_list(struct rpcrdma_xprt *r_xprt,
 	*segcount = cpu_to_be32(nchunks);
 
 done:
-	return xdr_stream_encode_item_absent(xdr);
+	if (xdr_stream_encode_item_absent(xdr) < 0)
+		return -EMSGSIZE;
+	return 0;
 }
 
 /* Register and XDR encode the Reply chunk. Supports encoding an array
@@ -480,8 +476,11 @@ static int rpcrdma_encode_reply_chunk(struct rpcrdma_xprt *r_xprt,
 	int nsegs, nchunks;
 	__be32 *segcount;
 
-	if (wtype != rpcrdma_replych)
-		return xdr_stream_encode_item_absent(xdr);
+	if (wtype != rpcrdma_replych) {
+		if (xdr_stream_encode_item_absent(xdr) < 0)
+			return -EMSGSIZE;
+		return 0;
+	}
 
 	seg = req->rl_segments;
 	nsegs = rpcrdma_convert_iovs(r_xprt, &rqst->rq_rcv_buf, 0, wtype, seg);
@@ -885,8 +884,8 @@ rpcrdma_marshal_req(struct rpcrdma_xprt *r_xprt, struct rpc_rqst *rqst)
 	 * or privacy, direct data placement of individual data items
 	 * is not allowed.
 	 */
-	ddp_allowed = !(rqst->rq_cred->cr_auth->au_flags &
-						RPCAUTH_AUTH_DATATOUCH);
+	ddp_allowed = !test_bit(RPCAUTH_AUTH_DATATOUCH,
+				&rqst->rq_cred->cr_auth->au_flags);
 
 	/*
 	 * Chunks needed for results?
@@ -1126,11 +1125,11 @@ rpcrdma_is_bcall(struct rpcrdma_xprt *r_xprt, struct rpcrdma_rep *rep)
 	p = xdr_inline_decode(xdr, 0);
 
 	/* Chunk lists */
-	if (*p++ != xdr_zero)
+	if (xdr_item_is_present(p++))
 		return false;
-	if (*p++ != xdr_zero)
+	if (xdr_item_is_present(p++))
 		return false;
-	if (*p++ != xdr_zero)
+	if (xdr_item_is_present(p++))
 		return false;
 
 	/* RPC header */
@@ -1169,10 +1168,7 @@ static int decode_rdma_segment(struct xdr_stream *xdr, u32 *length)
 	if (unlikely(!p))
 		return -EIO;
 
-	handle = be32_to_cpup(p++);
-	*length = be32_to_cpup(p++);
-	xdr_decode_hyper(p, &offset);
-
+	xdr_decode_rdma_segment(p, &handle, length, &offset);
 	trace_xprtrdma_decode_seg(handle, *length, offset);
 	return 0;
 }
@@ -1208,7 +1204,7 @@ static int decode_read_list(struct xdr_stream *xdr)
 	p = xdr_inline_decode(xdr, sizeof(*p));
 	if (unlikely(!p))
 		return -EIO;
-	if (unlikely(*p != xdr_zero))
+	if (unlikely(xdr_item_is_present(p)))
 		return -EIO;
 	return 0;
 }
@@ -1227,7 +1223,7 @@ static int decode_write_list(struct xdr_stream *xdr, u32 *length)
 		p = xdr_inline_decode(xdr, sizeof(*p));
 		if (unlikely(!p))
 			return -EIO;
-		if (*p == xdr_zero)
+		if (xdr_item_is_absent(p))
 			break;
 		if (!first)
 			return -EIO;
@@ -1249,7 +1245,7 @@ static int decode_reply_chunk(struct xdr_stream *xdr, u32 *length)
 		return -EIO;
 
 	*length = 0;
-	if (*p != xdr_zero)
+	if (xdr_item_is_present(p))
 		if (decode_write_chunk(xdr, length))
 			return -EIO;
 	return 0;
@@ -1342,8 +1338,7 @@ rpcrdma_decode_error(struct rpcrdma_xprt *r_xprt, struct rpcrdma_rep *rep,
 			be32_to_cpup(p), be32_to_cpu(rep->rr_xid));
 	}
 
-	r_xprt->rx_stats.bad_reply_count++;
-	return -EREMOTEIO;
+	return -EIO;
 }
 
 /* Perform XID lookup, reconstruction of the RPC reply, and
@@ -1380,13 +1375,11 @@ out:
 	spin_unlock(&xprt->queue_lock);
 	return;
 
-/* If the incoming reply terminated a pending RPC, the next
- * RPC call will post a replacement receive buffer as it is
- * being marshaled.
- */
 out_badheader:
 	trace_xprtrdma_reply_hdr(rep);
 	r_xprt->rx_stats.bad_reply_count++;
+	rqst->rq_task->tk_status = status;
+	status = 0;
 	goto out;
 }
 

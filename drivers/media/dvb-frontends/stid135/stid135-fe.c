@@ -710,13 +710,14 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 	if (p->scrambling_sequence_index) {
 		pls_mode = 1;
 		pls_code = p->scrambling_sequence_index;
-#if 1 //Deep Thought: code must be moved outside of if test or multi-stream does not work
+#ifdef TOTEST
+#else //Deep Thought: code must be moved outside of if test or multi-stream does not work
 		/* Set PLS before search */
 		dev_dbg(&state->base->i2c->dev, "%s: set pls_mode %d, pls_code %d !\n", __func__, pls_mode, pls_code);
 		err |= fe_stid135_set_pls(state, pls_mode, pls_code);
 #endif
 	}
-#if 1 //Deep Thought: code must be moved outside of if test or multi-stream does not work
+#ifdef TOTEST //Deep Thought: code must be moved outside of if test or multi-stream does not work
 	/* Set PLS before search */
 	dev_dbg(&state->base->i2c->dev, "%s: set pls_mode %d, pls_code %d !\n", __func__, pls_mode, pls_code);
 	err |= fe_stid135_set_pls(state, pls_mode, pls_code);
@@ -2118,6 +2119,9 @@ static struct dvb_frontend_ops stid135_ops = {
 	.constellation_start	= stid135_constellation_start,
 	.constellation_get	= stid135_constellation_get,
 
+	.eeprom_read			= eeprom_read,
+	.eeprom_write			= eeprom_write,
+	.read_temp			= stid135_read_temp,
 };
 
 static struct stv_base *match_base(struct i2c_adapter  *i2c, u8 adr)
@@ -2171,6 +2175,8 @@ struct dvb_frontend *stid135_attach(struct i2c_adapter *i2c,
 		base->mode = cfg->set_voltage ? mode : 1;
 		base->write_properties = cfg->write_properties;
 		base->read_properties = cfg->read_properties;
+		base->write_eeprom = cfg->write_eeprom;
+		base->read_eeprom = cfg->read_eeprom;
 		base->set_TSsampling = cfg->set_TSsampling;
 		base->set_TSparam  = cfg->set_TSparam;
 		base->vglna		=	cfg->vglna;    //for stvvglna 6909x v2 6903x v2

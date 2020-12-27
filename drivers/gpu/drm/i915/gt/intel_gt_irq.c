@@ -27,7 +27,8 @@ cs_irq_handler(struct intel_engine_cs *engine, u32 iir)
 	if (unlikely(iir & GT_CS_MASTER_ERROR_INTERRUPT)) {
 		u32 eir;
 
-		eir = ENGINE_READ(engine, RING_EIR);
+		/* Upper 16b are the enabling mask, rsvd for internal errors */
+		eir = ENGINE_READ(engine, RING_EIR) & GENMASK(15, 0);
 		ENGINE_TRACE(engine, "CS error: %x\n", eir);
 
 		/* Disable the error interrupt until after the reset */
@@ -37,6 +38,15 @@ cs_irq_handler(struct intel_engine_cs *engine, u32 iir)
 			WRITE_ONCE(engine->execlists.error_interrupt, eir);
 			tasklet = true;
 		}
+	}
+
+	if (iir & GT_WAIT_SEMAPHORE_INTERRUPT) {
+		WRITE_ONCE(engine->execlists.yield,
+			   ENGINE_READ_FW(engine, RING_EXECLIST_STATUS_HI));
+		ENGINE_TRACE(engine, "semaphore yield: %08x\n",
+			     engine->execlists.yield);
+		if (del_timer(&engine->execlists.timer))
+			tasklet = true;
 	}
 
 	if (iir & GT_CONTEXT_SWITCH_INTERRUPT)
@@ -228,7 +238,8 @@ void gen11_gt_irq_postinstall(struct intel_gt *gt)
 	const u32 irqs =
 		GT_CS_MASTER_ERROR_INTERRUPT |
 		GT_RENDER_USER_INTERRUPT |
-		GT_CONTEXT_SWITCH_INTERRUPT;
+		GT_CONTEXT_SWITCH_INTERRUPT |
+		GT_WAIT_SEMAPHORE_INTERRUPT;
 	struct intel_uncore *uncore = gt->uncore;
 	const u32 dmask = irqs << 16 | irqs;
 	const u32 smask = irqs << 16;
@@ -366,7 +377,8 @@ void gen8_gt_irq_postinstall(struct intel_gt *gt)
 	const u32 irqs =
 		GT_CS_MASTER_ERROR_INTERRUPT |
 		GT_RENDER_USER_INTERRUPT |
-		GT_CONTEXT_SWITCH_INTERRUPT;
+		GT_CONTEXT_SWITCH_INTERRUPT |
+		GT_WAIT_SEMAPHORE_INTERRUPT;
 	const u32 gt_interrupts[] = {
 		irqs << GEN8_RCS_IRQ_SHIFT | irqs << GEN8_BCS_IRQ_SHIFT,
 		irqs << GEN8_VCS0_IRQ_SHIFT | irqs << GEN8_VCS1_IRQ_SHIFT,
@@ -446,7 +458,7 @@ void gen5_gt_irq_postinstall(struct intel_gt *gt)
 		 * RPS interrupts will get enabled/disabled on demand when RPS
 		 * itself is enabled/disabled.
 		 */
-		if (HAS_ENGINE(gt->i915, VECS0)) {
+		if (HAS_ENGINE(gt, VECS0)) {
 			pm_irqs |= PM_VEBOX_USER_INTERRUPT;
 			gt->pm_ier |= PM_VEBOX_USER_INTERRUPT;
 		}

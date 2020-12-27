@@ -1111,6 +1111,7 @@ static int dvb_frontend_clear_cache(struct dvb_frontend *fe)
 	}
 
 	c->stream_id = NO_STREAM_ID_FILTER;
+	c->modcode = MODCODE_ALL;
 	c->scrambling_sequence_index = 0;/* default sequence */
 	c->enable_modcod = 0x0fffffff;
 
@@ -1217,7 +1218,7 @@ static struct dtv_cmds_h dtv_cmds[DTV_MAX_COMMAND + 1] = {
 	_DTV_CMD(DTV_ISDBT_LAYERC_TIME_INTERLEAVING, 1, 0),
 
 	_DTV_CMD(DTV_STREAM_ID, 1, 0),
-	_DTV_CMD(DTV_DVBT2_PLP_ID_LEGACY, 1, 0),
+	_DTV_CMD(DTV_MODCODE, 1, 0),
 	_DTV_CMD(DTV_SCRAMBLING_SEQUENCE_INDEX, 1, 0),
 	_DTV_CMD(DTV_MATYPE, 1, 0),
 	_DTV_CMD(DTV_ENABLE_MODCOD, 1, 0),
@@ -1624,8 +1625,12 @@ static int dtv_property_process_get(struct dvb_frontend *fe,
 
 	/* Multistream support */
 	case DTV_STREAM_ID:
-	case DTV_DVBT2_PLP_ID_LEGACY:
 		tvp->u.data = c->stream_id;
+		break;
+
+	/* Modcode support */
+	case DTV_MODCODE:
+		tvp->u.data = c->modcode;
 		break;
 
 	/* Physical layer scrambling support */
@@ -2115,8 +2120,12 @@ static int dtv_property_process_set_int(struct dvb_frontend *fe,
 
 	/* Multistream support */
 	case DTV_STREAM_ID:
-	case DTV_DVBT2_PLP_ID_LEGACY:
 		c->stream_id = data;
+		break;
+
+    /* Modcode support */
+	case DTV_MODCODE:
+		c->modcode = data;
 		break;
 
 	/* Physical layer scrambling support */
@@ -2847,6 +2856,12 @@ static int dvb_frontend_handle_ioctl(struct file *file,
 	dev_dbg(fe->dvb->device, "%s:\n", __func__);
 
 	switch (cmd) {
+    case FE_READ_TEMP:
+		if (fe->ops.read_temp) {
+				err = fe->ops.read_temp(fe, parg);
+		}
+		break;
+
 	case FE_ECP3FW_READ:
 		//printk("FE_ECP3FW_READ *****************");
 		if (fe->ops.spi_read) {
@@ -2883,17 +2898,30 @@ static int dvb_frontend_handle_ioctl(struct file *file,
 		err = 0;
 		break;
 	case FE_REGI2C_READ:
-		if (fe->ops.mcu_read) {
+		if (fe->ops.reg_i2cread) {
 			struct usbi2c_access *info = parg;
 			fe->ops.reg_i2cread(fe, info);
 		}
 		err = 0;
 		break;
 	case FE_REGI2C_WRITE:
-		if (fe->ops.mcu_write) {
+		if (fe->ops.reg_i2cwrite) {
 			struct usbi2c_access *info = parg;
 			fe->ops.reg_i2cwrite(fe, info);
-
+		}
+		err = 0;
+		break;
+	case FE_EEPROM_READ:
+		if (fe->ops.eeprom_read) {
+			struct eeprom_info *info = parg;
+			fe->ops.eeprom_read(fe, info);
+		}
+		err = 0;
+		break;
+	case FE_EEPROM_WRITE:
+		if (fe->ops.eeprom_write) {
+			struct eeprom_info *info = parg;
+			fe->ops.eeprom_write(fe, info);
 		}
 		err = 0;
 		break;
@@ -3174,37 +3202,25 @@ static int dvb_frontend_handle_ioctl(struct file *file,
 
 	case FE_READ_BER:
 		if (fe->ops.read_ber) {
-			if (fepriv->thread)
 				err = fe->ops.read_ber(fe, parg);
-			else
-				err = -EAGAIN;
 		}
 		break;
 
 	case FE_READ_SIGNAL_STRENGTH:
 		if (fe->ops.read_signal_strength) {
-			if (fepriv->thread)
 				err = fe->ops.read_signal_strength(fe, parg);
-			else
-				err = -EAGAIN;
 		}
 		break;
 
 	case FE_READ_SNR:
 		if (fe->ops.read_snr) {
-			if (fepriv->thread)
 				err = fe->ops.read_snr(fe, parg);
-			else
-				err = -EAGAIN;
 		}
 		break;
 
 	case FE_READ_UNCORRECTED_BLOCKS:
 		if (fe->ops.read_ucblocks) {
-			if (fepriv->thread)
 				err = fe->ops.read_ucblocks(fe, parg);
-			else
-				err = -EAGAIN;
 		}
 		break;
 

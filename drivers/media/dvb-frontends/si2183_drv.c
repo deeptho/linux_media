@@ -1392,6 +1392,26 @@ static void si2183_spi_write(struct dvb_frontend *fe,struct ecp3_info *ecp3inf)
 	return ;
 }
 
+static void eeprom_read(struct dvb_frontend *fe, struct eeprom_info *eepinf)
+{
+	struct i2c_client *client = fe->demodulator_priv;
+	struct si2183_dev *dev = i2c_get_clientdata(client);
+
+	if (dev->read_eeprom)
+		dev->read_eeprom(client->adapter,eepinf->reg, &(eepinf->data));
+	return ;
+}
+
+static void eeprom_write(struct dvb_frontend *fe,struct eeprom_info *eepinf)
+{
+	struct i2c_client *client = fe->demodulator_priv;
+	struct si2183_dev *dev = i2c_get_clientdata(client);
+
+	if (dev->write_eeprom)
+		dev->write_eeprom(client->adapter,eepinf->reg, eepinf->data);
+	return ;
+}
+
 static void si2183_release(struct dvb_frontend *fe)
 {
 	dprintk("release called. NOOP\n");
@@ -1451,23 +1471,25 @@ static const struct dvb_frontend_ops si2183_ops = {
 	.set_property			= si2183_set_dvb_property,
 
 	.set_tone			= si2183_set_tone,
-	.diseqc_send_burst		= si2183_diseqc_send_burst,
+	.diseqc_send_burst = si2183_diseqc_send_burst,
 	.diseqc_send_master_cmd		= si2183_diseqc_send_msg,
 #ifndef SI2183_USE_I2C_MUX
-	.i2c_gate_ctrl			= i2c_gate_ctrl,
+	.i2c_gate_ctrl = i2c_gate_ctrl,
 #endif
 
-	.spi_read			= si2183_spi_read,
-	.spi_write			= si2183_spi_write,
+	.spi_read	= si2183_spi_read,
+	.spi_write = si2183_spi_write,
 	.stop_task = si2183_stop_task,
 	.spectrum_start = si2183_spectrum_start,
 	.spectrum_get = si2183_spectrum_get,
 	.scan = si2183_scan_sat,
+	.eeprom_read		= eeprom_read,
+	.eeprom_write		= eeprom_write,
 #if 0
 	.constellation_start	= si2183_constellation_start,
 	.constellation_get	= si2183_constellation_get,
 #endif
-		};
+};
 
 
 static struct si_base *match_base(struct i2c_adapter *i2c, u8 adr)
@@ -1566,7 +1588,8 @@ static int si2183_probe(struct i2c_client *client,
 
 	dev->write_properties = config->write_properties;
 	dev->read_properties = config->read_properties;
-		dprintk("here addr=0x%x\n", client->addr);
+	dev->write_eeprom = config->write_eeprom;
+	dev->read_eeprom = config->read_eeprom;
 	i2c_set_clientdata(client, dev);
 		dprintk("here addr=0x%x\n", client->addr);
 #ifndef SI2183_USE_I2C_MUX

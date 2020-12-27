@@ -55,7 +55,9 @@
 
 .macro mcount_exit_regs
 	RESTORE_REGS_FTRACE
-	ldw	t1, (sp, 0)
+	subi	sp, 152
+	ldw	t1, (sp, 4)
+	addi	sp, 152
 	ldw	r8, (sp, 4)
 	ldw	lr, (sp, 8)
 	addi	sp, 12
@@ -103,6 +105,8 @@ ENTRY(_mcount)
 	mov	a0, lr
 	subi	a0, 4
 	ldw	a1, (sp, 24)
+	lrw	a2, function_trace_op
+	ldw	a2, (a2, 0)
 
 	jsr	r26
 

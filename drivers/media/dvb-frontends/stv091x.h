@@ -40,8 +40,12 @@ struct stv091x_cfg {
 	/* Hook for Lock LED */
 	void (*set_lock_led) (struct dvb_frontend *fe, int offon);
 
+	//update the FW.
 	void (*write_properties) (struct i2c_adapter *i2c,u8 reg, u32 buf);
 	void (*read_properties) (struct i2c_adapter *i2c,u8 reg, u32 *buf);
+	// EEPROM access
+	void (*write_eeprom) (struct i2c_adapter *i2c,u8 reg, u8 buf);
+	void (*read_eeprom) (struct i2c_adapter *i2c,u8 reg, u8 *buf);
 };
 
 #if IS_REACHABLE(CONFIG_DVB_STV091X)
@@ -75,9 +79,12 @@ struct stv_base {
 
 	/* Hook for Lock LED */
 	void (*set_lock_led) (struct dvb_frontend *fe, int offon);
+
 	void (*write_properties) (struct i2c_adapter *i2c,u8 reg, u32 buf);
 	void (*read_properties) (struct i2c_adapter *i2c,u8 reg, u32 *buf);
 
+	void (*write_eeprom) (struct i2c_adapter *i2c,u8 reg, u8 buf);
+	void (*read_eeprom) (struct i2c_adapter *i2c,u8 reg, u8 *buf);
 };
 
 enum ReceiveMode { Mode_None, Mode_DVBS, Mode_DVBS2, Mode_Auto };

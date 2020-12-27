@@ -1,5 +1,7 @@
 .. SPDX-License-Identifier: GPL-2.0
 
+.. _MIPI_CSI_2:
+
 MIPI CSI-2
 ==========
 
@@ -7,6 +9,12 @@ CSI-2 is a data bus intended for transferring images from cameras to
 the host SoC. It is defined by the `MIPI alliance`_.
 
 .. _`MIPI alliance`: http://www.mipi.org/
+
+Media bus formats
+-----------------
+
+See :ref:`v4l2-mbus-pixelcode` for details on which media bus formats should
+be used for CSI-2 interfaces.
 
 Transmitter drivers
 -------------------

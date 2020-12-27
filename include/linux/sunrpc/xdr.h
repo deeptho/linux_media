@@ -184,6 +184,7 @@ xdr_adjust_iovec(struct kvec *iov, __be32 *p)
 extern void xdr_shift_buf(struct xdr_buf *, size_t);
 extern void xdr_buf_from_iov(struct kvec *, struct xdr_buf *);
 extern int xdr_buf_subsegment(struct xdr_buf *, struct xdr_buf *, unsigned int, unsigned int);
+extern void xdr_buf_trim(struct xdr_buf *, unsigned int);
 extern int read_bytes_from_xdr_buf(struct xdr_buf *, unsigned int, void *, unsigned int);
 extern int write_bytes_to_xdr_buf(struct xdr_buf *, unsigned int, void *, unsigned int);
 
@@ -471,6 +472,32 @@ xdr_stream_encode_uint32_array(struct xdr_stream *xdr,
 	for (; array_size > 0; p++, array++, array_size--)
 		*p = cpu_to_be32p(array);
 	return ret;
+}
+
+/**
+ * xdr_item_is_absent - symbolically handle XDR discriminators
+ * @p: pointer to undecoded discriminator
+ *
+ * Return values:
+ *   %true if the following XDR item is absent
+ *   %false if the following XDR item is present
+ */
+static inline bool xdr_item_is_absent(const __be32 *p)
+{
+	return *p == xdr_zero;
+}
+
+/**
+ * xdr_item_is_present - symbolically handle XDR discriminators
+ * @p: pointer to undecoded discriminator
+ *
+ * Return values:
+ *   %true if the following XDR item is present
+ *   %false if the following XDR item is absent
+ */
+static inline bool xdr_item_is_present(const __be32 *p)
+{
+	return *p != xdr_zero;
 }
 
 /**

@@ -139,6 +139,13 @@ config DVB_TAS2101
 	help
 	Say Y when you want to support this frontend.
 
+config DVB_GX1133
+	tristate "NationalChip GX1133 based"
+	depends on DVB_CORE && I2C
+	default m if !MEDIA_SUBDRV_AUTOSELECT
+	help
+	Say Y when you want to support this frontend.
+
 config DVB_STV091X
 	tristate "STV091x based"
 	depends on DVB_CORE && I2C

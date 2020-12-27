@@ -208,6 +208,7 @@ static int __must_check nr_add_node(ax25_address *nr, const char *mnemonic,
 		/* refcount initialized at 1 */
 		spin_unlock_bh(&nr_node_list_lock);
 
+		nr_neigh_put(nr_neigh);
 		return 0;
 	}
 	nr_node_lock(nr_node);
@@ -262,7 +263,7 @@ static int __must_check nr_add_node(ax25_address *nr, const char *mnemonic,
 	case 3:
 		re_sort_routes(nr_node, 0, 1);
 		re_sort_routes(nr_node, 1, 2);
-		/* fall through */
+		fallthrough;
 	case 2:
 		re_sort_routes(nr_node, 0, 1);
 	case 1:
@@ -355,7 +356,7 @@ static int nr_del_node(ax25_address *callsign, ax25_address *neighbour, struct n
 				switch (i) {
 				case 0:
 					nr_node->routes[0] = nr_node->routes[1];
-					/* fall through */
+					fallthrough;
 				case 1:
 					nr_node->routes[1] = nr_node->routes[2];
 				case 2:
@@ -478,7 +479,7 @@ static int nr_dec_obs(void)
 				switch (i) {
 				case 0:
 					s->routes[0] = s->routes[1];
-					/* Fallthrough */
+					fallthrough;
 				case 1:
 					s->routes[1] = s->routes[2];
 				case 2:
@@ -525,7 +526,7 @@ void nr_rt_device_down(struct net_device *dev)
 						switch (i) {
 						case 0:
 							t->routes[0] = t->routes[1];
-							/* fall through */
+							fallthrough;
 						case 1:
 							t->routes[1] = t->routes[2];
 						case 2:

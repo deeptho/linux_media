@@ -68,6 +68,9 @@ struct si2183_config {
 	//update the FW.
 	void (*write_properties) (struct i2c_adapter *i2c,u8 reg, u32 buf);
 	void (*read_properties) (struct i2c_adapter *i2c,u8 reg, u32 *buf);
+	// EEPROM access
+	void (*write_eeprom) (struct i2c_adapter *i2c,u8 reg, u8 buf);
+	void (*read_eeprom) (struct i2c_adapter *i2c,u8 reg, u8 *buf);
 };
 
 struct si_base {
@@ -147,15 +150,19 @@ struct si2183_dev {
 	void (*RF_switch)(struct i2c_adapter * i2c,u8 rf_in,u8 flag);
 	u8 rf_in;
 	u8 active_fe;
+	struct spectrum_scan_state scan_state;
+	struct constellation_scan_state constellation_scan_state;
+	struct blindscan_state blindscan_state;
+
 	void (*TS_switch)(struct i2c_adapter * i2c,u8 flag);
 	void (*LED_switch)(struct i2c_adapter * i2c,u8 flag);
 
 	void (*write_properties) (struct i2c_adapter *i2c,u8 reg, u32 buf);
 	void (*read_properties) (struct i2c_adapter *i2c,u8 reg, u32 *buf);
 
-	struct spectrum_scan_state scan_state;
-	struct constellation_scan_state constellation_scan_state;
-	struct blindscan_state blindscan_state;
+	void (*write_eeprom) (struct i2c_adapter *i2c,u8 reg, u8 buf);
+	void (*read_eeprom) (struct i2c_adapter *i2c,u8 reg, u8 *buf);
+
 };
 
 int si2183_cmd_execute(struct i2c_client *client, struct si2183_cmd *cmd);

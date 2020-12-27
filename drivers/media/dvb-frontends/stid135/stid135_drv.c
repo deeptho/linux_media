@@ -1,4 +1,4 @@
- /*
+/*
 * This file is part of STiD135 OXFORD LLA
  *
 * Copyright (c) <2014>-<2018>, STMicroelectronics - All Rights Reserved
@@ -531,6 +531,158 @@ static struct fe_sat_car_loop_vs_cnr fe_stid135_256apsk_car_loop[NB_256APSK_COEF
 	{207,	0x09,	0x09,	0x09,	0x09,	0x09,	0x09,	0x09,	0x09}	/* FE_SATX_256APSK_3_4 */
 };
 
+
+static  u16 dvbs2_modcode_for_llr_x100[131] = {
+	0,	//FE_SAT_DUMMY_PLF,
+	400,	//FE_SAT_QPSK_14,
+	300,	//FE_SAT_QPSK_13,
+	250,	//FE_SAT_QPSK_25,
+	200,	//FE_SAT_QPSK_12,
+	167,	//FE_SAT_QPSK_35,
+	150,	//FE_SAT_QPSK_23,
+	133,	//FE_SAT_QPSK_34,
+	125,	//FE_SAT_QPSK_45,
+	120,	//FE_SAT_QPSK_56,
+	113,	//FE_SAT_QPSK_89,
+	111,	//FE_SAT_QPSK_910,
+	167,	//FE_SAT_8PSK_35,
+	150,	//FE_SAT_8PSK_23,
+	133,	//FE_SAT_8PSK_34,
+	120,	//FE_SAT_8PSK_56,
+	113,	//FE_SAT_8PSK_89,
+	111,	//FE_SAT_8PSK_910,
+	150,	//FE_SAT_16APSK_23,
+	133,	//FE_SAT_16APSK_34,
+	125,	//FE_SAT_16APSK_45,
+	120,	//FE_SAT_16APSK_56,
+	113,	//FE_SAT_16APSK_89,
+	111,	//FE_SAT_16APSK_910,
+	133,	//FE_SAT_32APSK_34,
+	125,	//FE_SAT_32APSK_45,
+	120,	//FE_SAT_32APSK_56,
+	113,	//FE_SAT_32APSK_89,
+	111,	//FE_SAT_32APSK_910,
+	0,		//FE_SAT_MODCODE_UNKNOWN,
+	/* below modcodes are part of DVBS2x */
+
+	0,	//FE_SAT_MODCODE_UNKNOWN_1E = 0x1E,
+	0,	//FE_SAT_MODCODE_UNKNOWN_1F  = 0x1F,
+	200,	//FE_SAT_DVBS1_QPSK_12 = 0x20,
+	150,	//FE_SAT_DVBS1_QPSK_23 = 0x21,
+	133,	//FE_SAT_DVBS1_QPSK_34 = 0x22,
+	120,	//FE_SAT_DVBS1_QPSK_56 = 0x23,
+	117,	//FE_SAT_DVBS1_QPSK_67 = 0x24,
+	114,	//FE_SAT_DVBS1_QPSK_78 = 0x25,
+	0,	//FE_SAT_MODCODE_UNKNOWN_26 = 0x26,
+	0,	//FE_SAT_MODCODE_UNKNOWN_27 = 0x27,
+	0,	//FE_SAT_MODCODE_UNKNOWN_28 = 0x28,
+	0,	//FE_SAT_MODCODE_UNKNOWN_29 = 0x29,
+	0,	//FE_SAT_MODCODE_UNKNOWN_2A = 0x2A,
+	0,	//FE_SAT_MODCODE_UNKNOWN_2B = 0x2B,
+	0,	//FE_SAT_MODCODE_UNKNOWN_2C = 0x2C,
+	0,	//FE_SAT_MODCODE_UNKNOWN_2D = 0x2D,
+	0,	//FE_SAT_MODCODE_UNKNOWN_2E = 0x2E,
+	0,	//FE_SAT_MODCODE_UNKNOWN_2F = 0x2F,
+	0,	//FE_SAT_MODCODE_UNKNOWN_30 = 0x30,
+	0,	//FE_SAT_MODCODE_UNKNOWN_31 = 0x31,
+	0,	//FE_SAT_MODCODE_UNKNOWN_32 = 0x32,
+	0,	//FE_SAT_MODCODE_UNKNOWN_33 = 0x33,
+	0,	//FE_SAT_MODCODE_UNKNOWN_34 = 0x34,
+	0,	//FE_SAT_MODCODE_UNKNOWN_35 = 0x35,
+	0,	//FE_SAT_MODCODE_UNKNOWN_36 = 0x36,
+	0,	//FE_SAT_MODCODE_UNKNOWN_37 = 0x37,
+	0,	//FE_SAT_MODCODE_UNKNOWN_38 = 0x38,
+	0,	//FE_SAT_MODCODE_UNKNOWN_39 = 0x39,
+	0,	//FE_SAT_MODCODE_UNKNOWN_3A = 0x3A,
+	0,	//FE_SAT_MODCODE_UNKNOWN_3B = 0x3B,
+	0,	//FE_SAT_MODCODE_UNKNOWN_3C = 0x3C,
+	0,	//FE_SAT_MODCODE_UNKNOWN_3D = 0x3D,
+	0,	//FE_SAT_MODCODE_UNKNOWN_3E = 0x3E,
+	0,	//FE_SAT_MODCODE_UNKNOWN_3F = 0x3F,
+	0,	//FE_SATX_VLSNR1		  = 0x40,
+	0,	//FE_SATX_VLSNR2		= 0x41,
+	346,	//FE_SATX_QPSK_13_45	  = 0x42,
+	222,	//FE_SATX_QPSK_9_20 	= 0x43,
+	182,	//FE_SATX_QPSK_11_20	  = 0x44,
+	180,	//FE_SATX_8APSK_5_9_L	= 0x45,
+	173,	//FE_SATX_8APSK_26_45_L   = 0x46,
+	157,	//FE_SATX_8PSK_23_36	= 0x47,
+	144,	//FE_SATX_8PSK_25_36	  = 0x48,
+	138,	//FE_SATX_8PSK_13_18	= 0x49,
+	200,	//FE_SATX_16APSK_1_2_L	  = 0x4A,
+	188,	//FE_SATX_16APSK_8_15_L = 0x4B,
+	180,	//FE_SATX_16APSK_5_9_L	  = 0x4C,
+	173,	//FE_SATX_16APSK_26_45	= 0x4D,
+	167,	//FE_SATX_16APSK_3_5	  = 0x4E,
+	167,	//FE_SATX_16APSK_3_5_L	= 0x4F,
+	161,	//FE_SATX_16APSK_28_45	  = 0x50,
+	157,	//FE_SATX_16APSK_23_36	= 0x51,
+	150,	//FE_SATX_16APSK_2_3_L	  = 0x52,
+	144,	//FE_SATX_16APSK_25_36	= 0x53,
+	138,	//FE_SATX_16APSK_13_18	  = 0x54,
+	129,	//FE_SATX_16APSK_7_9	= 0x55,
+	117,	//FE_SATX_16APSK_77_90	  = 0x56,
+	150,	//FE_SATX_32APSK_2_3_L	= 0x57,
+	0,	//FE_SATX_32APSK_R_58	  = 0x58,
+	141,	//FE_SATX_32APSK_32_45	= 0x59,
+	136,	//FE_SATX_32APSK_11_15	  = 0x5A,
+	129,	//FE_SATX_32APSK_7_9	= 0x5B,
+	141,	//FE_SATX_64APSK_32_45_L  = 0x5C,
+	136,	//FE_SATX_64APSK_11_15	= 0x5D,
+	0,	//FE_SATX_64APSK_R_5E	  = 0x5E,
+	129,	//FE_SATX_64APSK_7_9	= 0x5F,
+	0,	//FE_SATX_64APSK_R_60	  = 0x60,
+	125,	//FE_SATX_64APSK_4_5	= 0x61,
+	0,	//FE_SATX_64APSK_R_62	  = 0x62,
+	120,	//FE_SATX_64APSK_5_6	= 0x63,
+	133,	//FE_SATX_128APSK_3_4	  = 0x64,
+	129,	//FE_SATX_128APSK_7_9	= 0x65,
+	155,	//FE_SATX_256APSK_29_45_L = 0x66,
+	150,	//FE_SATX_256APSK_2_3_L = 0x67,
+	145,	//FE_SATX_256APSK_31_45_L = 0x68,
+	141,	//FE_SATX_256APSK_32_45 = 0x69,
+	136,	//FE_SATX_256APSK_11_15_L = 0x6A,
+	133,	//FE_SATX_256APSK_3_4	= 0x6B,
+	409,	//FE_SATX_QPSK_11_45_S	  = 0x6C,
+	375,	//FE_SATX_QPSK_4_15_S	= 0x6D,
+	321,	//FE_SATX_QPSK_14_45_S	  = 0x6E,
+	214,	//FE_SATX_QPSK_7_15_S	= 0x6F,
+	188,	//FE_SATX_QPSK_8_15_S	  = 0x70,
+	141,	//FE_SATX_QPSK_32_45_S	= 0x71,
+	214,	//FE_SATX_8PSK_7_15_S	  = 0x72,
+	188,	//FE_SATX_8PSK_8_15_S	= 0x73,
+	173,	//FE_SATX_8PSK_26_45_S	  = 0x74,
+	141,	//FE_SATX_8PSK_32_45_S	= 0x75,
+	214,	//FE_SATX_16APSK_7_15_S   = 0x76,
+	188,	//FE_SATX_16APSK_8_15_S = 0x77,
+	173,	//FE_SATX_16APSK_26_45_S  = 0x78,
+	167,	//FE_SATX_16APSK_3_5_S	= 0x79,
+	141,	//FE_SATX_16APSK_32_45_S  = 0x7A,
+	150,	//FE_SATX_32APSK_2_3_S	= 0x7B,
+	141,	//FE_SATX_32APSK_32_45_S  = 0x7C,
+	0,	//FE_SATX_8PSK			= 0x7D,
+	0,	//FE_SATX_32APSK		= 0x7E,
+	0,	//FE_SATX_256APSK		= 0x7F,  /* POFF Modes */
+	0,	//FE_SATX_16APSK	= 0x80,
+	0,	//FE_SATX_64APSK	= 0x81,
+	0,	//FE_SATX_1024APSK		= 0x82,
+
+};	/*ModCod for DVBS2*/
+
+
+
+ static u8 dvbs1_modcode_for_llr_x100[8] = {
+	200,	//FE_SAT_PR_1_2 =0,
+	150,	//FE_SAT_PR_2_3,
+	133,	//FE_SAT_PR_3_4,
+	125,	//FE_SAT_PR_4_5,	/* for turbo code only */
+	120,	//FE_SAT_PR_5_6,
+	117,	//FE_SAT_PR_6_7,	/* for DSS only */
+	114,	//FE_SAT_PR_7_8,
+	113 //FE_SAT_PR_8_9,	/* for turbo code only */
+	//FE_SAT_PR_UNKNOWN
+};	/*ModCod for DVBS1*/
+
 /*******************
 Current LLA revision
 ********************/
@@ -933,14 +1085,24 @@ fe_lla_error_t fe_stid135_set_carrier_frequency_init_(struct fe_stid135_internal
 	FVCO/4/12=6.2GHz/4/12=130MHz */
 
 		si_register = ((frequency_hz/PLL_FVCO_FREQUENCY)*cfr_factor)/100;
-
+#if 0
 		error |= ChipSetOneRegister(hChip, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRINIT2(Demod),
 																((u8)(si_register >> 16)));
 		error |= ChipSetOneRegister(hChip, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRINIT1(Demod),
 																((u8)(si_register >> 8)));
 		error |= ChipSetOneRegister(hChip, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRINIT0(Demod),
 																((u8)(si_register)));
+#else
 
+	 error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_CFRINIT2_CFR_INIT(demod),
+	((u8)(si_register >> 16)));
+	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_CFRINIT1_CFR_INIT(demod),
+	((u8)(si_register >> 8)));
+	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_CFRINIT0_CFR_INIT(demod),
+	((u8)si_register));
+	error |= ChipSetRegisters(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRINIT2(demod),3);
+
+#endif
 		//	s32 freq;
 		//	FE_STiD135_GetCarrierFrequency(hChip,master_clock,state->nr+1,&freq);
 	return error;
@@ -2613,8 +2775,11 @@ static fe_lla_error_t fe_stid135_manage_manual_rolloff(struct fe_stid135_interna
 	if(handle != NULL) {
 		pParams = (struct fe_stid135_internal_param *) handle;
 
+
+#ifdef TOTEST //DeepThought This may not be needed 20201226
 		error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEMOD_MANUALS2_ROLLOFF(demod), 1);
 		error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEMOD_MANUALSX_ROLLOFF(demod), 1);
+#endif
 		switch(pParams->roll_off[demod-1]) {
 			case FE_SAT_05:
 				error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEMOD_ROLLOFF_CONTROL(demod), 4);
@@ -2725,7 +2890,8 @@ fe_lla_error_t	fe_stid135_search(struct stv* state,
 			error |= fe_stid135_manage_manual_rolloff(handle, demod);
 		}
 #endif
-
+#ifdef TOTEST //deepthough 20201226 In the main driver this code is disabled
+#else
 		if((pSearch->symbol_rate >= pParams->master_clock) &&
 			 (state->demod_search_algo == FE_SAT_BLIND_SEARCH ||
 				state->demod_search_algo == FE_SAT_NEXT)
@@ -2738,7 +2904,7 @@ fe_lla_error_t	fe_stid135_search(struct stv* state,
 	error |= (error1=ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DMDSELOBS_NOSHDB_SEL(demod), &fld_value));
 	if(error1)
 		dprintk("error=%d\n", error1);
-	//dprintk("fld_value=%d srate=%d\n", fld_value, pSearch->symbol_rate);
+
 	if((pSearch->symbol_rate >= pParams->master_clock) && fld_value == 3) {
 		error1=FE_LLA_NOT_SUPPORTED;
 		dprintk("error=%d\n", error1);
@@ -2774,7 +2940,7 @@ fe_lla_error_t	fe_stid135_search(struct stv* state,
 		if(error1)
 			dprintk("error=%d\n", error1);
 	}
-
+#endif //TOTEST
 	state->demod_puncture_rate = pSearch->puncture_rate;
 	state->demod_modulation = pSearch->modulation;
 	state->demod_modcode = pSearch->modcode;
@@ -3010,31 +3176,31 @@ static void FE_STiD135_GetLockTimeout(u32 *DemodTimeout, u32 *FecTimeout,
 /**********************************************************************************
 FUNCTION   : Estimate_Power_Int
 ACTION     : basic function to verify channel power estimation (PchRF) and
-																		 band  power estimation (Pband) in order to verify designers
-																		 formulas principle inside ATB
-																		 Config is hardwired on TUNER1/DEMOD1
-																		 This function handle integer values for LLA
+						 band  power estimation (Pband) in order to verify designers
+						 formulas principle inside ATB
+						 Config is hardwired on TUNER1/DEMOD1
+						 This function handle integer values for LLA
 
 PARAMS IN  : Handle
-																	 TunerNb[1;4]
-																	 DemodNb [0;7]
-																	 PowerIref should be set to 105
-PARAMS OUT : *AGCRFIN1,
-																	 *AGCRFIN0,
-																	 *Agc1,
-																	 *AGC1POWERI,
-																	 *AGC1POWERQ,
-																	 *AGC1REF,
-																	 *AGC2REF,
-																	 *AGC2I1,
-																	 *AGC2I0,
-																	 *mant,
-																	 *exp,
-																	 *Agc2,
-																	 *GvDig,
-																	 *InterpolatedGvana,
-																	 *PchRF,
-																	 *Pband
+             TunerNb[1;4]
+             DemodNb [0;7]
+             PowerIref should be set to 105
+PARAMS OUT :  *AGCRFIN1,
+							 *AGCRFIN0,
+							 *Agc1,
+							 *AGC1POWERI,
+							 *AGC1POWERQ,
+							 *AGC1REF,
+							 *AGC2REF,
+							 *AGC2I1,
+							 *AGC2I0,
+							 *mant,
+							 *exp,
+							 *Agc2,
+							 *GvDig,
+							 *InterpolatedGvana,
+							 *PchRF,
+							 *Pband
 RETURN     : error
 **********************************************************************************/
 static fe_lla_error_t Estimate_Power_Int(struct stv* state,
@@ -8693,7 +8859,8 @@ fe_lla_error_t fe_stid135_set_stfe(struct fe_stid135_internal_param* pParams, en
 		error |= ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_C8SECTPFE_TSDMA_C8SECTPFE_TSDMA_DEST0_FORMAT, &reg_value);
 		reg_value |= FSTID135_C8SECTPFE_TSDMA_C8SECTPFE_TSDMA_DEST0_FORMAT_WAIT_WHOLE_PACKET__MASK;
 		error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_C8SECTPFE_TSDMA_C8SECTPFE_TSDMA_DEST0_FORMAT, reg_value);
-#if 1 //present in main driver
+#ifdef TOTEST //DeepThought This may not be needed 20201226, but present in latest official driver
+#else
 		error |= ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_C8SECTPFE_TSDMA_C8SECTPFE_TSDMA_DEST1_FORMAT, &reg_value);
 		reg_value |= FSTID135_C8SECTPFE_TSDMA_C8SECTPFE_TSDMA_DEST1_FORMAT_WAIT_WHOLE_PACKET__MASK;
 		error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_C8SECTPFE_TSDMA_C8SECTPFE_TSDMA_DEST1_FORMAT, reg_value);

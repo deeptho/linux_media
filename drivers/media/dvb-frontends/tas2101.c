@@ -355,6 +355,26 @@ static void tas2101_spi_write(struct dvb_frontend *fe,struct ecp3_info *ecp3inf)
 	return ;
 }
 
+static void tas2101_eeprom_read(struct dvb_frontend *fe, struct eeprom_info *eepinf)
+{
+	struct tas2101_priv *priv = fe->demodulator_priv;
+	struct i2c_adapter *adapter = priv->i2c;
+
+	if (priv->cfg->read_eeprom)
+		priv->cfg->read_eeprom(adapter,eepinf->reg, &(eepinf->data));
+	return ;
+}
+
+static void tas2101_eeprom_write(struct dvb_frontend *fe,struct eeprom_info *eepinf)
+{
+	struct tas2101_priv *priv = fe->demodulator_priv;
+	struct i2c_adapter *adapter = priv->i2c;
+
+	if (priv->cfg->write_eeprom)
+		priv->cfg->write_eeprom(adapter,eepinf->reg, eepinf->data);
+	return ;
+}
+
 static int tas2101_set_voltage(struct dvb_frontend *fe,
 	enum fe_sec_voltage voltage)
 {
@@ -1118,6 +1138,10 @@ static struct dvb_frontend_ops tas2101_ops = {
 	.search = tas2101_search,
 	.spectrum_start = tas2101_spectrum_start,
 	.spectrum_get = tas2101_spectrum_get,
+
+	.eeprom_read		= tas2101_eeprom_read,
+	.eeprom_write		= tas2101_eeprom_write,
+
 };
 
 MODULE_DESCRIPTION("DVB Frontend module for Tmax TAS2101");

@@ -41,7 +41,7 @@ enum {
 	ND_OPT_DNSSL = 31,		/* RFC6106 */
 	ND_OPT_6CO = 34,		/* RFC6775 */
 	ND_OPT_CAPTIVE_PORTAL = 37,	/* RFC7710 */
-	ND_OPT_PREF64 = 38,		/* RFC-ietf-6man-ra-pref64-09 */
+	ND_OPT_PREF64 = 38,		/* RFC8781 */
 	__ND_OPT_MAX
 };
 
@@ -494,7 +494,7 @@ int igmp6_event_report(struct sk_buff *skb);
 
 #ifdef CONFIG_SYSCTL
 int ndisc_ifinfo_sysctl_change(struct ctl_table *ctl, int write,
-			       void __user *buffer, size_t *lenp, loff_t *ppos);
+			       void *buffer, size_t *lenp, loff_t *ppos);
 int ndisc_ifinfo_sysctl_strategy(struct ctl_table *ctl,
 				 void __user *oldval, size_t __user *oldlenp,
 				 void __user *newval, size_t newlen);

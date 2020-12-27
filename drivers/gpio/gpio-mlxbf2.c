@@ -14,7 +14,6 @@
 #include <linux/resource.h>
 #include <linux/spinlock.h>
 #include <linux/types.h>
-#include <linux/version.h>
 
 /*
  * There are 3 YU GPIO blocks:
@@ -110,8 +109,8 @@ static int mlxbf2_gpio_get_lock_res(struct platform_device *pdev)
 	}
 
 	yu_arm_gpio_lock_param.io = devm_ioremap(dev, res->start, size);
-	if (IS_ERR(yu_arm_gpio_lock_param.io))
-		ret = PTR_ERR(yu_arm_gpio_lock_param.io);
+	if (!yu_arm_gpio_lock_param.io)
+		ret = -ENOMEM;
 
 exit:
 	mutex_unlock(yu_arm_gpio_lock_param.lock);
@@ -127,8 +126,8 @@ static int mlxbf2_gpio_lock_acquire(struct mlxbf2_gpio_context *gs)
 {
 	u32 arm_gpio_lock_val;
 
-	spin_lock(&gs->gc.bgpio_lock);
 	mutex_lock(yu_arm_gpio_lock_param.lock);
+	spin_lock(&gs->gc.bgpio_lock);
 
 	arm_gpio_lock_val = readl(yu_arm_gpio_lock_param.io);
 
@@ -136,8 +135,8 @@ static int mlxbf2_gpio_lock_acquire(struct mlxbf2_gpio_context *gs)
 	 * When lock active bit[31] is set, ModeX is write enabled
 	 */
 	if (YU_LOCK_ACTIVE_BIT(arm_gpio_lock_val)) {
-		mutex_unlock(yu_arm_gpio_lock_param.lock);
 		spin_unlock(&gs->gc.bgpio_lock);
+		mutex_unlock(yu_arm_gpio_lock_param.lock);
 		return -EINVAL;
 	}
 
@@ -150,10 +149,12 @@ static int mlxbf2_gpio_lock_acquire(struct mlxbf2_gpio_context *gs)
  * Release the YU arm_gpio_lock after changing the direction mode.
  */
 static void mlxbf2_gpio_lock_release(struct mlxbf2_gpio_context *gs)
+	__releases(&gs->gc.bgpio_lock)
+	__releases(yu_arm_gpio_lock_param.lock)
 {
 	writel(YU_ARM_GPIO_LOCK_RELEASE, yu_arm_gpio_lock_param.io);
-	mutex_unlock(yu_arm_gpio_lock_param.lock);
 	spin_unlock(&gs->gc.bgpio_lock);
+	mutex_unlock(yu_arm_gpio_lock_param.lock);
 }
 
 /*
@@ -310,7 +311,7 @@ static int mlxbf2_gpio_resume(struct platform_device *pdev)
 }
 #endif
 
-static const struct acpi_device_id mlxbf2_gpio_acpi_match[] = {
+static const struct acpi_device_id __maybe_unused mlxbf2_gpio_acpi_match[] = {
 	{ "MLNXBF22", 0 },
 	{},
 };

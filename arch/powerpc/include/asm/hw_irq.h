@@ -200,17 +200,14 @@ static inline bool arch_irqs_disabled(void)
 #define powerpc_local_irq_pmu_save(flags)			\
 	 do {							\
 		raw_local_irq_pmu_save(flags);			\
-		trace_hardirqs_off();				\
+		if (!raw_irqs_disabled_flags(flags))		\
+			trace_hardirqs_off();			\
 	} while(0)
 #define powerpc_local_irq_pmu_restore(flags)			\
 	do {							\
-		if (raw_irqs_disabled_flags(flags)) {		\
-			raw_local_irq_pmu_restore(flags);	\
-			trace_hardirqs_off();			\
-		} else {					\
+		if (!raw_irqs_disabled_flags(flags))		\
 			trace_hardirqs_on();			\
-			raw_local_irq_pmu_restore(flags);	\
-		}						\
+		raw_local_irq_pmu_restore(flags);		\
 	} while(0)
 #else
 #define powerpc_local_irq_pmu_save(flags)			\
@@ -250,9 +247,27 @@ static inline bool arch_irqs_disabled(void)
 	}								\
 } while(0)
 
+static inline bool __lazy_irq_pending(u8 irq_happened)
+{
+	return !!(irq_happened & ~PACA_IRQ_HARD_DIS);
+}
+
+/*
+ * Check if a lazy IRQ is pending. Should be called with IRQs hard disabled.
+ */
 static inline bool lazy_irq_pending(void)
 {
-	return !!(get_paca()->irq_happened & ~PACA_IRQ_HARD_DIS);
+	return __lazy_irq_pending(get_paca()->irq_happened);
+}
+
+/*
+ * Check if a lazy IRQ is pending, with no debugging checks.
+ * Should be called with IRQs hard disabled.
+ * For use in RI disabled code or other constrained situations.
+ */
+static inline bool lazy_irq_pending_nocheck(void)
+{
+	return __lazy_irq_pending(local_paca->irq_happened);
 }
 
 /*

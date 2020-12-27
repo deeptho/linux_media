@@ -682,7 +682,7 @@ int chtls_push_frames(struct chtls_sock *csk, int comp)
 				make_tx_data_wr(sk, skb, immdlen, len,
 						credits_needed, completion);
 			tp->snd_nxt += len;
-			tp->lsndtime = tcp_time_stamp(tp);
+			tp->lsndtime = tcp_jiffies32;
 			if (completion)
 				ULP_SKB_CB(skb)->flags &= ~ULPCB_FLAG_NEED_HDR;
 		} else {
@@ -1052,14 +1052,15 @@ int chtls_sendmsg(struct sock *sk, struct msghdr *msg, size_t size)
 							  &record_type);
 				if (err)
 					goto out_err;
+
+				/* Avoid appending tls handshake, alert to tls data */
+				if (skb)
+					tx_skb_finalize(skb);
 			}
 
 			recordsz = size;
 			csk->tlshws.txleft = recordsz;
 			csk->tlshws.type = record_type;
-
-			if (skb)
-				ULP_SKB_CB(skb)->ulp.tls.type = record_type;
 		}
 
 		if (!skb || (ULP_SKB_CB(skb)->flags & ULPCB_FLAG_NO_APPEND) ||

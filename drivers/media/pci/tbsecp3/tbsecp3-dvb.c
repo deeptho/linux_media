@@ -41,6 +41,7 @@
 #include "rda5816.h"
 
 #include "gx1133.h"
+
 #define dprintk(fmt, arg...)																					\
 	printk(KERN_DEBUG pr_fmt("%s:%d " fmt), __func__, __LINE__, ##arg)
 
@@ -622,8 +623,8 @@ static struct av201x_config tbs6902_av201x_cfg = {
 
 static struct tas2101_config tbs6302se_demod_cfg[] = {
 
-		{
-				.i2c_address   = 0x68,
+	{
+		.i2c_address   = 0x68,
 		.id            = ID_TAS2101,
 		.init          = {0xb0, 0x32, 0x81, 0x57, 0x64, 0x9a, 0x33}, // 0xb1
 		.init2         = 0,
@@ -632,10 +633,9 @@ static struct tas2101_config tbs6302se_demod_cfg[] = {
 
 		.mcuWrite_properties = mcu_24cxx_write,
 		.mcuRead_properties = mcu_24cxx_read,
-		},
-
-		{
-				.i2c_address   = 0x68,
+	},
+	{
+		.i2c_address   = 0x68,
 		.id            = ID_TAS2101,
 		.init          = {0xb0, 0x32, 0x81, 0x57, 0x64, 0x9a, 0x33}, // 0xb1
 		.init2         = 0,
@@ -661,8 +661,8 @@ static struct tas2101_config tbs6308_demod_cfg = {
 };
 
 static struct tas2101_config tbs6304_demod_cfg[] = {
-		{
-				.i2c_address   = 0x60,
+	{
+		.i2c_address   = 0x60,
 		.id            = ID_TAS2101,
 		.init          = {0xb0, 0x32, 0x81, 0x57, 0x64, 0x9a, 0x33}, // 0xb1
 		.init2         = 0,
@@ -671,9 +671,9 @@ static struct tas2101_config tbs6304_demod_cfg[] = {
 
 		.mcuWrite_properties = mcu_24cxx_write,
 		.mcuRead_properties = mcu_24cxx_read,
-		},
-		{
-				.i2c_address   = 0x68,
+	},
+	{
+		.i2c_address   = 0x68,
 		.id            = ID_TAS2101,
 		.init          = {0xb0, 0x32, 0x81, 0x57, 0x64, 0x9a, 0x33}, // 0xb1
 		.init2         = 0,
@@ -682,9 +682,9 @@ static struct tas2101_config tbs6304_demod_cfg[] = {
 
 		.mcuWrite_properties = mcu_24cxx_write,
 		.mcuRead_properties = mcu_24cxx_read,
-		},
-		{
-				.i2c_address   = 0x60,
+	},
+	{
+		.i2c_address   = 0x60,
 		.id            = ID_TAS2101,
 		.init          = {0xb0, 0x32, 0x81, 0x57, 0x64, 0x9a, 0x33}, // 0xb1
 		.init2         = 0,
@@ -693,9 +693,9 @@ static struct tas2101_config tbs6304_demod_cfg[] = {
 
 		.mcuWrite_properties = mcu_24cxx_write,
 		.mcuRead_properties = mcu_24cxx_read,
-		},
-		{
-				.i2c_address   = 0x68,
+	},
+	{
+		.i2c_address   = 0x68,
 		.id            = ID_TAS2101,
 		.init          = {0xb0, 0x32, 0x81, 0x57, 0x64, 0x9a, 0x33}, // 0xb1
 		.init2         = 0,
@@ -875,8 +875,8 @@ static struct mxl58x_cfg tbs6909_mxl58x_cfg = {
 	.set_voltage	= max_set_voltage,
 	.write_properties = ecp3_spi_write,
 	.read_properties = ecp3_spi_read,
-	//.write_eeprom = ecp3_eeprom_write,
-	//.read_eeprom = ecp3_eeprom_read,
+	.write_eeprom = ecp3_eeprom_write,
+	.read_eeprom = ecp3_eeprom_read,
 };
 
 static struct stv091x_cfg tbs6903_stv0910_cfg = {
@@ -887,8 +887,8 @@ static struct stv091x_cfg tbs6903_stv0910_cfg = {
 	.dual_tuner = 1,
 	.write_properties = ecp3_spi_write,
 	.read_properties = ecp3_spi_read,
-	//.write_eeprom = ecp3_eeprom_write,
-	//.read_eeprom = ecp3_eeprom_read,
+	.write_eeprom = ecp3_eeprom_write,
+	.read_eeprom = ecp3_eeprom_read,
 };
 
 struct stv6120_cfg tbs6903_stv6120_cfg = {
@@ -1012,15 +1012,15 @@ static struct stid135_cfg tbs6909x_stid135_cfg = {
 static struct stid135_cfg tbs6903x_V2_stid135_cfg = {
 	.adr		= 0x68,
 	.clk		= 27,
-	.ts_mode	= TS_STFE,
-	.set_voltage	= max_set_voltage,
+	.ts_mode	= TS_2PAR,
+	.set_voltage	= NULL,
 	.write_properties = ecp3_spi_write,
 	.read_properties = ecp3_spi_read,
 	.write_eeprom = ecp3_eeprom_write,
 	.read_eeprom = ecp3_eeprom_read,
 	.set_TSsampling = NULL,
 	.set_TSparam = NULL,
-	.vglna   =true,
+	.vglna   = 1,
 };
 
 static struct stid135_cfg tbs6909x_V2_stid135_cfg = {
@@ -1044,9 +1044,11 @@ static struct stid135_cfg tbs6916_stid135_cfg = {
 	.set_voltage	= Virtual_set_voltage,
 	.write_properties = ecp3_spi_write,
 	.read_properties = ecp3_spi_read,
+	.write_eeprom = ecp3_eeprom_write,
+	.read_eeprom = ecp3_eeprom_read,
 	.set_TSsampling = NULL,
 	.set_TSparam = NULL,
-	.vglna   =false,
+	.vglna   = 0,
 };
 
 static struct stid135_cfg tbs6912_stid135_cfg = {

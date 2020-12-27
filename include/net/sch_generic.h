@@ -330,6 +330,10 @@ struct tcf_proto_ops {
 	int			(*dump)(struct net*, struct tcf_proto*, void *,
 					struct sk_buff *skb, struct tcmsg*,
 					bool);
+	int			(*terse_dump)(struct net *net,
+					      struct tcf_proto *tp, void *fh,
+					      struct sk_buff *skb,
+					      struct tcmsg *t, bool rtnl_held);
 	int			(*tmplt_dump)(struct sk_buff *skb,
 					      struct net *net,
 					      void *tmplt_priv);
@@ -380,6 +384,7 @@ struct qdisc_skb_cb {
 	};
 #define QDISC_CB_PRIV_LEN 20
 	unsigned char		data[QDISC_CB_PRIV_LEN];
+	u16			mru;
 };
 
 typedef void tcf_chain_head_change_t(struct tcf_proto *tp_head, void *priv);
@@ -407,6 +412,7 @@ struct tcf_block {
 	struct mutex lock;
 	struct list_head chain_list;
 	u32 index; /* block index for shared blocks */
+	u32 classid; /* which class this block belongs to */
 	refcount_t refcnt;
 	struct net *net;
 	struct Qdisc *q;
@@ -458,7 +464,7 @@ static inline void qdisc_cb_private_validate(const struct sk_buff *skb, int sz)
 {
 	struct qdisc_skb_cb *qcb;
 
-	BUILD_BUG_ON(sizeof(skb->cb) < offsetof(struct qdisc_skb_cb, data) + sz);
+	BUILD_BUG_ON(sizeof(skb->cb) < sizeof(*qcb));
 	BUILD_BUG_ON(sizeof(qcb->data) < sz);
 }
 
@@ -708,11 +714,6 @@ static inline void qdisc_reset_all_tx_gt(struct net_device *dev, unsigned int i)
 			spin_unlock_bh(qdisc_lock(qdisc));
 		}
 	}
-}
-
-static inline void qdisc_reset_all_tx(struct net_device *dev)
-{
-	qdisc_reset_all_tx_gt(dev, 0);
 }
 
 /* Are all TX queues of the device empty?  */

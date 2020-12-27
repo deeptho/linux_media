@@ -1932,8 +1932,6 @@ static void spi_write(struct dvb_frontend *fe,struct ecp3_info *ecp3inf)
 }
 
 
-
-
 static int stv091x_read_dbm(struct dvb_frontend *fe, s16 *strength)
 {
 	struct stv *state = fe->demodulator_priv;
@@ -2058,6 +2056,25 @@ static int stv091x_get_consellation_samples(struct dvb_frontend *fe, struct dvb_
 	return 0;
 }
 
+static void eeprom_read(struct dvb_frontend *fe, struct eeprom_info *eepinf)
+{
+	struct stv *state = fe->demodulator_priv;
+	struct i2c_adapter *adapter = state->base->i2c;
+
+	if (state->base->read_eeprom)
+		state->base->read_eeprom(adapter,eepinf->reg, &(eepinf->data));
+	return ;
+}
+
+static void eeprom_write(struct dvb_frontend *fe,struct eeprom_info *eepinf)
+{
+	struct stv *state = fe->demodulator_priv;
+	struct i2c_adapter *adapter = state->base->i2c;
+
+	if (state->base->write_eeprom)
+		state->base->write_eeprom(adapter,eepinf->reg, eepinf->data);
+	return ;
+}
 
 static struct dvb_frontend_ops stv091x_ops = {
 	.delsys = { SYS_DVBS, SYS_DVBS2, SYS_DSS },
@@ -2099,6 +2116,10 @@ static struct dvb_frontend_ops stv091x_ops = {
 
 	.get_spectrum_scan		= stv091x_get_spectrum_scan,
 	.get_constellation_samples	= stv091x_get_consellation_samples,
+
+	.eeprom_read			= eeprom_read,
+	.eeprom_write			= eeprom_write,
+
 };
 
 static struct stv_base *match_base(struct i2c_adapter  *i2c, u8 adr)
@@ -2149,6 +2170,8 @@ struct dvb_frontend *stv091x_attach(struct i2c_adapter *i2c,
 		base->set_lock_led = cfg->set_lock_led;
 		base->write_properties = cfg->write_properties;
 		base->read_properties = cfg->read_properties;
+		base->write_eeprom = cfg->write_eeprom;
+		base->read_eeprom = cfg->read_eeprom;
 
 		mutex_init(&base->i2c_lock);
 		mutex_init(&base->reg_lock);

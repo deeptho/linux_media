@@ -1651,7 +1651,7 @@ vmw_gb_surface_reference_internal(struct drm_device *dev,
 	struct vmw_surface_metadata *metadata;
 	struct ttm_base_object *base;
 	uint32_t backup_handle;
-	int ret = -EINVAL;
+	int ret;
 
 	ret = vmw_surface_handle_reference(dev_priv, file_priv, req->sid,
 					   req->handle_type, &base);
@@ -1969,7 +1969,7 @@ static int vmw_surface_dirty_alloc(struct vmw_resource *res)
 		num_mip = 1;
 
 	num_subres = num_layers * num_mip;
-	dirty_size = sizeof(*dirty) + num_subres * sizeof(dirty->boxes[0]);
+	dirty_size = struct_size(dirty, boxes, num_subres);
 	acc_size = ttm_round_pot(dirty_size);
 	ret = ttm_mem_global_alloc(vmw_mem_glob(res->dev_priv),
 				   acc_size, &ctx);

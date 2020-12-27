@@ -1046,7 +1046,7 @@ i40iw_sc_query_rdma_features(struct i40iw_sc_cqp *cqp,
 	u64 header;
 
 	wqe = i40iw_sc_cqp_get_next_send_wqe(cqp, scratch);
-	if (wqe)
+	if (!wqe)
 		return I40IW_ERR_RING_FULL;
 
 	set_64bit_val(wqe, 32, feat_mem->pa);
@@ -1964,7 +1964,6 @@ static enum i40iw_status_code i40iw_sc_get_next_aeqe(struct i40iw_sc_aeq *aeq,
 		info->out_rdrsp = true;
 		break;
 	case I40IW_AE_SOURCE_RSVD:
-		/* fallthrough */
 	default:
 		break;
 	}
@@ -3762,14 +3761,14 @@ static enum i40iw_status_code cqp_sds_wqe_fill(struct i40iw_sc_cqp *cqp,
 					LS_64(1, I40IW_CQPSQ_UPESD_ENTRY_VALID)));
 
 		set_64bit_val(wqe, 56, info->entry[2].data);
-		/* fallthrough */
+		fallthrough;
 	case 2:
 		set_64bit_val(wqe, 32,
 			      (LS_64(info->entry[1].cmd, I40IW_CQPSQ_UPESD_SDCMD) |
 					LS_64(1, I40IW_CQPSQ_UPESD_ENTRY_VALID)));
 
 		set_64bit_val(wqe, 40, info->entry[1].data);
-		/* fallthrough */
+		fallthrough;
 	case 1:
 		set_64bit_val(wqe, 0,
 			      LS_64(info->entry[0].cmd, I40IW_CQPSQ_UPESD_SDCMD));

@@ -76,13 +76,31 @@ static const u32 mlx5e_ext_link_speed[MLX5E_EXT_LINK_MODES_NUMBER] = {
 	[MLX5E_100GAUI_2_100GBASE_CR2_KR2]	= 100000,
 	[MLX5E_200GAUI_4_200GBASE_CR4_KR4]	= 200000,
 	[MLX5E_400GAUI_8]			= 400000,
+	[MLX5E_100GAUI_1_100GBASE_CR_KR]	= 100000,
+	[MLX5E_200GAUI_2_200GBASE_CR2_KR2]	= 200000,
+	[MLX5E_400GAUI_4_400GBASE_CR4_KR4]	= 400000,
 };
+
+bool mlx5e_ptys_ext_supported(struct mlx5_core_dev *mdev)
+{
+	struct mlx5e_port_eth_proto eproto;
+	int err;
+
+	if (MLX5_CAP_PCAM_FEATURE(mdev, ptys_extended_ethernet))
+		return true;
+
+	err = mlx5_port_query_eth_proto(mdev, 1, true, &eproto);
+	if (err)
+		return false;
+
+	return !!eproto.cap;
+}
 
 static void mlx5e_port_get_speed_arr(struct mlx5_core_dev *mdev,
 				     const u32 **arr, u32 *size,
 				     bool force_legacy)
 {
-	bool ext = force_legacy ? false : MLX5_CAP_PCAM_FEATURE(mdev, ptys_extended_ethernet);
+	bool ext = force_legacy ? false : mlx5e_ptys_ext_supported(mdev);
 
 	*size = ext ? ARRAY_SIZE(mlx5e_ext_link_speed) :
 		      ARRAY_SIZE(mlx5e_link_speed);
@@ -177,7 +195,7 @@ int mlx5e_port_linkspeed(struct mlx5_core_dev *mdev, u32 *speed)
 	bool ext;
 	int err;
 
-	ext = MLX5_CAP_PCAM_FEATURE(mdev, ptys_extended_ethernet);
+	ext = mlx5e_ptys_ext_supported(mdev);
 	err = mlx5_port_query_eth_proto(mdev, 1, ext, &eproto);
 	if (err)
 		goto out;
@@ -205,7 +223,7 @@ int mlx5e_port_max_linkspeed(struct mlx5_core_dev *mdev, u32 *speed)
 	int err;
 	int i;
 
-	ext = MLX5_CAP_PCAM_FEATURE(mdev, ptys_extended_ethernet);
+	ext = mlx5e_ptys_ext_supported(mdev);
 	err = mlx5_port_query_eth_proto(mdev, 1, ext, &eproto);
 	if (err)
 		return err;
@@ -369,17 +387,19 @@ enum mlx5e_fec_supported_link_mode {
 			*_policy = MLX5_GET(pplm_reg, _buf, fec_override_admin_##link);	\
 	} while (0)
 
-#define MLX5E_FEC_OVERRIDE_ADMIN_50G_POLICY(buf, policy, write, link)		\
-	do {									\
-		u16 *__policy = &(policy);					\
-		bool _write = (write);						\
-										\
-		if (_write && *__policy)					\
-			*__policy = find_first_bit((u_long *)__policy,		\
-						   sizeof(u16) * BITS_PER_BYTE);\
-		MLX5E_FEC_OVERRIDE_ADMIN_POLICY(buf, *__policy, _write, link);	\
-		if (!_write && *__policy)					\
-			*__policy = 1 << *__policy;				\
+#define MLX5E_FEC_OVERRIDE_ADMIN_50G_POLICY(buf, policy, write, link)			\
+	do {										\
+		unsigned long policy_long;						\
+		u16 *__policy = &(policy);						\
+		bool _write = (write);							\
+											\
+		policy_long = *__policy;						\
+		if (_write && *__policy)						\
+			*__policy = find_first_bit(&policy_long,			\
+						   sizeof(policy_long) * BITS_PER_BYTE);\
+		MLX5E_FEC_OVERRIDE_ADMIN_POLICY(buf, *__policy, _write, link);		\
+		if (!_write && *__policy)						\
+			*__policy = 1 << *__policy;					\
 	} while (0)
 
 /* get/set FEC admin field for a given speed */
@@ -470,11 +490,8 @@ bool mlx5e_fec_in_caps(struct mlx5_core_dev *dev, int fec_policy)
 	int err;
 	int i;
 
-	if (!MLX5_CAP_GEN(dev, pcam_reg))
-		return -EOPNOTSUPP;
-
-	if (!MLX5_CAP_PCAM_REG(dev, pplm))
-		return -EOPNOTSUPP;
+	if (!MLX5_CAP_GEN(dev, pcam_reg) || !MLX5_CAP_PCAM_REG(dev, pplm))
+		return false;
 
 	MLX5_SET(pplm_reg, in, local_port, 1);
 	err =  mlx5_core_access_reg(dev, in, sz, out, sz, MLX5_REG_PPLM, 0, 0);

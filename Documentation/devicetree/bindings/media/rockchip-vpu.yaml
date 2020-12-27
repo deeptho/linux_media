@@ -31,8 +31,8 @@ properties:
     oneOf:
       - const: vdpu
       - items:
-        - const: vepu
-        - const: vdpu
+          - const: vepu
+          - const: vdpu
 
   clocks:
     maxItems: 2
@@ -66,7 +66,7 @@ examples:
 
         vpu: video-codec@ff9a0000 {
                 compatible = "rockchip,rk3288-vpu";
-                reg = <0x0 0xff9a0000 0x0 0x800>;
+                reg = <0xff9a0000 0x800>;
                 interrupts = <GIC_SPI 9 IRQ_TYPE_LEVEL_HIGH>,
                              <GIC_SPI 10 IRQ_TYPE_LEVEL_HIGH>;
                 interrupt-names = "vepu", "vdpu";
