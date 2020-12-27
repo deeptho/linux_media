@@ -264,7 +264,7 @@ static int stid135_probe(struct stv *state)
 	init_params.demod_ref_clk  	= 	state->base->extclk ? state->base->extclk : 27;
 	init_params.internal_dcdc	=	0;
 	init_params.internal_ldo	=	1; // LDO supply is internal on Oxford valid board
-	init_params.rf_input_type	=	0x0; // Single ended RF input on Oxford valid board rev2
+	init_params.rf_input_type	=	0xF; // Single ended RF input on Oxford valid board rev2
 	init_params.roll_off		=  	FE_SAT_35; // NYQUIST Filter value (used for DVBS1/DSS, DVBS2 is automatic)
 	init_params.tuner_iq_inversion	=	FE_SAT_IQ_NORMAL;
 
@@ -411,7 +411,7 @@ static int stid135_probe(struct stv *state)
 	if (err != FE_LLA_NO_ERROR)
 		dev_err(&state->base->i2c->dev, "%s: setup error %d !\n", __func__, err);
 
-
+#ifdef DTTEST //20201226 This code is alreadt above
 /*///////////////////init stvvglna/////////////////////////////////////*/
 	if(state->base->vglna){
 	printk("__Initialized STVVGLNA__\n");
@@ -468,6 +468,7 @@ static int stid135_probe(struct stv *state)
 	printk("Initialized STVVGLNA  3 device\n");
 	stvvglna_set_standby(vglna_handle3,0);
 	}
+#endif //DTTEST
 	return err != FE_LLA_NO_ERROR ? -1 : 0;
 }
 
@@ -582,20 +583,19 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 		pls_code = (p->stream_id>>8) & 0x3FFFF;
 		if (pls_mode == 0 && pls_code == 0)
 			pls_code = 1;
-
-
 	}
 
 	if (p->scrambling_sequence_index) {
 		pls_mode = 1;
 		pls_code = p->scrambling_sequence_index;
-#if 1 //Deep Thought: code must be moved outside of if test or multi-stream does not work
+#ifdef TOTEST
+#else //Deep Thought: code must be moved inside of if test
 		/* Set PLS before search */
 		dev_dbg(&state->base->i2c->dev, "%s: set pls_mode %d, pls_code %d !\n", __func__, pls_mode, pls_code);
 		err |= fe_stid135_set_pls(state->base->handle, state->nr + 1, pls_mode, pls_code);
 #endif
 	}
-#if 1 //Deep Thought: code must be moved outside of if test or multi-stream does not work
+#ifdef TOTEST //Deep Thought: code must be moved outside of if test or multi-stream does not work
 	/* Set PLS before search */
 	dev_dbg(&state->base->i2c->dev, "%s: set pls_mode %d, pls_code %d !\n", __func__, pls_mode, pls_code);
 	err |= fe_stid135_set_pls(state->base->handle, state->nr + 1, pls_mode, pls_code);
@@ -914,7 +914,6 @@ static int stid135_read_status(struct dvb_frontend *fe, enum fe_status *status)
 			if (err != FE_LLA_NO_ERROR)
 				dev_warn(&state->base->i2c->dev, "%s: fe_stid135_filter_forbidden_modcodes error %d !\n", __func__, err);
 		}
-
 	} else {
 		/* demod not locked */
 		*status |= FE_HAS_SIGNAL;
