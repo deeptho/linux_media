@@ -1113,7 +1113,6 @@ static int dvb_frontend_clear_cache(struct dvb_frontend *fe)
 	c->stream_id = NO_STREAM_ID_FILTER;
 	c->modcode = MODCODE_ALL;
 	c->scrambling_sequence_index = 0;/* default sequence */
-	c->enable_modcod = 0x0fffffff;
 
 	switch (c->delivery_system) {
 	case SYS_DVBS:
@@ -1637,16 +1636,14 @@ static int dtv_property_process_get(struct dvb_frontend *fe,
 	case DTV_SCRAMBLING_SEQUENCE_INDEX:
 		tvp->u.data = c->scrambling_sequence_index;
 		break;
-	case DTV_ENABLE_MODCOD:
-		tvp->u.data = c->enable_modcod;
-		break;
+#ifdef TODO
 	case DTV_MATYPE:
 		tvp->u.data = c->matype;
 		break;
-				case DTV_FRAME_LEN:
-								tvp->u.data = c->frame_len;
-								break;
-
+	case DTV_FRAME_LEN:
+		tvp->u.data = c->frame_len;
+		break;
+#endif
 	/* ATSC-MH */
 	case DTV_ATSCMH_FIC_VER:
 		tvp->u.data = fe->dtv_property_cache.atscmh_fic_ver;
@@ -2132,11 +2129,11 @@ static int dtv_property_process_set_int(struct dvb_frontend *fe,
 	case DTV_SCRAMBLING_SEQUENCE_INDEX:
 		c->scrambling_sequence_index = data;
 		break;
-
+#ifdef TODO
 	case DTV_ENABLE_MODCOD:
 		c->enable_modcod = data;
 		break;
-
+#endif
 	/* ATSC-MH */
 	case DTV_ATSCMH_PARADE_ID:
 		fe->dtv_property_cache.atscmh_parade_id = data;

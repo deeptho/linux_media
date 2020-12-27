@@ -1107,7 +1107,7 @@ static int stid135_tune(struct dvb_frontend *fe, bool re_tune,
 	}
 
 	if(re_tune) {
-#if y1
+#if 1
 		dprintk("RETUNE: GET SIGNAL\n");
 		fe_stid135_get_signal_info(state,  &state->signal_info, 0);
 		//dprintk("MIS2: num=%d\n", state->signal_info.isi_list.nb_isi);
@@ -1352,6 +1352,40 @@ static void spi_write(struct dvb_frontend *fe,struct ecp3_info *ecp3inf)
 	if (state->base->write_properties)
 		state->base->write_properties(adapter,ecp3inf->reg, ecp3inf->data);
 	return ;
+}
+
+static void eeprom_read(struct dvb_frontend *fe, struct eeprom_info *eepinf)
+{
+	struct stv *state = fe->demodulator_priv;
+	struct i2c_adapter *adapter = state->base->i2c;
+
+	if (state->base->read_eeprom)
+		state->base->read_eeprom(adapter,eepinf->reg, &(eepinf->data));
+	return ;
+}
+
+static void eeprom_write(struct dvb_frontend *fe,struct eeprom_info *eepinf)
+{
+	struct stv *state = fe->demodulator_priv;
+	struct i2c_adapter *adapter = state->base->i2c;
+
+	if (state->base->write_eeprom)
+		state->base->write_eeprom(adapter,eepinf->reg, eepinf->data);
+	return ;
+}
+
+static int stid135_read_temp(struct dvb_frontend *fe, s16 *temp)
+{
+	struct stv *state = fe->demodulator_priv;
+	fe_lla_error_t err = FE_LLA_NO_ERROR;
+
+	mutex_lock(&state->base->status_lock);
+	err = fe_stid135_get_soc_temperature(&state->base->ip, temp);
+	mutex_unlock(&state->base->status_lock);
+
+	if (err != FE_LLA_NO_ERROR)
+		dev_warn(&state->base->i2c->dev, "%s: fe_stid135_get_soc_temperature error %d !\n", __func__, err);
+	return 0;
 }
 
 
