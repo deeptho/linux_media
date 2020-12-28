@@ -4328,11 +4328,11 @@ fe_lla_error_t FE_STiD135_Algo(struct stv* state, BOOL satellite_scan, enum fe_s
 	dprintk("FE_STiD135_GetLockTimeout: demodTimeout=%d fecTimeout=%d symrate=%d algo=%d\n",
 					demodTimeout, fecTimeout, state->demod_symbol_rate, state->demod_search_algo
 					);
-#if 0
+#if 1
 #ifdef USER2
 	demodTimeout = demodTimeout * 16; // Low CNR
 #else
-	demodTimeout = demodTimeout * 4;
+	demodTimeout = demodTimeout * 8;
 #endif
 	fecTimeout   = fecTimeout   * 4;
 #endif
