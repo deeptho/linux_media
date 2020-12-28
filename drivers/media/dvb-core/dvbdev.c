@@ -32,6 +32,8 @@
 #include <linux/cdev.h>
 #include <linux/mutex.h>
 #include <media/dvbdev.h>
+#include <linux/kobject.h>
+#include <linux/sysfs.h>
 
 /* Due to enum tuner_pad_index */
 #include <media/tuner.h>
@@ -1030,11 +1032,50 @@ static char *dvb_devnode(struct device *dev, umode_t *mode)
 }
 
 
+static struct kobject *info_kobject;
+static int version; //not used
+static ssize_t version_show(struct kobject *kobj, struct kobj_attribute *attr,
+                      char *buf)
+{
+	/*
+		show() must not use snprintf() when formatting the value to be
+		returned to user space. If you can guarantee that an overflow
+		will never happen you can use sprintf() otherwise you must use
+		scnprintf().*/
+	return sprintf(buf,
+								 "type = \"neumo\";\n"
+								 "version = \"1.0\";\n");
+}
+
+static ssize_t version_store(struct kobject *kobj, struct kobj_attribute *attr,
+                      const char *buf, size_t count)
+{
+	return 0;
+}
+
+static struct kobj_attribute version_attribute =__ATTR(version, 0444, version_show, version_store);
+
+static int dvb_module_make_info(void)
+{
+	int error = 0;
+	struct kobject* mod_kobj = &(((struct module*)(THIS_MODULE))->mkobj).kobj;
+	info_kobject = kobject_create_and_add("info", mod_kobj/*kernel_kobj*/);
+	if(!info_kobject)
+		return -ENOMEM;
+
+	error = sysfs_create_file(info_kobject, &version_attribute.attr);
+	if (error) {
+		pr_err("dvb-core failed to create the info file\n");
+	}
+
+	return error;
+}
+
 static int __init init_dvbdev(void)
 {
 	int retval;
 	dev_t dev = MKDEV(DVB_MAJOR, 0);
-
+	dvb_module_make_info();
 	if ((retval = register_chrdev_region(dev, MAX_DVB_MINORS, "DVB")) != 0) {
 		pr_err("dvb-core: unable to get major %d\n", DVB_MAJOR);
 		return retval;
@@ -1054,7 +1095,6 @@ static int __init init_dvbdev(void)
 	dvb_class->dev_uevent = dvb_uevent;
 	dvb_class->devnode = dvb_devnode;
 	return 0;
-
 error:
 	cdev_del(&dvb_device_cdev);
 	unregister_chrdev_region(dev, MAX_DVB_MINORS);
@@ -1064,6 +1104,8 @@ error:
 
 static void __exit exit_dvbdev(void)
 {
+	if(info_kobject)
+		kobject_put(info_kobject);
 	class_destroy(dvb_class);
 	cdev_del(&dvb_device_cdev);
 	unregister_chrdev_region(MKDEV(DVB_MAJOR, 0), MAX_DVB_MINORS);

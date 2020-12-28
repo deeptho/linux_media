@@ -1729,16 +1729,16 @@ static int dtv_property_process_get(struct dvb_frontend *fe,
 
 	if (!dtv_cmds[tvp->cmd].buffer)
 		dev_dbg(fe->dvb->device,
-			"%s: GET cmd 0x%08x (%s) = 0x%08x\n",
+						"%s: GET cmd 0x%08x (%s) = 0x%08x\n",
 			__func__, tvp->cmd, dtv_cmds[tvp->cmd].name,
-			tvp->u.data);
+						tvp->u.data);
 	else
 		dev_dbg(fe->dvb->device,
 			"%s: GET cmd 0x%08x (%s) len %d: %*ph\n",
-			__func__,
-			tvp->cmd, dtv_cmds[tvp->cmd].name,
+						__func__,
+						tvp->cmd, dtv_cmds[tvp->cmd].name,
 			tvp->u.buffer.len,
-			tvp->u.buffer.len, tvp->u.buffer.data);
+						tvp->u.buffer.len, tvp->u.buffer.data);
 
 	return 0;
 }
