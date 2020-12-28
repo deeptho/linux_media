@@ -47,6 +47,11 @@ module_param(mode, int, 0444);
 MODULE_PARM_DESC(mode,
 		"Multi-switch mode: 0=quattro/quad 1=normal direct connection");
 
+static int vglna_mode=0;
+module_param(vglna_mode, int, 0444);
+MODULE_PARM_DESC(mode,
+		"vlglna on/off");
+
 static unsigned int rfsource;
 module_param(rfsource, int, 0644);
 MODULE_PARM_DESC(rfsource, "RF source selection for direct connection mode (default:0 - auto)");
@@ -411,7 +416,7 @@ static int stid135_probe(struct stv *state_demod1)
 	strcpy((char *)pVGLNAInit.Chip->Name, VglnaIdString);
 	stvvglna_init(&pVGLNAInit, &vglna_handle);
 	printk("Initialized STVVGLNA  0 device\n");
-	stvvglna_set_standby(vglna_handle,1);
+	stvvglna_set_standby(vglna_handle, vglna_mode);
 	dev_warn(&state_demod1->base->i2c->dev, "Initialized STVVGLNA 0 device\n");
 
 	VglnaIdString = "STVVGLNA1";
@@ -424,7 +429,7 @@ static int stid135_probe(struct stv *state_demod1)
 	pVGLNAInit1.NbDefVal = STVVGLNA_NBREGS;
 	strcpy((char *)pVGLNAInit1.Chip->Name, VglnaIdString);
 	stvvglna_init(&pVGLNAInit1, &vglna_handle1);
-	stvvglna_set_standby(vglna_handle1,1);
+	stvvglna_set_standby(vglna_handle1, vglna_mode);
 	dev_warn(&state_demod1->base->i2c->dev, "Initialized STVVGLNA 1 device\n");
 
 	VglnaIdString = "STVVGLNA2";
@@ -436,7 +441,7 @@ static int stid135_probe(struct stv *state_demod1)
 	pVGLNAInit2.NbDefVal = STVVGLNA_NBREGS;
 	strcpy((char *)pVGLNAInit2.Chip->Name, VglnaIdString);
 	stvvglna_init(&pVGLNAInit2, &vglna_handle2);
-	stvvglna_set_standby(vglna_handle2,1);
+	stvvglna_set_standby(vglna_handle2, vglna_mode);
 	dev_warn(&state_demod1->base->i2c->dev, "Initialized STVVGLNA 2 device\n");
 
 	VglnaIdString = "STVVGLNA3";
@@ -448,7 +453,7 @@ static int stid135_probe(struct stv *state_demod1)
 	pVGLNAInit3.NbDefVal = STVVGLNA_NBREGS;
 	strcpy((char *)pVGLNAInit3.Chip->Name, VglnaIdString);
 	stvvglna_init(&pVGLNAInit3, &vglna_handle3);
-	stvvglna_set_standby(vglna_handle3,1);
+	stvvglna_set_standby(vglna_handle3, vglna_mode);
 	dev_warn(&state_demod1->base->i2c->dev, "Initialized STVVGLNA 3 device\n");
 	}
 	if (err != FE_LLA_NO_ERROR)
