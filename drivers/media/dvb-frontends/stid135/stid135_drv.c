@@ -38,6 +38,10 @@
 #include "stid135_initLLA_cut2.h"
 #include "c8codew_addr_map.h"
 #include "stid135_addr_map.h"
+u32 dt_report =0;
+extern void chip_init_proc(STCHIP_Info_t* hChipHandle_, const char*name);
+void chip_close_proc(const char* name);
+
 
 #define DmdLock_TIMEOUT_LIMIT      5500  // Fixed issue BZ#86598
 //#define BLIND_SEARCH_AGC2BANDWIDTH  40
@@ -5709,9 +5713,10 @@ fe_lla_error_t FE_STiD135_Term(struct fe_stid135_internal_param* pParams)
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 
 
-
-			ChipClose(pParams->handle_demod);
-			ChipClose(pParams->handle_soc);
+	chip_close_proc("stid135");
+	ChipClose(pParams->handle_demod);
+	chip_close_proc("soc");
+	ChipClose(pParams->handle_soc);
 
 
 	return error;
@@ -12288,7 +12293,7 @@ STCHIP_Error_t stvvglna_init(SAT_VGLNA_Params_t *InitParams, STCHIP_Info_t* *hCh
 
 
 		(*hChipHandle) = ChipOpen(InitParams->Chip);
-
+		chip_init_proc(*hChipHandle, "vglna");
 		hChip=(*hChipHandle);
 
 		if(hChip != NULL)
@@ -12404,11 +12409,12 @@ STCHIP_Error_t stvvglna_term(STCHIP_Info_t* hChip)
 
 	if(hChip)
 	{
-		#ifndef ST_OSLINUX
-			if(hChip->pData)
-				free(hChip->pData);
-			ChipClose(hChip);
-		#endif
+#ifndef ST_OSLINUX
+		if(hChip->pData)
+			free(hChip->pData);
+		chip_close_proc("vglna");
+		ChipClose(hChip);
+#endif
 	}
 
 	return error;
