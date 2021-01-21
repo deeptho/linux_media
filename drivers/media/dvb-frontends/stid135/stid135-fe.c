@@ -39,7 +39,6 @@
 #define MAX_FFT_SIZE 8192
 #define dprintk(fmt, arg...)																					\
 	printk(KERN_DEBUG pr_fmt("%s:%d " fmt),  __func__, __LINE__, ##arg)
-
 LIST_HEAD(stvlist);
 
 static int mode;
@@ -56,9 +55,9 @@ static unsigned int rfsource;
 module_param(rfsource, int, 0644);
 MODULE_PARM_DESC(rfsource, "RF source selection for direct connection mode (default:0 - auto)");
 
-static unsigned int verbose;
-module_param(verbose, int, 0644);
-MODULE_PARM_DESC(verbose, "verbose debugging");
+unsigned int stid135_verbose;
+module_param(stid135_verbose, int, 0644);
+MODULE_PARM_DESC(stid135_verbose, "verbose debugging");
 
 static unsigned int mc_auto;
 module_param(mc_auto, int, 0644);
@@ -70,7 +69,7 @@ MODULE_PARM_DESC(blidscan_always, "Always tune using blindscan (default:0 - disa
 
 
 #define vprintk(fmt, arg...)																					\
-	if(verbose) printk(KERN_DEBUG pr_fmt("%s:%d " fmt),  __func__, __LINE__, ##arg)
+	if(stid135_verbose) printk(KERN_DEBUG pr_fmt("%s:%d " fmt),  __func__, __LINE__, ##arg)
 
 
 /*for debugging only: assumes only a single card is in use; otherwise wrong debug output
@@ -81,6 +80,7 @@ static atomic_t llr_rate_sum;
 
 void print_signal_info(const char* prefix, struct fe_sat_signal_info* i)
 {
+	#if 1
 	vprintk("LOCK %s: fec=%d dmd=%d signal=%d carr=%d vit=%d sync=%d timedout=%d lock=%d\n",
 				 prefix,
 				 i->fec_locked,
@@ -92,6 +92,7 @@ void print_signal_info(const char* prefix, struct fe_sat_signal_info* i)
 				 i->has_timedout,
 				 i->has_lock
 				 );
+	#endif
 }
 
 static int stid135_stop_task(struct dvb_frontend *fe);
@@ -475,6 +476,7 @@ static int stid135_init(struct dvb_frontend *fe)
 	mutex_lock(&state->base->status_lock);
 	BUG_ON(state->rf_in>3);
 	BUG_ON(state->base->tuner_use_count[state->rf_in]>1);
+	BUG_ON((state->rf_in<0 || state->rf_in>=4));
 	if(state->base->tuner_use_count[state->rf_in]++ == 0) {
 	err |= fe_stid135_tuner_enable(p_params->handle_demod, state->rf_in + 1);
 	err |= fe_stid135_diseqc_init(&state->base->ip, state->rf_in + 1, FE_SAT_DISEQC_2_3_PWM);
@@ -519,6 +521,7 @@ static bool pls_search_list(struct dvb_frontend *fe)
 		u32 pls_code = p->pls_search_codes[i];
 		s32 pktdelin;
 		u8 timeout = pls_code & 0xff;
+		BUG_ON(i <0 || i>= sizeof(p->pls_search_codes)/sizeof(p->pls_search_codes[0]));
 		vprintk("Trying scrambling mode=%d code %d timeout=%d\n", (pls_code>>26) & 0x3, (pls_code>>8) & 0x3FFFF, timeout);
 		set_pls_mode_code(state, (pls_code>>26) & 0x3, (pls_code>>8) & 0x3FFFF);
 		//write_reg(state, RSTV0910_P2_DMDISTATE + state->regoff, 0x15);
@@ -712,7 +715,7 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 	//dprintk("search standard = %d\n", search_params.standard);
 	search_params.iq_inversion	= FE_SAT_IQ_AUTO;
 	search_params.tuner_index_jump	= 0; // ok with narrow band signal
-
+	//the following is in Mhz despite what the name suggests
 	err = FE_STiD135_GetLoFreqHz(&state->base->ip, &(search_params.lo_frequency));
 	vprintk("[%d] lo_frequency = %d\n", state->nr+1, search_params.lo_frequency);
 	search_params.lo_frequency *= 1000000;
@@ -866,7 +869,8 @@ static int stid135_get_frontend(struct dvb_frontend *fe, struct dtv_frontend_pro
 		p-> isi_list_len = state->signal_info.isi_list.nb_isi;
 		if(p->isi_list_len>  max_isi_len)
 			p->isi_list_len = max_isi_len;
-		memcpy(p->isi, &state->signal_info.isi_list.isi[0], p->isi_list_len);
+		BUG_ON(p->isi_list_len <0 || p->isi_list_len >= max_isi_len);
+		memcpy(&p->isi[0], &state->signal_info.isi_list.isi[0], p->isi_list_len);
 		p->frequency = state->signal_info.frequency;
 		p->symbol_rate = state->signal_info.symbol_rate;
 	}
@@ -955,9 +959,10 @@ static int stid135_get_frontend(struct dvb_frontend *fe, struct dtv_frontend_pro
 			FEC_3_4, FEC_4_5, FEC_5_6, FEC_8_9,
 			FEC_9_10
 		};
-		if (state->signal_info.modcode < FE_SAT_MODCODE_UNKNOWN)
+		if (state->signal_info.modcode < FE_SAT_MODCODE_UNKNOWN) {
+			BUG_ON(state->signal_info.modcode <0 || state->signal_info.modcode>=0x20);
 			p->fec_inner = modcod2fec[state->signal_info.modcode];
-		else
+		} else
 			p->fec_inner = FEC_AUTO;
 		//dprintk("FEC:  %d %d\n", state->signal_info.modcode, p->fec_inner);
 		p->pilot = state->signal_info.pilots == FE_SAT_PILOTS_ON ? PILOT_ON : PILOT_OFF;
@@ -1043,7 +1048,7 @@ static int stid135_read_status(struct dvb_frontend *fe, enum fe_status *status)
 	if (!state->signal_info.has_viterbi) {
 		/* demod not locked */
 		*status |= FE_HAS_SIGNAL;
-		dprintk("HAS_SIGNAL AND TUNED sync=%d status=%d\n", state->signal_info.has_sync, *status);
+		vprintk("HAS_SIGNAL AND TUNED sync=%d status=%d\n", state->signal_info.has_sync, *status);
 		err = fe_stid135_get_band_power_demod_not_locked(state,  &state->signal_info.power);
 		// if unlocked, set to lowest resource..
 		mutex_unlock(&state->base->status_lock);
@@ -1068,7 +1073,7 @@ static int stid135_read_status(struct dvb_frontend *fe, enum fe_status *status)
 	err = fe_stid135_get_signal_quality(state, &state->signal_info, mc_auto);
 	mutex_unlock(&state->base->status_lock);
 	if (err != FE_LLA_NO_ERROR) {
-		dprintk("fe_stid135_get_signal_quality err=%d\n", err);
+		dprintk("fe_stid135_get_signal_quality err=%d\n", err); //7 means ST_ERROR_INVALID_HANDLE FE_LLA_INVALID_HANDLE
 		dev_err(&state->base->i2c->dev, "fe_stid135_get_signal_quality error\n");
 		dprintk("read status=%d\n", *status);
 		return -EIO;
@@ -1225,8 +1230,8 @@ static int stid135_set_tone(struct dvb_frontend *fe, enum fe_sec_tone_mode tone)
 {
 	struct stv *state = fe->demodulator_priv;
 	fe_lla_error_t err = FE_LLA_NO_ERROR;
-
-	if (state->base->mode == 0)
+	vprintk("DISEQC[%d] mode=%d tone=%d", state->rf_in+1,  state->base->mode, tone);
+	if(state->base->mode == 0) //mode always 1
 	{
 		if (tone == SEC_TONE_ON)
 			state->rf_in |= 1;
@@ -1237,8 +1242,12 @@ static int stid135_set_tone(struct dvb_frontend *fe, enum fe_sec_tone_mode tone)
 	}
 
 	mutex_lock(&state->base->status_lock);
-	err = fe_stid135_set_22khz_cont(&state->base->ip,state->rf_in + 1, tone == SEC_TONE_ON);
+	err = fe_stid135_set_22khz_cont(&state->base->ip, state->rf_in + 1, tone == SEC_TONE_ON);
 	mutex_unlock(&state->base->status_lock);
+
+	vprintk("DISEQC[%d] tone=%d error=%d err=%d abort=%d", state->rf_in+1,  tone, err,
+					state->base->ip.handle_demod->Error,
+					state->base->ip.handle_demod->Abort);
 
 	if (err != FE_LLA_NO_ERROR)
 		dev_err(&state->base->i2c->dev, "%s: fe_stid135_set_22khz_cont error %d !\n", __func__, err);
@@ -1313,7 +1322,7 @@ static int stid135_sleep(struct dvb_frontend *fe)
 	dev_dbg(&state->base->i2c->dev, "%s: tuner %d\n", __func__, state->rf_in);
 
 	mutex_lock(&state->base->status_lock);
-	BUG_ON(state->rf_in>3);
+	BUG_ON((state->rf_in<0 || state->rf_in>=4));
 	BUG_ON(state->base->tuner_use_count[state->rf_in]==0);
 	if(state->base->tuner_use_count[state->rf_in]>0)
 		state->base->tuner_use_count[state->rf_in]--;
@@ -1334,6 +1343,7 @@ static int stid135_read_signal_strength(struct dvb_frontend *fe, u16 *strength)
 
 	*strength = 0;
 	for (i=0; i < p->strength.len; i++) {
+		BUG_ON(i <0 || i>= sizeof(p->strength.stat)/sizeof(p->strength.stat[0])); //triggered
 		if (p->strength.stat[i].scale == FE_SCALE_RELATIVE)
 			*strength = (u16)p->strength.stat[i].uvalue;
 		else if (p->strength.stat[i].scale == FE_SCALE_DECIBEL)
@@ -1349,9 +1359,11 @@ static int stid135_read_snr(struct dvb_frontend *fe, u16 *snr)
 	int i;
 
 	*snr = 0;
-	for (i=0; i < p->cnr.len; i++)
+	for (i=0; i < p->cnr.len; i++) {
+		BUG_ON(i <0 || i>= sizeof(p->cnr.stat)/sizeof(p->cnr.stat[0]));
 		if (p->cnr.stat[i].scale == FE_SCALE_RELATIVE)
 			*snr = (u16)p->cnr.stat[i].uvalue;
+	}
 	return 0;
 }
 
@@ -1361,10 +1373,11 @@ static int stid135_read_ber(struct dvb_frontend *fe, u32 *ber)
 	int i;
 
 	*ber = 1;
-	for (i=0; i < p->post_bit_error.len; i++)
+	for (i=0; i < p->post_bit_error.len; i++) {
+		BUG_ON(i <0 || i>= sizeof(p->post_bit_error.stat)/sizeof(p->post_bit_error.stat[0]));
 		if ( p->post_bit_error.stat[0].scale == FE_SCALE_COUNTER )
 			*ber = (u32)p->post_bit_error.stat[0].uvalue;
-
+	}
 	return 0;
 }
 
@@ -2282,6 +2295,7 @@ struct dvb_frontend *stid135_attach(struct i2c_adapter *i2c,
 	//does not belong here: global for chip
 	fe_stid135_modcod_flt_reg_init();
 #endif
+	BUG_ON(sizeof(state->mc_flt)/sizeof(state->mc_flt[0])!=NB_SAT_MODCOD);
 	for(i=0;i<NB_SAT_MODCOD;i++) {
 		state->mc_flt[i].forbidden = FALSE;
 	}
