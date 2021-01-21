@@ -4345,7 +4345,7 @@ fe_lla_error_t FE_STiD135_Algo(struct stv* state, BOOL satellite_scan, enum fe_s
 #ifdef USER2
 	demodTimeout = demodTimeout * 16; // Low CNR
 #else
-	demodTimeout = demodTimeout * 8;
+	demodTimeout = demodTimeout * 4;
 #endif
 	fecTimeout   = fecTimeout   * 4;
 #endif
@@ -4501,7 +4501,7 @@ fe_lla_error_t FE_STiD135_Algo(struct stv* state, BOOL satellite_scan, enum fe_s
 				dprintk("here first_lock=%d\n", fld_value);
 
 				while ((fld_value != TRUE) && (pdel_status_timeout < 220)) {
-					ChipWaitOrAbort(state->base->ip.handle_demod, 8); //main driver has value 5
+					ChipWaitOrAbort(state->base->ip.handle_demod, 5);
 					pdel_status_timeout = (u8)(pdel_status_timeout + 5);
 #if 0
 					//stv09x1 checks bit 1 (PKTDELIN_LOCK)  whereas this code checks bit 0 ( FIRST_LOCK)
@@ -8377,7 +8377,7 @@ fe_lla_error_t fe_stid135_set_ts_parallel_serial(struct fe_stid135_internal_para
 
 					// Setting clk not data for PIO4_0 and clock inversion (BZ#75008)
 					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1108, 0x00000205);
-					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1100, 0x00000000);
+
 					// Setting data not clk for pio from PIO4_1 to PIO4_5 and for pio from PIO5_0 to PIO5_4, and choose STFE clock as a clock source for retime block
 					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1109, 0x00000401);
 					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1110, 0x00000401);
@@ -8389,11 +8389,6 @@ fe_lla_error_t fe_stid135_set_ts_parallel_serial(struct fe_stid135_internal_para
 					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1118, 0x00000401);
 					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1119, 0x00000401);
 					error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1120, 0x00000401);
-
-					// Enable leaky packet mechanism, the bandwidth is sustained to a minimum value
-					error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSPIDFLTC_PIDFLT_LEAKPKT(demod), 1);
-					// Remove bug fix: workaround of BZ#98230: bad sampling of data[3] of TS bus
-				//	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG0_TSFIFO_BCLKDEL1CK(demod), 0);
 				break;
 				case FE_TS_PARALLEL_ON_TSOUT_1:
 					// Setting alternate function 3 from PIO6_0 to PIO6_5
