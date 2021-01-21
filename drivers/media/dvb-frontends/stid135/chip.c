@@ -40,7 +40,7 @@
 
 #define dprintk(fmt, arg...)																					\
 	printk(KERN_DEBUG pr_fmt("%s:%d " fmt),  __func__, __LINE__, ##arg)
-extern int stid135_verbose
+extern int stid135_verbose;
 #define vprintk(fmt, arg...)																						\
 	if(stid135_verbose) printk(KERN_DEBUG pr_fmt("%s:%d " fmt),  __func__, __LINE__, ##arg)
 
@@ -245,7 +245,6 @@ STCHIP_Info_t* ChipOpen(STCHIP_Info_t *hChipOpenParams)
 
 		hChip->pRegMapImage  = calloc((u32)hChipOpenParams->NbRegs, sizeof(STCHIP_Register_t));		/* Allocation of the register map	*/
 		vprintk("REGMAP=%p", 	hChip->pRegMapImage);
-		hChip->pRegMapSnapshot  = calloc((u32)hChipOpenParams->NbRegs, sizeof(STCHIP_Register_t));		/* Allocation of the register map	*/
 
 		if(hChip->pRegMapImage != NULL)
 		{
@@ -279,7 +278,6 @@ STCHIP_Info_t* ChipOpen(STCHIP_Info_t *hChipOpenParams)
 					{
 						hChip->pRegMapImage[reg].Addr=0;
 						hChip->pRegMapImage[reg].Value=0;
-						hChip->pRegMapSnapshot[reg] = 	hChip->pRegMapImage[reg];
 						//hChip->pRegMapImage[reg].Base=0;
 					}
 
@@ -334,7 +332,6 @@ STCHIP_Error_t	ChipClose(STCHIP_Info_t* hChip)
 		node = ChipFindNode(hChip);
 		DeleteNode(node);
 		free(hChip->pRegMapImage);
-		free(hChip->pRegMapSnapshot);
 		free(hChip->pFieldMapImage);
 		free(hChip);
 	}
@@ -445,44 +442,6 @@ int dichotomy_search(STCHIP_Register_t tab[], s32 nbVal, u16 val)
 	if(tab[start_index].Addr == val) return((s32)start_index);  // if we have found the good value, we return index
 	else return(-1);  // other wise we return -1
 }
-
-
-void dump(STCHIP_Info_t* hChip) {
-	int i;
-	STCHIP_Register_t *tab=hChip->pRegMapImage;
-	printk("DUMP: nbregs=%d\n", hChip->NbRegs);
-	for(i=0; i<hChip->NbRegs; ++i) {
-		if(hChip->pRegMapSnapshot[i].Value!=hChip->pRegMapImage[i].Value)
-			printk("MODIFIED: [%d] addr=0x%x 0x%x => 0x%x\n", i, tab[i].Addr, hChip->pRegMapSnapshot[i].Value, tab[i].Value);
-	}
-	printk("Dump ends\n");
-}
-
-
-void snapshot(STCHIP_Info_t* hChip) {
-	int i;
-	STCHIP_Register_t *tab=hChip->pRegMapImage;
-	for(i=0; i<hChip->NbRegs; ++i) {
-		hChip->pRegMapSnapshot[i]=hChip->pRegMapImage[i];
-	}
-	printk("SNAPSHOT\n");
-}
-
-void restore(STCHIP_Info_t* hChip) {
-	int i;
-
-	STCHIP_Register_t *tab=hChip->pRegMapImage;
-	for(i=0; i<hChip->NbRegs; ++i) {
-		if( hChip->pRegMapSnapshot[i].Value != hChip->pRegMapImage[i].Value &&
-				hChip->pRegMapSnapshot[i].Addr&0x0f00 ==0x9) {
-			hChip->pRegMapImage[i].Value = hChip->pRegMapSnapshot[i].Value;
-			ChipSetRegisters(hChip, hChip->pRegMapSnapshot[i].Addr,1);
-		}
-	}
-	printk("RESTORED\n");
-}
-
-
 
 
 
@@ -862,7 +821,6 @@ STCHIP_Error_t  ChipUpdateDefaultValues(STCHIP_Info_t* hChip,STCHIP_Register_t  
 		{
 			hChip->pRegMapImage[reg].Addr=pRegMap[reg].Addr;
 			hChip->pRegMapImage[reg].Value=pRegMap[reg].Value;
-			hChip->pRegMapSnapshot[reg]= hChip->pRegMapImage[reg];
 		}
 	}
 	else

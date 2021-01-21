@@ -818,8 +818,5 @@ void print_spectrum_scan_state_(struct spectrum_scan_state*ss, const char* func,
 #define print_spectrum_scan_state(ss)																					\
 	print_spectrum_scan_state_(ss, __func__, __LINE__)
 
-void dump_regs(struct stv*state);
-void snapshot_regs(struct stv*state);
-void restore_regs(struct stv*state);
 
 #endif  /* ndef STID135_DRV_H */

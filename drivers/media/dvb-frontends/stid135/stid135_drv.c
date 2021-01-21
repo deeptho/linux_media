@@ -868,29 +868,6 @@ fe_lla_error_t fe_stid135_set_symbol_rate_(struct fe_stid135_internal_param * pP
 	return error;
 }
 
-extern void dump(STCHIP_Info_t* hChip);
-extern void snapshot(STCHIP_Info_t* hChip);
-extern void restore(STCHIP_Info_t* hChip);
-
-void dump_regs(struct stv*state) {
-	struct fe_stid135_internal_param * pParams = & state->base->ip;
-	STCHIP_Info_t* hchip = pParams->handle_demod;
-	dump(hchip);
-}
-
-
-
-void snapshot_regs(struct stv*state) {
-	struct fe_stid135_internal_param * pParams = & state->base->ip;
-	STCHIP_Info_t* hchip = pParams->handle_demod;
-	snapshot(hchip);
-}
-
-void restore_regs(struct stv*state) {
-	struct fe_stid135_internal_param * pParams = & state->base->ip;
-	STCHIP_Info_t* hchip = pParams->handle_demod;
-	restore(hchip);
-}
 
 /*****************************************************
 --FUNCTION	::	fe_stid135_set_symbol_rate
