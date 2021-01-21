@@ -639,6 +639,51 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 						 __func__, rf_power / 1000, state->nr, state->rf_in);
 	}
 	vprintk("[%d] set_parameters: error=%d locked=%d\n", state->nr+1, err, state->signal_info.has_lock);
+
+	/* Set modcode after search */
+	if (p->modcode != MODCODE_ALL) {
+        u32 m = p->modcode;
+        u32 j = 0;
+				u32 i;
+				struct fe_sat_dvbs2_mode_t modcode_mask[FE_SAT_MODCODE_UNKNOWN*4];
+        dev_dbg(&state->base->i2c->dev, "%s: set Modcode mask %x!\n", __func__, p->modcode);
+        m >>= 1;
+        for (i=FE_SAT_QPSK_14; i < FE_SAT_MODCODE_UNKNOWN; i ++) {
+            if (m & 1) {
+                dev_dbg(&state->base->i2c->dev, "%s: Modcode %02x enabled!\n", __func__, i);
+                modcode_mask[j].mod_code = i;
+                modcode_mask[j].pilots = FE_SAT_PILOTS_OFF;
+                modcode_mask[j].frame_length = FE_SAT_NORMAL_FRAME;
+                modcode_mask[j+1].mod_code = i;
+                modcode_mask[j+1].pilots = FE_SAT_PILOTS_ON;
+                modcode_mask[j+1].frame_length = FE_SAT_NORMAL_FRAME;
+                modcode_mask[j+2].mod_code = i;
+                modcode_mask[j+2].pilots = FE_SAT_PILOTS_OFF;
+                modcode_mask[j+2].frame_length = FE_SAT_SHORT_FRAME;
+                modcode_mask[j+3].mod_code = i;
+                modcode_mask[j+3].pilots = FE_SAT_PILOTS_ON;
+                modcode_mask[j+3].frame_length = FE_SAT_SHORT_FRAME;
+                j+=4;
+            }
+            m >>= 1;
+        }
+        err |= fe_stid135_set_modcodes_filter(state, modcode_mask, j);
+        if (err != FE_LLA_NO_ERROR)
+            dev_err(&state->base->i2c->dev, "%s: fe_stid135_set_modcodes_filter error %d !\n", __func__, err);
+	}
+
+	/* Set ISI after search */
+	if (p->stream_id != NO_STREAM_ID_FILTER) {
+		dev_warn(&state->base->i2c->dev, "%s: set ISI %d ! demod=%d tuner=%d\n", __func__, p->stream_id & 0xFF,
+						 state->nr, state->rf_in);
+		err |= fe_stid135_set_mis_filtering(state, TRUE, p->stream_id & 0xFF, 0xFF);
+	} else {
+		dev_dbg(&state->base->i2c->dev, "%s: disable ISI filtering !\n", __func__);
+		err |= fe_stid135_set_mis_filtering(state, FALSE, 0, 0xFF);
+	}
+	if (err != FE_LLA_NO_ERROR)
+		dev_err(&state->base->i2c->dev, "%s: fe_stid135_set_mis_filtering error %d !\n", __func__, err);
+
 	mutex_unlock(&state->base->status_lock);
 	return err != FE_LLA_NO_ERROR ? -1 : 0;
 }
