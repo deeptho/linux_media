@@ -3113,28 +3113,8 @@ static void FE_STiD135_GetLockTimeout(u32 *DemodTimeout, u32 *FecTimeout,
 {
 	switch (Algo) {
 	case FE_SAT_BLIND_SEARCH:
-#if 0
-		if (SymbolRate <= 1500000) {        /*1 Msps< SR <=1.5Msps*/
-			//TODO: timeouts in stv091x are much shorter
-			(*DemodTimeout) = 8000; // Fixed issue BZ#86598
-			(*FecTimeout) = 8000;   // Fixed issue BZ#86598
-		} else if (SymbolRate <= 5000000) {  /* 1.5Msps< SR <=5Msps*/
-			(*DemodTimeout) = 1000;
-			(*FecTimeout) = 300;
-		} else if(SymbolRate <= 30000000) { /* 5 Msps< SR <=30Msps*/
-			(*DemodTimeout) = 700;
-			(*FecTimeout) = 300;
-		} else if (SymbolRate <= 45000000) { /* 30 Msps< SR <=45Msps*/
-			(*DemodTimeout) = 400;
-			(*FecTimeout) = 200;
-		} else  { /*SR >45Msps*/
-			(*DemodTimeout) = 300;
-			(*FecTimeout) = 100;
-		}
-#else
-			(*DemodTimeout) = 8000;
-			(*FecTimeout) = 8000;
-		#endif
+			(*DemodTimeout) = 3000;
+			(*FecTimeout) = 3000;
 	break;
 	case FE_SAT_NEXT:
 		dprintk("Setting long timeouts\n");
