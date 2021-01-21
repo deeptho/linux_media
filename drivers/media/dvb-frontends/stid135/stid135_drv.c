@@ -374,9 +374,9 @@ static struct fe_sat_car_loop_vs_mode_code FE_STiD135_S2CarLoop[NB_SAT_MODCOD] =
 /* 16APSK_L S2X NORMAL FRAME */
 	{FE_SATX_16APSK_1_2_L,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28},
 	{FE_SATX_16APSK_8_15_L,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28},
-	{FE_SATX_16APSK_5_9_L,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28},
+	{FE_SATX_16APSK_5_9_L, 	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28},
 	{FE_SATX_16APSK_3_5_L,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28},
-	{FE_SATX_16APSK_2_3_L,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28},
+	{FE_SATX_16APSK_2_3_L, 	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28},
 /* 32ASPSK */
 	{FE_SAT_32APSK_34,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28,	0x28},
 	{FE_SAT_32APSK_45,	0x09,	0x09,	0x09,	0x09,	0x09,	0x09,	0x09,	0x09,	0x09,	0x09,	0x09,	0x09,	0x09,	0x09,	0x09,	0x09,	0x09,	0x09,	0x09,	0x09},
@@ -12427,6 +12427,86 @@ STCHIP_Error_t stvvglna_term(STCHIP_Info_t* hChip)
 
 	return error;
 }
+
+fe_lla_error_t get_current_llr(struct stv* state, s32 *current_llr)
+{
+	fe_lla_error_t error=FE_LLA_NO_ERROR;
+	s32 max_llr_allowed, raw_bit_rate;
+	s32 fld_value[2];
+	struct fe_stid135_internal_param * pParams = &state->base->ip;
+	// Bit rate = Mclk * tsfifo_bitrate / 16384
+
+	ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSBITRATE1_TSFIFO_BITRATE(state->nr+1), &(fld_value[0]));
+	ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSBITRATE0_TSFIFO_BITRATE(state->nr+1), &(fld_value[1]));
+
+	raw_bit_rate = ((fld_value[0]) << 8) + (fld_value[1]);
+	FE_STiD135_GetMclkFreq(pParams, (u32*)&(fld_value[0]));
+	raw_bit_rate = (s32)(((fld_value[0])/16384)) * raw_bit_rate;
+	printk("\nBit rate = %d Mbits/s\n", raw_bit_rate/1000000);
+	// LLR = TS bitrate * 1 / PR
+	if(state->demod_results.modcode != 0) {
+		if(state->demod_results.standard == FE_SAT_DVBS2_STANDARD) {
+			if(state->demod_results.modcode <= 131)
+				*current_llr = (raw_bit_rate / 100) * dvbs2_modcode_for_llr_x100[state->demod_results.modcode];
+		}
+		if(state->demod_results.standard == FE_SAT_DVBS1_STANDARD) {
+			if(state->demod_results.puncture_rate <= 8)
+				*current_llr = (raw_bit_rate / 100) * dvbs1_modcode_for_llr_x100[state->demod_results.puncture_rate];
+		}
+		if(*current_llr != 0)
+			printk("Current LLR  = %d MLLR/s\n", *current_llr/1000000);
+		else
+			printk("LLR unknown\n");
+
+
+		if((*current_llr/1000)<80000)
+			fe_stid135_set_maxllr_rate(state, 90);
+		else if(((*current_llr/1000)>80000)&&((*current_llr/1000)<113000))
+			fe_stid135_set_maxllr_rate(state, 129);
+		else if(((*current_llr/1000)>113000)&&((*current_llr/1000)<162000))
+			fe_stid135_set_maxllr_rate(state, 180);
+		else
+			fe_stid135_set_maxllr_rate(state, 250);
+
+
+
+	} else printk("LLR cannot be computed because dummy PLF!!\n");
+
+	ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG0_SDEMAP_MAXLLRRATE(state->nr+1), &max_llr_allowed);
+
+	switch(max_llr_allowed) {
+
+		case 0:
+			printk("Absolute maximum rate allowed by the LLR clock\n");
+		break;
+		case 1:
+			printk("Max LLR allowed = 180 MLLR/s\n");
+			if(*current_llr > 162000000)
+				printk("Careful! LLR may reach max allowed LLR!\n");
+		break;
+		case 2:
+			FE_STiD135_GetMclkFreq(pParams, &(fld_value[0])) ;
+
+			printk("Max LLR allowed = %d MLLR/s\n", fld_value[0]);
+
+			if(*current_llr >fld_value[0]/10*9)
+				printk("Careful! LLR may reach max allowed LLR!\n");
+
+		break;
+		case 3:
+			printk("Max LLR allowed = 90 MLLR/s\n");
+			if(*current_llr >  81000000 )
+				printk("Careful! LLR may reach max allowed LLR!\n");
+
+		break;
+		default:
+			printk("Unknown max LLR\n");
+		break;
+	}
+	return FE_LLA_NO_ERROR;
+
+}
+
 
 /*
 	tests

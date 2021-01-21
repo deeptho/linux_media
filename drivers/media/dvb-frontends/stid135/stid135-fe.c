@@ -72,12 +72,6 @@ MODULE_PARM_DESC(blidscan_always, "Always tune using blindscan (default:0 - disa
 	if(stid135_verbose) printk(KERN_DEBUG pr_fmt("%s:%d " fmt),  __func__, __LINE__, ##arg)
 
 
-/*for debugging only: assumes only a single card is in use; otherwise wrong debug output
-	will be printed, but apart from that behaviour will still be correct
-*/
-static atomic_t llr_rate_sum;
-
-
 void print_signal_info(const char* prefix, struct fe_sat_signal_info* i)
 {
 	#if 1
@@ -96,169 +90,8 @@ void print_signal_info(const char* prefix, struct fe_sat_signal_info* i)
 }
 
 static int stid135_stop_task(struct dvb_frontend *fe);
-static int stid135_compute_best_max_llr_rate(struct fe_sat_signal_info* signal_info, int* llr_rate)
-{
-	/*
-		p. 23
-		max 258 Bit/s per demod
-		8psk: 45 (8 tuners)     3
-		qpsk: 30     2
-		16apsk: 22.5 4
-		32apsk: 18   5
-		64apsk: 20   6
-	 */
-	int bits_per_symbol = 3;
-	switch(signal_info->modulation) {
-	case FE_SAT_MOD_QPSK:
-		bits_per_symbol = 2; break;
-	case FE_SAT_MOD_8PSK:
-	case FE_SAT_MOD_8PSK_L:
-		bits_per_symbol = 3; break;
-	case FE_SAT_MOD_16APSK:
-	case FE_SAT_MOD_16APSK_L:
-		bits_per_symbol = 4; break;
-	case FE_SAT_MOD_32APSK:
-	case FE_SAT_MOD_32APSK_L:
-		bits_per_symbol = 5; break;
-	case FE_SAT_MOD_VLSNR:
-		bits_per_symbol = 3; break; //????
-	case FE_SAT_MOD_64APSK:
-	case FE_SAT_MOD_64APSK_L:
-		bits_per_symbol = 6; break;
-	case FE_SAT_MOD_128APSK:
-		bits_per_symbol = 7; break;
-	case FE_SAT_MOD_256APSK:
-	case FE_SAT_MOD_256APSK_L:
-		bits_per_symbol = 8; break;
-	case FE_SAT_MOD_1024APSK:
-		bits_per_symbol = 10; break;
-	default:
-		break;
-	}
-
-	/*
-		We impose a limit as if this demodulator can comsume all available resources. However
-		some limits also apply to all demodulators together. This limit is currently not imposed.
-	 */
-	*llr_rate = (signal_info->symbol_rate * bits_per_symbol + 0500000L)/1000000L;
-	if(*llr_rate <= 90)
-		return 90;
-	if(*llr_rate <= 129)
-		return 129;
-	if(*llr_rate <= 180)
-		return 180;
-	return 256;
-}
 
 
-
-fe_lla_error_t set_maxllr_rate(int line, struct stv *state,	struct fe_sat_signal_info* info)
-{
-	fe_lla_error_t err = FE_LLA_NO_ERROR;
-	int old=0;
-	int tot;
-	int llr_rate = 0;
-	int max_llr_rate = info->symbol_rate ==0 ? 0:
-		stid135_compute_best_max_llr_rate(info, &llr_rate);
-
-	//	int delta = llr_rate - state->current_llr_rate;
-	int delta = max_llr_rate - state->current_max_llr_rate;
-
-	old = atomic_fetch_add(delta, &llr_rate_sum);
-	tot = old + delta;
-
-	if(tot> 720) {
-		dev_warn(&state->base->i2c->dev, "line %d: demod %d: LDPC budget exceeded tot=%d\n",
-						 line, state->nr,  tot);
-
-	}
-	if (state->current_max_llr_rate != max_llr_rate) {
-		if(max_llr_rate == 0) {
-			err |= fe_stid135_set_maxllr_rate(state, 90);
-		} else
-			if (max_llr_rate == 90) {
-			if(state->current_max_llr_rate ==0) {
-				//
-			} else
-				err |= fe_stid135_set_maxllr_rate(state, 90);
-		} else {
-			err |= fe_stid135_set_maxllr_rate(state, max_llr_rate);
-			}
-#if 0
-		dev_warn(&state->base->i2c->dev, "line %d: demod %d: set_maxllr_rate=%d (was %d tot=%d) "
-						 "modulation=%d symbol_rate=%d\n",
-						 line, state->nr,
-						 max_llr_rate,
-						 state->current_max_llr_rate, tot,
-						 info->modulation, info->symbol_rate);
-#endif
-	} else {
-#if 0
-		dev_warn(&state->base->i2c->dev, "line %d: demod %d + tuner %d: set_maxllr_rate=%d (tot=%d) UNCHANGED "
-						 "modulation=%d symbol_rate=%d\n",
-						 line, state->nr, state->rf_in,
-						 max_llr_rate, tot,
-						 info->modulation, info->symbol_rate);
-#endif
-	}
-	state->current_max_llr_rate = max_llr_rate;
-	state->current_llr_rate = llr_rate;
-	return err;
-}
-
-/*
-	select a high maxll_rate because we have too little info on the signal
- */
-fe_lla_error_t set_maxllr_rate_blind(int line, struct stv *state)
-{
-	fe_lla_error_t err = FE_LLA_NO_ERROR;
-	int old=0;
-	int tot;
-	int llr_rate = 0;
-	int max_llr_rate = 180;
-	//	int delta = llr_rate - state->current_llr_rate;
-	int delta = max_llr_rate - state->current_max_llr_rate;
-
-	old = atomic_fetch_add(delta, &llr_rate_sum);
-	tot = old + delta;
-
-	if(tot> 720) {
-		dev_warn(&state->base->i2c->dev, "line %d: demod %d: LDPC budget exceeded tot=%d\n",
-						 line, state->nr,  tot);
-
-	}
-	if (state->current_max_llr_rate != max_llr_rate) {
-		if(max_llr_rate == 0) {
-			err |= fe_stid135_set_maxllr_rate(state, 90);
-		} else
-			if (max_llr_rate == 90) {
-			if(state->current_max_llr_rate ==0) {
-				//
-			} else
-				err |= fe_stid135_set_maxllr_rate(state, 90);
-		} else {
-			err |= fe_stid135_set_maxllr_rate(state, max_llr_rate);
-		}
-		dev_warn(&state->base->i2c->dev, "line %d: demod %d: set_maxllr_rate=%d (was %d tot=%d)\n",
-						 line, state->nr,
-						 max_llr_rate,
-						 state->current_max_llr_rate, tot);
-	} else {
-		dev_warn(&state->base->i2c->dev, "line %d: demod %d + tuner %d: set_maxllr_rate=%d (tot=%d) UNCHANGED\n",
-						 line, state->nr, state->rf_in,
-						 max_llr_rate, tot);
-	}
-	state->current_max_llr_rate = max_llr_rate;
-	state->current_llr_rate = llr_rate;
-	return err;
-}
-
-
-fe_lla_error_t release_maxllr_rate(int line, struct stv *state) {
-	struct fe_sat_signal_info info;
-	info.symbol_rate = 0;
-	return set_maxllr_rate(line, state,	&info);
-}
 
 
 I2C_RESULT I2cReadWrite(void *pI2CHost, I2C_MODE mode, u8 ChipAddress, u8 *Data, int NbData)
@@ -622,6 +455,7 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 	BOOL satellite_scan =0;
 	//BOOL lock_stat=0;
 	struct fe_sat_signal_info* signal_info = &state->signal_info;
+	s32 current_llr;
 	memset(signal_info, 0, sizeof(*signal_info));
 	vprintk(
 					"[%d] delivery_system=%u modulation=%u frequency=%u symbol_rate=%u inversion=%u stream_id=%d\n",
@@ -632,11 +466,6 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 			"delivery_system=%u modulation=%u frequency=%u symbol_rate=%u inversion=%u stream_id=%d\n",
 			p->delivery_system, p->modulation, p->frequency,
 					p->symbol_rate, p->inversion, p->stream_id);
-
-	if(p->algorithm == ALGORITHM_BLIND || p->algorithm == ALGORITHM_BLIND_BEST_GUESS)
-		set_maxllr_rate_blind(__LINE__, state);
-	else
-		release_maxllr_rate(__LINE__, state);
 	mutex_lock(&state->base->status_lock);
 	if(blindscan_always) {
 		p->algorithm = ALGORITHM_WARM;
@@ -723,36 +552,6 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 	vprintk("[%d] demod %d + tuner %d\n",
 					state->nr+1,state->nr, state->rf_in);
 	err |= fe_stid135_set_rfmux_path(state, state->rf_in + 1);
-#if 0
-	if (p->stream_id == NO_STREAM_ID_FILTER) {
-		pls_mode = 0;
-		pls_code = 1;
-	}
-	else {
-		pls_mode = (p->stream_id>>26) & 0x3;
-		pls_code = (p->stream_id>>8) & 0x3FFFF;
-		if (pls_mode == 0 && pls_code == 0)
-			pls_code = 1;
-	}
-	signal_info-> pls_code =pls_code;
-	signal_info-> pls_mode =pls_mode;
-
-	if (p->scrambling_sequence_index) {
-		pls_mode = 1;
-		pls_code = p->scrambling_sequence_index;
-#ifdef TOTEST
-#else //Deep Thought: code must be moved outside of if test or multi-stream does not work
-		/* Set PLS before search */
-		dev_dbg(&state->base->i2c->dev, "%s: set pls_mode %d, pls_code %d !\n", __func__, pls_mode, pls_code);
-		err |= fe_stid135_set_pls(state, pls_mode, pls_code);
-#endif
-	}
-#ifdef TOTEST //Deep Thought: code must be moved outside of if test or multi-stream does not work
-	/* Set PLS before search */
-	dev_dbg(&state->base->i2c->dev, "%s: set pls_mode %d, pls_code %d !\n", __func__, pls_mode, pls_code);
-	err |= fe_stid135_set_pls(state, pls_mode, pls_code);
-#endif
-#endif
 
 	if (err != FE_LLA_NO_ERROR)
 		dev_err(&state->base->i2c->dev, "%s: fe_stid135_set_pls error %d !\n", __func__, err);
@@ -825,7 +624,9 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 		dev_dbg(&state->base->i2c->dev, "%s: locked !\n", __func__);
 		//set maxllr,when the  demod locked ,allocation of resources
 		//err |= fe_stid135_set_maxllr_rate(state, 180);
+		get_current_llr(state, &current_llr);
 
+		//for tbs6912
 		state->newTP = true;
 		state->loops = 15;
 		if(state->base->set_TSsampling)
@@ -1132,25 +933,12 @@ static int stid135_tune(struct dvb_frontend *fe, bool re_tune,
 		if (r)
 			return r;
 		state->tune_time = jiffies;
-#if 0
-		{
-			fe_lla_error_t error;
-			struct fe_stid135_internal_param *p_params = &state->base->ip;
-			error=fe_stid135_set_vtm(p_params, state->nr+1,
-															 state->signal_info.frequency, state->signal_info.symbol_rate,
-															 state->signal_info.roll_off);
-			dprintk("VTM: error=%d\n", error);
-		}
-#endif
-
 	}
 
 	if(re_tune) {
-#if 1
 		dprintk("RETUNE: GET SIGNAL\n");
 		fe_stid135_get_signal_info(state,  &state->signal_info, 0);
 		//dprintk("MIS2: num=%d\n", state->signal_info.isi_list.nb_isi);
-#endif
 	}
 
 	r = stid135_read_status(fe, status);
@@ -1161,27 +949,6 @@ static int stid135_tune(struct dvb_frontend *fe, bool re_tune,
 		*status &= FE_HAS_LOCK;
 		//dprintk("set *status=0x%x\n", *status);
 	}
-	if(re_tune) {
-		print_signal_info("(after)", &state->signal_info);
-		//dprintk("TUNE STATUS=0x%x\n", *status);
-		if(state->base->ts_mode == TS_STFE){
-			//set maxllr,when the  demod locked ,allocation of resources
-			/*Deep Thought: the value should be based on the symbo rate of the currently
-			tuned mux
-			*/
-			/*DeepThought : without this code it is not possible to tune the italian multistreams on 5.0W
-
-				11230H@51.5E has a symbolrate of 45MS/s (bitrate of 119MB/s) and requires a setting of at least 135;
-				The next higher value = 180.
-				12522V@5.0W has a symbolrate of 35.5MS and requires at least 3*35.5 = 100.5, but also does not work with
-				129.
-			*/
-			//dprintk("REDUCING MAXLLR_RATE\n");
-			set_maxllr_rate(__LINE__, state,	&state->signal_info);
-		}
-		print_signal_info("(after2)", &state->signal_info);
-	} else
-		print_signal_info("(after3)", &state->signal_info);
 	if (r)
 		return r;
 
@@ -1308,7 +1075,6 @@ static int stid135_sleep(struct dvb_frontend *fe)
 	struct stv *state = fe->demodulator_priv;
 	fe_lla_error_t err = FE_LLA_NO_ERROR;
 	struct fe_stid135_internal_param *p_params = &state->base->ip;
-	err |= release_maxllr_rate(__LINE__, state);
 
 	if (state->base->mode == 0)
 		return 0;
