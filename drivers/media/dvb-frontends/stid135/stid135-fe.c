@@ -184,7 +184,7 @@ static int stid135_probe(struct stv *state_demod1)
 	if (state_demod1->base->ts_mode == TS_STFE) { //DT: This code is called
 		dev_warn(&state_demod1->base->i2c->dev, "%s: 8xTS to STFE mode init.\n", __func__);
 		// note that  FE_SAT_DEMOD_1 is not used in the code in the following call for this ts_mode
-		err |= fe_stid135_set_ts_parallel_serial(state_demod1, FE_SAT_DEMOD_1, FE_TS_PARALLEL_ON_TSOUT_0);
+		err |= fe_stid135_set_ts_parallel_serial(&state_demod1->base->ip, FE_SAT_DEMOD_1, FE_TS_PARALLEL_ON_TSOUT_0);
 		err |= fe_stid135_enable_stfe(&state_demod1->base->ip,FE_STFE_OUTPUT0);
 		err |= fe_stid135_set_stfe(&state_demod1->base->ip, FE_STFE_TAGGING_MERGING_MODE, FE_STFE_INPUT1 |
 						FE_STFE_INPUT2 |FE_STFE_INPUT3 |FE_STFE_INPUT4| FE_STFE_INPUT5 |
