@@ -40,6 +40,9 @@
 
 #define dprintk(fmt, arg...)																					\
 	printk(KERN_DEBUG pr_fmt("%s:%d " fmt),  __func__, __LINE__, ##arg)
+extern int stid135_verbose
+#define vprintk(fmt, arg...)																						\
+	if(stid135_verbose) printk(KERN_DEBUG pr_fmt("%s:%d " fmt),  __func__, __LINE__, ##arg)
 
 typedef enum
 {
@@ -241,13 +244,14 @@ STCHIP_Info_t* ChipOpen(STCHIP_Info_t *hChipOpenParams)
 		}
 
 		hChip->pRegMapImage  = calloc((u32)hChipOpenParams->NbRegs, sizeof(STCHIP_Register_t));		/* Allocation of the register map	*/
+		vprintk("REGMAP=%p", 	hChip->pRegMapImage);
 		hChip->pRegMapSnapshot  = calloc((u32)hChipOpenParams->NbRegs, sizeof(STCHIP_Register_t));		/* Allocation of the register map	*/
 
 		if(hChip->pRegMapImage != NULL)
 		{
 			//hChip->pFieldMap = calloc(hChipOpenParams->NbFields,sizeof(STCHIP_Field_t));	/* Allocation of the field map	    */
 			hChip->pFieldMapImage = calloc(hChipOpenParams->NbFields,sizeof(STCHIP_Field_t));	/* Allocation of the field map	    */
-
+			vprintk("FIELDMAP=%p", 	hChip->pFieldMapImage);
 			if(hChip->pFieldMapImage != NULL)
 			{
 				if(AppendNode(hChip)!=NULL)
@@ -527,12 +531,6 @@ s32 ChipGetRegisterIndex(STCHIP_Info_t* hChip, u16 RegId)
 			{
 				/* We assume that reg addresses in STiD135DefVal and STiD135SocDefVal are sorted in the growing order */
 				regIndex = dichotomy_search(hChip->pRegMapImage, hChip->NbRegs, RegId);
-				if(regIndex<0) {
-					printk("register not found: %d\n", RegId);
-					regIndex = direct_search(hChip->pRegMapImage, hChip->NbRegs, RegId);
-					if(regIndex>=0)
-						printk("register found second time: %d\n", RegId);
-				}
 				hChip->LastRegIndex = regIndex;
 			}
 		}
@@ -560,21 +558,12 @@ s32 ChipGetFieldIndex(STCHIP_Info_t* hChip, u32 FieldId)
 		if(hChip->Abort==FALSE)
 		{
 			regAddress=(u16)((FieldId >> 16)&0xFFFF);
-			if(regAddress==0)
-				dprintk("BAD CALL: probably FieldId was cast to less than 32 bit\n");
 			if(hChip->pRegMapImage[hChip->LastRegIndex].Addr ==regAddress)
 				regIndex = hChip->LastRegIndex;
 			else
 			{
 				/* We assume that reg addresses in STiD135DefVal and STiD135SocDefVal are sorted in the growing order */
 				regIndex = dichotomy_search(hChip->pRegMapImage, hChip->NbRegs, regAddress);
-				if(regIndex<0) {
-					printk("field not found: %d\n", regAddress);
-					regIndex = direct_search(hChip->pRegMapImage, hChip->NbRegs, regAddress);
-					if(regIndex>=0)
-						printk("field found second time: %d\n", regAddress);
-				}
-
 				hChip->LastRegIndex = regIndex;
 			}
 		}
