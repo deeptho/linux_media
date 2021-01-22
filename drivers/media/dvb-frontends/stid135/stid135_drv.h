@@ -104,7 +104,7 @@ enum fe_stid135_stfe_input {
 
 /* Demod search state */
 
-typedef internal_param_ptr			fe_stid135_handle_t;
+//typedef internal_param_ptr			fe_stid135_handle_t;
 
 
 typedef u32 u32;
@@ -221,7 +221,6 @@ struct mc_array_customer {
 	s16 snr;
 };
 
-
 /*
 			Singleton structure, one per chip (i.e., the same for all 8 demods and all 4 tuners
 			on tbs6909x. Created in fe_stid135_init.
@@ -249,8 +248,8 @@ struct fe_stid135_internal_param {
 	struct ram_byte			pid_flt[8];
 	struct gse_ram_byte		gse_flt[8];
 	BOOL				mis_mode[8]; /* Memorisation of MIS mode */
-	struct modcod_data		mc_flt[NB_SAT_MODCOD];
 #endif
+	struct modcod_data		mc_flt[NB_SAT_MODCOD];
 	struct mutex *master_lock;
 };
 
@@ -306,7 +305,9 @@ struct status_bit_fields {
 	on tbs6909x. Created in fe_stid135_init.
 */
 
+#if 0
 typedef void*			fe_stid135_handle_t;
+#endif
 struct stv_base {
 	struct list_head     stvlist;
 
@@ -440,8 +441,6 @@ struct stv {
 	struct ram_byte			pid_flt;
 	struct gse_ram_byte		gse_flt;
 	BOOL	mis_mode; /* Memorisation of MIS mode */
-	struct modcod_data	mc_flt[NB_SAT_MODCOD];
-
 	struct spectrum_scan_state scan_state;
 	struct constellation_scan_state constellation_scan_state;
 };
@@ -540,38 +539,6 @@ fe_lla_error_t  FE_STiD135_CarrierGetQuality(STCHIP_Info_t* hChip, enum fe_stid1
 
 	fe_lla_error_t FE_STiD135_GetErrors(struct stv* state,
 		double *Errors, double *bits, double *Packets, double *Ber);
-	fe_lla_error_t fe_stid135_start_per(fe_stid135_handle_t handle, enum fe_stid135_demod demod, u8 Mode);
-
-	fe_lla_error_t fe_stid135_get_per(fe_stid135_handle_t handle,
-					enum fe_stid135_demod demod,
-					double BerTh,
-					unsigned int ErrTh,
-					double *Ber,
-					unsigned int Timeout,
-					double *NbPackets,
-					double *NbErrors,
-					unsigned char *Status);
-
-	fe_lla_error_t fe_stid135_get_fer(fe_stid135_handle_t handle,
-					enum fe_stid135_demod demod,
-					double BerTh,
-					unsigned int ErrTh,
-					double *Fer,
-					unsigned int Timeout,
-					double *NbFrames,
-					double *NbErrors,
-					unsigned char *Status);
-
-	fe_lla_error_t BerLoop(fe_stid135_handle_t handle,
-					enum fe_stid135_demod demod,
-					double BerTh,
-					unsigned int ErrTh,
-					double *Ber,
-					unsigned int Timeout,
-					double *NbPackets,
-					double *NbErrors,
-					unsigned char *Status,
-							BOOL fer_dvbs2x);
 
 fe_lla_error_t fe_stid135_get_lock_status(struct stv* state, bool*carrier_lock, bool*has_viterbi, bool* has_sync);
 fe_lla_error_t fe_stid135_get_data_status(struct stv* state, BOOL* Locked_p);

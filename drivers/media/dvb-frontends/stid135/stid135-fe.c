@@ -2100,9 +2100,9 @@ struct dvb_frontend *stid135_attach(struct i2c_adapter *i2c,
 	//does not belong here: global for chip
 	fe_stid135_modcod_flt_reg_init();
 #endif
-	BUG_ON(sizeof(state->mc_flt)/sizeof(state->mc_flt[0])!=NB_SAT_MODCOD);
+	BUG_ON(sizeof(state->base->ip.mc_flt)/sizeof(state->base->ip.mc_flt[0])!=NB_SAT_MODCOD);
 	for(i=0;i<NB_SAT_MODCOD;i++) {
-		state->mc_flt[i].forbidden = FALSE;
+		state->base->ip.mc_flt[i].forbidden = FALSE;
 	}
 	error = fe_stid135_apply_custom_qef_for_modcod_filter(state, NULL);
 	if(error)
