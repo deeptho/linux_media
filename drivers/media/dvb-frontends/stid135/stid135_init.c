@@ -8979,21 +8979,7 @@ STCHIP_Error_t STiD135_Init(Demod_InitParams_t *InitParams,
 	return error;
 }
 
-
-void dttst(STCHIP_Info_t* *hChipHandle)
-{
-	STCHIP_Info_t* hChip;
-	//	STCHIP_Error_t error = 0;
-
-	hChip=(*hChipHandle);
-
-	if(hChip != NULL) {
-		printk("RESETTING DEFAULTS\n");
-		ChipUpdateDefaultValues(hChip,STiD135SocDefVal);
-	}
-}
-
-STCHIP_Error_t STiD135_SOC_Init(Demod_InitParams_t *InitParams, STCHIP_Info_t* *hChipHandle)
+STCHIP_Error_t STiD135_SOC_Init(Demod_InitParams_t *InitParams, STCHIP_Info_t** hChipHandle)
 {
 	STCHIP_Info_t* hChip;
 	STCHIP_Error_t error = 0;
