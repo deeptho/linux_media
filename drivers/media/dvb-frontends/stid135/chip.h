@@ -341,9 +341,7 @@ u16		ChipGetRegisterAddrFromId(STCHIP_Info_t* hChip, u16 RegId);
 
 STCHIP_Error_t	ChipSetField(STCHIP_Info_t* hChip, u32 FieldId, s32 Value);
 
-
 	STCHIP_Error_t	ChipGetField(STCHIP_Info_t* hChip, u32 FieldId, s32* value_p);
-
 
 STCHIP_Error_t	ChipSetFieldImage(STCHIP_Info_t* hChip, u32 FieldId, s32 Value);
 s32				ChipGetFieldImage(STCHIP_Info_t* hChip, u32 FieldId);
@@ -357,7 +355,6 @@ s32				ChipGetFieldDefault(STCHIP_Info_t* hChip, u16 FieldId);
 void	ChipWaitOrAbort(STCHIP_Info_t* hChip,u32 delay_ms);
 
 	void	ChipAbort(STCHIP_Info_t* hChip,BOOL Abort);
-
 
 /* Added for slice management */
 // STCHIP_Error_t  ChipAddParent (STCHIP_Info_t* hChip,u16 RegId, char *Name, u16 Addr, u8 Default, STCHIP_Access_t Access);
