@@ -40,11 +40,10 @@
     extern "C" {
 #endif
 
-			fe_lla_error_t fe_stid135_init_fft(fe_stid135_handle_t handle, enum fe_stid135_demod path,
-																				 FE_OXFORD_TunerPath_t tuner_nb, int fft_mode, s32 Reg[60]);
+			fe_lla_error_t fe_stid135_init_fft(struct stv*state, int fft_mode, s32 Reg[60]);
 
-			fe_lla_error_t fe_stid135_term_fft(fe_stid135_handle_t handle, enum fe_stid135_demod path, FE_OXFORD_TunerPath_t tuner_nb, s32 Reg[60]);
-			fe_lla_error_t fe_stid135_fft(struct stv* state, enum fe_stid135_demod path, u32 mode,
+			fe_lla_error_t fe_stid135_term_fft(struct stv* state, s32 Reg[60]);
+			fe_lla_error_t fe_stid135_fft(struct stv* state, u32 mode,
 																		u32 nb_acquisition, s32 frq, u32 range, u32 *tab, u32* begin, s32 buffer_size);
 
 
