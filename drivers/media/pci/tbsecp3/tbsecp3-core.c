@@ -44,54 +44,24 @@ void tbsecp3_gpio_set_pin(struct tbsecp3_dev *dev,
 	tbs_write(TBSECP3_GPIO_BASE, bank, tmp);
 }
 
-//#define DTTEST
-#ifdef DTTEST
-extern volatile int bad_count;
-extern volatile u32 bad_stat;
-#endif
-
 static irqreturn_t tbsecp3_irq_handler(int irq, void *dev_id)
 {
 	struct tbsecp3_dev *dev = (struct tbsecp3_dev *) dev_id;
 	struct tbsecp3_i2c *i2c;
 	int i, in;
 	u32 stat = tbs_read(TBSECP3_INT_BASE, TBSECP3_INT_STAT);
-#ifdef DTTEST
-	bool ok =false;
-#endif
 	tbs_write(TBSECP3_INT_BASE, TBSECP3_INT_STAT, stat);
 
-	if (stat & 0x000000f0) {
-		/* dma0~3 */
-#ifdef DTTEST
-		ok =true;
-#endif
+	if (stat & 0x00000ff0) {
+		/* dma0~7 */
 		for (i = 0; i < dev->info->adapters; i++) {
 			in = dev->adapter[i].cfg->ts_in;
-			if (stat & TBSECP3_DMA_IF(in)){
+			if (stat & TBSECP3_DMA_IF(in))
 				tasklet_schedule(&dev->adapter[i].tasklet);
-				}
 		}
 	}
-
-	if (stat & 0x00000f00) {
-		/* dma 4~7*/
-#ifdef DTTEST
-		ok =true;
-#endif
-		for (i = 4; i < dev->info->adapters; i++) {
-			in = dev->adapter[i].cfg->ts_in;
-			if (stat & TBSECP3_DMA_IF(in)){
-				tasklet_schedule(&dev->adapter[i].tasklet);
-				}
-		}
-	}
-
-	if (stat & 0x000f0000) {
-		/* dma8~11 */
-#ifdef DTTEST
-		ok =true;
-#endif
+	if (stat & 0x00ff0000) {
+		/* dma8~15 */
 		for (i = 8; i < dev->info->adapters; i++) {
 			in = dev->adapter[i].cfg->ts_in;
 			if (stat & TBSECP3_DMA_IF1(in)){
@@ -100,24 +70,9 @@ static irqreturn_t tbsecp3_irq_handler(int irq, void *dev_id)
 		}
 	}
 
-	if (stat & 0x00f00000) {
-		/* dma 12~15*/
-#ifdef DTTEST
-		ok =true;
-#endif
-		for (i = 12; i < dev->info->adapters; i++) {
-			in = dev->adapter[i].cfg->ts_in;
-			if (stat & TBSECP3_DMA_IF1(in)){
-				tasklet_schedule(&dev->adapter[i].tasklet);
-				}
-		}
-	}
 
 	if (stat & 0x0000000f) {
 		/* i2c */
-#ifdef DTTEST
-		ok =true;
-#endif
 		for (i = 0; i < 4; i++) {
 			i2c = &dev->i2c_bus[i];
 			if (stat & TBSECP3_I2C_IF(i)) {
@@ -126,13 +81,7 @@ static irqreturn_t tbsecp3_irq_handler(int irq, void *dev_id)
 			}
 		}
 	}
-#ifdef DTTEST
-	if(!ok/* &&stat*/) {
-		bad_count++;
-		bad_stat = stat;
-	}
-#endif
-	//printk("tbsecp3_irq_handler stat 0x%x \n",stat);
+
 	tbs_write(TBSECP3_INT_BASE, TBSECP3_INT_EN, 1);
 	return IRQ_HANDLED;
 }

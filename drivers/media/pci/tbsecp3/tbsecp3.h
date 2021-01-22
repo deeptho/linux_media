@@ -109,7 +109,7 @@ struct tbsecp3_board {
 	u32 i2c_speed;
 	u8 eeprom_i2c;
 	u8 eeprom_addr;
-	struct tbsecp3_adap_config adap_config[16];
+	struct tbsecp3_adap_config adap_config[TBSECP3_MAX_ADAPTERS];
 };
 
 struct tbsecp3_i2c {
