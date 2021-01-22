@@ -684,7 +684,6 @@ static void dvb_frontend_wakeup(struct dvb_frontend *fe)
 	wake_up_interruptible(&fepriv->wait_queue);
 }
 
-
 static int dvb_frontend_thread(void *data)
 {
 	struct dvb_frontend *fe = data;
@@ -2201,8 +2200,6 @@ static int dtv_property_process_set(struct dvb_frontend *fe,
 		 * Use the cached Digital TV properties to tune the
 		 * frontend
 		 */
-		if (fe->ops.dtv_tune)
-			fe->ops.dtv_tune(fe);
 
 		dev_dbg(fe->dvb->device,
 			"%s: Setting the frontend from property cache\n",
@@ -2396,6 +2393,7 @@ static int dvb_frontend_do_ioctl(struct file *file, unsigned int cmd,
 		up(&fepriv->sem);
 		return -EPERM;
 	}
+
 	err = dvb_frontend_handle_ioctl(file, cmd, parg);
 
 	up(&fepriv->sem);
@@ -2468,8 +2466,8 @@ static int dvb_frontend_handle_compat_ioctl(struct file *file, unsigned int cmd,
 
 		for (i = 0; i < tvps->num; i++) {
 			err = dtv_property_process_set_int(fe, file,
-									 (tvp + i)->cmd,
-									 (tvp + i)->u.data);
+																				 (tvp + i)->cmd,
+																				 (tvp + i)->u.data);
 			if (err < 0) {
 				kfree(tvp);
 				return err;

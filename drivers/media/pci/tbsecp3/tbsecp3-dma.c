@@ -38,6 +38,7 @@ static void tbsecp3_dma_tasklet(unsigned long adap)
 
 	spin_lock(&adapter->adap_lock);
 	no_dvb = adapter->no_dvb;
+	BUG_ON(adapter->no_dvb);
 	if(no_dvb)
 		adapter->dma.offset =0;
 
@@ -54,7 +55,7 @@ static void tbsecp3_dma_tasklet(unsigned long adap)
 		while (read_buffer != next_buffer)
 		{
 			data = adapter->dma.buf[read_buffer];
-
+			BUG_ON(adapter->no_dvb);
 			if (!no_dvb && data[adapter->dma.offset] != 0x47) {
 			/* Find sync byte offset with crude force (this might fail!) */
 				for (i = 0; i < TS_PACKET_SIZE; i++)
@@ -75,6 +76,7 @@ static void tbsecp3_dma_tasklet(unsigned long adap)
 						adapter->dma.buf[0], adapter->dma.offset);
 				}
 			}
+			BUG_ON(adapter->no_dvb);
 			if(no_dvb) {
 				dvb_dmx_copy_data(&adapter->demux, data, adapter->dma.buffer_pkts);
 			} else {

@@ -550,6 +550,7 @@ static int start_feed(struct dvb_demux_feed *dvbdmxfeed)
 	struct dvb_demux *dvbdmx = dvbdmxfeed->demux;
 	struct tbsecp3_adapter *adapter = dvbdmx->priv;
 	adapter->no_dvb= (dvbdmxfeed->filter->type == DMX_TYPE_DATA);
+	BUG_ON(adapter->no_dvb);
 	if (!adapter->feeds)
 		tbsecp3_dma_enable(adapter);
 

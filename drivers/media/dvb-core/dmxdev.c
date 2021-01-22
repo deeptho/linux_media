@@ -1065,7 +1065,6 @@ static int dvb_demux_do_ioctl(struct file *file,
 		return -ERESTARTSYS;
 
 	switch (cmd) {
-
 	case DMX_START:
 		if (mutex_lock_interruptible(&dmxdevfilter->mutex)) {
 			mutex_unlock(&dmxdev->mutex);
@@ -1110,6 +1109,7 @@ static int dvb_demux_do_ioctl(struct file *file,
 			mutex_unlock(&dmxdev->mutex);
 			return -ERESTARTSYS;
 		}
+		BUG_ON(1);
 		ret = dvb_dmxdev_data_filter_set(dmxdev, dmxdevfilter);
 		mutex_unlock(&dmxdevfilter->mutex);
 		break;
