@@ -12420,15 +12420,26 @@ fe_lla_error_t get_current_llr(struct stv* state, s32 *current_llr)
 	FE_STiD135_GetMclkFreq(pParams, (u32*)&(fld_value[0]));
 	raw_bit_rate = (s32)(((fld_value[0])/16384)) * raw_bit_rate;
 	printk("\nBit rate = %d Mbits/s\n", raw_bit_rate/1000000);
+	*current_llr = 0;
 	// LLR = TS bitrate * 1 / PR
 	if(state->demod_results.modcode != 0) {
 		if(state->demod_results.standard == FE_SAT_DVBS2_STANDARD) {
-			if(state->demod_results.modcode <= 131)
+			if(state->demod_results.modcode < sizeof(dvbs2_modcode_for_llr_x100)/sizeof(dvbs2_modcode_for_llr_x100[0])
+				 && (state->demod_results.modcode>=0) //just in case...
+				 )
 				*current_llr = (raw_bit_rate / 100) * dvbs2_modcode_for_llr_x100[state->demod_results.modcode];
+			else {
+				dprintk("Encountered unknown modcode for DVBS2: %d", state->demod_results.modcode);
+			}
 		}
 		if(state->demod_results.standard == FE_SAT_DVBS1_STANDARD) {
-			if(state->demod_results.puncture_rate <= 8)
-				*current_llr = (raw_bit_rate / 100) * dvbs1_modcode_for_llr_x100[state->demod_results.puncture_rate];
+			if(state->demod_results.puncture_rate < sizeof(dvbs1_modcode_for_llr_x100)
+				 && (state->demod_results.modcode>=0) //just in case...
+				 )  {
+					 *current_llr = (raw_bit_rate / 100) * dvbs1_modcode_for_llr_x100[state->demod_results.puncture_rate];
+			} else {
+				dprintk("Encountered unknown puncture rate for DVBS1: %d", state->demod_results.puncture_rate);
+			}
 		}
 		if(*current_llr != 0)
 			printk("Current LLR  = %d MLLR/s\n", *current_llr/1000000);
