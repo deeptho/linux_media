@@ -120,6 +120,8 @@ static int stid135_probe(struct stv *state_demod1)
 	struct fe_stid135_internal_param *p_params;
 	enum device_cut_id cut_id;
 	int i;
+
+	// for vglna
 	char *VglnaIdString = NULL;
 	STCHIP_Info_t VGLNAChip;
 	STCHIP_Info_t* vglna_handle;
@@ -130,8 +132,9 @@ static int stid135_probe(struct stv *state_demod1)
 	SAT_VGLNA_InitParams_t pVGLNAInit1;
 	SAT_VGLNA_InitParams_t pVGLNAInit2;
 	SAT_VGLNA_InitParams_t pVGLNAInit3;
-	p_params = &state_demod1->base->ip;
+	//end
 	dev_warn(&state_demod1->base->i2c->dev, "%s\n", FE_STiD135_GetRevision());
+
 	strcpy(init_params.demod_name,"STiD135");
 	init_params.pI2CHost		=	state_demod1->base;
 	init_params.demod_i2c_adr   	=	state_demod1->base->adr ? state_demod1->base->adr<<1 : 0xd0;
@@ -141,9 +144,7 @@ static int stid135_probe(struct stv *state_demod1)
 	init_params.rf_input_type	=	0xF; // Single ended RF input on Oxford valid board rev2
 	init_params.roll_off		=  	FE_SAT_35; // NYQUIST Filter value (used for DVBS1/DSS, DVBS2 is automatic)
 	init_params.tuner_iq_inversion	=	FE_SAT_IQ_NORMAL;
-#if 0
-	err |= fe_stid135_apply_custom_qef_for_modcod_filter(state_demod1, NULL);
-#endif
+
 	err = fe_stid135_init(&init_params, &state_demod1->base->ip);
 
 	if (err != FE_LLA_NO_ERROR) {
@@ -151,12 +152,12 @@ static int stid135_probe(struct stv *state_demod1)
 		return -EINVAL;
 	}
 
-	//p_params = state_demod1->base->handle;
+	p_params = &state_demod1->base->ip;
 	p_params->master_lock = &state_demod1->base->status_lock;
 	vprintk("here state_demod1=%p\n", state_demod1);
 	vprintk("here state_demod1->base=%p\n", state_demod1->base);
 	vprintk("here state_demod1->base=%p\n", state_demod1->base);
-	err = fe_stid135_get_cut_id(&state_demod1->base->ip,&cut_id);
+	err = fe_stid135_get_cut_id(&state_demod1->base->ip, &cut_id);
 	switch(cut_id)
 	{
 	case STID135_CUT1_0:
@@ -198,13 +199,7 @@ static int stid135_probe(struct stv *state_demod1)
 	} else { //DT: This code is not called
 		dev_warn(&state_demod1->base->i2c->dev, "%s: 2xTS parallel mode init.\n", __func__);
 		err |= fe_stid135_set_ts_parallel_serial(&state_demod1->base->ip, FE_SAT_DEMOD_3, FE_TS_PARALLEL_PUNCT_CLOCK);
-#if 1
-		//err |= fe_stid135_set_maxllr_rate(state_demod1, FE_SAT_DEMOD_3, 180);
-#endif
-		//err |= fe_stid135_set_ts_parallel_serial(state_demod1, FE_SAT_DEMOD_1, FE_TS_PARALLEL_PUNCT_CLOCK);
-#if 1
-		//err |= fe_stid135_set_maxllr_rate(state_demod1, FE_SAT_DEMOD_1, 180);
-#endif
+		err |= fe_stid135_set_ts_parallel_serial(&state_demod1->base->ip, FE_SAT_DEMOD_1, FE_TS_PARALLEL_PUNCT_CLOCK);
 	}
 	if (state_demod1->base->mode == 0) {
 		dev_warn(&state_demod1->base->i2c->dev, "%s: multiswitch mode init.\n", __func__);
@@ -448,11 +443,9 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
 	fe_lla_error_t err = FE_LLA_NO_ERROR;
 	fe_lla_error_t error1 = FE_LLA_NO_ERROR;
-	//struct fe_stid135_internal_param *p_params = &state->base->ip;
 	struct fe_sat_search_params search_params;
 	struct fe_sat_search_result search_results;
 	s32 rf_power;
-	BOOL satellite_scan =0;
 	//BOOL lock_stat=0;
 	struct fe_sat_signal_info* signal_info = &state->signal_info;
 	s32 current_llr;
@@ -477,14 +470,12 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 	switch(p->algorithm) {
 	case ALGORITHM_WARM:
 		search_params.search_algo		= FE_SAT_WARM_START;
-		satellite_scan = 0;
 			;
 		break;
 
 	case ALGORITHM_COLD:
 	case ALGORITHM_COLD_BEST_GUESS:
 		search_params.search_algo		= FE_SAT_COLD_START;
-		satellite_scan = 0;
 		break;
 
 	case ALGORITHM_BLIND:
@@ -493,13 +484,11 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 		search_params.search_algo		= FE_SAT_BLIND_SEARCH;
 		search_params.standard = FE_SAT_AUTO_SEARCH;
 		search_params.puncture_rate = FE_SAT_PR_UNKNOWN;
-		satellite_scan = 0;
 		break;
 	case ALGORITHM_SEARCH_NEXT:
 		search_params.search_algo		= FE_SAT_NEXT;
 		search_params.standard = FE_SAT_AUTO_SEARCH;
 		search_params.puncture_rate = FE_SAT_PR_UNKNOWN;
-		satellite_scan = 0;
 		break;
 	case ALGORITHM_SEARCH:
 		//todo
@@ -569,7 +558,7 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 	}
 #endif
 
-	err |= (error1=fe_stid135_search(state, &search_params, &search_results, satellite_scan));
+	err |= (error1=fe_stid135_search(state, &search_params, &search_results, 0));
 	//err |= fe_stid135_get_lock_status(state, 0, 0, 0 ); //EXPERIMENTAL
 	if(error1!=0)
 		dprintk("[%d] fe_stid135_search returned error=%d\n", state->nr+1, error1);
