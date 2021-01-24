@@ -67,7 +67,9 @@ static u16 mc_reg_addr[FE_SAT_MODCODE_MAX][8]; //TODO
 void tst(struct fe_stid135_internal_param* pParams, u32 reg_value, const char* func, int line) {
 	if (reg_value & ~0x11111) {
 		int error;
-		printk(KERN_DEBUG pr_fmt("%s:%d " "CONFIG1000  corrupt: 0x%x CORRECTING\n"),  func, line, reg_value);
+		printk(KERN_DEBUG pr_fmt("%s:%d " "CONFIG1000  corrupt: 0x%x (rereading)\n"),  func, line, reg_value);
+		error = ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1000, &reg_value);
+		printk(KERN_DEBUG pr_fmt("%s:%d " "CONFIG1000  reread: re-read=0x%x error=%d\n"),  func, line, reg_value, error);
 		reg_value= 0x11111;
 		error = ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1000, reg_value);
 		if(error) {
@@ -2819,7 +2821,10 @@ fe_lla_error_t	fe_stid135_search(struct stv* state,
 		return FE_LLA_BAD_PARAMETER;
 	}
 
-	BUG_ON(state->base->ip.handle_demod->Error);
+	if(state->base->ip.handle_demod->Error) {
+		dprintk("CALLED with error set to %d (correcting)\n", state->base->ip.handle_demod->Error);
+		state->base->ip.handle_demod->Error = FE_LLA_NO_ERROR;
+	}
 	if (state->base->ip.handle_demod->Error) {
 		dprintk("[%d] error=%d\n", state->nr, FE_LLA_I2C_ERROR);
 		return FE_LLA_I2C_ERROR;
@@ -9438,29 +9443,36 @@ fe_lla_error_t fe_stid135_reset_modcodes_filter(struct stv* state)
 {
 	enum fe_stid135_demod demod = state->nr+1;
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
+	fe_lla_error_t error1 = FE_LLA_NO_ERROR;
 	//struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
 	u8 i, row_max;
 	u32 reg_value;
-	BUG_ON(state->base->ip.handle_demod->Error);
 	if(state->base->ip.handle_demod->Error) {
-		error = FE_LLA_I2C_ERROR;
-	} else {
-		error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_MODCODLST0(demod), 0xFF);
-		error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLST1_NRESET_MODCODLST(demod), 1);
-		/*First disable all modcodes */
-		row_max = sizeof(state->base->ip.mc_flt) / sizeof(struct modcod_data) - 1;
-		for(i = 0;i <= row_max;i++) {
-				state->base->ip.mc_flt[i].forbidden = FALSE;
-				error |= ChipGetOneRegister(state->base->ip.handle_demod, state->base->ip.mc_flt[i].register_address, &reg_value);
-				//dprintk("here error=%d\n", error);
-				reg_value &= ~(state->base->ip.mc_flt[i].mask_value);
-				error |= ChipSetOneRegister(state->base->ip.handle_demod, state->base->ip.mc_flt[i].register_address, reg_value);
-				//dprintk("here error=%d\n", error);
-			}
+		dprintk("CALLED with error=%d (correcting)\n", state->base->ip.handle_demod->Error);
+		error = FE_LLA_NO_ERROR;
+	}
+	error |= (error1=ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_MODCODLST0(demod), 0xFF));
+	if(error1)
+		dprintk("Error setting REG_RC8CODEW_DVBSX_DEMOD_MODCODLST0(%d)\n", demod);
+	error |= (error1=ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLST1_NRESET_MODCODLST(demod), 1));
+	if(error1)
+		dprintk("Error setting FLD_FC8CODEW_DVBSX_DEMOD_MODCODLST1_NRESET_MODCODLST(%d)\n", demod);
+	/*First disable all modcodes */
+	row_max = sizeof(state->base->ip.mc_flt) / sizeof(struct modcod_data) - 1;
+	for(i = 0;i <= row_max;i++) {
+		state->base->ip.mc_flt[i].forbidden = FALSE;
+		error |= (error1=ChipGetOneRegister(state->base->ip.handle_demod, state->base->ip.mc_flt[i].register_address, &reg_value));
+		if(error1)
+			dprintk("Error getting reg %d demod=%d\n", i, demod);
+		reg_value &= ~(state->base->ip.mc_flt[i].mask_value);
+		error |= (error1=ChipSetOneRegister(state->base->ip.handle_demod, state->base->ip.mc_flt[i].register_address, reg_value));
+		if(error1)
+			dprintk("Error getting reg %d demod=%d\n", i, demod);
+		//dprintk("here error=%d\n", error);
+	}
 
-		}
-		if (state->base->ip.handle_demod->Error ) //Check the error at the end of the function
-			error = FE_LLA_I2C_ERROR;
+	if (state->base->ip.handle_demod->Error ) //Check the error at the end of the function
+		error = FE_LLA_I2C_ERROR;
 	return error;
 }
 

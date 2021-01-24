@@ -448,7 +448,7 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 	s32 rf_power;
 	//BOOL lock_stat=0;
 	struct fe_sat_signal_info* signal_info = &state->signal_info;
-	s32 current_llr;
+	s32 current_llr=0;
 	memset(signal_info, 0, sizeof(*signal_info));
 	vprintk(
 					"[%d] delivery_system=%u modulation=%u frequency=%u symbol_rate=%u inversion=%u stream_id=%d\n",
@@ -465,11 +465,12 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 		p->delivery_system = SYS_AUTO;
 		p->symbol_rate = p->symbol_rate ==0 ? 22000000 : p->symbol_rate;
 	}
-	/* Search parameters */
 
+#if 1 // XXX official driver always uses FE_SAT_COLD_START
+	/* Search parameters */
 	switch(p->algorithm) {
 	case ALGORITHM_WARM:
-		search_params.search_algo		= FE_SAT_WARM_START;
+		search_params.search_algo	= FE_SAT_WARM_START;
 			;
 		break;
 
@@ -494,6 +495,12 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 		//todo
 		break;
 	}
+	if(p->algorithm != ALGORITHM_WARM)
+		dprintk("Algorithm is not  WARM: %d\n", p->algorithm);
+#else
+	search_params.search_algo 	= FE_SAT_COLD_START;
+#endif
+
 	search_params.stream_id = p->stream_id;
 
 	search_params.frequency		=  p->frequency*1000;
@@ -522,7 +529,7 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 			default:
 				search_params.standard		= FE_SAT_AUTO_SEARCH;
 			}
-	//dprintk("search standard = %d\n", search_params.standard);
+
 	search_params.iq_inversion	= FE_SAT_IQ_AUTO;
 	search_params.tuner_index_jump	= 0; // ok with narrow band signal
 	//the following is in Mhz despite what the name suggests
@@ -543,7 +550,7 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 	err |= fe_stid135_set_rfmux_path(state, state->rf_in + 1);
 
 	if (err != FE_LLA_NO_ERROR)
-		dev_err(&state->base->i2c->dev, "%s: fe_stid135_set_pls error %d !\n", __func__, err);
+		dev_err(&state->base->i2c->dev, "%s: fe_stid135_set_rfmux_math error %d !\n", __func__, err);
 #if 1 /*Deep Thought: keeping filters ensures that  a demod does not cause a storm of data when demodulation is
 				failing (e.g., ran fade) This could cause other demods to fail as well as they share resources.
 				filter_forbidden_modcodes may be better
@@ -559,7 +566,9 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 #endif
 
 	err |= (error1=fe_stid135_search(state, &search_params, &search_results, 0));
-	//err |= fe_stid135_get_lock_status(state, 0, 0, 0 ); //EXPERIMENTAL
+#if 0  //XXX official driver calls this
+	err |= fe_stid135_get_lock_status(state, 0, 0, 0 );
+#endif
 	if(error1!=0)
 		dprintk("[%d] fe_stid135_search returned error=%d\n", state->nr+1, error1);
 	if (err != FE_LLA_NO_ERROR) {
@@ -568,13 +577,13 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 		dprintk("[%d[ fe_stid135_search error %d !\n", state->nr+1, err);
 		return -1;
 	}
-
+#if 1 //missing in official driver, but only calld during blindscan
 	if(!state->signal_info.has_viterbi && p->algorithm != ALGORITHM_WARM) {
 		bool locked=false;
 		print_signal_info("(before trying pls)", &state->signal_info);
-		locked=pls_search_list(fe);
+		locked = pls_search_list(fe);
 		if(!locked)
-			locked=pls_search_range(fe);
+			locked = pls_search_range(fe);
 		if(locked)
 			state->signal_info.has_lock=true;
 		dprintk("PLS locked=%d\n", locked);
@@ -605,8 +614,9 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 					err, state->signal_info.has_lock,
 					state->signal_info.has_viterbi,					state->signal_info.has_sync,
 					state->signal_info.has_timedout);
+#endif
 
-	if (state->signal_info.has_carrier){
+	if (state->signal_info.has_carrier){ //XXX official driver may require has_sync
 
 		vprintk("[%d] set_parameters: error=%d locked=%d\n", state->nr+1, err, state->signal_info.has_lock);
 
@@ -681,12 +691,11 @@ static int stid135_get_frontend(struct dvb_frontend *fe, struct dtv_frontend_pro
 {
 	struct stv *state = fe->demodulator_priv;
 	//struct fe_stid135_internal_param *p_params = &state->base->ip;
-	if (!state->signal_info.has_viterbi) {
+	if (!state->signal_info.has_viterbi) {//official driver would test for has_sync
 		vprintk("no viterbi\n");
 		return 0;
 	}
-	//dprintk("algo=%d\n", state->demod_search_algo);
-	//TODO: next test
+
 #if 1
 	if(state->demod_search_algo == FE_SAT_BLIND_SEARCH ||
 							state->demod_search_algo == FE_SAT_NEXT) {
@@ -713,9 +722,8 @@ static int stid135_get_frontend(struct dvb_frontend *fe, struct dtv_frontend_pro
 		break;
 	case FE_SAT_DVBS1_STANDARD:
 	default:
-		//dprintk("XXXX delivery_system set to DVBS\n");
 		p->delivery_system = SYS_DVBS;
-			}
+	}
 
 	switch (state->signal_info.modulation) {
 	case FE_SAT_MOD_8PSK:
@@ -751,7 +759,7 @@ static int stid135_get_frontend(struct dvb_frontend *fe, struct dtv_frontend_pro
 	case FE_SAT_MOD_QPSK:
 	default:
 		p->modulation = QPSK;
-			}
+	}
 
 	switch (state->signal_info.roll_off) {
 		case FE_SAT_05:
@@ -793,7 +801,6 @@ static int stid135_get_frontend(struct dvb_frontend *fe, struct dtv_frontend_pro
 			p->fec_inner = modcod2fec[state->signal_info.modcode];
 		} else
 			p->fec_inner = FEC_AUTO;
-		//dprintk("FEC:  %d %d\n", state->signal_info.modcode, p->fec_inner);
 		p->pilot = state->signal_info.pilots == FE_SAT_PILOTS_ON ? PILOT_ON : PILOT_OFF;
 	}
 	else {
@@ -819,13 +826,9 @@ static int stid135_get_frontend(struct dvb_frontend *fe, struct dtv_frontend_pro
 		default:
 			p->fec_inner = FEC_NONE;
 		}
-		//dprintk("FEC:  %d %d\n", state->signal_info.puncture_rate, p->fec_inner);
 	}
+#if 1
 	p->stream_id = state->signal_info.isi;
-	//printk("XXXXX stream_id=%d\n",p->stream_id);
-#if 0
-	p->pls_mode = state->signal_info.pls_mode;
-	p->pls_code = state->signal_info.pls_code;
 #endif
 	return 0;
 }
@@ -836,18 +839,16 @@ static int stid135_read_status(struct dvb_frontend *fe, enum fe_status *status)
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
 	fe_lla_error_t err = FE_LLA_NO_ERROR;
 	u32 speed;
-	//dprintk("set *status=0\n");
+
 	*status = 0;
 	if (!mutex_trylock(&state->base->status_lock)) {
-		if (state->signal_info.has_viterbi) {
+		if (state->signal_info.has_viterbi) {//XX: official driver tests for has_sync?
 			*status |= FE_HAS_SIGNAL | FE_HAS_CARRIER
 				| FE_HAS_VITERBI | FE_HAS_SYNC | FE_HAS_LOCK;
-			//dprintk("set *status=0x%x\n", *status);
 		}
-		//dprintk("read status=%d\n", *status);
 		return 0;
 	}
-	//dprintk("read_status locked=%d status=%d\n", state->signal_info.locked, *status);
+
 	p->strength.len = 1;
 	p->strength.stat[0].scale = FE_SCALE_NOT_AVAILABLE;
 	p->cnr.len = 1;
@@ -869,12 +870,10 @@ static int stid135_read_status(struct dvb_frontend *fe, enum fe_status *status)
 	if (err != FE_LLA_NO_ERROR) {
 		dev_err(&state->base->i2c->dev, "fe_stid135_get_lock_status error\n");
 		mutex_unlock(&state->base->status_lock);
-		//dprintk("read status=%d\n", *status);
 		return -EIO;
 	}
 
-
-	if (!state->signal_info.has_viterbi) {
+	if (!state->signal_info.has_viterbi) { //XXX should perhaps be has_sync instead
 		/* demod not locked */
 		*status |= FE_HAS_SIGNAL;
 		vprintk("HAS_SIGNAL AND TUNED sync=%d status=%d\n", state->signal_info.has_sync, *status);
@@ -893,6 +892,7 @@ static int stid135_read_status(struct dvb_frontend *fe, enum fe_status *status)
 
 		p->strength.stat[1].scale = FE_SCALE_RELATIVE;
 		p->strength.stat[1].uvalue = (100 + state->signal_info.power/1000) * 656;
+		p->cnr.len=0; //XXX may be a will confuse user space
 		return 0;
 	}
 
@@ -952,7 +952,6 @@ static int stid135_read_status(struct dvb_frontend *fe, enum fe_status *status)
 	return 0;
 }
 
-//extern void dttst(STCHIP_Handle_t *hChipHandle);
 
 static int stid135_tune(struct dvb_frontend *fe, bool re_tune,
 		unsigned int mode_flags,
@@ -961,28 +960,29 @@ static int stid135_tune(struct dvb_frontend *fe, bool re_tune,
 	struct stv *state = fe->demodulator_priv;
 	int r;
 	if (re_tune) {
-		//stid135_stop_task(fe);
 		r = stid135_set_parameters(fe);
-		//dprintk("stid135_set_parameters returned %d locked=%d\n", r, state->signal_info.locked);
 		if (r)
 			return r;
 		state->tune_time = jiffies;
 	}
-
+#if 1
 	if(re_tune) {
 		dprintk("RETUNE: GET SIGNAL\n");
 		fe_stid135_get_signal_info(state,  &state->signal_info, 0);
 		//dprintk("MIS2: num=%d\n", state->signal_info.isi_list.nb_isi);
 	}
+#endif
 
 	r = stid135_read_status(fe, status);
 
 
+#if 1
 	if(state->signal_info.has_timedout) {
 		*status |= FE_TIMEDOUT;
 		*status &= FE_HAS_LOCK;
 		//dprintk("set *status=0x%x\n", *status);
 	}
+#endif
 	if (r)
 		return r;
 
@@ -1013,7 +1013,7 @@ static int stid135_set_voltage(struct dvb_frontend *fe, enum fe_sec_voltage volt
 		return 0;
 	}
 
-	if (state->base->set_voltage) {
+	if (state->base->set_voltage) {//XXX official driver does not use mutex
 		mutex_lock(&state->base->status_lock); //DeepThought: this performs multiple i2c calls and needs to be protected
 		state->base->set_voltage(state->base->i2c, voltage, state->rf_in);
 		mutex_unlock(&state->base->status_lock);
@@ -1110,11 +1110,11 @@ static int stid135_sleep(struct dvb_frontend *fe)
 	fe_lla_error_t err = FE_LLA_NO_ERROR;
 	struct fe_stid135_internal_param *p_params = &state->base->ip;
 
-	if (state->base->mode == 0)
+	if (state->base->mode == 0) //XXX official driver never calls code below
 		return 0;
 
 	dev_dbg(&state->base->i2c->dev, "%s: tuner %d\n", __func__, state->rf_in);
-
+	dprintk("Stating to sleep");
 	mutex_lock(&state->base->status_lock);
 	BUG_ON((state->rf_in<0 || state->rf_in>=4));
 	BUG_ON(state->base->tuner_use_count[state->rf_in]==0);
@@ -1235,72 +1235,6 @@ static int stid135_read_temp(struct dvb_frontend *fe, s16 *temp)
 	return 0;
 }
 
-
-#if 0
-/*
-	center_freq and range in kHz
- */
-static int stid135_get_spectrum_scan_fft_one_band(struct stv *state,
-																									struct dtv_fe_spectrum* s,
-																									s32 center_freq, u32 range,
-																									u32* freq,
-																									s32* rf_level,
-																									s32* rf_band,
-																									int fft_size, int mode, s32 pbandx1000, bool double_correction)
-{
-	fe_lla_error_t error = FE_LLA_NO_ERROR;
-	//	s32 Pbandx1000;
-	u32 nb_acquisition = 255; //average 1 samples
-	s32 lo_frequency;
-	u32 begin =0;
-	int i;
-	int a=3;
-	s32 delta;
-	dprintk("Start of spectrum scan\n");
-	error = FE_STiD135_GetLoFreqHz(&state->base->ip, &lo_frequency);
-	if(error) {
-		dprintk("FE_STiD135_GetLoFreqHz FAILED: error=%d\n", error);
-		return error;
-	}
-	lo_frequency *=  1000000; //now in Hz
-
-
-	dprintk("center_freq=%dkHz lo=%dkHz range=%dkHz mode=%d fft_size=%d\n",
-					center_freq, lo_frequency/1000, range, mode, fft_size);
-
-	error = fe_stid135_fft(state, state->nr+1, mode, nb_acquisition,
-												 center_freq*1000 - lo_frequency, range*1000, rf_level, &begin, MAX_FFT_SIZE);
-
-	pbandx1000 += mode*6020; //compensate for FFT number of bins: 20*log10(2)
-	delta = 10*(3000 + STLog10(range) - STLog10(fft_size)); //this is a power spectral density range*1000/fft_size is the bin width in Hz
-	//dprintk("Pbandx1000=%d error=%d\n", Pbandx1000, error);
-	if(fft_size> MAX_FFT_SIZE)
-		dprintk("BUG!!!! fft_size=%d\n", fft_size);
-
-	for(i=0; i< fft_size; ++i) {
-		s32 f = ((i-(signed)fft_size/2)*range)/(signed)fft_size +center_freq; //in kHz
-		s32 correction1000 = (s32)(f/1000  - 1550);
-
-		freq[i]= f;
-
-		correction1000 = (s32)(correction1000*1000/600);
-		correction1000 = (s32) (correction1000 * correction1000/1000);
-		if(double_correction)
-			correction1000 += correction1000;
-
-		rf_level[i] += pbandx1000 - delta +correction1000;
-		rf_band[i] = pbandx1000 +correction1000;
-	}
-
-	if(fft_size/2-a<0 || fft_size/2+a>= MAX_FFT_SIZE)
-		dprintk("BUG!!!! a=%d fft_size=%d\n", a, fft_size);
-	if(begin==1)
-		rf_level[0] = rf_level[1];
-	for(i=-a+1; i<a; ++i)
-		rf_level[fft_size/2+i] = (rf_level[fft_size/2-a] + rf_level[fft_size/2+a])/2;
-	return error;
-}
-#endif
 
 static int stid135_get_spectrum_scan_fft(struct dvb_frontend *fe, unsigned int *delay,  enum fe_status *status)
 {
@@ -1476,8 +1410,10 @@ static int stid135_get_spectrum_scan_sweep(struct dvb_frontend *fe,
  */
 static int stid135_stop_task(struct dvb_frontend *fe)
 {
+
 	struct stv *state = fe->demodulator_priv;
 	struct spectrum_scan_state* ss = &state->scan_state;
+	dprintk("CALLED\n");
 	if(ss->freq)
 		kfree(ss->freq);
 	if(ss->spectrum)
@@ -1535,257 +1471,6 @@ int stid135_spectrum_get(struct dvb_frontend *fe, struct dtv_fe_spectrum* user)
 	//stid135_stop_task(fe);
 	return error;
 }
-
-
-#if 0
-static int scan_within_tuner_bw(struct dvb_frontend *fe, bool* locked_ret)
-{
-	//bool rising_edge_found = false;
-	bool locked=false;
-	int asperity = 0;
-	s32 frequency_jump=0;
-	struct stv *state = fe->demodulator_priv;
-	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
-#if 0
-	//BUG_ON(!state->satellite_scan);
-	state->signal_info.timedout=false;
-	//u32 IF;
-	state->signal_info.fec_locked = 0;
-	state->signal_info.demod_locked = 0;
-#if 0 //TODO
-	Stop(state);
-#endif
-	//if (fe->ops.tuner_ops.get_if_frequency)
-	//	fe->ops.tuner_ops.get_if_frequency(fe, &IF);
-		/* Set the Init Symbol rate*/
-
-
-	if (state->symbol_rate < 100000 || state->symbol_rate > 70000000)
-		return -EINVAL;
-	stv091x_compute_timeouts(&state->DemodTimeout, &state->FecTimeout, state->symbol_rate, p->algorithm);
-	stv091x_set_frequency_symbol_rate_bandwidth(state);
-
-
-	state->ReceiveMode = Mode_None;
-	state->DemodLockTime = 0;
-
-	switch(p->algorithm) {
-	case ALGORITHM_SEARCH_NEXT:
-		break;
-	default:
-		dprintk("This function should not be called with algorithm=%d\n", p->algorithm);
-		break;
-	}
-
-	asperity = stv091x_carrier_search(state, &frequency_jump);
-	dprintk("asperity=%d frequency=%d jump=%d\n", asperity, p->frequency, frequency_jump);
-	if(asperity==1 ||asperity==2) { //rising or falling edge found
-		p->frequency += frequency_jump;
-
-		state->Started = 1;
-		{ bool need_retune;
-			int ret;
-			int old = p->algorithm;
-			p->algorithm = ALGORITHM_BLIND;
-			ret = tune_once(fe, &need_retune);
-			dprintk("tune_once returned stat=%d\n", ret);
-			p->algorithm = old;
-			locked= !state->timedout;
-		}
-
-
-		if(locked) {
-			//stv091x_get_signal_info(fe); already done in tune_once
-		} else {
-			state->Started = 0;
-		}
-	} else {
-		p->frequency += ((state->tuner_bw / 3000) - 1000);
-		dprintk("frequency=%d\n", p->frequency);
-	}
-	*locked_ret = locked;
-#endif
-	return asperity;
-}
-#endif
-
-#if 0
-//check if we are on a leading or falling edge of a potential signal
-//returns 0 if nothing found, 1 on rising edge and 2 on falling edge
-static int stv091x_carrier_check(struct stv* state, s32 *FinalFreq, s32* frequency_jump)
-{
-	u32 minagc2level=0xffff,maxagc2level=0x0000,midagc2level,
-		agc2level,
-		agc2ratio;
-	s32	init_freq,freq_step;
-	u32	tmp1,tmp2,tmp3,tmp4;
-	u32 asperity=0;
-	u32 waitforfall=0;
-	u32 acculevel=0;
-	u32 div=2;
-	u32 agc2leveltab[20];
-
-	s32 i,j,k,l,nbSteps;
-
-
-	write_reg(state, RSTV0910_P2_DMDISTATE,0x1C); //stop demod
-	tmp2= read_reg(state, RSTV0910_P2_CARCFG);
-	write_reg(state, RSTV0910_P2_CARCFG,0x06); //rotator on, citroen 2
-
-#if 0
-	tmp3= read_reg(state, RSTV0910_P2_BCLC); //set beta for DVBS1/legacy DTV
-	write_reg(state, RSTV0910_P2_BCLC,0x00);
-#endif
-
-#if 0
-	tmp4= read_reg(state, RSTV0910_P2_CARFREQ);
-	write_reg(state, RSTV0910_P2_CARFREQ,0x00);
-#else
-	//TODO
-	//set carrier frquency
-#endif
-#if 0
-	//TODO
-	write_reg(state, RSTV0910_P2_AGC2REF,0x38);
-#endif
-
-#if 0
-	tmp1= read_reg(state, RSTV0910_P2_DMDCFGMD);
-
-	write_reg_fields(state, RSTV0910_P2_DMDCFGMD,
-									 {FSTV0910_P2_DVBS1_ENABLE, 1},
-									 {FSTV0910_P2_DVBS2_ENABLE, 1},
-									 {FSTV0910_P2_SCAN_ENABLE, 0}, 		/*Enable the SR SCAN*/
-									 {FSTV0910_P2_CFR_AUTOSCAN, 0} /*activate the carrier frequency search loop*/
-									 );
-#else
-	error |= ChipSetOneRegister(hChip, (u16)REG_RC8CODEW_DVBSX_DEMOD_DMDCFGMD(Demod), 0xD8);
-#endif
-	stv091x_set_symbol_rate(state, 1000000/div); /*AGC2 bandwidth is 1/div MHz */
-
-	nbSteps=(state->tuner_bw/3000000)*div;
-	if(nbSteps<=0)
-		nbSteps=1;
-
-	freq_step=((1000000<<8)/(state->base->mclk>>8))/div; /* AGC2 step is 1/div MHz */
-
-	init_freq=0;
-	j=0;	/* index after a rising edge is found */
-
-	for(i=0;i<nbSteps;i++)
-	{
-		/* Scan on the positive part of the tuner Bw */
-		//dprintk("freq=%d\n", init_freq);
-		write_reg(state, RSTV0910_P2_DMDISTATE, 0x1C); //stp demod
-		write_reg(state, RSTV0910_P2_CFRINIT1, (init_freq >>8) & 0xff);
-		write_reg(state, RSTV0910_P2_CFRINIT0, init_freq & 0xff);
-		write_reg(state, RSTV0910_P2_DMDISTATE, 0x18); //zero offset start
-		msleep(5);
-
-		agc2level=0;
-		agc2level = (read_reg_field(state, FSTV0910_P2_AGC2_INTEGRATOR1) <<8) |
-			read_reg_field(state, FSTV0910_P2_AGC2_INTEGRATOR0);
-
-		if (i == 0) {
-			minagc2level= agc2level;
-			maxagc2level= agc2level;
-			midagc2level=agc2level;
-
-			for (k=0;k<5*div;k++) {
-				agc2leveltab[k]= agc2level;
-			}
-		} else {
-
-			k= i%(5*div);
-			agc2leveltab[k]= agc2level;
-
-			minagc2level=0xffff;
-			maxagc2level=0x0000;
-			acculevel=0;
-
-			for (l=0;l<5*div;l++) {
-				/* Min and max detection */
-
-				if( agc2leveltab[l]<minagc2level ) {
-					minagc2level=agc2leveltab[l];
-				} else if(agc2leveltab[l] >maxagc2level) {
-					maxagc2level=agc2leveltab[l];
-				}
-
-				acculevel=acculevel+agc2leveltab[l];
-			}
-
-			midagc2level= acculevel/(5*div);
-
-			if (waitforfall==0) {
-				agc2ratio = (maxagc2level - minagc2level)*128/midagc2level;
-			} else {
-				agc2ratio = (agc2level - minagc2level)*128/midagc2level;
-			}
-
-			if (agc2ratio > 0xffff)
-				agc2ratio = 0xffff;
-
-
-			if ((agc2ratio > STV0910_BLIND_SEARCH_AGC2BANDWIDTH) && (agc2level==minagc2level)) {	 /* rising edge */
-				asperity=1;		 /* The first edge is rising */
-				waitforfall=1;
-				for (l=0;l<5*div;l++) {
-					agc2leveltab[l]= agc2level;
-				}
-			} else if ((agc2ratio > STV0910_BLIND_SEARCH_AGC2BANDWIDTH)) {
-				/* Falling edge */
-				if (waitforfall==0) {
-					asperity=2; /* the first edge is falling */
-				} else {
-					asperity=1;
-				}
-
-				if (j==1) {
-					for (l=0;l<5*div;l++) {
-						agc2leveltab[l]= agc2level;
-					}
-
-					j=0;				 /* All reset */
-					waitforfall=0;
-					asperity=0;
-				} else {
-					break;
-				}
-			}
-
-			if ((waitforfall==1) && j==(5*div)) {
-				break;
-			}
-			if (waitforfall==1) {
-				j+=1;
-			}
-		} /* end of i!=0 */
-
-		init_freq = init_freq + freq_step;
-
-	} /* End of for (i=0;i<nbSteps) */
-
-	//restore registers
-	write_reg(state, RSTV0910_P2_DMDCFGMD,tmp1);
-	write_reg(state, RSTV0910_P2_CARCFG,tmp2);
-	write_reg(state, RSTV0910_P2_BCLC,tmp3);
-	write_reg(state, RSTV0910_P2_CARFREQ,tmp4);
-	write_reg(state, RSTV0910_P2_DMDISTATE,0x1C);
-	write_reg(state, RSTV0910_P2_CFRINIT1,0);
-	write_reg(state, RSTV0910_P2_CFRINIT0,0);
-
-	if (asperity ==1) { /* rising edge followed by a constant level or a falling edge */
-		*frequency_jump = (1000/div)*(i-(j+2)/2);
-	} else {
-		*frequency_jump = (1000/div)*i; /* falling edge */
-	}
-
-	return asperity;
-}
-#endif
-
-
 
 
 fe_lla_error_t FE_STiD135_GetCarrierFrequency(struct stv* state, u32 MasterClock, s32* carrierFrequency_p);
@@ -2028,16 +1713,11 @@ struct dvb_frontend *stid135_attach(struct i2c_adapter *i2c,
 	struct stv *state;
 	struct stv_base *base=NULL;
 
-	//struct fe_stid135_internal_param * pParams;
 	state = kzalloc(sizeof(struct stv), GFP_KERNEL);
 	if (!state)
 		return NULL;
 
-
-	//dprintk("ATTACH addr=0x%x\n", cfg->adr);
 	base = match_base(i2c, cfg->adr);
-
-
 	if (base) {
 		base->count++;
 		state->base = base;
@@ -2074,7 +1754,7 @@ struct dvb_frontend *stid135_attach(struct i2c_adapter *i2c,
 
 		list_add(&base->stvlist, &stvlist);
 	}
-
+#if 0 //XXX official driver ahs none of this
 	//pParams = &state->base->ip;
 	/* Init for PID filtering feature */
 
@@ -2096,17 +1776,17 @@ struct dvb_frontend *stid135_attach(struct i2c_adapter *i2c,
 	error = fe_stid135_apply_custom_qef_for_modcod_filter(state, NULL);
 	if(error)
 		dprintk("fe_stid135_apply_custom_qef_for_modcod_filter error=%d\n", error);
-
+#endif
 	state->fe.ops               = stid135_ops;
 	state->fe.demodulator_priv  = state;
 	state->nr = nr;
 	state->newTP = false;
 	state->bit_rate  = 0;
 	state->loops = 15;
-	state->current_max_llr_rate = 0;
-	state->current_llr_rate = 0;
+	//state->current_max_llr_rate = 0;
+	//state->current_llr_rate = 0;
+	//error |= fe_stid135_set_maxllr_rate(state, 90);
 
-	error |= fe_stid135_set_maxllr_rate(state, 90);
 	if (rfsource > 0 && rfsource < 5)
 		rf_in = rfsource - 1;
 	state->rf_in = base->mode ? rf_in : 0;
@@ -2116,8 +1796,7 @@ struct dvb_frontend *stid135_attach(struct i2c_adapter *i2c,
 
 	dev_info(&i2c->dev, "%s demod found at adr %02X on %s\n",
 					 state->fe.ops.info.name, cfg->adr, dev_name(&i2c->dev));
-	//	dprintk("SNAPSHOT!!!\n");
-	//snapshot_regs(state);
+
 	return &state->fe;
 
 fail:

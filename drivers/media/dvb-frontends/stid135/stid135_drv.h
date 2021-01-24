@@ -406,8 +406,8 @@ struct stv {
 	int                  nr;     //DT: adapter aka demod: 0-7
 	int                  rf_in;  //DT  tuner frontend: 0-3
 	unsigned long        tune_time;
-	int current_llr_rate;  //Remember the current reconfiguration to avoid calling hardware needlessly
-	int current_max_llr_rate;  //Remember the current reconfiguration to avoid calling hardware needlessly
+	//int current_llr_rate;  //Remember the current reconfiguration to avoid calling hardware needlessly
+	//int current_max_llr_rate;  //Remember the current reconfiguration to avoid calling hardware needlessly
 	struct fe_sat_signal_info signal_info;
 
 	bool newTP; //for tbs6912
