@@ -831,7 +831,7 @@ fe_lla_error_t FE_STiD135_GetSymbolRate(struct stv*state, u32 MasterClock, u32* 
 {
 	enum fe_stid135_demod Demod = state->nr+1;
 	STCHIP_Info_t* hChip = state->base->ip.handle_demod;
-	return FE_STiD135_GetSymbolRate_(hChip, 	Demod, MasterClock, symbolRate_p);
+	return FE_STiD135_GetSymbolRate_(hChip, Demod, MasterClock, symbolRate_p);
 }
 
 
@@ -921,8 +921,8 @@ fe_lla_error_t fe_stid135_set_symbol_rate(struct stv* state,  u32 symbol_rate)
 --PARAMS OUT	::	Frequency offset in Hz
 --RETURN	::	error
 --***************************************************/
-fe_lla_error_t FE_STiD135_GetCarrierFrequency_(STCHIP_Info_t* hChip, u32 MasterClock,
-				enum fe_stid135_demod Demod, s32* carrierFrequency_p)
+fe_lla_error_t FE_STiD135_GetCarrierFrequency_(STCHIP_Info_t* hChip, enum fe_stid135_demod Demod,  u32 MasterClock,
+				s32* carrierFrequency_p)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 
@@ -992,7 +992,7 @@ fe_lla_error_t FE_STiD135_GetCarrierFrequency_(STCHIP_Info_t* hChip, u32 MasterC
 fe_lla_error_t FE_STiD135_GetCarrierFrequency(struct stv* state, u32 MasterClock, s32* carrierFrequency_p)
 {
 	STCHIP_Info_t* hChip = state->base->ip.handle_demod;
-	return FE_STiD135_GetCarrierFrequency_(hChip, MasterClock, state->nr +1, carrierFrequency_p);
+	return FE_STiD135_GetCarrierFrequency_(hChip, state->nr +1, MasterClock, carrierFrequency_p);
 }
 
 void report_(struct stv*state,  const char* func, int line)
@@ -1348,12 +1348,12 @@ fe_lla_error_t FE_STiD135_TimingGetOffset(struct stv*state, u32 SymbolRate, s32*
 --PARAMS OUT	::	punctureRate_p -> puncture rate
 --RETURN	::	error
 *****************************************************/
-static  fe_lla_error_t FE_STiD135_GetViterbiPunctureRate(
-			STCHIP_Info_t* hChip, enum fe_stid135_demod Demod, enum fe_sat_rate *punctureRate_p)
+static  fe_lla_error_t FE_STiD135_GetViterbiPunctureRate(struct stv* state, enum fe_sat_rate *punctureRate_p)
 {
 	s32 rateField;
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
-
+	STCHIP_Info_t* hChip = state->base->ip.handle_demod;
+	enum fe_stid135_demod Demod = state->nr+1;
 	error |= ChipGetField(hChip, FLD_FC8CODEW_DVBSX_VITERBI_VITCURPUN_VIT_CURPUN(Demod), &rateField);
 
 	switch(rateField) {
@@ -1692,29 +1692,22 @@ fe_lla_error_t fe_stid135_get_lock_status(struct stv* state, bool*carrier_lock, 
 		*has_sync = false;
 	if(has_viterbi)
 		*has_viterbi = false;
-
+	//state->signal_info.has_sync is the same as *Locked_p in official driver
 
 	pParams = &state->base->ip;
 
-
-
-
-
 		error = error1 =  ChipGetField(state->base->ip.handle_demod,
-				FLD_FC8CODEW_DVBSX_DEMOD_DMDSTATE_HEADER_MODE(state->nr+1), &(fld_value[0]));
+																	 FLD_FC8CODEW_DVBSX_DEMOD_DMDSTATE_HEADER_MODE(state->nr+1), &(fld_value[0]));
 		demodState = (enum fe_sat_search_state)(fld_value[0]);
 
 		if(error1)
 			dprintk("demodstate=%d error=%d\n", demodState, error1);
-
 
 		switch (demodState) {
 		case FE_SAT_SEARCH:
 		case FE_SAT_PLH_DETECTED :
 			//dprintk("FIRST PLHEADER DETECTED\n");
 
-			if(carrier_lock)
-				*carrier_lock  = FALSE;
 			state->signal_info.has_carrier = false;
 			state->signal_info.has_viterbi = false;
 			state->signal_info.has_sync = false;
@@ -1722,16 +1715,13 @@ fe_lla_error_t fe_stid135_get_lock_status(struct stv* state, bool*carrier_lock, 
 		case FE_SAT_DVBS2_FOUND:
 			error |= (error1=ChipGetField(state->base->ip.handle_demod,
 																		FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS_LOCK_DEFINITIF(state->nr+1), &(fld_value[0])));
-			//dprintk("error=%d\n", error1);
 			error |= (error1=ChipGetField(state->base->ip.handle_demod,
 																		FLD_FC8CODEW_DVBSX_PKTDELIN_PDELSTATUS1_PKTDELIN_LOCK(state->nr+1), &(fld_value[1])));
-			//dprintk("error=%d\n", error1);
 
 			//TODO: stv091x does not check TSFIFO_LINEOK
 			//fld_value[2]==0 means that packets with erros have been received
 			error |= (error1=ChipGetField(state->base->ip.handle_demod,
 																		FLD_FC8CODEW_DVBSX_HWARE_TSSTATUS_TSFIFO_LINEOK(state->nr+1), &(fld_value[2])));
-			//dprintk("error=%d\n", error1);
 			state->signal_info.has_carrier = fld_value[0];
 			state->signal_info.has_viterbi = fld_value[0] & fld_value[1];
 			state->signal_info.has_sync = fld_value[0] & fld_value[1] & fld_value[2];
@@ -1744,8 +1734,6 @@ fe_lla_error_t fe_stid135_get_lock_status(struct stv* state, bool*carrier_lock, 
 				if(!state->signal_info.has_sync)
 					dprintk("NO SYNC: %d %d %d\n",  fld_value[0] , fld_value[1] , fld_value[2]);
 			}
-
-								//dprintk("PPP carrier_lock=%d has_sync=%d\n", *carrier_lock, *has_sync);
 		break;
 
 		case FE_SAT_DVBS_FOUND:
@@ -2370,7 +2358,7 @@ static fe_lla_error_t FE_STiD135_GetDemodLock (struct stv* state, u32 TimeOut, B
 	s32 lock = 0;
 	u16 symbFreqRegister;
 	//u32 symbolRate ;
-	u32 TimeOut_SymbRate, SRate_1MSymb_Sec ;
+	u32 TimeOut_SymbRate;
 	u32 timer = 0;
 	s32 fld_value, slc_min, slc_max, slc_sel;
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
@@ -2613,7 +2601,6 @@ u32 FE_STiD135_CarrierWidth(u32 SymbolRate, enum fe_sat_rolloff roll_off)
 static fe_lla_error_t fe_stid135_set_reg_init_values(struct stv* state)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
-	//struct fe_stid135_internal_param *pParams = &state->base->ip;
 
 	//p. 316 measuring point=demod iq out; normal mode, observe the selection iqsymb_sel;
 	error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DEMOD(state->nr+1), 0x00);
@@ -2621,7 +2608,7 @@ static fe_lla_error_t fe_stid135_set_reg_init_values(struct stv* state)
 		//DVBS2 enable; no autoscan; no dvb s1  (default setting)
 	error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DMDCFGMD(state->nr+1), 0xc8);
 
-	//set loop carrier1 coeffientcs
+	//set loop carrier1 coefficients
 	error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CARFREQ(state->nr+1), 0x45); // to make demod lock in DVBS1 (cold start only)
 
 	//derotator 1b
@@ -3835,8 +3822,7 @@ fe_lla_error_t fe_stid135_get_signal_info(struct stv* state,
 			error |= FE_STiD135_GetStandard(
 				state->base->ip.handle_demod, Demod, &(pInfo->standard));
 
-			 error |= FE_STiD135_GetViterbiPunctureRate(
-				state->base->ip.handle_demod,Demod, &(pInfo->puncture_rate));
+			 error |= FE_STiD135_GetViterbiPunctureRate(state, &(pInfo->puncture_rate));
 
 			error |= fe_stid135_get_mode_code(state,
 						&pInfo->modcode,
@@ -4691,44 +4677,28 @@ fe_lla_error_t FE_STiD135_SetSearchStandard(struct stv* state)
 	break;
 
 	case FE_SAT_AUTO_SEARCH:
-#if 0 //LATESTX
 		/*If automatic enable both DVBS1/DSS and DVBS2 search*/
 		error |= ChipSetFieldImage(state->base->ip.handle_demod,
 		FLD_FC8CODEW_DVBSX_DEMOD_DMDCFGMD_DVBS1_ENABLE(Demod), 1);
 		error |= ChipSetFieldImage(state->base->ip.handle_demod,
 		FLD_FC8CODEW_DVBSX_DEMOD_DMDCFGMD_DVBS2_ENABLE(Demod), 1);
-		error |= ChipSetRegisters(state->base->ip.handle_demod,
-		(u16)REG_RC8CODEW_DVBSX_DEMOD_DMDCFGMD(Demod), 1);
-
-		error |= FE_STiD135_SetViterbiStandard(state->base->ip.handle_demod,
-				state->demod_search_standard,
-				state->demod_puncture_rate,Demod);
-
-		/* Enable Super FEC */
-		error |= ChipSetOneRegister(state->base->ip.handle_demod,
-		(u16)REG_RC8CODEW_DVBSX_HWARE_SFDLYSET2(Demod), 0);
-#else
-
-		error |= ChipSetFieldImage(state->base->ip.handle_demod,
-		FLD_FC8CODEW_DVBSX_DEMOD_DMDCFGMD_DVBS1_ENABLE(Demod), 1);
-		error |= ChipSetFieldImage(state->base->ip.handle_demod,
-		FLD_FC8CODEW_DVBSX_DEMOD_DMDCFGMD_DVBS2_ENABLE(Demod), 1);
-
+#if 1 //XXX different
 		error |= ChipSetFieldImage(state->base->ip.handle_demod,
 															 FLD_FC8CODEW_DVBSX_DEMOD_DMDCFGMD_CFR_AUTOSCAN(Demod), 1);
 
 		error |= ChipSetFieldImage(state->base->ip.handle_demod,
 															 FLD_FC8CODEW_DVBSX_DEMOD_DMDCFGMD_SCAN_ENABLE(Demod), 1);
+#endif
 		error |= ChipSetRegisters(state->base->ip.handle_demod,
 		(u16)REG_RC8CODEW_DVBSX_DEMOD_DMDCFGMD(Demod), 1);
 
 		error |= FE_STiD135_SetViterbiStandard(state->base->ip.handle_demod,
 				state->demod_search_standard,
 				state->demod_puncture_rate,Demod);
-
+#if 0 // XXX different
 		/* Enable Super FEC */
-		//error |= ChipSetOneRegister(state->base->ip.handle_demod,
-		//(u16)REG_RC8CODEW_DVBSX_HWARE_SFDLYSET2(Demod), 0);
+		error |= ChipSetOneRegister(state->base->ip.handle_demod,
+		(u16)REG_RC8CODEW_DVBSX_HWARE_SFDLYSET2(Demod), 0);
 #endif
 	break;
 
@@ -4986,7 +4956,7 @@ static  fe_lla_error_t FE_STiD135_GetSignalParams(
 		state->demod_results.frequency += (u32)offsetFreq/1000;
 
 	error |=
-		FE_STiD135_GetViterbiPunctureRate(state->base->ip.handle_demod, Demod, &(state->demod_results.puncture_rate));
+		FE_STiD135_GetViterbiPunctureRate(state, &(state->demod_results.puncture_rate));
 
 	error = error | fe_stid135_get_mode_code(state,
 				&state->demod_results.modcode,
@@ -11284,7 +11254,7 @@ fe_lla_error_t fe_stid135_uninit_after_bb_flt_calib_(struct fe_stid135_internal_
 	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC1SHDB(Demod), 0x00);
 
 	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_AGCRF_AGCRFREF(tuner_nb), 0x60);
-#if 1 //present in main driver
+
 	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRUP2(Demod), 0xCE);
 	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRUP1(Demod), 0xC9);
 	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRUP0(Demod), 0xCC);
@@ -11295,7 +11265,6 @@ fe_lla_error_t fe_stid135_uninit_after_bb_flt_calib_(struct fe_stid135_internal_
 	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRINIT1(Demod), 0x75);
 	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRINIT0(Demod), 0x8E);
 	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CARCFG(Demod), 0xC6);
-#endif
 	return (fe_lla_error_t)error;
 }
 
@@ -12407,7 +12376,6 @@ STCHIP_Error_t stvvglna_term(STCHIP_Info_t* hChip)
 
 fe_lla_error_t get_current_llr(struct stv* state, s32 *current_llr)
 {
-	fe_lla_error_t error=FE_LLA_NO_ERROR;
 	s32 max_llr_allowed, raw_bit_rate;
 	s32 fld_value[2];
 	struct fe_stid135_internal_param * pParams = &state->base->ip;
@@ -12475,20 +12443,20 @@ fe_lla_error_t get_current_llr(struct stv* state, s32 *current_llr)
 		case 2:
 			FE_STiD135_GetMclkFreq(pParams, &(fld_value[0])) ;
 
-			printk("Max LLR allowed = %d MLLR/s\n", fld_value[0]);
+			dprintk("Max LLR allowed = %d MLLR/s\n", fld_value[0]/10*9000000);
 
 			if(*current_llr >fld_value[0]/10*9)
-				printk("Careful! LLR may reach max allowed LLR!\n");
+				dprintk("Careful! LLR may reach max allowed LLR!\n");
 
 		break;
 		case 3:
 			printk("Max LLR allowed = 90 MLLR/s\n");
 			if(*current_llr >  81000000 )
-				printk("Careful! LLR may reach max allowed LLR!\n");
+				dprintk("Careful! LLR may reach max allowed LLR!\n");
 
 		break;
 		default:
-			printk("Unknown max LLR\n");
+			dprintk("Unknown max LLR\n");
 		break;
 	}
 	return FE_LLA_NO_ERROR;
