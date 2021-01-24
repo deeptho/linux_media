@@ -64,7 +64,17 @@ void chip_close_proc(const char* name);
 static u8  mc_mask_bitfield[FE_SAT_MODCODE_MAX];
 static u16 mc_reg_addr[FE_SAT_MODCODE_MAX][8]; //TODO
 
-
+void tst(struct fe_stid135_internal_param* pParams, u32 reg_value, const char* func, int line) {
+	if (reg_value & ~0x11111) {
+		int error;
+		printk(KERN_DEBUG pr_fmt("%s:%d " "CONFIG1000  corrupt: 0x%x CORRECTING\n"),  func, line, reg_value);
+		reg_value= 0x11111;
+		error = ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1000, reg_value);
+		if(error) {
+			printk(KERN_DEBUG pr_fmt("%s:%d " "CONFIG1000  corrupt: correction failed: error=%d\n"),  func, line, error);
+		}
+	}
+}
 
 static struct mc_array_customer st_mc_flt[FE_SAT_MODCODE_MAX] = {
 	// MODCODE, SNRx100
@@ -2652,7 +2662,7 @@ static fe_lla_error_t fe_stid135_set_reg_init_values(struct stv* state)
 	return error;
 }
 
-void tst(struct stv* state)
+void tstxxx(struct stv* state)
 {
 	fe_lla_error_t error;
 	fe_lla_error_t error1;
@@ -6277,21 +6287,36 @@ fe_lla_error_t fe_stid135_diseqc_init(struct fe_stid135_internal_param* pParams,
 	switch(tuner_nb) {
 	case AFE_TUNER2:
 		error |= ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1000, &reg_value);
-		vprintk("DISEQC[%d] reg_value=%d error=%d", tuner_nb, reg_value, error);
-		reg_value |= 0x00000001;
-		error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1000, reg_value);
+		tst(pParams, reg_value, __func__, __LINE__);
+		vprintk("DISEQC[%d] reg_value=0x%x error=%d", tuner_nb, reg_value, error);
+		if(error) {
+			dprintk("DISEQC[%d] ERROR reg_value=0x%x error=%d", tuner_nb, reg_value, error);
+		} else {
+			reg_value |= 0x00000001;
+			error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1000, reg_value);
+		}
 	break;
 	case AFE_TUNER3:
 		error |= ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1000, &reg_value);
+		tst(pParams, reg_value, __func__, __LINE__);
 		vprintk("DISEQC[%d] reg_value=%d error=%d", tuner_nb, reg_value, error);
-		reg_value |= 0x00000010;
-		error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1000, reg_value);
+		if(error) {
+			dprintk("DISEQC[%d] ERROR reg_value=0x%x error=%d", tuner_nb, reg_value, error);
+		} else {
+			reg_value |= 0x00000010;
+			error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1000, reg_value);
+		}
 	break;
 	case AFE_TUNER4:
 		error |= ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1000, &reg_value);
+		tst(pParams, reg_value, __func__, __LINE__);
 		vprintk("DISEQC[%d] reg_value=%d error=%d", tuner_nb, reg_value, error);
-		reg_value |= 0x00000100;
-		error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1000, reg_value);
+		if(error) {
+			dprintk("DISEQC[%d] ERROR reg_value=0x%x error=%d", tuner_nb, reg_value, error);
+		} else {
+			reg_value |= 0x00000100;
+			error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1000, reg_value);
+		}
 		break;
 	default:
 		break;
