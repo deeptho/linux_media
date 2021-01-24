@@ -1754,7 +1754,7 @@ struct dvb_frontend *stid135_attach(struct i2c_adapter *i2c,
 
 		list_add(&base->stvlist, &stvlist);
 	}
-#if 0 //XXX official driver ahs none of this
+#if 1 //XXX official driver has none of this (it is done elsewhere)
 	//pParams = &state->base->ip;
 	/* Init for PID filtering feature */
 
@@ -1769,9 +1769,9 @@ struct dvb_frontend *stid135_attach(struct i2c_adapter *i2c,
 	//does not belong here: global for chip
 	fe_stid135_modcod_flt_reg_init();
 #endif
-	BUG_ON(sizeof(state->base->ip.mc_flt)/sizeof(state->base->ip.mc_flt[0])!=NB_SAT_MODCOD);
+	BUG_ON(sizeof(state->mc_flt)/sizeof(state->mc_flt[0])!=NB_SAT_MODCOD);
 	for(i=0;i<NB_SAT_MODCOD;i++) {
-		state->base->ip.mc_flt[i].forbidden = FALSE;
+		state->mc_flt[i].forbidden = FALSE;
 	}
 	error = fe_stid135_apply_custom_qef_for_modcod_filter(state, NULL);
 	if(error)
@@ -1803,8 +1803,17 @@ fail:
 	kfree(state);
 	return NULL;
 }
+
+static int stid135_module_init(void)
+{
+	fe_stid135_modcod_flt_reg_init();
+	return 0;
+}
+
+
 EXPORT_SYMBOL_GPL(stid135_attach);
 
+module_init(stid135_module_init);
 MODULE_DESCRIPTION("STiD135 driver");
 MODULE_AUTHOR("CrazyCat");
 MODULE_LICENSE("GPL");

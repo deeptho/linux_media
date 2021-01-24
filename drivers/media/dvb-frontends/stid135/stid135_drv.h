@@ -248,8 +248,8 @@ struct fe_stid135_internal_param {
 	struct ram_byte			pid_flt[8];
 	struct gse_ram_byte		gse_flt[8];
 	BOOL				mis_mode[8]; /* Memorisation of MIS mode */
-#endif
 	struct modcod_data		mc_flt[NB_SAT_MODCOD];
+#endif
 	struct mutex *master_lock;
 };
 
@@ -441,6 +441,8 @@ struct stv {
 	struct ram_byte			pid_flt;
 	struct gse_ram_byte		gse_flt;
 	BOOL	mis_mode; /* Memorisation of MIS mode */
+	struct modcod_data	mc_flt[NB_SAT_MODCOD];
+
 	struct spectrum_scan_state scan_state;
 	struct constellation_scan_state constellation_scan_state;
 };
@@ -764,7 +766,7 @@ fe_lla_error_t fe_stid135_set_carrier_frequency_init(struct stv* state,
 fe_lla_error_t fe_stid135_set_symbol_rate(struct stv* state,  u32 symbol_rate);
 
 fe_lla_error_t fe_stid135_manage_matype_info(struct stv* state);
-
+void fe_stid135_modcod_flt_reg_init(void);
 STCHIP_Error_t stvvglna_init(SAT_VGLNA_Params_t *InitParams, STCHIP_Info_t* *hChipHandle);
 STCHIP_Error_t stvvglna_set_standby(STCHIP_Info_t* hChip, U8 StandbyOn);
 STCHIP_Error_t stvvglna_get_status(STCHIP_Info_t* hChip, U8 *Status);

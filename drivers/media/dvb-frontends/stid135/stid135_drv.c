@@ -742,7 +742,7 @@ fe_lla_error_t FE_STiD135_TunerStandby(STCHIP_Info_t* TunerHandle,
 
 fe_lla_error_t fe_stid135_set_vcore_supply(struct fe_stid135_internal_param* pParams);
 static fe_lla_error_t fe_stid135_select_min_isi(struct stv* state);
-static void fe_stid135_modcod_flt_reg_init(void);
+void fe_stid135_modcod_flt_reg_init(void);
 
 //==============================================================================
 
@@ -4141,9 +4141,10 @@ fe_lla_error_t fe_stid135_init(struct fe_sat_init_params *pInit,
 		pParams->internal_dcdc = pInit->internal_dcdc;
 		pParams->internal_ldo = pInit->internal_ldo;
 		pParams->rf_input_type = pInit->rf_input_type;
+
 		//DANGER: &(pParams->handle_demod) or (pParams->handle_demod)
 		//	error |= fe_stid135_apply_custom_qef_for_modcod_filter(pParams, NULL);
-		fe_stid135_modcod_flt_reg_init();
+		//fe_stid135_modcod_flt_reg_init(); XXX now done in module init
 
 		TunerError = FE_STiD135_TunerInit(pParams);
 
@@ -9458,14 +9459,14 @@ fe_lla_error_t fe_stid135_reset_modcodes_filter(struct stv* state)
 	if(error1)
 		dprintk("Error setting FLD_FC8CODEW_DVBSX_DEMOD_MODCODLST1_NRESET_MODCODLST(%d)\n", demod);
 	/*First disable all modcodes */
-	row_max = sizeof(state->base->ip.mc_flt) / sizeof(struct modcod_data) - 1;
+	row_max = sizeof(state->mc_flt) / sizeof(state->mc_flt[0]) - 1;
 	for(i = 0;i <= row_max;i++) {
-		state->base->ip.mc_flt[i].forbidden = FALSE;
-		error |= (error1=ChipGetOneRegister(state->base->ip.handle_demod, state->base->ip.mc_flt[i].register_address, &reg_value));
+		state->mc_flt[i].forbidden = FALSE;
+		error |= (error1=ChipGetOneRegister(state->base->ip.handle_demod, state->mc_flt[i].register_address, &reg_value));
 		if(error1)
 			dprintk("Error getting reg %d demod=%d\n", i, demod);
-		reg_value &= ~(state->base->ip.mc_flt[i].mask_value);
-		error |= (error1=ChipSetOneRegister(state->base->ip.handle_demod, state->base->ip.mc_flt[i].register_address, reg_value));
+		reg_value &= ~(state->mc_flt[i].mask_value);
+		error |= (error1=ChipSetOneRegister(state->base->ip.handle_demod, state->mc_flt[i].register_address, reg_value));
 		if(error1)
 			dprintk("Error getting reg %d demod=%d\n", i, demod);
 		//dprintk("here error=%d\n", error);
@@ -9523,15 +9524,15 @@ fe_lla_error_t fe_stid135_apply_custom_qef_for_modcod_filter(struct stv* state, 
 	} else {
 			if(cust_mc_flt == NULL) {
 				for(i = 0;i < NB_SAT_MODCOD;i++) {
-					state->base->ip.mc_flt[i].register_address = mc_reg_addr[st_mc_flt[i].modcod_id][state->nr+1-1];
-					state->base->ip.mc_flt[i].mask_value = mc_mask_bitfield[st_mc_flt[i].modcod_id];
-					state->base->ip.mc_flt[i].qef = st_mc_flt[i].snr;
+					state->mc_flt[i].register_address = mc_reg_addr[st_mc_flt[i].modcod_id][state->nr+1-1];
+					state->mc_flt[i].mask_value = mc_mask_bitfield[st_mc_flt[i].modcod_id];
+					state->mc_flt[i].qef = st_mc_flt[i].snr;
 				}
 			} else {
 				for(i = 0;i < NB_SAT_MODCOD;i++) {
-					state->base->ip.mc_flt[i].register_address = mc_reg_addr[cust_mc_flt[i].modcod_id][state->nr+1-1];
-					state->base->ip.mc_flt[i].mask_value = mc_mask_bitfield[cust_mc_flt[i].modcod_id];
-					state->base->ip.mc_flt[i].qef = cust_mc_flt[i].snr;
+					state->mc_flt[i].register_address = mc_reg_addr[cust_mc_flt[i].modcod_id][state->nr+1-1];
+					state->mc_flt[i].mask_value = mc_mask_bitfield[cust_mc_flt[i].modcod_id];
+					state->mc_flt[i].qef = cust_mc_flt[i].snr;
 				}
 			}
 	}
@@ -9548,7 +9549,7 @@ fe_lla_error_t fe_stid135_apply_custom_qef_for_modcod_filter(struct stv* state, 
 --PARAMS OUT	::	NONE
 --RETURN	::	Error (if any)
 --***************************************************/
-static void fe_stid135_modcod_flt_reg_init(void)
+void fe_stid135_modcod_flt_reg_init(void)
 {
 	u8 i;
 
@@ -9744,11 +9745,11 @@ fe_lla_error_t fe_stid135_filter_forbidden_modcodes(struct stv* state, s32 cnr)
 		error = FE_LLA_I2C_ERROR;
 	else {
 		row_min = 0;
-		row_max = sizeof(state->base->ip.mc_flt) / sizeof(struct modcod_data) - 1;
+		row_max = sizeof(state->mc_flt) / sizeof(state->mc_flt[0]) - 1;
 		if(INRANGE(-300, cnr, 10000)) {
 			while((row_max - row_min) > 1) {
 				found_row = (u8)((row_max + row_min) >> 1);
-				if(INRANGE(state->base->ip.mc_flt[row_min].qef, cnr, state->base->ip.mc_flt[found_row].qef))
+				if(INRANGE(state->mc_flt[row_min].qef, cnr, state->mc_flt[found_row].qef))
 					row_max = found_row;
 				else
 					row_min = found_row;
@@ -9758,21 +9759,21 @@ fe_lla_error_t fe_stid135_filter_forbidden_modcodes(struct stv* state, s32 cnr)
 		error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLST1_SYMBRATE_FILTER(demod), 0);
 
 		/* Disable all forbidden modcodes */
-		row_max = sizeof(state->base->ip.mc_flt) / sizeof(struct modcod_data) - 1;
+		row_max = sizeof(state->mc_flt) / sizeof(state->mc_flt[0]) - 1;
 		for(i = 0;i <= row_min;i++) {
-			if(state->base->ip.mc_flt[i].forbidden == TRUE) {
-				state->base->ip.mc_flt[i].forbidden = FALSE;
-				error |= ChipGetOneRegister(state->base->ip.handle_demod, state->base->ip.mc_flt[i].register_address, &reg_value);
-				reg_value &= ~(state->base->ip.mc_flt[i].mask_value);
-				error |= ChipSetOneRegister(state->base->ip.handle_demod, state->base->ip.mc_flt[i].register_address, reg_value);
+			if(state->mc_flt[i].forbidden == TRUE) {
+				state->mc_flt[i].forbidden = FALSE;
+				error |= ChipGetOneRegister(state->base->ip.handle_demod, state->mc_flt[i].register_address, &reg_value);
+				reg_value &= ~(state->mc_flt[i].mask_value);
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, state->mc_flt[i].register_address, reg_value);
 			}
 		}
 		for(i = (u8)(row_min + 1);i <= row_max;i++) {
-			if(state->base->ip.mc_flt[i].forbidden == FALSE) {
-				state->base->ip.mc_flt[i].forbidden = TRUE;
-				error |= ChipGetOneRegister(state->base->ip.handle_demod, state->base->ip.mc_flt[i].register_address, &reg_value);
-				reg_value |= state->base->ip.mc_flt[i].mask_value;
-				error |= ChipSetOneRegister(state->base->ip.handle_demod, state->base->ip.mc_flt[i].register_address, reg_value);
+			if(state->mc_flt[i].forbidden == FALSE) {
+				state->mc_flt[i].forbidden = TRUE;
+				error |= ChipGetOneRegister(state->base->ip.handle_demod, state->mc_flt[i].register_address, &reg_value);
+				reg_value |= state->mc_flt[i].mask_value;
+				error |= ChipSetOneRegister(state->base->ip.handle_demod, state->mc_flt[i].register_address, reg_value);
 			}
 		}
 	}
