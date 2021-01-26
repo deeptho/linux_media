@@ -767,7 +767,7 @@ int get_spectrum_scan_fft(struct dvb_frontend *fe)
 	bool double_correction;
 	s32 useable_samples2;
 	s32 lost_samples2;
-
+	ss->spectrum_present = false;
 	if(p->scan_end_frequency < p->scan_start_frequency)
 		return -1; //fully done
 	ss->start_frequency = start_frequency;
@@ -807,7 +807,6 @@ int get_spectrum_scan_fft(struct dvb_frontend *fe)
 	}
 
 	ss->spectrum_len = (end_frequency-start_frequency + ss->sample_step-1)/ss->sample_step;
-	ss->spectrum_present = true;
 
 
 	useable_samples2 = ((ss->fft_size*6)/10+1)/2;
@@ -878,7 +877,7 @@ int get_spectrum_scan_fft(struct dvb_frontend *fe)
 		right = temp_rf_level[i-1];
 
 	}
-
+	ss->spectrum_present = true;
  _end:
 	dprintk("ending\n");
 	if(temp_freq)
@@ -896,177 +895,6 @@ int get_spectrum_scan_fft(struct dvb_frontend *fe)
 
 
 
-enum slope_t {
-	FALLING = 1,
-	RISING = 2
-};
-
-#define MAXW 31
-
-static s32 max_(s32*a, int n)
-{
-	int i;
-	s32 ret=a[0];
-	for(i=0; i<n;++i)
-		if(a[i]> ret)
-			ret=a[i];
-	return ret;
-}
-
-
-
-
-/*
-	candidate right edges of transponder
-	w is window size
-	n is size of signal
-*/
-static void falling(u8* pres, s32* psig, int n, int w, int thresh, int mincount)
-{
-	int count=0;
-	bool peak_found=false;
-	int i;
-	s32 temp[MAXW];
-	if(w >MAXW)
-		w=MAXW;
-	for(i=0;i<w;++i)
-		temp[i]=psig[n-1];
-	for(i=0; i< n; ++i) {
-		s32 s = psig[i];
-		s32 left_max;
-		temp[i%w] = s;
-		left_max = max_(temp, w);
-		if (left_max-s > thresh)
-			count++;
-		else
-			count =0;
-		if(count>=mincount) {
-			//mark complete peak if not already on a peak
-			if(!peak_found) {
-				//dprintk("SET FALL\n");
-				pres[i] |=FALLING;
-			}
-			peak_found = true;
-		} else {
-			peak_found =false;
-		}
-	}
-}
-
-/*
-	candidate left edges of transponder
-	w is window size
-	n is size of signal
-*/
-static void rising(u8* pres, s32* psig, int n, int w, int thresh, int mincount)
-{
-	int count=0;
-	bool peak_found=false;
-	int i;
-	s32 temp[MAXW];
-	if(w>MAXW)
-		w=MAXW;
-	for(i=0;i<w;++i)
-		temp[i]=psig[n-1];
-	for(i=n-1; i>=0; --i) {
-		s32 s = psig[i];
-		s32 right_max;
-		temp[i%w] = s;
-		right_max = max_(temp, w);
-		if (right_max-s > thresh)
-			count++;
-		else
-			count =0;
-		if(count>=mincount) {
-			//mark complete peak if not already on a peak
-			if(!peak_found) {
-				//dprintk("SET RISE\n");
-				pres[i] |= RISING;
-			}
-			peak_found = true;
-		} else {
-			peak_found =false;
-		}
-	}
-}
-
-
-/*
-	Fix some cases in which there is no rising edge between two falling edges,
-	or vice versa
- */
-static void fix(u8* pres, s32* psig, int n, int w, int thresh, int mincount)
-{
-
-	//bool peak_found=false;
-	int i;
-	//s32 temp[MAXW];
-	int last=0;
-	if(w>MAXW)
-		w=MAXW;
-
-
-	for(i=0; i<n; ++i) {
-		if(i>0) {
-			if(pres[i]!=0) {
-				if((pres[i] & RISING ) && (pres[last] &RISING)) {
-					falling(pres+last, psig+last, i-last+1, w, thresh, mincount);
-				}
-				if((pres[i] & FALLING ) && (pres[last] & FALLING)) {
-					rising(pres+last, psig+last, i-last+1, w, thresh, mincount);
-				}
-				last = i;
-			}
-		}
-	}
-}
-
-
-//returns index of a peak in the spectrum
-static int next_candidate_tp(struct spectrum_scan_state* ss)
-{
-	for(; ss->current_idx < ss->idx_end; ++ss->current_idx) {
-		if(ss->peak_marks[ss->current_idx] & FALLING) {
-			dprintk("FALLING FOUND at %d last_rise=%d last fall =%d\n",
-							ss->current_idx, ss->last_rise_idx, ss->last_fall_idx);
-			if(ss->last_rise_idx > ss->last_fall_idx && ss->last_rise_idx>=0) {
-				//candidate found; peak is between last_rise and current idx
-				ss->last_peak_idx = (ss->last_rise_idx + ss->current_idx)/2;
-				ss->last_peak_freq =
-					ss->freq[ss->last_peak_idx]; //in kHz
-				ss->last_peak_bw = ss->freq[ss->current_idx] - ss->freq[ss->last_rise_idx]; //in kHz
-				dprintk("CANDIDATE: %d %dkHz BW=%dkHz\n", ss->last_peak_idx, ss->last_peak_freq,
-								ss->last_peak_bw);
-				ss->last_fall_idx = ss->current_idx;
-				if(ss->peak_marks[ss->current_idx]& RISING)
-					ss->last_rise_idx = ss->current_idx;
-				ss->current_idx++;
-				return ss->last_peak_idx;
-			}
-
-			ss->last_fall_idx = ss->current_idx;
-		}
-
-		if(ss->peak_marks[ss->current_idx]& RISING)
-			ss->last_rise_idx = ss->current_idx;
-	}
-	return -1;
-}
-
-
-static void dump_data(const char* name, u8* data, int size)
-{
-	int i;
-	printk("%s=[ ", name);
-	for(i=0;i<size;++i)
-		printk("%d ", data[i]);
-	printk("]");
-}
-
-
-/*
-	center_freq and range in kHz
- */
 
 /*
 	returns -1 when done or when error
@@ -1079,36 +907,20 @@ int stid135_spectral_scan_start(struct dvb_frontend *fe)
 	struct spectrum_scan_state* ss = &state->scan_state;
 	//	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
-
+	ss->scan_in_progress =true;
 	error = get_spectrum_scan_fft(fe);
 	if(error)
 		return error;
-
-	ss->scan_in_progress =true;
-
-	ss->idx_start =  0;
-	ss->idx_end = ss->spectrum_len;
 	ss->current_idx = 0;
-	ss->last_peak_idx = -1;
-	ss->last_rise_idx = -1;
-	ss->last_fall_idx = -1;
-
 	ss->w =17;
 	ss->threshold = 2000;
 	ss->mincount = 3;
 
-	ss->peak_marks = kzalloc(ss->spectrum_len * (sizeof(ss->peak_marks[0])), GFP_KERNEL);
-	dprintk("BUFFER(peak_marks size=%d) %p-%p\n", ss->spectrum_len, ss->peak_marks, ss->peak_marks+ ss->fft_size * (sizeof(ss->peak_marks[0])));
 	if (!ss->spectrum) {
 		return -ENOMEM;
 	}
 
-	memset(ss->peak_marks, 0, sizeof(ss->peak_marks[0])*ss->spectrum_len);
-	falling(ss->peak_marks, ss->spectrum, ss->spectrum_len, ss->w, ss->threshold, ss->mincount);
-	rising(ss->peak_marks, ss->spectrum, ss->spectrum_len, ss->w, ss->threshold, ss->mincount);
-	fix(ss->peak_marks, ss->spectrum, ss->spectrum_len, ss->w, ss->threshold, ss->mincount);
-	//dump_data("marks", ss->peak_marks, ss->spectrum_len);
-	return error;
+	return stid135_scan_spectrum(ss);
 }
 
 
@@ -1116,17 +928,13 @@ int stid135_spectral_scan_next(struct dvb_frontend *fe,   s32 *frequency_ret)
 {
 	struct stv *state = fe->demodulator_priv;
 	struct spectrum_scan_state* ss = &state->scan_state;
-	int ret=-1;
-	while(ss->current_idx < ss->idx_end) {
-		print_spectrum_scan_state(ss);
-		ret = next_candidate_tp(ss);
-		if(ret>=0) {
-			dprintk("Next frequency to scan: [%d] %dkHz\n", ret, ss->last_peak_freq);
-			*frequency_ret =  ss->last_peak_freq;
-			return 0;
-		} else {
-			dprintk("Current subband fully scanned: current_idx=%d idx_end=%d\n", ss->current_idx, ss->idx_end);
-		}
+
+	if(ss->current_idx < ss->num_candidates) {
+		*frequency_ret = ss->candidate_frequencies[ss->current_idx++];
+		dprintk("Next frequency to scan: %d/%d %dkHz\n", ss->current_idx -1, ss->num_candidates, *frequency_ret);
+		return 0;
+	} else {
+		dprintk("Current subband fully scanned %d frequencies\n", ss->num_candidates);
 	}
 	return -1;
 }
@@ -1137,13 +945,13 @@ void print_spectrum_scan_state_(struct spectrum_scan_state*ss, const char* func,
 {
 	printk(KERN_DEBUG
 				 "%s:%d\n------------------------------------\n"
-				 "in_progress=%d  idx_start=%d idx_end=%d  spectrum_len=%d  current_idx=%d\n"
+				 "in_progress=%d  idx_end=%d  spectrum_len=%d  current_idx=%d\n"
 				 "last_peak_idx=%d  last_peak_freq=%d last_rise_idx=%d last_fall_idx=%d\n"
 				 "mode=%d fft_size=%d w=%d threshold=%d\n"
 				 "lo_frequency_hz=%dkHz  range=%dkHz sample_step=%dkHz\n"
 				 "-------------------------------\n",
 				 func, line,
-				 ss->scan_in_progress, ss->idx_start, ss->idx_end, ss->spectrum_len, ss->current_idx,
+				 ss->scan_in_progress, ss->spectrum_len, ss->spectrum_len, ss->current_idx,
 				 ss->last_peak_idx, ss->last_peak_freq, ss->last_rise_idx, ss->last_fall_idx,
 				 ss->mode, ss->fft_size, ss->w, ss->threshold,
 				 ss->lo_frequency_hz/1000, ss->range, ss->sample_step);

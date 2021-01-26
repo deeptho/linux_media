@@ -44,6 +44,7 @@
 #include "fesat_pro_advance.h"
 #include "oxford_anafe_func.h"
 #include "stid135_initLLA_cut2.h"
+#include "stid135-scan.h"
 #include <media/dvb_frontend.h>
 /* ========================================================== */
 // Typedefs - proprietary, non generic
@@ -341,49 +342,6 @@ struct stv_base {
 	//end
 
 	int vglna;
-};
-
-
-/*
-	state for spectrum scan
-*/
-
-struct spectrum_scan_state {
-	bool spectrum_present;
-	bool scan_in_progress;
-
-	s32* freq;
-	s32* spectrum;
-	int spectrum_len;
-	int fft_size; //for fft
-	s32 sample_step; //bandwidth of one spectral bin in kHz
-	s32 start_frequency;
-	s32 end_frequency;
-	s32 range; //bandwidth of current fft in kHz (covers the whole spectrum, not just the useable part)
-	int mode; //for fft
-
-	int idx_start ;//analysis starts at spectrum[idx_start]
-	int idx_end ;//analysis end at spectrum[idx_end]-1
-	int current_idx; //position at which we last stopped processing
-	s32 next_frequency; // If we found a transponder last time, this is the frequency just above the transponder bandwidth
-
-	int last_peak_idx; //index at which we last found a peak
-	s32 last_peak_freq; //frequency of current peak
-	s32 last_peak_bw; //bandwidth of current peak
-
-	int last_rise_idx; //location of last processed rising peak
-	int last_fall_idx; //location of last processed falling peak
-
-
-	int w; //window_size
-	int threshold; //minimum peak amplitude required
-	int mincount; //minimum number of above threshold detections to count as rise/fall
-
-	s32 lo_frequency_hz;
-
-
-	u8* peak_marks;
-
 };
 
 
