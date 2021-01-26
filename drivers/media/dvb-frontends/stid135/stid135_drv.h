@@ -399,7 +399,7 @@ struct stv {
 	struct ram_byte			pid_flt;
 	struct gse_ram_byte		gse_flt;
 	BOOL	mis_mode; /* Memorisation of MIS mode */
-	struct modcod_data	mc_flt[NB_SAT_MODCOD];
+	struct modcod_data	mc_flt[NB_SAT_MODCOD]; //This must be per adapter, not per chip
 
 	struct spectrum_scan_state scan_state;
 	struct constellation_scan_state constellation_scan_state;
