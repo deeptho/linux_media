@@ -274,6 +274,7 @@ typedef enum
 
 		void	*pData;			  /* pointer to chip data */
 		u8	TunerNb;		  /* number of tuner from 0 to 3, field added to match Oxford */
+		atomic_t num_parallel;
 	}
 	STCHIP_Info_t;
 

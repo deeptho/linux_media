@@ -692,7 +692,13 @@ STCHIP_Error_t  ChipSetRegisters(STCHIP_Info_t* hChip, u16 FirstReg, s32 NbRegs)
 								data[nbdata++]=0xff&(hChip->pRegMapImage[firstRegIndex+i].Value>>(8*j));	/*   fill data buffer (LSB first) */
 					break;
 				}
-				#ifndef NO_I2C
+#ifndef NO_I2C
+				{int x=atomic_add_return(100, &hChip->num_parallel);
+					if(x>100) {
+						dump_stack();
+						dprintk("Overlapping call x=%d\n", x);
+					}
+				}
 					if(hChip->Repeater && hChip->RepeaterHost && hChip->RepeaterFn)
 						hChip->RepeaterFn(hChip->RepeaterHost,TRUE);	/* Set repeater ON */
 
@@ -701,6 +707,7 @@ STCHIP_Error_t  ChipSetRegisters(STCHIP_Info_t* hChip, u16 FirstReg, s32 NbRegs)
 
 					if(hChip->Repeater && hChip->RepeaterHost && hChip->RepeaterFn)
 						hChip->RepeaterFn(hChip->RepeaterHost,FALSE);	/* Set repeater OFF */
+					atomic_add_return(-100, &hChip->num_parallel);
 
 				#endif
 			}
@@ -745,7 +752,14 @@ STCHIP_Error_t ChipGetRegisters(STCHIP_Info_t* hChip, u16 FirstReg, s32 NbRegs)
 				firstRegIndex =ChipGetRegisterIndex(hChip, FirstReg);
 				if((firstRegIndex >= 0) && ((firstRegIndex + NbRegs - 1) < hChip->NbRegs))
 				{
-					#ifndef NO_I2C
+#ifndef NO_I2C
+					{int x=atomic_add_return(1, &hChip->num_parallel);
+						if(x>1) {
+							dump_stack();
+							dprintk("Overlapping call x=%d\n", x);
+						}
+					}
+
 						switch(hChip->ChipMode)
 						{
 							case STCHIP_MODE_I2C2STBUS:	/* fixed 2 addr + 1 data transaction -
@@ -816,6 +830,8 @@ STCHIP_Error_t ChipGetRegisters(STCHIP_Info_t* hChip, u16 FirstReg, s32 NbRegs)
 								else hChip->pRegMapImage[firstRegIndex+i].Value = hChip->pRegMapImage[firstRegIndex+i].Value + (u32)(data[i+j]<<(8*j)); /* fill register value, little endian, classic */
 
 						}
+						atomic_add_return(-1, &hChip->num_parallel);
+
 					#endif
 				}
 				else
