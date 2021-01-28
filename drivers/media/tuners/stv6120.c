@@ -44,7 +44,7 @@ struct SLookup {
 	u16 RegValue;
 };
 
-
+#if 0
 static int cutoff_from_index(int idx) {
 	if(idx==0)
 		return 5;
@@ -52,7 +52,7 @@ static int cutoff_from_index(int idx) {
 		return 36;
 	return 5+idx;
 }
-
+#endif
 static struct SLookup Gain_RFAGC_LookUp[] = {
 	/*Gain *100dB*/   /*reg*/
 	{	7429		,	0        },  /*	74.61 dB	weakest signal*/

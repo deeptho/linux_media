@@ -965,7 +965,7 @@ error:
 	struct tas2101_priv* state = fe->demodulator_priv;
 	struct dtv_frontend_properties* p = &fe->dtv_property_cache;
 	struct tas2101_spectrum_scan_state* ss = &state->scan_state;
-	long dbm_raw;
+	//long dbm_raw;
 	int ret, i;
 	u32 sr;
 	u8 buf[3];

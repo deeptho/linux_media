@@ -291,7 +291,7 @@ static int av201x_agc_to_gain_dbm(struct dvb_frontend *fe, s32 if_agc)
 
 static int av201x_get_rf_strength(struct dvb_frontend *fe, u16 *st)
 {
-	struct av201x_priv *priv = fe->tuner_priv;
+	//struct av201x_priv *priv = fe->tuner_priv;
 	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
 	s32 gain = av201x_agc_to_gain_dbm(fe, *st);
 	*st = 1000 + gain/1000;
