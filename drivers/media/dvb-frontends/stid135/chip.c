@@ -32,7 +32,7 @@
 * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 *
 */
-
+#include <linux/bsearch.h>
 #include "i2c.h"
 #include "chip.h"
 
@@ -414,6 +414,27 @@ STCHIP_Error_t ChipAddField(STCHIP_Info_t* hChip,u16 RegId, u32 FieldId,char * N
 	return hChip->Error;
 }
 
+static int addr_compar(const void* a, const void* b)
+{
+	STCHIP_Register_t*  ra = (STCHIP_Register_t*)a;
+	STCHIP_Register_t*  rb = (STCHIP_Register_t*)b;
+	return (int)ra->Addr -(int) rb->Addr;
+}
+
+#if 1
+int dichotomy_search(STCHIP_Register_t tab[], s32 nbVal, u16 addr)
+{
+	STCHIP_Register_t to_search;
+	STCHIP_Register_t *found;
+	to_search.Addr = addr;
+
+	found = bsearch(&to_search, tab, nbVal, sizeof(STCHIP_Register_t), addr_compar);
+	if(!found)
+		return -1;
+	return found - &tab[0];
+}
+
+#else
 /* Dichotomy-based search function  */
 int dichotomy_search(STCHIP_Register_t tab[], s32 nbVal, u16 val)
 {
@@ -422,7 +443,7 @@ int dichotomy_search(STCHIP_Register_t tab[], s32 nbVal, u16 val)
 	u32 start_index;  // start index
 	u32 end_index;  // end index
 	u32 middle_index;  // middle index
-
+	int x = dichotomy_search_new(tab, nbVal, val);
 	/* Initialisation of these variables before search loop */
 	found = FALSE;  // value is not yet found
 	start_index = 0;  // search range between 0 and ...
@@ -437,11 +458,21 @@ int dichotomy_search(STCHIP_Register_t tab[], s32 nbVal, u16 val)
 		if(tab[middle_index].Addr > val) end_index = middle_index;  // if value which located at im index is greater to searched value, end index becomes "ifin" middle index, therefore search range is narrower for the next loop
 			else start_index = middle_index;  // otherwise start index becomes middle index and search range is also narrower
 	}
+	if(tab[start_index].Addr == val) {
+		if(x!=start_index)
+			dprintk("DIFFERENT: %d %d\n", x, start_index);
+	}
+	else {
+		if(x>=0)
+			dprintk("DIFFERENT: %d %d\n", x, start_index);
+	}
+
 
 	/* test conditionnant la valeur que la fonction va renvoyer */
 	if(tab[start_index].Addr == val) return((s32)start_index);  // if we have found the good value, we return index
 	else return(-1);  // other wise we return -1
 }
+
 
 
 
@@ -466,7 +497,7 @@ int direct_search(STCHIP_Register_t tab[], s32 nbVal, u16 val)
 	if(i< end_index && tab[i].Addr == val) return((s32)i);  // if we have found the good value, we return index
 	else return(-1);  // other wise we return -1
 }
-
+#endif
 
 /*****************************************************
 **FUNCTION	::	ChipGetRegisterIndex
