@@ -950,10 +950,11 @@ enum dtv_fe_constellation_method {
  *
  */
 struct dtv_fe_spectrum {
-	u32 *freq;
-	s32 *rf_level;
-	s32 *rf_band;
+	u32 *freq;     //frequencies of spectrum will be returned in freq[num_freq]
+	s32 *rf_level; //rf_level of spectrum  will be returned in rf_level[num_freq]
+	s32 *candidate_frequencies; //frequencies which were tried for locking are returned in candidate_frequencies[num_candidates]
 	u32 num_freq;
+	u32 num_candidates;
 	u32 scale; //FE_SCALE_DECIBEL; or FE_SCALE_RELATIVE
 	u8 spectrum_method;
 };

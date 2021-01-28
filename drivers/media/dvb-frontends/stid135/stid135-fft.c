@@ -820,10 +820,11 @@ int get_spectrum_scan_fft(struct dvb_frontend *fe)
 					ss->spectrum_len, ss->range, lost_samples2, useable_samples2);
 
 	ss->freq = kzalloc(ss->spectrum_len * (sizeof(ss->freq[0])), GFP_KERNEL);
+	ss->candidate_frequencies = kzalloc(ss->spectrum_len * (sizeof(ss->candidate_frequencies[0])), GFP_KERNEL); //much too big
 	ss->spectrum = kzalloc(ss->spectrum_len * (sizeof(ss->spectrum[0])), GFP_KERNEL);
 	temp_freq = kzalloc(8192 * (sizeof(temp_freq[0])), GFP_KERNEL);
 	temp_rf_level = kzalloc(8192 * (sizeof(temp_rf_level[0])), GFP_KERNEL);
-	if (!temp_rf_level || !temp_freq || !ss->freq || !ss->spectrum) {
+	if (!temp_rf_level || !temp_freq || !ss->freq || !ss->spectrum || !ss->candidate_frequencies) {
 		error = -ENOMEM;
 		goto _end;
 	}

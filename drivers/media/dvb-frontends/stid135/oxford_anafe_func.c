@@ -37,6 +37,11 @@
 
 #include "oxford_anafe_init.h"
 #include "oxford_anafe_func.h"
+#define dprintk(fmt, arg...)																					\
+	printk(KERN_DEBUG pr_fmt("%s:%d " fmt),  __func__, __LINE__, ##arg)
+extern int stid135_verbose;
+#define vprintk(fmt, arg...)																						\
+	if(stid135_verbose) printk(KERN_DEBUG pr_fmt("%s:%d " fmt),  __func__, __LINE__, ##arg)
 
 /******************************************
 FUNCTION   : Oxford_AfeInit
@@ -704,6 +709,10 @@ U32 Oxford_GetFvco_MHz(STCHIP_Info_t* hTuner, U32 Fxtal_MHz)
 {
 	U32 Int=0, Frac=0, Sd=0, RefDiv=1;
 	U32    Fvco_U32=0;
+	if(hTuner->Error) {
+		dprintk("hChip called with error state =%d (correcting)\n", hTuner->Error);
+		hTuner->Error = CHIPERR_NO_ERROR;
+	}
 
 	/*read regs*/
 	Sd	= 	Oxford_GetPLLsdOn( hTuner);
@@ -782,9 +791,13 @@ U32 Oxford_GetPLLfrac(STCHIP_Info_t* hTuner)
 {
 	S32 pllfracH, pllfracL;
 	U32 pllfrac;
-
-	ChipGetField(hTuner,FAFE_PLL_FRAC_H, &pllfracH);
+	STCHIP_Error_t error;
+	error = ChipGetField(hTuner,FAFE_PLL_FRAC_H, &pllfracH);
+	if(error!= CHIPERR_NO_ERROR)
+		dprintk("ChipGetFIeld error=%d\n", error);
 	ChipGetField(hTuner,FAFE_PLL_FRAC_L, &pllfracL);
+	if(error!= CHIPERR_NO_ERROR)
+		dprintk("ChipGetFIeld error=%d\n", error);
 
 	pllfrac = (U32)(((pllfracH << 8) + pllfracL) &0x7fff);
 	return(pllfrac);
@@ -817,8 +830,10 @@ RETURN     : freq
 U32 Oxford_GetPLLinteger(STCHIP_Info_t* hTuner)
 {
 	U32 pllint;
-
-	ChipGetField(hTuner,FAFE_PLL_INT, (S32*)&pllint);
+	STCHIP_Error_t error;
+	error = ChipGetField(hTuner,FAFE_PLL_INT, (S32*)&pllint);
+	if(error!= CHIPERR_NO_ERROR)
+		dprintk("ChipGetFIeld error=%d\n", error);
 	pllint &= 0xff;
 
 	return(pllint);
@@ -858,9 +873,10 @@ RETURN     : div
 U32 Oxford_GetPLLrefDiv(STCHIP_Info_t* hTuner)
 {
 	U32 RefDiv=1;
-
-	(STCHIP_Error_t)ChipGetField(hTuner,FAFE_PLL_REFDIV_N,(S32*)&RefDiv);
-
+	STCHIP_Error_t error;
+	error = ChipGetField(hTuner,FAFE_PLL_REFDIV_N,(S32*)&RefDiv);
+	if(error!= CHIPERR_NO_ERROR)
+		dprintk("ChipGetFIeld erorr=%d\n", error);
 	if (RefDiv &0x1)
 		RefDiv=1;
 	else
@@ -892,8 +908,10 @@ RETURN     : div
 U32 Oxford_GetPLLsdOn(STCHIP_Info_t* hTuner)
 {
 	U32 sd;
-
-	ChipGetField(hTuner,FAFE_PLL_SDON, (S32*)&sd);
+	STCHIP_Error_t error;
+	error=ChipGetField(hTuner,FAFE_PLL_SDON, (S32*)&sd);
+	if(error!= CHIPERR_NO_ERROR)
+		dprintk("ChipGetFIeld error=%d\n", error);
 	sd &= 0x1;
 
 	return(sd);

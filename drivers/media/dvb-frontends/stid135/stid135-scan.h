@@ -61,7 +61,8 @@ struct spectrum_scan_state {
 	s32* candidate_frequencies;
 	int spectrum_len;
 	int num_candidates;
-
+	int num_good;
+	int num_bad;
 
 	//state
 	bool scan_in_progress;
