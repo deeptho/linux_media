@@ -47,6 +47,10 @@
 #define dprintk(fmt, arg...)																					\
 	printk(KERN_DEBUG pr_fmt("%s:%d " fmt),  __func__, __LINE__, ##arg)
 
+extern int stid135_verbose;
+#define vprintk(fmt, arg...)																						\
+	if(stid135_verbose) printk(KERN_DEBUG pr_fmt("%s:%d " fmt),  __func__, __LINE__, ##arg)
+
 /*****************************************************
 --FUNCTION	::	fe_stid135_fft_save_registers
 --ACTION	::	save registers prior to callling FFT
@@ -704,9 +708,9 @@ static int stid135_get_spectrum_scan_fft_one_band(struct stv *state,
 	int i;
 	int a=3;
 	s32 delta;
-#if 0
-	dprintk("sepctrum scan: center_freq=%dkHz lo=%dkHz range=%dkHz mode=%d fft_size=%d\n",
-					center_freq, lo_frequency_hz/1000, range, mode, fft_size);
+#if 1
+	vprintk("spectrum scan: center_freq=%dkHz lo=%dkHz range=%dkHz mode=%d fft_size=%d freq=%p rf_level=%p\n",
+					center_freq, lo_frequency_hz/1000, range, mode, fft_size, freq, rf_level);
 #endif
 	error = fe_stid135_fft(state, mode, nb_acquisition,
 												 center_freq*1000 - lo_frequency_hz, range*1000, rf_level, &begin, fft_size);
@@ -743,7 +747,7 @@ int get_spectrum_scan_fft(struct dvb_frontend *fe)
 {
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
 	struct stv *state = fe->demodulator_priv;
-	struct spectrum_scan_state* ss = &state->scan_state;
+	struct spectrum_scan_state_t* ss = &state->scan_state;
 
 	u32 table_size = 8192;
 	s32 max_range= 60000;//96800;
@@ -768,12 +772,14 @@ int get_spectrum_scan_fft(struct dvb_frontend *fe)
 	s32 useable_samples2;
 	s32 lost_samples2;
 	ss->spectrum_present = false;
-	if(p->scan_end_frequency < p->scan_start_frequency)
+	if(p->scan_end_frequency < p->scan_start_frequency) {
+		vprintk("FULLY DONE\n");
 		return -1; //fully done
+	}
 	ss->start_frequency = start_frequency;
 	ss->end_frequency = end_frequency;
 
-	ss->sample_step = p->scan_resolution==0 ? 100 : p->scan_resolution; //in kHz
+	ss->frequency_step = p->scan_resolution==0 ? 100 : p->scan_resolution; //in kHz
 
 	ss->fft_size =  (p->scan_fft_size>0) ? p->scan_fft_size : 512;
 	if(ss->fft_size >= 4096)
@@ -797,16 +803,17 @@ int get_spectrum_scan_fft(struct dvb_frontend *fe)
 	ss->lo_frequency_hz *=  1000000; //now in Hz
 
 
- 	ss->range = ss->sample_step * ss->fft_size; //in kHz
+ 	ss->range = ss->frequency_step * ss->fft_size; //in kHz
 
 	if(ss->range >= max_range) {
-		ss->sample_step = max_range/ss->fft_size;
+		ss->frequency_step = max_range/ss->fft_size;
 		dprintk("specified resolution (%dkHz) is too large; decreased to %dkHz\n",
-						p->scan_resolution, ss->sample_step);
-		ss->range = ss->sample_step * ss->fft_size; //in kHz
+						p->scan_resolution, ss->frequency_step);
+		ss->range = ss->frequency_step * ss->fft_size; //in kHz
 	}
 
-	ss->spectrum_len = (end_frequency-start_frequency + ss->sample_step-1)/ss->sample_step;
+	ss->spectrum_len = (end_frequency-start_frequency + ss->frequency_step-1)
+		/ss->frequency_step;
 
 
 	useable_samples2 = ((ss->fft_size*6)/10+1)/2;
@@ -816,15 +823,16 @@ int get_spectrum_scan_fft(struct dvb_frontend *fe)
 
 	dprintk("demod: %d: tuner:%d range=[%d,%d]kHz resolution=%dkHz num_freq=%d range=%dkHz lost=%d useable=%d\n",
 					state->nr, state->rf_in,
-					start_frequency, end_frequency, ss->sample_step,
+					start_frequency, end_frequency, ss->frequency_step,
 					ss->spectrum_len, ss->range, lost_samples2, useable_samples2);
 
 	ss->freq = kzalloc(ss->spectrum_len * (sizeof(ss->freq[0])), GFP_KERNEL);
-	ss->candidate_frequencies = kzalloc(ss->spectrum_len * (sizeof(ss->candidate_frequencies[0])), GFP_KERNEL); //much too big
+	//ss->candidates = kzalloc(ss->spectrum_len * (sizeof(ss->candidates[0])), GFP_KERNEL); //much too big
 	ss->spectrum = kzalloc(ss->spectrum_len * (sizeof(ss->spectrum[0])), GFP_KERNEL);
 	temp_freq = kzalloc(8192 * (sizeof(temp_freq[0])), GFP_KERNEL);
 	temp_rf_level = kzalloc(8192 * (sizeof(temp_rf_level[0])), GFP_KERNEL);
-	if (!temp_rf_level || !temp_freq || !ss->freq || !ss->spectrum || !ss->candidate_frequencies) {
+	if (!temp_rf_level || !temp_freq || !ss->freq || !ss->spectrum) {
+		dprintk("ERROR spectrum_len=%d\n", ss->spectrum_len);
 		error = -ENOMEM;
 		goto _end;
 	}
@@ -839,13 +847,12 @@ int get_spectrum_scan_fft(struct dvb_frontend *fe)
 	}
 
 	for(idx=0; idx < ss->spectrum_len;) {
-		s32 center_freq = start_frequency + (idx + useable_samples2)* ss->sample_step;
+		s32 center_freq = start_frequency + (idx + useable_samples2)* ss->frequency_step;
 		if (kthread_should_stop() || dvb_frontend_task_should_stop(fe)) {
 			//@todo:  should this be moved into  stid135_get_spectrum_scan_fft_one_band?
 			dprintk("exiting on should stop\n");
 			break;
 		}
-
 		error = stid135_get_spectrum_scan_fft_one_band(state, center_freq, ss->range,
 																									 ss->lo_frequency_hz,
 																									 temp_freq, temp_rf_level,
@@ -880,15 +887,16 @@ int get_spectrum_scan_fft(struct dvb_frontend *fe)
 	}
 	ss->spectrum_present = true;
  _end:
-	dprintk("ending\n");
+	dprintk("ending error=%d\n", error);
 	if(temp_freq)
 		kfree(temp_freq);
 	if(temp_rf_level)
 		kfree(temp_rf_level);
-
+	dprintk("Freed temp variables\n");
 	error |= (error1=fe_stid135_term_fft(state, Reg));
+	dprintk("Terminated fft\n");
 	if(error) {
-		dprintk("fe_stid135_term_fft FAILED: error=%d\n", error);
+		dprintk("fe_stid135_term_fft FAILED: error=%d\n", error1);
 	}
 	return error;
 }
@@ -905,33 +913,35 @@ int get_spectrum_scan_fft(struct dvb_frontend *fe)
 int stid135_spectral_scan_start(struct dvb_frontend *fe)
 {
 	struct stv *state = fe->demodulator_priv;
-	struct spectrum_scan_state* ss = &state->scan_state;
+	struct spectrum_scan_state_t* ss = &state->scan_state;
 	//	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	ss->scan_in_progress =true;
+	ss->current_idx = 0;
 	error = get_spectrum_scan_fft(fe);
 	if(error)
 		return error;
-	ss->current_idx = 0;
-	ss->w =17;
-	ss->threshold = 2000;
-	ss->mincount = 3;
 
 	if (!ss->spectrum) {
+		dprintk("No spectrum\n");
 		return -ENOMEM;
 	}
-
+	dprintk("Calling stid135_scan_spectrum\n");
 	return stid135_scan_spectrum(ss);
 }
 
 
-int stid135_spectral_scan_next(struct dvb_frontend *fe,   s32 *frequency_ret)
+int stid135_spectral_scan_next(struct dvb_frontend *fe,
+															 s32 *frequency_ret, s32* symbolrate_ret)
 {
 	struct stv *state = fe->demodulator_priv;
-	struct spectrum_scan_state* ss = &state->scan_state;
+	struct spectrum_scan_state_t* ss = &state->scan_state;
 
 	if(ss->current_idx < ss->num_candidates) {
-		*frequency_ret = ss->candidate_frequencies[ss->current_idx++];
+		struct spectral_peak_t * peak =
+			&ss->candidates[ss->current_idx++];
+		*frequency_ret = peak->freq;
+		*symbolrate_ret = peak->symbol_rate;
 		dprintk("Next frequency to scan: %d/%d %dkHz\n", ss->current_idx -1, ss->num_candidates, *frequency_ret);
 		return 0;
 	} else {
@@ -942,18 +952,17 @@ int stid135_spectral_scan_next(struct dvb_frontend *fe,   s32 *frequency_ret)
 
 
 
-void print_spectrum_scan_state_(struct spectrum_scan_state*ss, const char* func, int line)
+void print_spectrum_scan_state_(struct spectrum_scan_state_t* ss,
+																const char* func, int line)
 {
 	printk(KERN_DEBUG
 				 "%s:%d\n------------------------------------\n"
 				 "in_progress=%d  idx_end=%d  spectrum_len=%d  current_idx=%d\n"
-				 "last_peak_idx=%d  last_peak_freq=%d last_rise_idx=%d last_fall_idx=%d\n"
-				 "mode=%d fft_size=%d w=%d threshold=%d\n"
-				 "lo_frequency_hz=%dkHz  range=%dkHz sample_step=%dkHz\n"
+				 "mode=%d fft_size=%d threshold=%d\n"
+				 "lo_frequency_hz=%dkHz  range=%dkHz frequency_step=%dkHz\n"
 				 "-------------------------------\n",
 				 func, line,
 				 ss->scan_in_progress, ss->spectrum_len, ss->spectrum_len, ss->current_idx,
-				 ss->last_peak_idx, ss->last_peak_freq, ss->last_rise_idx, ss->last_fall_idx,
-				 ss->mode, ss->fft_size, ss->w, ss->threshold,
-				 ss->lo_frequency_hz/1000, ss->range, ss->sample_step);
+				 ss->mode, ss->fft_size, ss->threshold,
+				 ss->lo_frequency_hz/1000, ss->range, ss->frequency_step);
 };

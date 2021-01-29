@@ -55,7 +55,7 @@ static unsigned int rfsource;
 module_param(rfsource, int, 0644);
 MODULE_PARM_DESC(rfsource, "RF source selection for direct connection mode (default:0 - auto)");
 
-unsigned int stid135_verbose;
+int stid135_verbose=0;
 module_param(stid135_verbose, int, 0644);
 MODULE_PARM_DESC(stid135_verbose, "verbose debugging");
 
@@ -1286,7 +1286,7 @@ static int stid135_get_spectrum_scan_sweep(struct dvb_frontend *fe,
 																						 unsigned int *delay,  enum fe_status *status)
 {
 	struct stv *state = fe->demodulator_priv;
-	struct spectrum_scan_state* ss = &state->scan_state;
+	struct spectrum_scan_state_t* ss = &state->scan_state;
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
 	struct fe_stid135_internal_param * pParams = (struct fe_stid135_internal_param *) &state->base->ip;
 	s32 lo_frequency;
@@ -1439,13 +1439,13 @@ static int stid135_get_spectrum_scan_sweep(struct dvb_frontend *fe,
 static int stid135_stop_task(struct dvb_frontend *fe)
 {
 	struct stv *state = fe->demodulator_priv;
-	struct spectrum_scan_state* ss = &state->scan_state;
+	struct spectrum_scan_state_t* ss = &state->scan_state;
 	mutex_lock(&state->base->status_lock);
 	dprintk("CALLED\n");
 	if(ss->freq)
 		kfree(ss->freq);
-	if(ss->candidate_frequencies)
-		kfree(ss->candidate_frequencies);
+	if(ss->candidates)
+		kfree(ss->candidates);
 	if(ss->spectrum)
 		kfree(ss->spectrum);
 	memset(ss, 0, sizeof(*ss));
@@ -1459,7 +1459,7 @@ static int stid135_spectrum_start(struct dvb_frontend *fe,
 																	unsigned int *delay, enum fe_status *status)
 {
 	struct stv *state = fe->demodulator_priv;
-	struct spectrum_scan_state* ss = &state->scan_state;
+	struct spectrum_scan_state_t* ss = &state->scan_state;
 	int ret=0;
 	fe_lla_error_t err = FE_LLA_NO_ERROR;
 	stid135_stop_task(fe);
@@ -1495,13 +1495,18 @@ int stid135_spectrum_get(struct dvb_frontend *fe, struct dtv_fe_spectrum* user)
 	if (user->num_candidates > state->scan_state.num_candidates)
 		user->num_candidates = state->scan_state.num_candidates;
 	if(state->scan_state.freq && state->scan_state.spectrum) {
-		if (copy_to_user((void __user*) user->freq, state->scan_state.freq, user->num_freq * sizeof(__u32))) {
+		if(user->freq && user->num_freq > 0 &&
+			 copy_to_user((void __user*) user->freq, state->scan_state.freq, user->num_freq * sizeof(__u32))) {
 			error = -EFAULT;
 		}
-		if (copy_to_user((void __user*) user->rf_level, state->scan_state.spectrum, user->num_freq * sizeof(__s32))) {
+		if(user->rf_level && user->num_freq > 0 &&
+			 copy_to_user((void __user*) user->rf_level, state->scan_state.spectrum, user->num_freq * sizeof(__s32))) {
 			error = -EFAULT;
 		}
-		if (copy_to_user((void __user*) user->candidate_frequencies, state->scan_state.candidate_frequencies, user->num_candidates * sizeof(__s32))) {
+		if(user->candidates && user->num_candidates >0 &&
+			 copy_to_user((void __user*) user->candidates,
+										 state->scan_state.candidates,
+										 user->num_candidates * sizeof(struct spectral_peak_t))) {
 			error = -EFAULT;
 		}
 	} else
@@ -1563,7 +1568,7 @@ static int stid135_scan_sat(struct dvb_frontend *fe, bool init,
 			break;
 		}
 		*status = 0;
-		ret=stid135_spectral_scan_next(fe,  &p->frequency);
+		ret=stid135_spectral_scan_next(fe,  &p->frequency, &p->symbol_rate);
 		if(ret<0) {
 			dprintk("reached end of scan range\n");
 			*status =  FE_TIMEDOUT;
@@ -1592,13 +1597,15 @@ static int stid135_scan_sat(struct dvb_frontend *fe, bool init,
 		/*Although undocumented, a low symbol rate must be set to detect signals with SR below 1 MS/s
 			and a low value does not seem to be essential for high SR transponders
 		*/
-#if 0
-		p->symbol_rate = p->symbol_rate==0? 100000: p->symbol_rate;
+#if 1
+		p->symbol_rate = p->symbol_rate==0? 1000000: p->symbol_rate;
+		p->stream_id = -1;
 #else
 		p->symbol_rate = 1000000; //otherwise it may be set too low based on last transponder
 		p->stream_id = -1;
 #endif
-		dprintk("FREQ=%d search_range=%dkHz fft=%d res=%dkH srate=%dkS/s\n", 	p->frequency, p->search_range/1000,
+		dprintk("FREQ=%d search_range=%dkHz fft=%d res=%dkHz srate=%dkS/s\n",
+						p->frequency, p->search_range/1000,
 						p->scan_fft_size, p->scan_resolution, p->symbol_rate/1000);
 		ret = stid135_tune_(fe, retune, mode_flags, delay, status);
 		old = *status;

@@ -401,7 +401,7 @@ struct stv {
 	BOOL	mis_mode; /* Memorisation of MIS mode */
 	struct modcod_data	mc_flt[NB_SAT_MODCOD]; //This must be per adapter, not per chip
 
-	struct spectrum_scan_state scan_state;
+	struct spectrum_scan_state_t scan_state;
 	struct constellation_scan_state constellation_scan_state;
 };
 
@@ -737,12 +737,15 @@ fe_lla_error_t fe_stid135_read_hw_matype(struct stv* state, u8 *matype, u8 *isi_
 bool fe_stid135_check_sis_or_mis(u8 matype);
 
 int stid135_spectral_scan_start(struct dvb_frontend *fe);
-int stid135_spectral_scan_next(struct dvb_frontend *fe,   s32 *frequency_ret);
+int stid135_spectral_scan_next(struct dvb_frontend *fe,
+															 s32 *frequency_ret,
+															 s32* symbol_rate_ret);
 int get_spectrum_scan_fft(struct dvb_frontend *fe);
 
 
-void print_spectrum_scan_state_(struct spectrum_scan_state*ss, const char* func, int line);
-#define print_spectrum_scan_state(ss)																					\
+void print_spectrum_scan_state_(struct spectrum_scan_state_t*ss,
+																const char* func, int line);
+#define print_spectrum_scan_state(ss)		\
 	print_spectrum_scan_state_(ss, __func__, __LINE__)
 
 
