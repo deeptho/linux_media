@@ -1033,7 +1033,7 @@ static char *dvb_devnode(struct device *dev, umode_t *mode)
 
 
 static struct kobject *info_kobject;
-static int version; //not used
+
 static ssize_t version_show(struct kobject *kobj, struct kobj_attribute *attr,
                       char *buf)
 {

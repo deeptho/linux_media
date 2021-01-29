@@ -3091,7 +3091,7 @@ static int dvb_frontend_handle_ioctl(struct file *file,
 
 	case FE_SET_TONE:
 		if (fe->ops.set_tone) {
-			dprintk("FE_SET_TONE %d\n", parg);
+			dprintk("FE_SET_TONE %d\n", (enum fe_sec_tone_mode)parg);
 			err = fe->ops.set_tone(fe,
 								 (enum fe_sec_tone_mode)parg);
 			fepriv->tone = (enum fe_sec_tone_mode)parg;
@@ -3102,7 +3102,7 @@ static int dvb_frontend_handle_ioctl(struct file *file,
 
 	case FE_SET_VOLTAGE:
 		if (fe->ops.set_voltage) {
-			dprintk("FE_SET_VOLTAGE %d\n", parg);
+			dprintk("FE_SET_VOLTAGE %d\n", (enum fe_sec_voltage)parg);
 			err = fe->ops.set_voltage(fe,
 							(enum fe_sec_voltage)parg);
 			fepriv->voltage = (enum fe_sec_voltage)parg;
