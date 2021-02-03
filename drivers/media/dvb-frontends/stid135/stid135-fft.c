@@ -1,6 +1,7 @@
 /*
  * This file is part of STiD135 OXFORD LLA
  *
+ * Copyright (c) <2020>-<2021>, Deep Thought <deeptho@gmail.com> Make this code actually work in the linux drivers
  * Copyright (c) <2014>-<2018>, STMicroelectronics - All Rights Reserved
  * Author(s): Mathias Hilaire (mathias.hilaire@st.com), Thierry Delahaye (thierry.delahaye@st.com) for STMicroelectronics.
  *
