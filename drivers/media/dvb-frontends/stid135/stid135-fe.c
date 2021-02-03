@@ -703,7 +703,7 @@ static int stid135_get_frontend(struct dvb_frontend *fe, struct dtv_frontend_pro
 	}
 
 
-	if(state->demod_search_algo == FE_SAT_BLIND_SEARCH ||
+	if(true || state->demod_search_algo == FE_SAT_BLIND_SEARCH ||
 							state->demod_search_algo == FE_SAT_NEXT) {
 		int max_isi_len= sizeof(p->isi)/sizeof(p->isi[0]);
 		if(max_isi_len > sizeof(state->signal_info.isi_list.isi)/sizeof(state->signal_info.isi_list.isi[0]))
