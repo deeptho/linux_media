@@ -476,7 +476,7 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 	case ALGORITHM_COLD:
 	case ALGORITHM_COLD_BEST_GUESS:
 		search_params.search_algo		= FE_SAT_COLD_START;
-		search_params.symbol_rate = p->symbol_rate;
+		search_params.symbol_rate = p->symbol_rate == 0;
 		break;
 
 	case ALGORITHM_BLIND:
@@ -512,7 +512,7 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 	search_params.stream_id = p->stream_id;
 
 	search_params.frequency		=  p->frequency*1000;
-	search_params.symbol_rate		=		p->symbol_rate;
+	//search_params.symbol_rate		=		p->symbol_rate;
 	vprintk("[%d] symbol_rate=%dkS/s\n", state->nr+1, p->symbol_rate/1000);
 	search_params.modulation	= FE_SAT_MOD_UNKNOWN;
 	search_params.modcode		= FE_SAT_DUMMY_PLF;
@@ -836,9 +836,10 @@ static int stid135_get_frontend(struct dvb_frontend *fe, struct dtv_frontend_pro
 			p->fec_inner = FEC_NONE;
 		}
 	}
-#if 1
-	p->stream_id = state->signal_info.isi;
-#endif
+	p->stream_id = ((state->signal_info.isi  &0xff) |
+									(state->signal_info.pls_mode << 26) |
+									((state->signal_info.pls_code &0x3FFFF)<<8)
+									);
 	return 0;
 }
 
@@ -989,8 +990,6 @@ static int stid135_tune_(struct dvb_frontend *fe, bool re_tune,
 		//dprintk("MIS2: num=%d\n", state->signal_info.isi_list.nb_isi);
 	}
 #endif
-
-	r = stid135_read_status(fe, status);
 
 	r = stid135_read_status_(fe, status);
 
