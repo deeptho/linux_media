@@ -327,8 +327,10 @@ static int stid135_spectral_scan_end(struct spectrum_scan_state_t* ss,
 	if(si->rs)
 		kfree(si->rs);
 	si->rs = NULL;
+#if 0
 	for(i=0; i <ss->spectrum_len; ++i)
 		ss->freq[i]=i*ss->frequency_step;
+#endif
 	dprintk("num_peaks=%d\n", si->num_peaks);
 	BUG_ON(ss->candidates != NULL);
 	ss->candidates =

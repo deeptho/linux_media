@@ -584,7 +584,7 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 		dprintk("[%d[ fe_stid135_search error %d !\n", state->nr+1, err);
 		return -1;
 	}
-#if 1 //missing in official driver, but only calld during blindscan
+#if 1 //missing in official driver, but only called during blindscan
 	if(!state->signal_info.has_viterbi && p->algorithm != ALGORITHM_WARM && p->algorithm != ALGORITHM_COLD) {
 		bool locked=false;
 		print_signal_info("(before trying pls)", &state->signal_info);
@@ -712,12 +712,12 @@ static int stid135_get_frontend(struct dvb_frontend *fe, struct dtv_frontend_pro
 		//do not do any calls which may run i2c code
 		fe_stid135_get_signal_info(state,  &state->signal_info, 0);
 #endif
-		//dprintk("MIS2: num=%d\n", state->signal_info.isi_list.nb_isi);
 		p-> isi_list_len = state->signal_info.isi_list.nb_isi;
 		if(p->isi_list_len>  max_isi_len)
 			p->isi_list_len = max_isi_len;
 		BUG_ON(p->isi_list_len <0 || p->isi_list_len >= max_isi_len);
 		memcpy(&p->isi[0], &state->signal_info.isi_list.isi[0], p->isi_list_len);
+		vprintk("MIS2: num=%d\n", p->isi_list_len);
 		p->frequency = state->signal_info.frequency;
 		p->symbol_rate = state->signal_info.symbol_rate;
 	}
