@@ -1519,13 +1519,13 @@ static fe_lla_error_t FE_STiD135_SetViterbiStandard(STCHIP_Info_t* hChip,
 
 	switch (Standard) {
 	case FE_SAT_AUTO_SEARCH:
-#if  1 //LATESTX
+
 		/* Disable DSS in auto mode search for DVBS1 and DVBS2
 		only , DSS search is on demande */
 		error |= ChipSetOneRegister(hChip, fecmReg, 0x00);
 		/* Enable All PR exept 6/7 */
 		error |= ChipSetOneRegister(hChip, prvitReg, 0x2F);
-#endif
+
 	break;
 
 	case FE_SAT_SEARCH_DVBS1:
@@ -1886,7 +1886,7 @@ fe_lla_error_t FE_STiD135_WaitForLock(struct stv* state,
 	u32 strMergerLockField;
 	struct fe_stid135_internal_param *pParams;
 	BOOL lock;
-
+	vprintk("[%d] entering  FecTimeOut=%d\n", state->nr+1,  FecTimeOut);
 	pParams = &state->base->ip;
 
 	/* Stream Merger lock status field) */
@@ -4407,8 +4407,10 @@ fe_lla_error_t FE_STiD135_Algo(struct stv* state, BOOL satellite_scan, enum fe_s
 
 		if (state->demod_search_algo == FE_SAT_BLIND_SEARCH ||
 				state->demod_search_algo == FE_SAT_NEXT) {
+			vprintk("[%d] calling FE_STiD135_BlindSearchAlgo: demodTimeout=%d\n",  state->nr+1, demodTimeout);
 			error |= (error1=FE_STiD135_BlindSearchAlgo(state, demodTimeout,
 																									satellite_scan, &lock));
+			vprintk("[%d] end call FE_STiD135_BlindSearchAlgo: lock=%d\n",  state->nr+1, lock);
 			if(error1)
 				dprintk("[%d] ERROR=%d\n", state->nr+1, error1);
 
