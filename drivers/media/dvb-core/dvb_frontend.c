@@ -2459,7 +2459,6 @@ static int dvb_frontend_handle_compat_ioctl(struct file *file, unsigned int cmd,
 	struct dvb_frontend *fe = dvbdev->priv;
 	struct dvb_frontend_private *fepriv = fe->frontend_priv;
 	int i, err = 0;
-
 	if (cmd == COMPAT_FE_SET_PROPERTY) {
 		struct compat_dtv_properties prop, *tvps = NULL;
 		struct compat_dtv_property *tvp = NULL;
@@ -3113,6 +3112,7 @@ static int dvb_frontend_handle_ioctl(struct file *file,
 			fepriv->tone = (enum fe_sec_tone_mode)parg;
 			fepriv->state = FESTATE_DISEQC;
 			fepriv->status = 0;
+			c->sectone = fepriv->tone;
 		}
 		break;
 
