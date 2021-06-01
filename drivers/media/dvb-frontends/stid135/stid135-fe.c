@@ -1266,8 +1266,7 @@ static int stid135_read_temp(struct dvb_frontend *fe, s16 *temp)
 
 static int stid135_get_spectrum_scan_fft(struct dvb_frontend *fe, unsigned int *delay,  enum fe_status *status)
 {
-
-	fe_lla_error_t error = get_spectrum_scan_fft(fe);
+	int error = stid135_spectral_scan_start(fe);
 	if(!error) {
 		*status =  FE_HAS_SIGNAL|FE_HAS_CARRIER|FE_HAS_VITERBI|FE_HAS_SYNC|FE_HAS_LOCK;
 		return 0;
