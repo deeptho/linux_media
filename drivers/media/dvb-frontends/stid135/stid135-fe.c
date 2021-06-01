@@ -862,7 +862,6 @@ static int stid135_read_status_(struct dvb_frontend *fe, enum fe_status *status)
 	p->pre_bit_count.stat[0].scale = FE_SCALE_NOT_AVAILABLE;
 
 	err = fe_stid135_get_lock_status(state, NULL, NULL, NULL);
-
 	if(state->signal_info.has_carrier)
 		*status |= (FE_HAS_SIGNAL|FE_HAS_CARRIER);
 	if(state->signal_info.has_viterbi)

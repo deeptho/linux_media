@@ -2397,23 +2397,18 @@ static fe_lla_error_t FE_STiD135_GetDemodLock (struct stv* state, u32 TimeOut, B
 	 /* SR_register = 2^16 / (12 * MCLK) */
 	//SRate_1MSymb_Sec = 0x1e5;
 	MclkFreq = pParams->master_clock;
-#if 1 //LATESTX
+
 	SRate_1MSymb_Sec = (1<<16) * 1 / (12*MclkFreq/1000000);
-	if (state->demod_search_algo != FE_SAT_BLIND_SEARCH &&
-			state->demod_search_algo != FE_SAT_NEXT) {
-		vprintk("[%d] using srate dependent timeout\n", state->nr+1);
-	}
-#endif
+	vprintk("[%d] using srate dependent timeout\n", state->nr+1);
+
 	while ((timer < TimeOut_SymbRate) && (lock == 0)) {
 		if (kthread_should_stop() || dvb_frontend_task_should_stop(&state->fe)) {
 			dprintk("exiting on should stop\n");
 			timer = TimeOut_SymbRate;
 			break;
 		}
-		//read symbolrate to compute timeout symbolrate dependent tinout: TODO: replace this with fixed timeouts
-#if 1 //LATESTX
-	if (state->demod_search_algo != FE_SAT_BLIND_SEARCH &&
-			state->demod_search_algo != FE_SAT_NEXT) {
+
+		int old = TimeOut_SymbRate;
 		error |= ChipGetRegisters(state->base->ip.handle_demod, symbFreqRegister, 2);
 		int symbolRate = (u32)
 			((ChipGetFieldImage(state->base->ip.handle_demod, symbFreq2) << 8)+
@@ -2438,9 +2433,11 @@ static fe_lla_error_t FE_STiD135_GetDemodLock (struct stv* state, u32 TimeOut, B
 			/* The new timeout is between 200 ms and original
 				 TimeOut */
 		}
-	}
-	////END OF TODO
-#endif //LATESTX
+		if(old != TimeOut_SymbRate ) {
+			vprintk("[%d] timeout changed to %d\n", state->nr+1,  TimeOut_SymbRate);
+		}
+
+
 	error |= ChipGetField(state->base->ip.handle_demod, headerField, &fld_value);
 	demodState = (enum fe_sat_search_state)fld_value;
 	switch (demodState) {
@@ -4741,22 +4738,14 @@ static fe_lla_error_t FE_STiD135_StartSearch(struct stv* state)
 		/*The symbol rate and the exact
 		carrier frequency are known */
 		/*Trig an acquisition (start the search)*/
-#if 0
-		error |= ChipSetOneRegister(state->base->ip.handle_demod,
-																(u16)REG_RC8CODEW_DVBSX_DEMOD_DMDISTATE(Demod), 0x18);
-#else
-		if(true || state->demod_symbol_rate < 2000000) {
+
 		/*better for low symbol rate - only choice which allows tuning to symbolrate 667
 			Note that tuner bandwith still takes into account known symbol rate
 		*/
-			vprintk("[%d] XXX set to 0x01\n", state->nr+1);
-			error |= ChipSetOneRegister(state->base->ip.handle_demod,
-																	(u16)REG_RC8CODEW_DVBSX_DEMOD_DMDISTATE(Demod), 0x01);
-		} else {
+		vprintk("[%d] XXX set to 0x01\n", state->nr+1);
 		error |= ChipSetOneRegister(state->base->ip.handle_demod,
-																(u16)REG_RC8CODEW_DVBSX_DEMOD_DMDISTATE(Demod), 0x18);
-		}
-#endif
+																(u16)REG_RC8CODEW_DVBSX_DEMOD_DMDISTATE(Demod), 0x01);
+
 		break;
 
 	case FE_SAT_COLD_START:
