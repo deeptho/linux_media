@@ -2309,12 +2309,22 @@ static int dvb_frontend_handle_algo_ctrl_ioctl(struct file *file,
 	switch (cmd) {
 	case DTV_STOP:
 		//this will request the task to stop processing
+		dprintk("entering DTV_STOP: stop_task\n");
 		atomic_set(&fe->algo_state.task_should_stop, true);
-		//so
 		if (down_interruptible(&fepriv->sem))
 			return -ERESTARTSYS;
+		dprintk("DTV_STOP starts stop_task\n");
 		if (fe->ops.stop_task)
 			fe->ops.stop_task(fe);
+		fepriv->state = FESTATE_IDLE;
+
+		dprintk("DTV_STOP done stop_task\n");
+
+		atomic_set(&fe->algo_state.task_should_stop, false);
+
+		dvb_frontend_clear_events(fe);
+		dvb_frontend_add_event(fe, FE_IDLE);
+
 		up(&fepriv->sem);
 		return 0;
 		break;
@@ -2355,17 +2365,20 @@ static int dvb_frontend_do_ioctl(struct file *file, unsigned int cmd,
 	struct dvb_frontend_private *fepriv = fe->frontend_priv;
 	int err;
 	dev_dbg(fe->dvb->device, "%s: (%d)\n", __func__, _IOC_NR(cmd));
+	if((file->f_flags & O_ACCMODE) != O_RDONLY)  {
+		if(cmd == DTV_STOP) {
+			dprintk("algo_ctrl requested\n");
+			if ((file->f_flags & O_ACCMODE) == O_RDONLY
+					&& (_IOC_DIR(cmd) != _IOC_READ
+							|| cmd == DTV_STOP)) {
+				return -EPERM;
+			}
+			return 	dvb_frontend_handle_algo_ctrl_ioctl(file, cmd, parg);
 
-	if(cmd==DTV_STOP) {
-		dprintk("algo_ctrl requested\n");
-		if ((file->f_flags & O_ACCMODE) == O_RDONLY
-				&& (_IOC_DIR(cmd) != _IOC_READ
-						|| cmd == DTV_STOP)) {
-		return -EPERM;
 		}
-		return 	dvb_frontend_handle_algo_ctrl_ioctl(file, cmd, parg);
-
-		return 0;
+		if(cmd == FE_GET_EVENT) {
+			return dvb_frontend_get_event(fe, parg, file->f_flags);
+		}
 	}
 
 	if (down_interruptible(&fepriv->sem))
