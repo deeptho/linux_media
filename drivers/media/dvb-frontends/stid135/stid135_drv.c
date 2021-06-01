@@ -32,7 +32,7 @@
 * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
-
+#include <linux/kthread.h>
 #include "stid135_drv.h"
 #include "stid135_init.h"
 #include "stid135_initLLA_cut2.h"
@@ -2299,7 +2299,7 @@ fe_lla_error_t FE_STiD135_CarrierGetQuality(STCHIP_Info_t* hChip, enum fe_stid13
 	//dprintk("demod=%d foundStandard=%d\n", Demod, *foundStandard);
 	if (*foundStandard == FE_SAT_DVBS2_STANDARD) {
 		lookup = &FE_STiD135_S2_CN_LookUp;
-		/*If DVBS2 use PLH normilized noise indicators*/
+		/*If DVBS2 use PLH normalized noise indicators*/
 		noiseField1 = FLD_FC8CODEW_DVBSX_DEMOD_NNOSPLHT1_NOSPLHT_NORMED(Demod);
 		noiseField0 = FLD_FC8CODEW_DVBSX_DEMOD_NNOSPLHT0_NOSPLHT_NORMED(Demod);
 		noiseReg = (u16)REG_RC8CODEW_DVBSX_DEMOD_NNOSPLHT1(Demod);
@@ -2405,6 +2405,11 @@ static fe_lla_error_t FE_STiD135_GetDemodLock (struct stv* state, u32 TimeOut, B
 	}
 #endif
 	while ((timer < TimeOut_SymbRate) && (lock == 0)) {
+		if (kthread_should_stop() || dvb_frontend_task_should_stop(&state->fe)) {
+			dprintk("exiting on should stop\n");
+			timer = TimeOut_SymbRate;
+			break;
+		}
 		//read symbolrate to compute timeout symbolrate dependent tinout: TODO: replace this with fixed timeouts
 #if 1 //LATESTX
 	if (state->demod_search_algo != FE_SAT_BLIND_SEARCH &&
