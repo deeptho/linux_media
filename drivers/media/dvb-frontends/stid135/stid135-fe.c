@@ -992,9 +992,11 @@ static int stid135_tune_(struct dvb_frontend *fe, bool re_tune,
 
 	r = stid135_read_status_(fe, status);
 
+	vprintk("[%d] setting timedout=%d\n", state->nr+1, !state->signal_info.has_viterbi);
+	state->signal_info.has_timedout = !state->signal_info.has_viterbi;
 	if(state->signal_info.has_timedout) {
 		*status |= FE_TIMEDOUT;
-		*status &= FE_HAS_LOCK;
+		*status &= ~FE_HAS_LOCK;
 	}
 
 	if (r)
