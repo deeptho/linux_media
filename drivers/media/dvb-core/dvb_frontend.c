@@ -758,7 +758,7 @@ restart:
 					dprintk("starting spectrum scan\n");
 					if (fe->ops.spectrum_start)
 						fe->ops.spectrum_start(fe,  &fepriv->spectrum, &fepriv->delay, &s);
-					dprintk("spectrum scan ended\n");
+					dprintk("spectrum scan ended s=0x%x\n", s);
 					fepriv->state = FESTATE_IDLE;
 				}	else if (fepriv->state & FESTATE_GETTING_CONSTELLATION) {
 					dev_dbg(fe->dvb->device, "%s: Spectrum requested, DTV_CMDS_H\n", __func__);
@@ -775,10 +775,13 @@ restart:
 					} else {
 						re_tune = false;
 					}
+
 					if (fe->ops.tune)
 						fe->ops.tune(fe, re_tune, fepriv->tune_mode_flags, &fepriv->delay, &s);
+					dprintk("read_status event: s=0x%x old=0x%x", s,  fepriv->status);
 				}
 				if (s != fepriv->status && !(fepriv->tune_mode_flags & FE_TUNE_MODE_ONESHOT)) {
+					dprintk("Adding event val=0x%x\n", s);
 					dev_dbg(fe->dvb->device, "%s: state changed, adding current state\n", __func__);
 					dvb_frontend_add_event(fe, s);
 					fepriv->status = s;
