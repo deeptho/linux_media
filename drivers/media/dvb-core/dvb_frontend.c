@@ -127,6 +127,7 @@ struct dvb_frontend_private {
 	enum dvbfe_search algo_status;
 	struct dtv_fe_spectrum spectrum;
 	struct dtv_fe_constellation constellation;
+	int heartbeat_interval;
 #if defined(CONFIG_MEDIA_CONTROLLER_DVB)
 	struct media_pipeline pipe;
 #endif
@@ -712,7 +713,8 @@ restart:
 						 dvb_frontend_should_wakeup(fe) ||
 						 kthread_should_stop() ||
 						 freezing(current),
-			fepriv->delay);
+            (fepriv->heartbeat_interval > 0 ) ? (fepriv->heartbeat_interval*HZ)/1000 :
+																		 fepriv->delay);
 
 		if (kthread_should_stop() || dvb_frontend_is_exiting(fe)) {
 			/* got signal or quitting */
@@ -772,7 +774,8 @@ restart:
 						fe->ops.tune(fe, re_tune, fepriv->tune_mode_flags, &fepriv->delay, &s);
 					dprintk("read_status event: s=0x%x old=0x%x", s,  fepriv->status);
 				}
-				if (s != fepriv->status && !(fepriv->tune_mode_flags & FE_TUNE_MODE_ONESHOT)) {
+				if ((s != fepriv->status && !(fepriv->tune_mode_flags & FE_TUNE_MODE_ONESHOT))
+						|| (fepriv->heartbeat_interval>0)) {
 					dprintk("Adding event val=0x%x\n", s);
 					dev_dbg(fe->dvb->device, "%s: state changed, adding current state\n", __func__);
 					dvb_frontend_add_event(fe, s);
@@ -1159,6 +1162,7 @@ static struct dtv_cmds_h dtv_cmds[DTV_MAX_COMMAND + 1] = {
 	_DTV_CMD(DTV_SCAN, 1, 0),
 	_DTV_CMD(DTV_SPECTRUM, 1, 0),
 	_DTV_CMD(DTV_CONSTELLATION, 1, 0),
+	_DTV_CMD(DTV_HEARTBEAT, 1, 0),
 	_DTV_CMD(DTV_CLEAR, 1, 0),
 	/* Set */
 	_DTV_CMD(DTV_FREQUENCY, 1, 0),
@@ -1444,6 +1448,7 @@ static int dtv_property_process_get(struct dvb_frontend *fe,
 						struct file *file)
 {
 	int ncaps;
+	struct dvb_frontend_private *fepriv = fe->frontend_priv;
 	switch (tvp->cmd) {
 	case DTV_ENUM_DELSYS:
 		ncaps = 0;
@@ -1476,6 +1481,9 @@ static int dtv_property_process_get(struct dvb_frontend *fe,
 		break;
  	case DTV_CONSTELLATION:
 		dtv_get_constellation(fe, &tvp->u.constellation);
+		break;
+	case DTV_HEARTBEAT:
+		tvp->u.data = fepriv->heartbeat_interval;
 		break;
 	case DTV_SEARCH_RANGE:
 		tvp->u.data = c->search_range;
@@ -1965,6 +1973,7 @@ static int dtv_property_process_set_int(struct dvb_frontend *fe,
 						u32 cmd, u32 data)
 {
 	int r = 0;
+	struct dvb_frontend_private *fepriv = fe->frontend_priv;
 	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
 
 	/* Allow the frontend to validate incoming properties */
@@ -2143,7 +2152,13 @@ static int dtv_property_process_set_int(struct dvb_frontend *fe,
 		if (r < 0)
 			c->lna = LNA_AUTO;
 		break;
-
+	/* neumo api if interval>0 tune loop will run every heart_beat interval milliseconds and event will be
+		 sent even if status does not change*/
+	case DTV_HEARTBEAT:
+		fepriv->heartbeat_interval = data;
+		if( fepriv->heartbeat_interval<500)
+			heartbeat_interval = 500;
+		break;
 	default:
 		return -EINVAL;
 	}
@@ -3339,6 +3354,7 @@ static int dvb_frontend_open(struct inode *inode, struct file *file)
 		fepriv->tune_mode_flags &= ~FE_TUNE_MODE_ONESHOT;
 		fepriv->tone = -1;
 		fepriv->voltage = -1;
+		fepriv->heartbeat_interval = 0;
 
 #ifdef CONFIG_MEDIA_CONTROLLER_DVB
 		mutex_lock(&fe->dvb->mdev_lock);
