@@ -355,9 +355,9 @@ static bool pls_search_list(struct dvb_frontend *fe)
 
 		if (pktdelin/*packet delineator locked*/) {
 			locked=1;
-			dprintk("PLS LOCKED\n");
+			vprintk("PLS LOCKED\n");
 		} else {
-			dprintk("PLS NOT LOCKED\n");
+			vprintk("PLS NOT LOCKED\n");
 		}
 		//locked = wait_for_dmdlock(fe, 1 /*require_data*/);
 		//dprintk("RESULT=%d\n", locked);
@@ -1010,14 +1010,20 @@ static int stid135_tune_(struct dvb_frontend *fe, bool re_tune,
 	return 0;
 }
 
+static int stid135_constellation_start_(struct dvb_frontend *fe, struct dtv_fe_constellation* user);
+
 static int stid135_tune(struct dvb_frontend *fe, bool re_tune,
 		unsigned int mode_flags,
 		unsigned int *delay, enum fe_status *status)
 {
 	struct stv *state = fe->demodulator_priv;
+	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
 	int r;
 	mutex_lock(&state->base->status_lock);
 	r = stid135_tune_(fe, re_tune, mode_flags, delay, status);
+	if(r>=0 && p->constellation.num_samples>0) {
+		r = stid135_constellation_start_(fe, &p->constellation);
+	}
 	mutex_unlock(&state->base->status_lock);
 	return r;
 }
@@ -1439,6 +1445,7 @@ static int stid135_stop_task(struct dvb_frontend *fe)
 {
 	struct stv *state = fe->demodulator_priv;
 	struct spectrum_scan_state_t* ss = &state->scan_state;
+	struct constellation_scan_state* cs = &state->constellation_scan_state;
 	mutex_lock(&state->base->status_lock);
 	dprintk("CALLED\n");
 	if(ss->freq)
@@ -1447,7 +1454,10 @@ static int stid135_stop_task(struct dvb_frontend *fe)
 		kfree(ss->candidates);
 	if(ss->spectrum)
 		kfree(ss->spectrum);
+	if(cs->samples)
+		kfree(cs->samples);
 	memset(ss, 0, sizeof(*ss));
+	memset(cs, 0, sizeof(*cs));
 	mutex_unlock(&state->base->status_lock);
 	//dprintk("Freed memory\n");
 	return 0;
@@ -1636,30 +1646,29 @@ static int stid135_scan_sat(struct dvb_frontend *fe, bool init,
 	return ret;
 }
 
-int stid135_constellation_start(struct dvb_frontend *fe,
-																			 struct dtv_fe_constellation* user,
-																			 unsigned int *delay, enum fe_status *status)
+
+static int stid135_constellation_start_(struct dvb_frontend *fe, struct dtv_fe_constellation* user)
 {
 	struct stv *state = fe->demodulator_priv;
 	struct constellation_scan_state* cs = &state->constellation_scan_state;
 	struct fe_stid135_internal_param * pParams = &state->base->ip;
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
-
-	stid135_stop_task(fe);
-	mutex_lock(&state->base->status_lock);
-	cs->num_samples = 0;
-	cs->constel_select =  user->constel_select;
-	cs->samples_len = user->num_samples;
-	dprintk("demod: %d: constellation %d samples mode=%d\n", state->nr, cs->samples_len, (int)cs->constel_select);
-	if(cs->samples_len ==0) {
-		mutex_unlock(&state->base->status_lock);
+	vprintk("demod: %d: constellation samples=%d constel_select=%d\n", state->nr, user->num_samples, (int)user->constel_select);
+	if(user->num_samples ==0) {
 		return -EINVAL;
 	}
-	cs->samples = kzalloc(cs->samples_len * (sizeof(cs->samples[0])), GFP_KERNEL);
-	if (!cs->samples) {
-		mutex_unlock(&state->base->status_lock);
-		return  -ENOMEM;
+	if(cs->samples_len != user->num_samples) {
+		if(cs->samples)
+			kfree(cs->samples);
+		cs->samples_len = user->num_samples;
+		cs->samples = kzalloc(cs->samples_len * (sizeof(cs->samples[0])), GFP_KERNEL);
+		if (!cs->samples) {
+			return  -ENOMEM;
+		}
 	}
+
+	cs->constel_select =  user->constel_select;
+	cs->num_samples = 0;
 
 	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_IQCONST_CONSTEL_SELECT(state->nr+1),
 												cs->constel_select);
@@ -1674,12 +1683,25 @@ int stid135_constellation_start(struct dvb_frontend *fe,
 		cs->samples[cs->num_samples].real = ChipGetFieldImage(pParams->handle_demod,
 																													FLD_FC8CODEW_DVBSX_DEMOD_QSYMB_Q_SYMBOL(state->nr+1));
 	}
+	vprintk("demod: %d: constellation retrieved samples=%d\n", state->nr, cs->num_samples);
 
+
+	return 0;
+}
+
+int stid135_constellation_start(struct dvb_frontend *fe,
+																			 struct dtv_fe_constellation* user,
+																			 unsigned int *delay, enum fe_status *status)
+{
+	int ret;
+	struct stv* state = fe->demodulator_priv;
+	stid135_stop_task(fe);
+	mutex_lock(&state->base->status_lock);
+	ret = stid135_constellation_start_(fe, user);
 	*status =  FE_HAS_SIGNAL|FE_HAS_CARRIER|FE_HAS_VITERBI|FE_HAS_SYNC|FE_HAS_LOCK;
 	mutex_unlock(&state->base->status_lock);
 	return 0;
 }
-
 
 static int stid135_constellation_get(struct dvb_frontend *fe, struct dtv_fe_constellation* user)
 {
@@ -1700,6 +1722,10 @@ static int stid135_constellation_get(struct dvb_frontend *fe, struct dtv_fe_cons
 	mutex_unlock(&state->base->status_lock);
 	return error;
 }
+
+
+
+
 
 
 static struct dvb_frontend_ops stid135_ops = {
