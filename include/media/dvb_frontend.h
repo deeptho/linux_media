@@ -686,6 +686,10 @@ struct dtv_frontend_properties {
 
 	u32			modcode;
 
+		/*for returning constellation samples*/
+
+	struct dtv_fe_constellation constellation;
+
     /* Physical Layer Scrambling specifics */
 	u32			scrambling_sequence_index;
 
