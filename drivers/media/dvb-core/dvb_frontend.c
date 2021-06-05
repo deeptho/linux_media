@@ -71,7 +71,6 @@ MODULE_PARM_DESC(dvb_mfe_wait_time, "Wait up to <mfe_wait_time> seconds on open(
 #define FESTATE_SCAN_FIRST 512
 #define FESTATE_SCAN_NEXT 1024
 #define FESTATE_GETTING_SPECTRUM 2048
-#define FESTATE_GETTING_CONSTELLATION 4096
 #define FESTATE_WAITFORLOCK (FESTATE_TUNING_FAST | FESTATE_TUNING_SLOW | FESTATE_ZIGZAG_FAST | FESTATE_ZIGZAG_SLOW | FESTATE_DISEQC)
 #define FESTATE_SEARCHING_FAST (FESTATE_TUNING_FAST | FESTATE_ZIGZAG_FAST)
 #define FESTATE_SEARCHING_SLOW (FESTATE_TUNING_SLOW | FESTATE_ZIGZAG_SLOW)
@@ -759,13 +758,6 @@ restart:
 					if (fe->ops.spectrum_start)
 						fe->ops.spectrum_start(fe,  &fepriv->spectrum, &fepriv->delay, &s);
 					dprintk("spectrum scan ended s=0x%x\n", s);
-					fepriv->state = FESTATE_IDLE;
-				}	else if (fepriv->state & FESTATE_GETTING_CONSTELLATION) {
-					dev_dbg(fe->dvb->device, "%s: Spectrum requested, DTV_CMDS_H\n", __func__);
-					dprintk("starting constellation scan\n");
-					if (fe->ops.constellation_start)
-						fe->ops.constellation_start(fe,  &fepriv->constellation, &fepriv->delay, &s);
-					dprintk("constellation scan ended\n");
 					fepriv->state = FESTATE_IDLE;
 				} else {
 					if (fepriv->state & FESTATE_RETUNE) {
@@ -2237,7 +2229,6 @@ static int dtv_property_process_set(struct dvb_frontend *fe,
 		 * Use the cached Digital TV properties to scan the
 		 * frontend
 		 */
-		dprintk("set constellation  called\n");
 		dev_dbg(fe->dvb->device,
 			"%s: Setting the frontend from property cache\n",
 			__func__);
@@ -2396,7 +2387,7 @@ static int dvb_frontend_do_ioctl(struct file *file, unsigned int cmd,
 	 * statistics parameters.
 	 *
 	 * That matches all _IOR() ioctls, except for two special cases:
-	 *   - FE_GET_EVENT is part of the tuning logic on a DVB application;
+	 *   - FE_GET_EVENT is part of the tuning logic on a DVB application (there is only one event queue)
 	 *   - FE_DISEQC_RECV_SLAVE_REPLY is part of DiSEqC 2.0
 	 *     setup
 	 * So, those two ioctls should also return -EPERM, as otherwise
@@ -2753,18 +2744,14 @@ static int dtv_get_spectrum(struct dvb_frontend *fe, struct dtv_fe_spectrum* use
 
 static int dtv_set_constellation(struct dvb_frontend *fe, struct dtv_fe_constellation* constellation)
 {
-	struct dvb_frontend_private *fepriv = fe->frontend_priv;
+	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
 	if (!fe->ops.constellation_get || !fe->ops.constellation_start)
 		return  -ENOTSUPP;
-	fepriv->constellation = * constellation;
+	c->constellation.num_samples = constellation->num_samples;
+	c->constellation.method = constellation->method;
+	c->constellation.constel_select = constellation->constel_select;
+	c->constellation.samples = NULL;
 	dprintk("SET constellation: num_samples=%d constel_select=%d\n", constellation->num_samples, constellation->constel_select);
- 	/* Request the search algorithm to search */
-	fepriv->state = FESTATE_GETTING_CONSTELLATION;
-	dvb_frontend_clear_events(fe);
-	dvb_frontend_add_event(fe, 0);
-	dvb_frontend_wakeup(fe);
-	fepriv->status = 0;
-
 	return 0;
 }
 
@@ -2773,7 +2760,7 @@ static int dtv_set_constellation(struct dvb_frontend *fe, struct dtv_fe_constell
 static int dtv_get_constellation(struct dvb_frontend *fe, struct dtv_fe_constellation* user)
 {
 	int err = 0;
-	dprintk("constellation retrieved user: n=%d\n", user->num_samples);
+	dprintk("constellation retrieved user->num_samples=%d\n", user->num_samples);
 
 	if(fe->ops.constellation_get)
 		fe->ops.constellation_get(fe, user);
@@ -3141,7 +3128,8 @@ static int dvb_frontend_handle_ioctl(struct file *file,
 		fepriv->tune_mode_flags = (unsigned long)parg;
 		err = 0;
 		break;
-	/* DEPRECATED dish control ioctls */
+
+		/* DEPRECATED dish control ioctls */
 
 	case FE_DISHNETWORK_SEND_LEGACY_CMD:
 		if (fe->ops.dishnetwork_send_legacy_command) {
