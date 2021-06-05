@@ -2402,15 +2402,17 @@ static fe_lla_error_t FE_STiD135_GetDemodLock (struct stv* state, u32 TimeOut, B
 	vprintk("[%d] using srate dependent timeout\n", state->nr+1);
 
 	while ((timer < TimeOut_SymbRate) && (lock == 0)) {
+		int old;
+		int symbolRate;
 		if (kthread_should_stop() || dvb_frontend_task_should_stop(&state->fe)) {
 			dprintk("exiting on should stop\n");
 			timer = TimeOut_SymbRate;
 			break;
 		}
 
-		int old = TimeOut_SymbRate;
+		old = TimeOut_SymbRate;
 		error |= ChipGetRegisters(state->base->ip.handle_demod, symbFreqRegister, 2);
-		int symbolRate = (u32)
+		symbolRate = (u32)
 			((ChipGetFieldImage(state->base->ip.handle_demod, symbFreq2) << 8)+
 			 (ChipGetFieldImage(state->base->ip.handle_demod, symbFreq1)));
 		if (TimeOut < DmdLock_TIMEOUT_LIMIT) {
