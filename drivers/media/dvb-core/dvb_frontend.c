@@ -2760,7 +2760,7 @@ static int dtv_get_spectrum(struct dvb_frontend *fe, struct dtv_fe_spectrum* use
 static int dtv_set_constellation(struct dvb_frontend *fe, struct dtv_fe_constellation* constellation)
 {
 	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
-	if (!fe->ops.constellation_get || !fe->ops.constellation_start)
+	if (!fe->ops.constellation_get)
 		return  -ENOTSUPP;
 	c->constellation.num_samples = constellation->num_samples;
 	c->constellation.method = constellation->method;

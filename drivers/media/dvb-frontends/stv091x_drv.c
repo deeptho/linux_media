@@ -2406,6 +2406,10 @@ static int tune_once(struct dvb_frontend *fe, bool* need_retune)
 	return 0;
 }
 
+
+static int stv091x_constellation_start(struct dvb_frontend *fe,
+																			 struct dtv_fe_constellation* user, int max_num_samples);
+
 static int tune(struct dvb_frontend *fe, bool re_tune,
 		unsigned int mode_flags,
 		unsigned int *delay, enum fe_status *status)
@@ -2448,19 +2452,21 @@ static int tune(struct dvb_frontend *fe, bool re_tune,
 #endif
 		state->tune_time = jiffies;
 	}
-
 	r = read_status(fe, status);
-	if(state->timedout)
-		*status |= FE_TIMEDOUT;
+	{
+		int max_num_samples = state->symbol_rate /5 ; //we spend max 500 ms on this
+		if(max_num_samples > 1024)
+			max_num_samples = 1204; //also set an upper limit which should be fast enough
+		stv091x_constellation_start(fe, &p->constellation, max_num_samples);
+	}
 	if (r)
 		return r;
 
 
-	if (*status & FE_HAS_LOCK)
+	if (*status & FE_HAS_LOCK) {
 		return 0;
-
-	*delay = HZ;
-
+	} else
+		*delay = HZ;
 	return 0;
 }
 
@@ -2788,24 +2794,34 @@ static int stv091x_spectrum_start(struct dvb_frontend *fe,
 }
 
 static int stv091x_constellation_start(struct dvb_frontend *fe,
-																			 struct dtv_fe_constellation* user,
-																			 unsigned int *delay, enum fe_status *status)
+																			 struct dtv_fe_constellation* user, int max_num_samples)
 {
 	struct stv *state = fe->demodulator_priv;
 	struct stv_constellation_scan_state* cs = &state->constellation_scan_state;
+	int num_samples = user->num_samples;
+	if(num_samples > max_num_samples)
+		num_samples = max_num_samples;
+
 	s8 buff[2];
 
 	stv091x_stop_task(fe);
+	dprintk("demod: %d: constellation num_samples=%d/%d  mode=%d\n", state->nr, user->num_samples, max_num_samples, (int)cs->constel_select);
+
+	if(num_samples ==0) {
+		return -EINVAL;
+	}
+	if(cs->samples_len != num_samples) {
+		if(cs->samples)
+			kfree(cs->samples);
+		cs->samples_len = num_samples;
+		cs->samples = kzalloc(cs->samples_len * (sizeof(cs->samples[0])), GFP_KERNEL);
+		if (!cs->samples) {
+			return  -ENOMEM;
+		}
+	}
+
 	cs->num_samples = 0;
 	cs->constel_select =  user->constel_select;
-	cs->samples_len = user->num_samples;
-	dprintk("demod: %d: constellation %d samples mode=%d\n", state->nr, cs->samples_len, (int)cs->constel_select);
-	if(cs->samples_len ==0)
-		 return -EINVAL;
-	cs->samples = kzalloc(cs->samples_len * (sizeof(cs->samples[0])), GFP_KERNEL);
-	if (!cs->samples) {
-		return  -ENOMEM;
-	}
 
 	write_reg_fields(state, RSTV0910_P2_IQCONST,
 									 {FSTV0910_P2_CONSTEL_SELECT, 0}, //inverse mode
@@ -2822,8 +2838,6 @@ static int stv091x_constellation_start(struct dvb_frontend *fe,
 		cs->samples[cs->num_samples].imag = buff[0];
 		cs->samples[cs->num_samples].real = buff[1];
 	}
-
-	*status =  FE_HAS_SIGNAL|FE_HAS_CARRIER|FE_HAS_VITERBI|FE_HAS_SYNC|FE_HAS_LOCK;
 	return 0;
 }
 
@@ -2924,7 +2938,9 @@ static struct dvb_frontend_ops stv091x_ops = {
 	.stop_task = stv091x_stop_task,
 	.spectrum_start = stv091x_spectrum_start,
 	.spectrum_get = stv091x_spectrum_get,
+#if 0
 	.constellation_start	= stv091x_constellation_start,
+#endif
 	.constellation_get	= stv091x_constellation_get,
 };
 

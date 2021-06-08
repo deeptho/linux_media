@@ -1010,7 +1010,7 @@ static int stid135_tune_(struct dvb_frontend *fe, bool re_tune,
 	return 0;
 }
 
-static int stid135_constellation_start_(struct dvb_frontend *fe, struct dtv_fe_constellation* user);
+static int stid135_constellation_start_(struct dvb_frontend *fe, struct dtv_fe_constellation* user, int max_num_samples);
 
 static int stid135_tune(struct dvb_frontend *fe, bool re_tune,
 		unsigned int mode_flags,
@@ -1022,7 +1022,10 @@ static int stid135_tune(struct dvb_frontend *fe, bool re_tune,
 	mutex_lock(&state->base->status_lock);
 	r = stid135_tune_(fe, re_tune, mode_flags, delay, status);
 	if(r>=0 && p->constellation.num_samples>0) {
-		r = stid135_constellation_start_(fe, &p->constellation);
+		int max_num_samples = state->signal_info.symbol_rate /5 ; //we spend max 500 ms on this
+		if(max_num_samples > 1024)
+			max_num_samples = 1024; //also set an upper limit which should be fast enough
+		r = stid135_constellation_start_(fe, &p->constellation, max_num_samples);
 	}
 	mutex_unlock(&state->base->status_lock);
 	return r;
@@ -1647,20 +1650,24 @@ static int stid135_scan_sat(struct dvb_frontend *fe, bool init,
 }
 
 
-static int stid135_constellation_start_(struct dvb_frontend *fe, struct dtv_fe_constellation* user)
+static int stid135_constellation_start_(struct dvb_frontend *fe, struct dtv_fe_constellation* user, int max_num_samples)
 {
 	struct stv *state = fe->demodulator_priv;
 	struct constellation_scan_state* cs = &state->constellation_scan_state;
 	struct fe_stid135_internal_param * pParams = &state->base->ip;
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
-	vprintk("demod: %d: constellation samples=%d constel_select=%d\n", state->nr, user->num_samples, (int)user->constel_select);
-	if(user->num_samples ==0) {
+	int num_samples = user->num_samples;
+	if(num_samples > max_num_samples)
+		num_samples = max_num_samples;
+	vprintk("demod: %d: constellation samples=%d/%d constel_select=%d\n", state->nr, user->num_samples,
+					max_num_samples, (int)user->constel_select);
+	if(num_samples ==0) {
 		return -EINVAL;
 	}
-	if(cs->samples_len != user->num_samples) {
+	if(cs->samples_len != num_samples) {
 		if(cs->samples)
 			kfree(cs->samples);
-		cs->samples_len = user->num_samples;
+		cs->samples_len = num_samples;
 		cs->samples = kzalloc(cs->samples_len * (sizeof(cs->samples[0])), GFP_KERNEL);
 		if (!cs->samples) {
 			return  -ENOMEM;
@@ -1689,6 +1696,7 @@ static int stid135_constellation_start_(struct dvb_frontend *fe, struct dtv_fe_c
 	return 0;
 }
 
+#if 0
 int stid135_constellation_start(struct dvb_frontend *fe,
 																			 struct dtv_fe_constellation* user,
 																			 unsigned int *delay, enum fe_status *status)
@@ -1702,6 +1710,7 @@ int stid135_constellation_start(struct dvb_frontend *fe,
 	mutex_unlock(&state->base->status_lock);
 	return 0;
 }
+#endif
 
 static int stid135_constellation_get(struct dvb_frontend *fe, struct dtv_fe_constellation* user)
 {
@@ -1768,7 +1777,9 @@ static struct dvb_frontend_ops stid135_ops = {
 	.scan =  stid135_scan_sat,
 	.spectrum_start		= stid135_spectrum_start,
 	.spectrum_get		= stid135_spectrum_get,
+#if 0
 	.constellation_start	= stid135_constellation_start,
+#endif
 	.constellation_get	= stid135_constellation_get,
 
 	.eeprom_read			= eeprom_read,

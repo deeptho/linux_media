@@ -483,10 +483,10 @@ struct dvb_frontend_ops {
 
 	int (*spectrum_get)(struct dvb_frontend *fe,
 											struct dtv_fe_spectrum* user);
-
+#if 0
 	int (*constellation_start)(struct dvb_frontend *fe, struct dtv_fe_constellation* user,
 												unsigned int *delay, enum fe_status *status);
-
+#endif
 	int (*constellation_get)(struct dvb_frontend *fe,
 											struct dtv_fe_constellation* user);
 
