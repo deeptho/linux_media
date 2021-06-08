@@ -331,8 +331,9 @@ static void stid135_release(struct dvb_frontend *fe)
 static bool pls_search_list(struct dvb_frontend *fe)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
-	struct stv *state = fe->demodulator_priv;
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
+	struct stv *state = fe->demodulator_priv;
+	struct fe_sat_signal_info* signal_info = &state->signal_info;
 	int i = 0;
 	int locked = 0;
 	u8 matype_info;
@@ -365,7 +366,9 @@ static bool pls_search_list(struct dvb_frontend *fe)
 				error = fe_stid135_read_hw_matype(state, &matype_info, &isi);
 				state->mis_mode= !fe_stid135_check_sis_or_mis(matype_info);
 				dprintk("selecting stream_id=%d\n", isi);
+				signal_info->isi = isi;
 				p->stream_id = 	(isi&0xff) | (pls_code & ~0xff);
+				dprintk("SET stream_id=0x%x isi=0x%x\n",p->stream_id, isi);
 				break;
 			}
 			if (kthread_should_stop() || dvb_frontend_task_should_stop(fe)) {
@@ -387,6 +390,7 @@ static bool pls_search_range(struct dvb_frontend *fe)
 {
 	struct stv *state = fe->demodulator_priv;
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
+	struct fe_sat_signal_info* signal_info = &state->signal_info;
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
 	u32 pls_code = 0;
 	int locked = 0;
@@ -429,7 +433,9 @@ static bool pls_search_range(struct dvb_frontend *fe)
 			error = fe_stid135_read_hw_matype(state, &matype_info, &isi);
 			state->mis_mode= !fe_stid135_check_sis_or_mis(matype_info);
 			dprintk("selecting stream_id=%d\n", isi);
-				p->stream_id = 	(isi&0xff) | (pls_code & ~0xff);
+			signal_info->isi = isi;
+			p->stream_id = 	(isi&0xff) | (pls_code & ~0xff);
+			dprintk("SET stream_id=0x%x isi=0x%x\n",p->stream_id, isi);
 				break;
 		}
 	}
@@ -840,6 +846,7 @@ static int stid135_get_frontend(struct dvb_frontend *fe, struct dtv_frontend_pro
 									(state->signal_info.pls_mode << 26) |
 									((state->signal_info.pls_code &0x3FFFF)<<8)
 									);
+	dprintk("SET stream_id=0x%x isi=0x%x\n",p->stream_id, state->signal_info.isi);
 	return 0;
 }
 
