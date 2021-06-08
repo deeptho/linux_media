@@ -2156,8 +2156,8 @@ static int dtv_property_process_set_int(struct dvb_frontend *fe,
 		 sent even if status does not change*/
 	case DTV_HEARTBEAT:
 		fepriv->heartbeat_interval = data;
-		if( fepriv->heartbeat_interval<500)
-			heartbeat_interval = 500;
+		if(fepriv->heartbeat_interval<500)
+			fepriv->heartbeat_interval = 500;
 		break;
 	default:
 		return -EINVAL;
