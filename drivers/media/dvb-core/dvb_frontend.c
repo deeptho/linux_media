@@ -1218,7 +1218,7 @@ static struct dtv_cmds_h dtv_cmds[DTV_MAX_COMMAND + 1] = {
 	_DTV_CMD(DTV_STREAM_ID, 1, 0),
 	_DTV_CMD(DTV_MODCODE, 1, 0),
 	_DTV_CMD(DTV_SCRAMBLING_SEQUENCE_INDEX, 1, 0),
-	_DTV_CMD(DTV_MATYPE, 1, 0),
+	_DTV_CMD(DTV_MATYPE, 0, 0),
 	_DTV_CMD(DTV_ENABLE_MODCOD, 1, 0),
 	_DTV_CMD(DTV_LNA, 1, 0),
 	_DTV_CMD(DTV_ALGORITHM, 1, 0),
@@ -1512,10 +1512,9 @@ static int dtv_property_process_get(struct dvb_frontend *fe,
 	}
 		break;
 	case DTV_ISI_LIST:
-		tvp->u.buffer.len = (c->isi_list_len <  sizeof(tvp->u.buffer.data)/ sizeof(tvp->u.buffer.data[0])) ?
-			c->isi_list_len :  sizeof(tvp->u.buffer.data)/ sizeof(tvp->u.buffer.data[0]);
-		//dprintk("MIS3: num=%d-%d\n", c->isi_list_len, tvp->u.buffer.len);
-		memcpy(&tvp->u.buffer.data[0], &c->isi[0], tvp->u.buffer.len  * sizeof(__u8));
+		tvp->u.buffer.len = (sizeof(c->isi_bitset) <  sizeof(tvp->u.buffer.data)) ?
+			sizeof(c->isi_bitset) :  sizeof(tvp->u.buffer.data);
+		memcpy(&tvp->u.buffer.data[0], &c->isi_bitset[0], tvp->u.buffer.len  * sizeof(__u8));
 		break;
 	case DTV_MODULATION:
 		tvp->u.data = c->modulation;
@@ -1639,10 +1638,12 @@ static int dtv_property_process_get(struct dvb_frontend *fe,
 	case DTV_SCRAMBLING_SEQUENCE_INDEX:
 		tvp->u.data = c->scrambling_sequence_index;
 		break;
-#ifdef TODO
+
 	case DTV_MATYPE:
+		dprintk("QQQQQ1 set matype=0x%x", c->matype);
 		tvp->u.data = c->matype;
 		break;
+#ifdef TODO
 	case DTV_FRAME_LEN:
 		tvp->u.data = c->frame_len;
 		break;

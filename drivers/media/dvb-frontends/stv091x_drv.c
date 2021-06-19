@@ -1518,13 +1518,12 @@ static int stv091x_isi_scan(struct dvb_frontend *fe)
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
 	struct stv *state = fe->demodulator_priv;
 	u8 CurrentISI;
+	u8 matype;
 	int i;
-	u32 j=0, n;
 	u8 tmp;
 	u8 regs[2];
-	bool ISIAlreadyFound;
-	int max_num_isi = 	sizeof(p->isi)/sizeof(p->isi[0]);
-		dprintk("ISI scan\n");
+
+	dprintk("ISI scan\n");
 	//disable ISI filtering so that we can observe all stream_id's
 	tmp = read_reg(state, RSTV0910_P2_PDELCTRL1 + state->regoff);
 	tmp |= 0x20; //0x20: enable mis filter
@@ -1538,29 +1537,26 @@ static int stv091x_isi_scan(struct dvb_frontend *fe)
 	//ensure that we will observe the current isi
 	write_reg(state, RSTV0910_P2_PDELCTRL0 + state->regoff, 0);
 	msleep(40);
-	p->isi_list_len = 0;
+
 	/* Get Current ISI and store in struct */
+	memset(&p->isi_bitset[0], 0, sizeof(p->isi_bitset));
+
 	for (i=0; i < 40; i++) {
-		ISIAlreadyFound = FALSE;
+		uint32_t mask;
+		int j;
 		regs[0] = read_reg(state, RSTV0910_P2_MATSTR1);
 		regs[1] = read_reg(state, RSTV0910_P2_MATSTR0);
+		matype = regs[0];
 		CurrentISI = regs[1];
-		for (j=0; j< p->isi_list_len; j++) {
-			if (CurrentISI == p->isi[j]) {
-				ISIAlreadyFound = TRUE;
-			}
-		}
-		if (!ISIAlreadyFound) {
-			dprintk("MIS found matype=%d stream_id=%d\n", regs[0], CurrentISI);
-			n = p->isi_list_len++;
-			if(n>= max_num_isi)
-				break; //list fu;;
-			p->isi[n] = CurrentISI;
-		}
+
+		j = CurrentISI/32;
+		mask = ((uint32_t)1)<< (CurrentISI%32);
+		p->isi_bitset[j] |= mask;
+
+		p->matype = matype;
+
 		msleep(10);
 	}
-	if(p->isi_list_len>0)
-		dprintk("Found %d streams\n", p->isi_list_len);
 	//restore proper mis
 	if(p->algorithm == ALGORITHM_COLD || p->algorithm == ALGORITHM_COLD_BEST_GUESS) {
 		dprintk("SET_STREAM_INDEX: %d\n", p->stream_id);
@@ -2799,10 +2795,10 @@ static int stv091x_constellation_start(struct dvb_frontend *fe,
 	struct stv *state = fe->demodulator_priv;
 	struct stv_constellation_scan_state* cs = &state->constellation_scan_state;
 	int num_samples = user->num_samples;
+	s8 buff[2];
 	if(num_samples > max_num_samples)
 		num_samples = max_num_samples;
 
-	s8 buff[2];
 
 	stv091x_stop_task(fe);
 	dprintk("demod: %d: constellation num_samples=%d/%d  mode=%d\n", state->nr, user->num_samples, max_num_samples, (int)cs->constel_select);

@@ -712,11 +712,10 @@ struct dtv_frontend_properties {
 	u8			atscmh_sccc_code_mode_d;
 
 	u32			lna;
-	u8		isi[32];
+	u32		isi_bitset[8];
 	u32		pls_search_codes[8];
 	u32		pls_search_range_start;
 	u32		pls_search_range_end;
-	u8		isi_list_len;
 	u8    pls_search_codes_len;
 
 	/* statistics data */

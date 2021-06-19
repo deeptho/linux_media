@@ -3919,7 +3919,10 @@ fe_lla_error_t fe_stid135_get_signal_info(struct stv* state,
 					 pParams->demod_search_algo[Demod-1] == FE_SAT_NEXT)*/) {
 					fe_lla_error_t error1 = FE_LLA_NO_ERROR;
 					error1 =fe_stid135_isi_scan(state, &pInfo->isi_list);
-					dprintk("MIS DETECTION: error=%d nb_isi=%d\n", error1, pInfo->isi_list.nb_isi);
+					dprintk("MIS DETECTION: error=%d\n", error1);
+				} else {
+					u8 isi_read;
+					fe_stid135_read_hw_matype(state, &pInfo->matype, &isi_read);
 				}
 
 			} else { /*DVBS1/DSS*/
@@ -3927,6 +3930,7 @@ fe_lla_error_t fe_stid135_get_signal_info(struct stv* state,
 				error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_VITERBI_FECM_IQINV(Demod), &(fld_value[0]));
 				pInfo->spectrum = (enum fe_sat_iq_inversion)(fld_value[0]);
 				pInfo->modulation = FE_SAT_MOD_QPSK;
+				pInfo->matype = 0;
 			}
 
 			if (state->base->ip.handle_demod->Error)
@@ -5666,6 +5670,16 @@ fe_lla_error_t FE_STiD135_Term(struct fe_stid135_internal_param* pParams)
 static fe_lla_error_t fe_stid135_read_hw_matype_(STCHIP_Info_t* hChip,
 	enum fe_stid135_demod Demod, u8 *matype, u8 *isi_read)
 {
+	/*
+		MATYPE (2 bytes) describes the input stream format, the type of mode adaptation and the
+		transmission roll-off factor. All the stream information fields are stored in registers
+		MATSTRx, UPLSTRx, DFLSTRx, SYNCSTR and SYNCDSTRx.
+		SIS/MIS (1 bit) describes whether there is a single input stream or multiple input streams. If
+		SIS/MIS = multiple input stream, then the second byte is the input stream identifier (ISI),
+		otherwise the second byte is reserved.
+		MATSTR0+1: matype of the current frame
+
+	 */
 
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 
@@ -5724,8 +5738,8 @@ fe_lla_error_t fe_stid135_manage_matype_info(struct stv* state)
 			/* Read Matype */
 			error = fe_stid135_read_hw_matype(state, &matype_info, &isi);
 			genuine_matype = matype_info;
-
-			/* Chech if MIS stream (Multi Input Stream). If yes then set the MIS Filter to get the Min ISI */
+			state->signal_info.matype = genuine_matype;
+			/* Check if MIS stream (Multi Input Stream). If yes then set the MIS Filter to get the Min ISI */
 			if (!fe_stid135_check_sis_or_mis(matype_info)) {
 #if 0
 				if (state->demod_search_algo == FE_SAT_BLIND_SEARCH ||
@@ -10456,8 +10470,7 @@ fe_lla_error_t fe_stid135_isi_scan(struct stv* state, struct fe_sat_isi_struct_t
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	u8 CurrentISI,matype;
 	u8 i;
-	u32 j=0, n;
-	BOOL ISIAlreadyFound;
+	u32 j=0;
 	//struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
 
 		if (state->base->ip.handle_demod->Error)
@@ -10469,22 +10482,20 @@ fe_lla_error_t fe_stid135_isi_scan(struct stv* state, struct fe_sat_isi_struct_t
 			/* Setup HW to store Current ISI */
 			error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL0_ISIOBS_MODE(demod), 0);
 			ChipWaitOrAbort(state->base->ip.handle_demod,100);
-			/* initialise struct to FF */
-			for (i=0; i < 9; i++)
-				p_isi_struct->isi[i] = 0xFF;
-			p_isi_struct->nb_isi = 0;
+
+			memset(&p_isi_struct->isi_bitset[0], 0, sizeof(p_isi_struct->isi_bitset));
+
 			/* Get Current ISI and store in struct */
 			for (i=0; i < 40; i++) {
-				ISIAlreadyFound = FALSE;
+				uint32_t mask;
+
 				error |= fe_stid135_read_hw_matype(state, &matype, &CurrentISI);
-				for (j=0; j<9; j++) {
-					if (CurrentISI == p_isi_struct->isi[j]) {
-						ISIAlreadyFound = TRUE;
-					}
-				}
-				if (! ISIAlreadyFound) {
-					n = p_isi_struct->nb_isi++;
-					p_isi_struct->isi[n] = CurrentISI;
+				j = CurrentISI/32;
+				mask = ((uint32_t)1)<< (CurrentISI%32);
+				p_isi_struct->isi_bitset[j] |= mask;
+
+				if(CurrentISI == state->signal_info.isi) {
+				state->signal_info.matype = matype;
 				}
 				ChipWaitOrAbort(state->base->ip.handle_demod,10);
 			}

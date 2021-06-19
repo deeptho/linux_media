@@ -331,8 +331,7 @@ struct fe_sat_search_result {
 
 struct fe_sat_isi_struct_t
 {
-	u32 nb_isi;
-	u8 isi[256];
+	u32 isi_bitset[8]; //bitset; 1 bit indicates corresponding ISI is in use
 };
 typedef  struct fe_sat_isi_struct_t  fe_sat_isi_struct;
 

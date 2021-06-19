@@ -313,10 +313,12 @@ int si2183_read_status(struct dvb_frontend *fe, enum fe_status *status)
 		c->stream_id = cmd.args[12]; 		//multistream
 	else
 		c->stream_id = -1;
-	c->isi_list_len = 1;
-	memset(c->isi, 0xff, c->isi_list_len);
-	c->isi[0]= c->stream_id;
 
+	memset(c->isi_bitset, 0, sizeof(c->isi_bitset));
+	if(c->stream_id>=0) {
+		int i= (c->stream_id)%256;
+		c->isi_bitset[i/32] |= ((uint32_t)1) << (i%32);
+	}
 	dev->fe_status = *status;
 
 	dev_dbg(&client->dev, "status=%02x args=%*ph\n",

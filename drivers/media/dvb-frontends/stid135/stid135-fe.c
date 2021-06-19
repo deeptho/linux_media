@@ -367,6 +367,7 @@ static bool pls_search_list(struct dvb_frontend *fe)
 				state->mis_mode= !fe_stid135_check_sis_or_mis(matype_info);
 				dprintk("selecting stream_id=%d\n", isi);
 				signal_info->isi = isi;
+				p->matype = matype_info;
 				p->stream_id = 	(isi&0xff) | (pls_code & ~0xff);
 				dprintk("SET stream_id=0x%x isi=0x%x\n",p->stream_id, isi);
 				break;
@@ -434,7 +435,8 @@ static bool pls_search_range(struct dvb_frontend *fe)
 			state->mis_mode= !fe_stid135_check_sis_or_mis(matype_info);
 			dprintk("selecting stream_id=%d\n", isi);
 			signal_info->isi = isi;
-			p->stream_id = 	(isi&0xff) | (pls_code & ~0xff);
+			p->stream_id = 	((isi&0xff) | (pls_code & ~0xff));
+		  p->matype = matype_info;
 			dprintk("SET stream_id=0x%x isi=0x%x\n",p->stream_id, isi);
 				break;
 		}
@@ -711,19 +713,8 @@ static int stid135_get_frontend(struct dvb_frontend *fe, struct dtv_frontend_pro
 
 	if(true || state->demod_search_algo == FE_SAT_BLIND_SEARCH ||
 							state->demod_search_algo == FE_SAT_NEXT) {
-		int max_isi_len= sizeof(p->isi)/sizeof(p->isi[0]);
-		if(max_isi_len > sizeof(state->signal_info.isi_list.isi)/sizeof(state->signal_info.isi_list.isi[0]))
-			max_isi_len = sizeof(state->signal_info.isi_list.isi)/sizeof(state->signal_info.isi_list.isi[0]);
-#if 0
-		//do not do any calls which may run i2c code
-		fe_stid135_get_signal_info(state,  &state->signal_info, 0);
-#endif
-		p-> isi_list_len = state->signal_info.isi_list.nb_isi;
-		if(p->isi_list_len>  max_isi_len)
-			p->isi_list_len = max_isi_len;
-		BUG_ON(p->isi_list_len <0 || p->isi_list_len >= max_isi_len);
-		memcpy(&p->isi[0], &state->signal_info.isi_list.isi[0], p->isi_list_len);
-		vprintk("MIS2: num=%d\n", p->isi_list_len);
+		memcpy(p->isi_bitset, state->signal_info.isi_list.isi_bitset, sizeof(p->isi_bitset));
+		p->matype = state->signal_info.matype;
 		p->frequency = state->signal_info.frequency;
 		p->symbol_rate = state->signal_info.symbol_rate;
 	}
@@ -1629,14 +1620,10 @@ static int stid135_scan_sat(struct dvb_frontend *fe, bool init,
 		ret = stid135_tune_(fe, retune, mode_flags, delay, status);
 		old = *status;
 		{
-			int max_isi_len= sizeof(p-> isi)/sizeof(p->isi[0]);
 			state->base->ip.handle_demod->Error = FE_LLA_NO_ERROR;
 			fe_stid135_get_signal_info(state,  &state->signal_info, 0);
-			//dprintk("MIS2: num=%d\n", state->signal_info.isi_list.nb_isi);
-			p-> isi_list_len = state->signal_info.isi_list.nb_isi;
-			if(p->isi_list_len>  max_isi_len)
-				p->isi_list_len = max_isi_len;
-			memcpy(p->isi, &state->signal_info.isi_list.isi[0], p->isi_list_len);
+			memcpy(p->isi_bitset, state->signal_info.isi_list.isi_bitset, sizeof(p->isi_bitset));
+			p->matype =  state->signal_info.matype;
 			p->frequency = state->signal_info.frequency;
 			p->symbol_rate = state->signal_info.symbol_rate;
 		}
