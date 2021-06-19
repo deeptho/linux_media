@@ -319,6 +319,7 @@ static int dvb_frontend_get_event(struct dvb_frontend *fe,
 
 	if (events->overflow) {
 		events->overflow = 0;
+		events->eventr = events->eventw;
 		return -EOVERFLOW;
 	}
 
