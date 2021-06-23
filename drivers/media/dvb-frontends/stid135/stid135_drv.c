@@ -10493,10 +10493,11 @@ fe_lla_error_t fe_stid135_isi_scan(struct stv* state, struct fe_sat_isi_struct_t
 				j = CurrentISI/32;
 				mask = ((uint32_t)1)<< (CurrentISI%32);
 				p_isi_struct->isi_bitset[j] |= mask;
-
+#if 0
 				if(CurrentISI == state->signal_info.isi) {
 				state->signal_info.matype = matype;
 				}
+#endif
 				ChipWaitOrAbort(state->base->ip.handle_demod,10);
 			}
 			// Go back to previous value of test mode

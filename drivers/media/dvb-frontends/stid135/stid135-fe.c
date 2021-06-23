@@ -367,7 +367,7 @@ static bool pls_search_list(struct dvb_frontend *fe)
 				state->mis_mode= !fe_stid135_check_sis_or_mis(matype_info);
 				dprintk("selecting stream_id=%d\n", isi);
 				signal_info->isi = isi;
-				p->matype = matype_info;
+				//p->matype = matype_info;
 				p->stream_id = 	(isi&0xff) | (pls_code & ~0xff);
 				dprintk("SET stream_id=0x%x isi=0x%x\n",p->stream_id, isi);
 				break;
@@ -436,7 +436,7 @@ static bool pls_search_range(struct dvb_frontend *fe)
 			dprintk("selecting stream_id=%d\n", isi);
 			signal_info->isi = isi;
 			p->stream_id = 	((isi&0xff) | (pls_code & ~0xff));
-		  p->matype = matype_info;
+		  //p->matype = matype_info;
 			dprintk("SET stream_id=0x%x isi=0x%x\n",p->stream_id, isi);
 				break;
 		}
