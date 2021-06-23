@@ -2717,7 +2717,7 @@ static int dtv_get_pls_search_list(struct dvb_frontend *fe, struct dtv_pls_searc
 		len = user->num_codes;
 	if(user->codes == NULL || len <=0)
 		return -EFAULT;
-	if (copy_to_user(user->codes, &c->pls_search_codes, len))
+	if (copy_to_user(user->codes, &c->pls_search_codes, len*sizeof(user->codes[0])))
 		return -EFAULT;
 	return 0;
 }
@@ -2730,8 +2730,13 @@ static int dtv_set_pls_search_list(struct dvb_frontend *fe, struct dtv_pls_searc
 		c->pls_search_codes_len = user->num_codes;
 	if(c->pls_search_codes_len==0 || user->codes == NULL)
 		return -EFAULT;
-	if (copy_from_user(&c->pls_search_codes, user->codes, c->pls_search_codes_len))
+	if (copy_from_user(&c->pls_search_codes, user->codes, c->pls_search_codes_len*sizeof(user->codes[0])))
 		return -EFAULT;
+	int i;
+	dprintk("PLS: %d codes:\n", c->pls_search_codes_len);
+	for(i=0;i< c->pls_search_codes_len;++i)
+		dprintk("code=0x%x\n", c->pls_search_codes, &c->pls_search_codes[i]);
+
 	return 0;
 }
 
