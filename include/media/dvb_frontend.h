@@ -713,7 +713,7 @@ struct dtv_frontend_properties {
 
 	u32			lna;
 	u32		isi_bitset[8];
-	u32		pls_search_codes[8];
+	u32		pls_search_codes[64];
 	u32		pls_search_range_start;
 	u32		pls_search_range_end;
 	u8    pls_search_codes_len;

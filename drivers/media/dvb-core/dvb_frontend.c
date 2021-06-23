@@ -1440,6 +1440,8 @@ static int dvb_frontend_handle_algo_ctrl_ioctl(struct file *file,
 static int dtv_set_sat_scan(struct dvb_frontend *fe, bool scan_continue);
 static int dtv_set_spectrum(struct dvb_frontend *fe, enum dtv_fe_spectrum_method method);
 static int dtv_get_spectrum(struct dvb_frontend *fe, struct dtv_fe_spectrum*user);
+static int dtv_set_pls_search_list(struct dvb_frontend *fe, struct dtv_pls_search_list* user);
+static int dtv_get_pls_search_list(struct dvb_frontend *fe, struct dtv_pls_search_list* user);
 static int dtv_set_constellation(struct dvb_frontend *fe, struct dtv_fe_constellation* constellation);
 static int dtv_get_constellation(struct dvb_frontend *fe, struct dtv_fe_constellation* user);
 
@@ -1502,14 +1504,8 @@ static int dtv_property_process_get(struct dvb_frontend *fe,
 		tvp->u.buffer.len = i;
 	}
 		break;
-	case DTV_PLS_SEARCH_LIST: {
-		int i=0;
-		for(i=0; i+sizeof(c->pls_search_codes[0]) <= sizeof(tvp->u.buffer.data) &&
-					i/4 < c->pls_search_codes_len;
-				i+=sizeof(c->pls_search_codes[0]))
-			memcpy(&tvp->u.buffer.data[i], &c->pls_search_codes[i/4], sizeof(c->pls_search_codes[0]));
-		tvp->u.buffer.len=i;
-	}
+	case DTV_PLS_SEARCH_LIST:
+		dtv_get_pls_search_list(fe, &tvp->u.pls_search_codes);
 		break;
 	case DTV_ISI_LIST:
 		tvp->u.buffer.len = (sizeof(c->isi_bitset) <  sizeof(tvp->u.buffer.data)) ?
@@ -2261,17 +2257,7 @@ static int dtv_property_process_set(struct dvb_frontend *fe,
 		}
 		break;
 	case DTV_PLS_SEARCH_LIST: {
-		int i;
-		int maxlen = sizeof(c->pls_search_codes)/sizeof(c->pls_search_codes[0]);
-		c->pls_search_codes_len = 0;
-		for(i=0; i+sizeof(c->pls_search_codes[0]) <= tvp->u.buffer.len &&  c->pls_search_codes_len < maxlen;
-				i+=sizeof(c->pls_search_codes[0]), c->pls_search_codes_len++) {
-			dprintk("i=%d/%d len=%d/%d\n", i,  tvp->u.buffer.len , c->pls_search_codes_len, maxlen);
-			memcpy(&c->pls_search_codes[c->pls_search_codes_len],
-						 &tvp->u.buffer.data[i],
-						 sizeof(c->pls_search_codes[0]));
-		}
-		dprintk("PLS_SEARCH_LIST: %d codes buffer_len=%d\n", c->pls_search_codes_len, tvp->u.buffer.len);
+		r = dtv_set_pls_search_list(fe, &tvp->u.pls_search_codes);
 	}
 		break;
 	default:
@@ -2723,6 +2709,31 @@ static int dtv_set_sat_scan(struct dvb_frontend *fe, bool scan_continue)
 	return 0;
 }
 
+static int dtv_get_pls_search_list(struct dvb_frontend *fe, struct dtv_pls_search_list* user)
+{
+	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
+	int len = c->pls_search_codes_len;
+	if(user->num_codes < len)
+		len = user->num_codes;
+	if(user->codes == NULL || len <=0)
+		return -EFAULT;
+	if (copy_to_user(user->codes, &c->pls_search_codes, len))
+		return -EFAULT;
+	return 0;
+}
+
+static int dtv_set_pls_search_list(struct dvb_frontend *fe, struct dtv_pls_search_list* user)
+{
+	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
+	c->pls_search_codes_len = sizeof(c->pls_search_codes)/sizeof(c->pls_search_codes[0]);
+	if(user->num_codes < c->pls_search_codes_len)
+		c->pls_search_codes_len = user->num_codes;
+	if(c->pls_search_codes_len==0 || user->codes == NULL)
+		return -EFAULT;
+	if (copy_from_user(&c->pls_search_codes, user->codes, c->pls_search_codes_len))
+		return -EFAULT;
+	return 0;
+}
 
 static int dtv_set_spectrum(struct dvb_frontend *fe, enum dtv_fe_spectrum_method method)
 {
