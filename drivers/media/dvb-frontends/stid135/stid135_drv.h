@@ -306,9 +306,6 @@ struct status_bit_fields {
 	on tbs6909x. Created in fe_stid135_init.
 */
 
-#if 0
-typedef void*			fe_stid135_handle_t;
-#endif
 struct stv_base {
 	struct list_head     stvlist;
 
@@ -322,13 +319,8 @@ struct stv_base {
 	int (*set_voltage)(struct i2c_adapter *i2c,
 		enum fe_sec_voltage voltage, u8 rf_in);
 	u8                   mode;
-#if 1 //TEST
+
 	struct fe_stid135_internal_param ip;
-#else
-	fe_stid135_handle_t  handle; /*pointer to a private singleton fe_stid135_internal_param structure, which contains
-																 some per-demod state; the singleton structure is created in fe_stid135_init,
-																 which is called only once per chip */
-#endif
 	u8 tuner_use_count[4];
 	void (*write_properties) (struct i2c_adapter *i2c,u8 reg, u32 buf);
 	void (*read_properties) (struct i2c_adapter *i2c,u8 reg, u32 *buf);

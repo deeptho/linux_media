@@ -429,7 +429,7 @@ static bool pls_search_range(struct dvb_frontend *fe)
 			dprintk("exiting on should stop\n");
 			break;
 		}
-		dprintk("RESULT=%d\n", locked);
+		dprintk("PLS RESULT=%d\n", locked);
 		if(locked) {
 			error = fe_stid135_read_hw_matype(state, &matype_info, &isi);
 			state->mis_mode= !fe_stid135_check_sis_or_mis(matype_info);
@@ -437,7 +437,7 @@ static bool pls_search_range(struct dvb_frontend *fe)
 			signal_info->isi = isi;
 			p->stream_id = 	((isi&0xff) | (pls_code & ~0xff));
 		  //p->matype = matype_info;
-			dprintk("SET stream_id=0x%x isi=0x%x\n",p->stream_id, isi);
+			dprintk("PLS SET stream_id=0x%x isi=0x%x\n",p->stream_id, isi);
 				break;
 		}
 	}
@@ -980,13 +980,12 @@ static int stid135_tune_(struct dvb_frontend *fe, bool re_tune,
 		}
 		state->tune_time = jiffies;
 	}
-#if 1 //TEST
+
 	if(re_tune) {
 		vprintk("[%d] RETUNE: GET SIGNAL\n", state->nr+1);
 		fe_stid135_get_signal_info(state,  &state->signal_info, 0);
 		//dprintk("MIS2: num=%d\n", state->signal_info.isi_list.nb_isi);
 	}
-#endif
 
 	r = stid135_read_status_(fe, status);
 
