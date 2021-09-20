@@ -403,12 +403,16 @@ static bool pls_search_range(struct dvb_frontend *fe)
 		return false;
 	if(timeout==0)
 		timeout = 25;
+	dprintk("pls search range: %d to %d timeout=%d\n",
+					(p->pls_search_range_start) & 0x3FFFF,
+					(p->pls_search_range_end) & 0x3FFFF, timeout);
+
 	atomic_set(&fe->algo_state.cur_index, 0);
 	atomic_set(&fe->algo_state.max_index, (p->pls_search_range_end - p->pls_search_range_start)>>8);
 	for(pls_code=p->pls_search_range_start; pls_code<p->pls_search_range_end; pls_code += 0x100, count++) {
 		s32 pktdelin;
 		if((count+= timeout)>=1000) {
-			dprintk("Trying scrambling mode=%d code %d timeout=%d ...\n",
+			vprintk("Trying scrambling mode=%d code %d timeout=%d ...\n",
 							(pls_code>>26) & 0x3, (pls_code>>8) & 0x3FFFF, timeout);
 			atomic_add(count, &fe->algo_state.cur_index);
 			count=0;
@@ -431,7 +435,7 @@ static bool pls_search_range(struct dvb_frontend *fe)
 			dprintk("exiting on should stop\n");
 			break;
 		}
-		dprintk("PLS RESULT=%d\n", locked);
+		vprintk("PLS RESULT=%d\n", locked);
 		if(locked) {
 			error = fe_stid135_read_hw_matype(state, &matype_info, &isi);
 			state->mis_mode= !fe_stid135_check_sis_or_mis(matype_info);
@@ -443,6 +447,7 @@ static bool pls_search_range(struct dvb_frontend *fe)
 				break;
 		}
 	}
+	dprintk("PLS search endied\n"); //143816
 	return locked;
 }
 
@@ -601,10 +606,11 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 		locked = pls_search_list(fe);
 		if(!locked)
 			locked = pls_search_range(fe);
-		if(locked)
+		if(locked) {
 			state->signal_info.has_lock=true;
-		dprintk("PLS locked=%d\n", locked);
-		print_signal_info("(PLS)", &state->signal_info);
+			dprintk("PLS locked=%d\n", locked); //143816
+			print_signal_info("(PLS)", &state->signal_info);
+		}
 		if(locked) {
 			/*The following can cause delock*/
 			//set_stream_index(state, p->stream_id);
@@ -1449,7 +1455,6 @@ static int stid135_stop_task(struct dvb_frontend *fe)
 	struct spectrum_scan_state_t* ss = &state->scan_state;
 	struct constellation_scan_state* cs = &state->constellation_scan_state;
 	mutex_lock(&state->base->status_lock);
-	dprintk("CALLED\n");
 	if(ss->freq)
 		kfree(ss->freq);
 	if(ss->candidates)
