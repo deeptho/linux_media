@@ -403,7 +403,7 @@ static bool pls_search_range(struct dvb_frontend *fe)
 		timeout = 25;
 	atomic_set(&fe->algo_state.cur_index, 0);
 	atomic_set(&fe->algo_state.max_index, (p->pls_search_range_end - p->pls_search_range_start)>>8);
-	for(pls_code=p->pls_search_range_start; pls_code<p->pls_search_range_end; pls_code += 0xff, count++) {
+	for(pls_code=p->pls_search_range_start; pls_code<p->pls_search_range_end; pls_code += 0x100, count++) {
 		s32 pktdelin;
 		if((count+= timeout)>=1000) {
 			dprintk("Trying scrambling mode=%d code %d timeout=%d ...\n",
