@@ -2718,6 +2718,7 @@ static int stv091x_spectrum_start(struct dvb_frontend *fe,
 	u32 num_freq = (p->scan_end_frequency-p->scan_start_frequency+ resolution-1)/resolution;
 	stv091x_stop_task(fe);
 	s->num_freq = num_freq;
+	s->num_candidates = 0;
 	ss->spectrum_len = num_freq;
 	ss->freq = kzalloc(ss->spectrum_len * (sizeof(ss->freq[0])), GFP_KERNEL);
 	ss->spectrum = kzalloc(ss->spectrum_len * (sizeof(ss->spectrum[0])), GFP_KERNEL);
@@ -2770,7 +2771,6 @@ static int stv091x_spectrum_start(struct dvb_frontend *fe,
 			dprintk("exiting on should stop\n");
 			break;
 		}
-
 		write_reg(state, RSTV0910_P2_DMDISTATE, 0x1C); //stop demod
 		write_reg(state, RSTV0910_P2_DMDISTATE, 0x18); //warm
 
@@ -2885,6 +2885,7 @@ int stv091x_spectrum_get(struct dvb_frontend *fe, struct dtv_fe_spectrum* user)
 	}
 	else
 		error = -EFAULT;
+	user->num_candidates = 0;
 	return error;
 }
 
