@@ -1636,7 +1636,6 @@ static int dtv_property_process_get(struct dvb_frontend *fe,
 		break;
 
 	case DTV_MATYPE:
-		dprintk("QQQQQ1 set matype=0x%x", c->matype);
 		tvp->u.data = c->matype;
 		break;
 #ifdef TODO
@@ -3566,6 +3565,7 @@ int dvb_register_frontend(struct dvb_adapter *dvb,
 	sema_init(&fepriv->sem, 1);
 	init_waitqueue_head(&fepriv->wait_queue);
 	init_waitqueue_head(&fepriv->events.wait_queue);
+	init_waitqueue_head(&fe->algo_state.wait_queue);
 	mutex_init(&fepriv->events.mtx);
 	fe->dvb = dvb;
 	fepriv->inversion = INVERSION_OFF;
