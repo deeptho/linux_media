@@ -2360,9 +2360,9 @@ static int tune_once(struct dvb_frontend *fe, bool* need_retune)
 	if(p->algorithm == ALGORITHM_WARM || p->algorithm == ALGORITHM_COLD ||
 		 p->algorithm == ALGORITHM_BLIND_BEST_GUESS)
 		dprintk("SET_STREAM_INDEX: %d\n", p->stream_id);
-		set_stream_index(state, p->stream_id);
-		stv091x_start_scan(state, p);
-		break;
+	set_stream_index(state, p->stream_id);
+	stv091x_start_scan(state, p);
+	break;
 	default:
 		dprintk("This function should not be called with algorithm=%d\n", p->algorithm);
 		break;
@@ -2712,8 +2712,9 @@ static int stv091x_spectrum_start(struct dvb_frontend *fe,
 	u32 end_frequency = p->scan_end_frequency;
 	//u32 bandwidth = end_frequency-start_frequency; //in kHz
 	uint32_t frequency;
-	uint32_t resolution =  (p->scan_resolution>0) ? p->scan_resolution : 1000; //in kHz
-	uint32_t bandwidth =  resolution; //in kHz
+	int val1, val2, val3;
+	uint32_t resolution =  (p->scan_resolution>0) ? p->scan_resolution : 500; //in kHz
+	uint32_t bandwidth =  2*resolution; //in kHz
 	u32 num_freq = (p->scan_end_frequency-p->scan_start_frequency+ resolution-1)/resolution;
 	stv091x_stop_task(fe);
 	s->num_freq = num_freq;
@@ -2773,18 +2774,30 @@ static int stv091x_spectrum_start(struct dvb_frontend *fe,
 		write_reg(state, RSTV0910_P2_DMDISTATE, 0x1C); //stop demod
 		write_reg(state, RSTV0910_P2_DMDISTATE, 0x18); //warm
 
-		ss->freq[i]= start_frequency +i*resolution;
+		ss->freq[i]= start_frequency + i*resolution;
 		frequency = ss->freq[i];
 #if 1
 		p->frequency = frequency;
 		if(fe->ops.tuner_ops.set_frequency_and_bandwidth)
 			fe->ops.tuner_ops.set_frequency_and_bandwidth(fe, frequency, bandwidth); //todo: check that this sets the proper bandwidth
 #else
-			fe->ops.tuner_ops.set_params(fe); //todo: check that this sets the proper bandwidth
+		fe->ops.tuner_ops.set_params(fe); //todo: check that this sets the proper bandwidth
 #endif
 		//usleep_range(12000, 13000);
-		ss->spectrum[i] = stv091x_narrow_band_signal_power_dbm(fe);
+		if (i == 0) {
+			val1 = stv091x_narrow_band_signal_power_dbm(fe);
+			val2 = val3 = val1;
+			continue;
+		}
+		val3 = val2;
+		val2 = val1;
+		val1 = stv091x_narrow_band_signal_power_dbm(fe);
+		ss->spectrum[i-1] += (val1 + 2* val2 + val3)/4;
+
 	}
+	ss->spectrum[num_freq-1] = val1;
+
+	dprintk("Ending spectrum_scan num_freq=%d\n", num_freq);
 	*status =  FE_HAS_SIGNAL|FE_HAS_CARRIER|FE_HAS_VITERBI|FE_HAS_SYNC|FE_HAS_LOCK;
 	return 0;
 }
