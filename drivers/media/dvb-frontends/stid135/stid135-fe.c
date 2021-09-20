@@ -399,6 +399,8 @@ static bool pls_search_range(struct dvb_frontend *fe)
 	int count=0;
 	u8 matype_info;
 	u8 isi;
+	if(p->pls_search_range_start >= p->pls_search_range_end)
+		return false;
 	if(timeout==0)
 		timeout = 25;
 	atomic_set(&fe->algo_state.cur_index, 0);
