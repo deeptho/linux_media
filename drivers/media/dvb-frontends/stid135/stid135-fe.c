@@ -416,7 +416,7 @@ static bool pls_search_range(struct dvb_frontend *fe)
 							(pls_code>>26) & 0x3, (pls_code>>8) & 0x3FFFF, timeout);
 			atomic_add(count, &fe->algo_state.cur_index);
 			count=0;
-			wake_up_interruptible(&fe->algo_state.wait_queue);
+			//wake_up_interruptible(&fe->algo_state.wait_queue);
 		}
 		set_pls_mode_code(state, (pls_code>>26) & 0x3, (pls_code>>8) & 0x3FFFF);
 		//write_reg(state, RSTV0910_P2_DMDISTATE + state->regoff, 0x15);
