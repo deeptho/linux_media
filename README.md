@@ -9,7 +9,7 @@ https://github.com/deeptho/blindscan
 
 
 # Installation
-
+```
 mkdir ~/blindscan_kernel
 cd  ~/blindscan_kernel
 
@@ -25,3 +25,4 @@ make distclean
 make allyesconfig
 make -j8
 sudo make install
+```
