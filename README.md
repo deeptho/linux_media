@@ -24,3 +24,4 @@ make dir DIR=../media
 make distclean
 make allyesconfig
 make -j8
+sudo make install
