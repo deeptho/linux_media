@@ -30,8 +30,6 @@ static inline struct xfs_buf_log_item *BUF_ITEM(struct xfs_log_item *lip)
 	return container_of(lip, struct xfs_buf_log_item, bli_item);
 }
 
-static void xfs_buf_item_done(struct xfs_buf *bp);
-
 /* Is this log iovec plausibly large enough to contain the buffer log format? */
 bool
 xfs_buf_log_check_iovec(
@@ -57,6 +55,24 @@ xfs_buf_log_format_size(
 			(blfp->blf_map_size * sizeof(blfp->blf_data_map[0]));
 }
 
+static inline bool
+xfs_buf_item_straddle(
+	struct xfs_buf		*bp,
+	uint			offset,
+	int			first_bit,
+	int			nbits)
+{
+	void			*first, *last;
+
+	first = xfs_buf_offset(bp, offset + (first_bit << XFS_BLF_SHIFT));
+	last = xfs_buf_offset(bp,
+			offset + ((first_bit + nbits) << XFS_BLF_SHIFT));
+
+	if (last - first != nbits * XFS_BLF_CHUNK)
+		return true;
+	return false;
+}
+
 /*
  * This returns the number of log iovecs needed to log the
  * given buf log item.
@@ -71,24 +87,56 @@ STATIC void
 xfs_buf_item_size_segment(
 	struct xfs_buf_log_item		*bip,
 	struct xfs_buf_log_format	*blfp,
+	uint				offset,
 	int				*nvecs,
 	int				*nbytes)
 {
 	struct xfs_buf			*bp = bip->bli_buf;
+	int				first_bit;
+	int				nbits;
 	int				next_bit;
 	int				last_bit;
 
-	last_bit = xfs_next_bit(blfp->blf_data_map, blfp->blf_map_size, 0);
-	if (last_bit == -1)
+	first_bit = xfs_next_bit(blfp->blf_data_map, blfp->blf_map_size, 0);
+	if (first_bit == -1)
 		return;
 
-	/*
-	 * initial count for a dirty buffer is 2 vectors - the format structure
-	 * and the first dirty region.
-	 */
-	*nvecs += 2;
-	*nbytes += xfs_buf_log_format_size(blfp) + XFS_BLF_CHUNK;
+	(*nvecs)++;
+	*nbytes += xfs_buf_log_format_size(blfp);
 
+	do {
+		nbits = xfs_contig_bits(blfp->blf_data_map,
+					blfp->blf_map_size, first_bit);
+		ASSERT(nbits > 0);
+
+		/*
+		 * Straddling a page is rare because we don't log contiguous
+		 * chunks of unmapped buffers anywhere.
+		 */
+		if (nbits > 1 &&
+		    xfs_buf_item_straddle(bp, offset, first_bit, nbits))
+			goto slow_scan;
+
+		(*nvecs)++;
+		*nbytes += nbits * XFS_BLF_CHUNK;
+
+		/*
+		 * This takes the bit number to start looking from and
+		 * returns the next set bit from there.  It returns -1
+		 * if there are no more bits set or the start bit is
+		 * beyond the end of the bitmap.
+		 */
+		first_bit = xfs_next_bit(blfp->blf_data_map, blfp->blf_map_size,
+					(uint)first_bit + nbits + 1);
+	} while (first_bit != -1);
+
+	return;
+
+slow_scan:
+	/* Count the first bit we jumped out of the above loop from */
+	(*nvecs)++;
+	*nbytes += XFS_BLF_CHUNK;
+	last_bit = first_bit;
 	while (last_bit != -1) {
 		/*
 		 * This takes the bit number to start looking from and
@@ -105,16 +153,15 @@ xfs_buf_item_size_segment(
 		 */
 		if (next_bit == -1) {
 			break;
-		} else if (next_bit != last_bit + 1) {
+		} else if (next_bit != last_bit + 1 ||
+		           xfs_buf_item_straddle(bp, offset, first_bit, nbits)) {
 			last_bit = next_bit;
+			first_bit = next_bit;
 			(*nvecs)++;
-		} else if (xfs_buf_offset(bp, next_bit * XFS_BLF_CHUNK) !=
-			   (xfs_buf_offset(bp, last_bit * XFS_BLF_CHUNK) +
-			    XFS_BLF_CHUNK)) {
-			last_bit = next_bit;
-			(*nvecs)++;
+			nbits = 1;
 		} else {
 			last_bit++;
+			nbits++;
 		}
 		*nbytes += XFS_BLF_CHUNK;
 	}
@@ -144,7 +191,10 @@ xfs_buf_item_size(
 	int			*nbytes)
 {
 	struct xfs_buf_log_item	*bip = BUF_ITEM(lip);
+	struct xfs_buf		*bp = bip->bli_buf;
 	int			i;
+	int			bytes;
+	uint			offset = 0;
 
 	ASSERT(atomic_read(&bip->bli_refcount) > 0);
 	if (bip->bli_flags & XFS_BLI_STALE) {
@@ -176,7 +226,7 @@ xfs_buf_item_size(
 	}
 
 	/*
-	 * the vector count is based on the number of buffer vectors we have
+	 * The vector count is based on the number of buffer vectors we have
 	 * dirty bits in. This will only be greater than one when we have a
 	 * compound buffer with more than one segment dirty. Hence for compound
 	 * buffers we need to track which segment the dirty bits correspond to,
@@ -184,10 +234,19 @@ xfs_buf_item_size(
 	 * count for the extra buf log format structure that will need to be
 	 * written.
 	 */
+	bytes = 0;
 	for (i = 0; i < bip->bli_format_count; i++) {
-		xfs_buf_item_size_segment(bip, &bip->bli_formats[i],
-					  nvecs, nbytes);
+		xfs_buf_item_size_segment(bip, &bip->bli_formats[i], offset,
+					  nvecs, &bytes);
+		offset += BBTOB(bp->b_maps[i].bm_len);
 	}
+
+	/*
+	 * Round up the buffer size required to minimise the number of memory
+	 * allocations that need to be done as this item grows when relogged by
+	 * repeated modifications.
+	 */
+	*nbytes = round_up(bytes, 512);
 	trace_xfs_buf_item_size(bip);
 }
 
@@ -204,18 +263,6 @@ xfs_buf_item_copy_iovec(
 	xlog_copy_iovec(lv, vecp, XLOG_REG_TYPE_BCHUNK,
 			xfs_buf_offset(bp, offset),
 			nbits * XFS_BLF_CHUNK);
-}
-
-static inline bool
-xfs_buf_item_straddle(
-	struct xfs_buf		*bp,
-	uint			offset,
-	int			next_bit,
-	int			last_bit)
-{
-	return xfs_buf_offset(bp, offset + (next_bit << XFS_BLF_SHIFT)) !=
-		(xfs_buf_offset(bp, offset + (last_bit << XFS_BLF_SHIFT)) +
-		 XFS_BLF_CHUNK);
 }
 
 static void
@@ -270,6 +317,38 @@ xfs_buf_item_format_segment(
 	/*
 	 * Fill in an iovec for each set of contiguous chunks.
 	 */
+	do {
+		ASSERT(first_bit >= 0);
+		nbits = xfs_contig_bits(blfp->blf_data_map,
+					blfp->blf_map_size, first_bit);
+		ASSERT(nbits > 0);
+
+		/*
+		 * Straddling a page is rare because we don't log contiguous
+		 * chunks of unmapped buffers anywhere.
+		 */
+		if (nbits > 1 &&
+		    xfs_buf_item_straddle(bp, offset, first_bit, nbits))
+			goto slow_scan;
+
+		xfs_buf_item_copy_iovec(lv, vecp, bp, offset,
+					first_bit, nbits);
+		blfp->blf_size++;
+
+		/*
+		 * This takes the bit number to start looking from and
+		 * returns the next set bit from there.  It returns -1
+		 * if there are no more bits set or the start bit is
+		 * beyond the end of the bitmap.
+		 */
+		first_bit = xfs_next_bit(blfp->blf_data_map, blfp->blf_map_size,
+					(uint)first_bit + nbits + 1);
+	} while (first_bit != -1);
+
+	return;
+
+slow_scan:
+	ASSERT(bp->b_addr == NULL);
 	last_bit = first_bit;
 	nbits = 1;
 	for (;;) {
@@ -294,7 +373,7 @@ xfs_buf_item_format_segment(
 			blfp->blf_size++;
 			break;
 		} else if (next_bit != last_bit + 1 ||
-		           xfs_buf_item_straddle(bp, offset, next_bit, last_bit)) {
+		           xfs_buf_item_straddle(bp, offset, first_bit, nbits)) {
 			xfs_buf_item_copy_iovec(lv, vecp, bp, offset,
 						first_bit, nbits);
 			blfp->blf_size++;
@@ -414,7 +493,7 @@ xfs_buf_item_unpin(
 	int			remove)
 {
 	struct xfs_buf_log_item	*bip = BUF_ITEM(lip);
-	xfs_buf_t		*bp = bip->bli_buf;
+	struct xfs_buf		*bp = bip->bli_buf;
 	int			stale = bip->bli_flags & XFS_BLI_STALE;
 	int			freed;
 
@@ -463,7 +542,7 @@ xfs_buf_item_unpin(
 		 */
 		if (bip->bli_flags & XFS_BLI_STALE_INODE) {
 			xfs_buf_item_done(bp);
-			xfs_iflush_done(bp);
+			xfs_buf_inode_iodone(bp);
 			ASSERT(list_empty(&bp->b_li_list));
 		} else {
 			xfs_trans_ail_delete(lip, SHUTDOWN_LOG_IO_ERROR);
@@ -944,7 +1023,7 @@ xfs_buf_item_free(
  */
 void
 xfs_buf_item_relse(
-	xfs_buf_t	*bp)
+	struct xfs_buf	*bp)
 {
 	struct xfs_buf_log_item	*bip = bp->b_log_item;
 
@@ -956,153 +1035,10 @@ xfs_buf_item_relse(
 	xfs_buf_item_free(bip);
 }
 
-/*
- * Decide if we're going to retry the write after a failure, and prepare
- * the buffer for retrying the write.
- */
-static bool
-xfs_buf_ioerror_fail_without_retry(
-	struct xfs_buf		*bp)
-{
-	struct xfs_mount	*mp = bp->b_mount;
-	static ulong		lasttime;
-	static xfs_buftarg_t	*lasttarg;
-
-	/*
-	 * If we've already decided to shutdown the filesystem because of
-	 * I/O errors, there's no point in giving this a retry.
-	 */
-	if (XFS_FORCED_SHUTDOWN(mp))
-		return true;
-
-	if (bp->b_target != lasttarg ||
-	    time_after(jiffies, (lasttime + 5*HZ))) {
-		lasttime = jiffies;
-		xfs_buf_ioerror_alert(bp, __this_address);
-	}
-	lasttarg = bp->b_target;
-
-	/* synchronous writes will have callers process the error */
-	if (!(bp->b_flags & XBF_ASYNC))
-		return true;
-	return false;
-}
-
-static bool
-xfs_buf_ioerror_retry(
-	struct xfs_buf		*bp,
-	struct xfs_error_cfg	*cfg)
-{
-	if ((bp->b_flags & (XBF_STALE | XBF_WRITE_FAIL)) &&
-	    bp->b_last_error == bp->b_error)
-		return false;
-
-	bp->b_flags |= (XBF_WRITE | XBF_DONE | XBF_WRITE_FAIL);
-	bp->b_last_error = bp->b_error;
-	if (cfg->retry_timeout != XFS_ERR_RETRY_FOREVER &&
-	    !bp->b_first_retry_time)
-		bp->b_first_retry_time = jiffies;
-	return true;
-}
-
-/*
- * Account for this latest trip around the retry handler, and decide if
- * we've failed enough times to constitute a permanent failure.
- */
-static bool
-xfs_buf_ioerror_permanent(
-	struct xfs_buf		*bp,
-	struct xfs_error_cfg	*cfg)
-{
-	struct xfs_mount	*mp = bp->b_mount;
-
-	if (cfg->max_retries != XFS_ERR_RETRY_FOREVER &&
-	    ++bp->b_retries > cfg->max_retries)
-		return true;
-	if (cfg->retry_timeout != XFS_ERR_RETRY_FOREVER &&
-	    time_after(jiffies, cfg->retry_timeout + bp->b_first_retry_time))
-		return true;
-
-	/* At unmount we may treat errors differently */
-	if ((mp->m_flags & XFS_MOUNT_UNMOUNTING) && mp->m_fail_unmount)
-		return true;
-
-	return false;
-}
-
-/*
- * On a sync write or shutdown we just want to stale the buffer and let the
- * caller handle the error in bp->b_error appropriately.
- *
- * If the write was asynchronous then no one will be looking for the error.  If
- * this is the first failure of this type, clear the error state and write the
- * buffer out again. This means we always retry an async write failure at least
- * once, but we also need to set the buffer up to behave correctly now for
- * repeated failures.
- *
- * If we get repeated async write failures, then we take action according to the
- * error configuration we have been set up to use.
- *
- * Multi-state return value:
- *
- * XBF_IOERROR_FINISH: clear IO error retry state and run callback completions
- * XBF_IOERROR_DONE: resubmitted immediately, do not run any completions
- * XBF_IOERROR_FAIL: transient error, run failure callback completions and then
- *    release the buffer
- */
-enum {
-	XBF_IOERROR_FINISH,
-	XBF_IOERROR_DONE,
-	XBF_IOERROR_FAIL,
-};
-
-static int
-xfs_buf_iodone_error(
-	struct xfs_buf		*bp)
-{
-	struct xfs_mount	*mp = bp->b_mount;
-	struct xfs_error_cfg	*cfg;
-
-	if (xfs_buf_ioerror_fail_without_retry(bp))
-		goto out_stale;
-
-	trace_xfs_buf_item_iodone_async(bp, _RET_IP_);
-
-	cfg = xfs_error_get_cfg(mp, XFS_ERR_METADATA, bp->b_error);
-	if (xfs_buf_ioerror_retry(bp, cfg)) {
-		xfs_buf_ioerror(bp, 0);
-		xfs_buf_submit(bp);
-		return XBF_IOERROR_DONE;
-	}
-
-	/*
-	 * Permanent error - we need to trigger a shutdown if we haven't already
-	 * to indicate that inconsistency will result from this action.
-	 */
-	if (xfs_buf_ioerror_permanent(bp, cfg)) {
-		xfs_force_shutdown(mp, SHUTDOWN_META_IO_ERROR);
-		goto out_stale;
-	}
-
-	/* Still considered a transient error. Caller will schedule retries. */
-	return XBF_IOERROR_FAIL;
-
-out_stale:
-	xfs_buf_stale(bp);
-	bp->b_flags |= XBF_DONE;
-	trace_xfs_buf_error_relse(bp, _RET_IP_);
-	return XBF_IOERROR_FINISH;
-}
-
-static void
+void
 xfs_buf_item_done(
 	struct xfs_buf		*bp)
 {
-	struct xfs_buf_log_item	*bip = bp->b_log_item;
-
-	if (!bip)
-		return;
-
 	/*
 	 * If we are forcibly shutting down, this may well be off the AIL
 	 * already. That's because we simulate the log-committed callbacks to
@@ -1111,113 +1047,12 @@ xfs_buf_item_done(
 	 * xfs_trans_ail_delete() takes care of these.
 	 *
 	 * Either way, AIL is useless if we're forcing a shutdown.
+	 *
+	 * Note that log recovery writes might have buffer items that are not on
+	 * the AIL even when the file system is not shut down.
 	 */
-	xfs_trans_ail_delete(&bip->bli_item, SHUTDOWN_CORRUPT_INCORE);
-	bp->b_log_item = NULL;
-	xfs_buf_item_free(bip);
-	xfs_buf_rele(bp);
-}
-
-static inline void
-xfs_buf_clear_ioerror_retry_state(
-	struct xfs_buf		*bp)
-{
-	bp->b_last_error = 0;
-	bp->b_retries = 0;
-	bp->b_first_retry_time = 0;
-}
-
-/*
- * Inode buffer iodone callback function.
- */
-void
-xfs_buf_inode_iodone(
-	struct xfs_buf		*bp)
-{
-	if (bp->b_error) {
-		struct xfs_log_item *lip;
-		int ret = xfs_buf_iodone_error(bp);
-
-		if (ret == XBF_IOERROR_FINISH)
-			goto finish_iodone;
-		if (ret == XBF_IOERROR_DONE)
-			return;
-		ASSERT(ret == XBF_IOERROR_FAIL);
-		list_for_each_entry(lip, &bp->b_li_list, li_bio_list) {
-			set_bit(XFS_LI_FAILED, &lip->li_flags);
-		}
-		xfs_buf_ioerror(bp, 0);
-		xfs_buf_relse(bp);
-		return;
-	}
-
-finish_iodone:
-	xfs_buf_clear_ioerror_retry_state(bp);
-	xfs_buf_item_done(bp);
-	xfs_iflush_done(bp);
-	xfs_buf_ioend_finish(bp);
-}
-
-/*
- * Dquot buffer iodone callback function.
- */
-void
-xfs_buf_dquot_iodone(
-	struct xfs_buf		*bp)
-{
-	if (bp->b_error) {
-		struct xfs_log_item *lip;
-		int ret = xfs_buf_iodone_error(bp);
-
-		if (ret == XBF_IOERROR_FINISH)
-			goto finish_iodone;
-		if (ret == XBF_IOERROR_DONE)
-			return;
-		ASSERT(ret == XBF_IOERROR_FAIL);
-		spin_lock(&bp->b_mount->m_ail->ail_lock);
-		list_for_each_entry(lip, &bp->b_li_list, li_bio_list) {
-			xfs_set_li_failed(lip, bp);
-		}
-		spin_unlock(&bp->b_mount->m_ail->ail_lock);
-		xfs_buf_ioerror(bp, 0);
-		xfs_buf_relse(bp);
-		return;
-	}
-
-finish_iodone:
-	xfs_buf_clear_ioerror_retry_state(bp);
-	/* a newly allocated dquot buffer might have a log item attached */
-	xfs_buf_item_done(bp);
-	xfs_dquot_done(bp);
-	xfs_buf_ioend_finish(bp);
-}
-
-/*
- * Dirty buffer iodone callback function.
- *
- * Note that for things like remote attribute buffers, there may not be a buffer
- * log item here, so processing the buffer log item must remain be optional.
- */
-void
-xfs_buf_iodone(
-	struct xfs_buf		*bp)
-{
-	if (bp->b_error) {
-		int ret = xfs_buf_iodone_error(bp);
-
-		if (ret == XBF_IOERROR_FINISH)
-			goto finish_iodone;
-		if (ret == XBF_IOERROR_DONE)
-			return;
-		ASSERT(ret == XBF_IOERROR_FAIL);
-		ASSERT(list_empty(&bp->b_li_list));
-		xfs_buf_ioerror(bp, 0);
-		xfs_buf_relse(bp);
-		return;
-	}
-
-finish_iodone:
-	xfs_buf_clear_ioerror_retry_state(bp);
-	xfs_buf_item_done(bp);
-	xfs_buf_ioend_finish(bp);
+	xfs_trans_ail_delete(&bp->b_log_item->bli_item,
+			     (bp->b_flags & _XBF_LOGRECOVERY) ? 0 :
+			     SHUTDOWN_CORRUPT_INCORE);
+	xfs_buf_item_relse(bp);
 }

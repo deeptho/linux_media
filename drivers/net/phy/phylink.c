@@ -271,8 +271,9 @@ static int phylink_parse_mode(struct phylink *pl, struct fwnode_handle *fwnode)
 		pl->cfg_link_an_mode = MLO_AN_FIXED;
 	fwnode_handle_put(dn);
 
-	if (fwnode_property_read_string(fwnode, "managed", &managed) == 0 &&
-	    strcmp(managed, "in-band-status") == 0) {
+	if ((fwnode_property_read_string(fwnode, "managed", &managed) == 0 &&
+	     strcmp(managed, "in-band-status") == 0) ||
+	    pl->config->ovr_an_inband) {
 		if (pl->cfg_link_an_mode == MLO_AN_FIXED) {
 			phylink_err(pl,
 				    "can't use both fixed-link and in-band-status\n");
@@ -304,6 +305,10 @@ static int phylink_parse_mode(struct phylink *pl, struct fwnode_handle *fwnode)
 
 		case PHY_INTERFACE_MODE_2500BASEX:
 			phylink_set(pl->supported, 2500baseX_Full);
+			break;
+
+		case PHY_INTERFACE_MODE_5GBASER:
+			phylink_set(pl->supported, 5000baseT_Full);
 			break;
 
 		case PHY_INTERFACE_MODE_USXGMII:
@@ -472,7 +477,7 @@ static void phylink_major_config(struct phylink *pl, bool restart,
 		err = pl->mac_ops->mac_finish(pl->config, pl->cur_link_an_mode,
 					      state->interface);
 		if (err < 0)
-			phylink_err(pl, "mac_prepare failed: %pe\n",
+			phylink_err(pl, "mac_finish failed: %pe\n",
 				    ERR_PTR(err));
 	}
 }
@@ -535,8 +540,10 @@ static void phylink_mac_pcs_get_state(struct phylink *pl,
 
 	if (pl->pcs_ops)
 		pl->pcs_ops->pcs_get_state(pl->pcs, state);
-	else
+	else if (pl->mac_ops->mac_pcs_get_state)
 		pl->mac_ops->mac_pcs_get_state(pl->config, state);
+	else
+		state->link = 0;
 }
 
 /* The fixed state is... fixed except for the link state,
@@ -1647,7 +1654,7 @@ int phylink_ethtool_set_pauseparam(struct phylink *pl,
 EXPORT_SYMBOL_GPL(phylink_ethtool_set_pauseparam);
 
 /**
- * phylink_ethtool_get_eee_err() - read the energy efficient ethernet error
+ * phylink_get_eee_err() - read the energy efficient ethernet error
  *   counter
  * @pl: a pointer to a &struct phylink returned from phylink_create().
  *
@@ -2319,6 +2326,49 @@ static void phylink_decode_sgmii_word(struct phylink_link_state *state,
 }
 
 /**
+ * phylink_decode_usxgmii_word() - decode the USXGMII word from a MAC PCS
+ * @state: a pointer to a struct phylink_link_state.
+ * @lpa: a 16 bit value which stores the USXGMII auto-negotiation word
+ *
+ * Helper for MAC PCS supporting the USXGMII protocol and the auto-negotiation
+ * code word.  Decode the USXGMII code word and populate the corresponding fields
+ * (speed, duplex) into the phylink_link_state structure.
+ */
+void phylink_decode_usxgmii_word(struct phylink_link_state *state,
+				 uint16_t lpa)
+{
+	switch (lpa & MDIO_USXGMII_SPD_MASK) {
+	case MDIO_USXGMII_10:
+		state->speed = SPEED_10;
+		break;
+	case MDIO_USXGMII_100:
+		state->speed = SPEED_100;
+		break;
+	case MDIO_USXGMII_1000:
+		state->speed = SPEED_1000;
+		break;
+	case MDIO_USXGMII_2500:
+		state->speed = SPEED_2500;
+		break;
+	case MDIO_USXGMII_5000:
+		state->speed = SPEED_5000;
+		break;
+	case MDIO_USXGMII_10G:
+		state->speed = SPEED_10000;
+		break;
+	default:
+		state->link = false;
+		return;
+	}
+
+	if (lpa & MDIO_USXGMII_FULL_DUPLEX)
+		state->duplex = DUPLEX_FULL;
+	else
+		state->duplex = DUPLEX_HALF;
+}
+EXPORT_SYMBOL_GPL(phylink_decode_usxgmii_word);
+
+/**
  * phylink_mii_c22_pcs_get_state() - read the MAC PCS state
  * @pcs: a pointer to a &struct mdio_device.
  * @state: a pointer to a &struct phylink_link_state.
@@ -2361,6 +2411,7 @@ void phylink_mii_c22_pcs_get_state(struct mdio_device *pcs,
 		break;
 
 	case PHY_INTERFACE_MODE_SGMII:
+	case PHY_INTERFACE_MODE_QSGMII:
 		phylink_decode_sgmii_word(state, lpa);
 		break;
 
@@ -2469,9 +2520,10 @@ int phylink_mii_c22_pcs_config(struct mdio_device *pcs, unsigned int mode,
 
 	changed = ret > 0;
 
+	/* Ensure ISOLATE bit is disabled */
 	bmcr = mode == MLO_AN_INBAND ? BMCR_ANENABLE : 0;
 	ret = mdiobus_modify(pcs->bus, pcs->addr, MII_BMCR,
-			     BMCR_ANENABLE, bmcr);
+			     BMCR_ANENABLE | BMCR_ISOLATE, bmcr);
 	if (ret < 0)
 		return ret;
 

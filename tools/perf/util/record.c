@@ -14,6 +14,9 @@
 #include "util/perf_api_probe.h"
 #include "record.h"
 #include "../perf-sys.h"
+#include "topdown.h"
+#include "map_symbol.h"
+#include "mem-events.h"
 
 /*
  * evsel__config_leader_sampling() uses special rules for leader sampling.
@@ -24,7 +27,8 @@ static struct evsel *evsel__read_sampler(struct evsel *evsel, struct evlist *evl
 {
 	struct evsel *leader = evsel->leader;
 
-	if (evsel__is_aux_event(leader)) {
+	if (evsel__is_aux_event(leader) || arch_topdown_sample_read(leader) ||
+	    is_mem_loads_aux_event(leader)) {
 		evlist__for_each_entry(evlist, evsel) {
 			if (evsel->leader == leader && evsel != evsel->leader)
 				return evsel;
@@ -88,8 +92,7 @@ static void evsel__config_leader_sampling(struct evsel *evsel, struct evlist *ev
 			    leader->core.attr.sample_type;
 }
 
-void perf_evlist__config(struct evlist *evlist, struct record_opts *opts,
-			 struct callchain_param *callchain)
+void evlist__config(struct evlist *evlist, struct record_opts *opts, struct callchain_param *callchain)
 {
 	struct evsel *evsel;
 	bool use_sample_identifier = false;
@@ -101,7 +104,7 @@ void perf_evlist__config(struct evlist *evlist, struct record_opts *opts,
 	 * since some might depend on this info.
 	 */
 	if (opts->group)
-		perf_evlist__set_leader(evlist);
+		evlist__set_leader(evlist);
 
 	if (evlist->core.cpus->map[0] < 0)
 		opts->no_inherit = true;
@@ -143,7 +146,7 @@ void perf_evlist__config(struct evlist *evlist, struct record_opts *opts,
 			evsel__set_sample_id(evsel, use_sample_identifier);
 	}
 
-	perf_evlist__set_id_pos(evlist);
+	evlist__set_id_pos(evlist);
 }
 
 static int get_max_rate(unsigned int *rate)
@@ -154,9 +157,15 @@ static int get_max_rate(unsigned int *rate)
 static int record_opts__config_freq(struct record_opts *opts)
 {
 	bool user_freq = opts->user_freq != UINT_MAX;
+	bool user_interval = opts->user_interval != ULLONG_MAX;
 	unsigned int max_rate;
 
-	if (opts->user_interval != ULLONG_MAX)
+	if (user_interval && user_freq) {
+		pr_err("cannot set frequency and period at the same time\n");
+		return -1;
+	}
+
+	if (user_interval)
 		opts->default_interval = opts->user_interval;
 	if (user_freq)
 		opts->freq = opts->user_freq;
@@ -201,10 +210,10 @@ static int record_opts__config_freq(struct record_opts *opts)
 	 * Default frequency is over current maximum.
 	 */
 	if (max_rate < opts->freq) {
-		pr_warning("Lowering default frequency rate to %u.\n"
+		pr_warning("Lowering default frequency rate from %u to %u.\n"
 			   "Please consider tweaking "
 			   "/proc/sys/kernel/perf_event_max_sample_rate.\n",
-			   max_rate);
+			   opts->freq, max_rate);
 		opts->freq = max_rate;
 	}
 
@@ -216,7 +225,7 @@ int record_opts__config(struct record_opts *opts)
 	return record_opts__config_freq(opts);
 }
 
-bool perf_evlist__can_select_event(struct evlist *evlist, const char *str)
+bool evlist__can_select_event(struct evlist *evlist, const char *str)
 {
 	struct evlist *temp_evlist;
 	struct evsel *evsel;

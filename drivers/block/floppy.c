@@ -145,8 +145,6 @@
  * Better audit of register_blkdev.
  */
 
-#undef  FLOPPY_SILENT_DCL_CLEAR
-
 #define REALLY_SLOW_IO
 
 #define DEBUGT 2
@@ -402,7 +400,6 @@ static struct floppy_drive_params drive_params[N_DRIVE];
 static struct floppy_drive_struct drive_state[N_DRIVE];
 static struct floppy_write_errors write_errors[N_DRIVE];
 static struct timer_list motor_off_timer[N_DRIVE];
-static struct gendisk *disks[N_DRIVE];
 static struct blk_mq_tag_set tag_sets[N_DRIVE];
 static struct block_device *opened_bdev[N_DRIVE];
 static DEFINE_MUTEX(open_lock);
@@ -476,6 +473,8 @@ static struct floppy_struct floppy_type[32] = {
 	{ 1600,10,2,80,0,0x25,0x02,0xDF,0x2E,"D800"  },	/* 30 800KB 3.5"    */
 	{ 3200,20,2,80,0,0x1C,0x00,0xCF,0x2C,"H1600" }, /* 31 1.6MB 3.5"    */
 };
+
+static struct gendisk *disks[N_DRIVE][ARRAY_SIZE(floppy_type)];
 
 #define SECTSIZE (_FD_SECTSIZE(*floppy))
 
@@ -561,6 +560,7 @@ static void floppy_release_irq_and_dma(void);
  * output_byte is automatically disabled when reset is set.
  */
 static void reset_fdc(void);
+static int floppy_revalidate(struct gendisk *disk);
 
 /*
  * These are global variables, as that's the easiest way to give
@@ -2397,37 +2397,15 @@ static void rw_interrupt(void)
 		probing = 0;
 	}
 
-	if (CT(raw_cmd->cmd[COMMAND]) != FD_READ ||
-	    raw_cmd->kernel_data == bio_data(current_req->bio)) {
+	if (CT(raw_cmd->cmd[COMMAND]) != FD_READ) {
 		/* transfer directly from buffer */
 		cont->done(1);
-	} else if (CT(raw_cmd->cmd[COMMAND]) == FD_READ) {
+	} else {
 		buffer_track = raw_cmd->track;
 		buffer_drive = current_drive;
 		INFBOUND(buffer_max, nr_sectors + fsector_t);
 	}
 	cont->redo();
-}
-
-/* Compute maximal contiguous buffer size. */
-static int buffer_chain_size(void)
-{
-	struct bio_vec bv;
-	int size;
-	struct req_iterator iter;
-	char *base;
-
-	base = bio_data(current_req->bio);
-	size = 0;
-
-	rq_for_each_segment(bv, current_req, iter) {
-		if (page_address(bv.bv_page) + bv.bv_offset != base + size)
-			break;
-
-		size += bv.bv_len;
-	}
-
-	return size >> 9;
 }
 
 /* Compute the maximal transfer size */
@@ -2451,7 +2429,6 @@ static void copy_buffer(int ssize, int max_sector, int max_sector_2)
 {
 	int remaining;		/* number of transferred 512-byte sectors */
 	struct bio_vec bv;
-	char *buffer;
 	char *dma_buffer;
 	int size;
 	struct req_iterator iter;
@@ -2490,8 +2467,6 @@ static void copy_buffer(int ssize, int max_sector, int max_sector_2)
 
 		size = bv.bv_len;
 		SUPBOUND(size, remaining);
-
-		buffer = page_address(bv.bv_page) + bv.bv_offset;
 		if (dma_buffer + size >
 		    floppy_track_buffer + (max_buffer_sectors << 10) ||
 		    dma_buffer < floppy_track_buffer) {
@@ -2507,13 +2482,13 @@ static void copy_buffer(int ssize, int max_sector, int max_sector_2)
 				pr_info("write\n");
 			break;
 		}
-		if (((unsigned long)buffer) % 512)
-			DPRINT("%p buffer not aligned\n", buffer);
 
 		if (CT(raw_cmd->cmd[COMMAND]) == FD_READ)
-			memcpy(buffer, dma_buffer, size);
+			memcpy_to_page(bv.bv_page, bv.bv_offset, dma_buffer,
+				       size);
 		else
-			memcpy(dma_buffer, buffer, size);
+			memcpy_from_page(dma_buffer, bv.bv_page, bv.bv_offset,
+					 size);
 
 		remaining -= size;
 		dma_buffer += size;
@@ -2688,54 +2663,6 @@ static int make_raw_rw_request(void)
 		raw_cmd->flags &= ~FD_RAW_WRITE;
 		raw_cmd->flags |= FD_RAW_READ;
 		raw_cmd->cmd[COMMAND] = FM_MODE(_floppy, FD_READ);
-	} else if ((unsigned long)bio_data(current_req->bio) < MAX_DMA_ADDRESS) {
-		unsigned long dma_limit;
-		int direct, indirect;
-
-		indirect =
-		    transfer_size(ssize, max_sector,
-				  max_buffer_sectors * 2) - fsector_t;
-
-		/*
-		 * Do NOT use minimum() here---MAX_DMA_ADDRESS is 64 bits wide
-		 * on a 64 bit machine!
-		 */
-		max_size = buffer_chain_size();
-		dma_limit = (MAX_DMA_ADDRESS -
-			     ((unsigned long)bio_data(current_req->bio))) >> 9;
-		if ((unsigned long)max_size > dma_limit)
-			max_size = dma_limit;
-		/* 64 kb boundaries */
-		if (CROSS_64KB(bio_data(current_req->bio), max_size << 9))
-			max_size = (K_64 -
-				    ((unsigned long)bio_data(current_req->bio)) %
-				    K_64) >> 9;
-		direct = transfer_size(ssize, max_sector, max_size) - fsector_t;
-		/*
-		 * We try to read tracks, but if we get too many errors, we
-		 * go back to reading just one sector at a time.
-		 *
-		 * This means we should be able to read a sector even if there
-		 * are other bad sectors on this track.
-		 */
-		if (!direct ||
-		    (indirect * 2 > direct * 3 &&
-		     *errors < drive_params[current_drive].max_errors.read_track &&
-		     ((!probing ||
-		       (drive_params[current_drive].read_track & (1 << drive_state[current_drive].probed_format)))))) {
-			max_size = blk_rq_sectors(current_req);
-		} else {
-			raw_cmd->kernel_data = bio_data(current_req->bio);
-			raw_cmd->length = current_count_sectors << 9;
-			if (raw_cmd->length == 0) {
-				DPRINT("%s: zero dma transfer attempted\n", __func__);
-				DPRINT("indirect=%d direct=%d fsector_t=%d\n",
-				       indirect, direct, fsector_t);
-				return 0;
-			}
-			virtualdmabug_workaround();
-			return 2;
-		}
 	}
 
 	if (CT(raw_cmd->cmd[COMMAND]) == FD_READ)
@@ -2779,19 +2706,17 @@ static int make_raw_rw_request(void)
 	raw_cmd->length = ((raw_cmd->length - 1) | (ssize - 1)) + 1;
 	raw_cmd->length <<= 9;
 	if ((raw_cmd->length < current_count_sectors << 9) ||
-	    (raw_cmd->kernel_data != bio_data(current_req->bio) &&
-	     CT(raw_cmd->cmd[COMMAND]) == FD_WRITE &&
+	    (CT(raw_cmd->cmd[COMMAND]) == FD_WRITE &&
 	     (aligned_sector_t + (raw_cmd->length >> 9) > buffer_max ||
 	      aligned_sector_t < buffer_min)) ||
 	    raw_cmd->length % (128 << raw_cmd->cmd[SIZECODE]) ||
 	    raw_cmd->length <= 0 || current_count_sectors <= 0) {
 		DPRINT("fractionary current count b=%lx s=%lx\n",
 		       raw_cmd->length, current_count_sectors);
-		if (raw_cmd->kernel_data != bio_data(current_req->bio))
-			pr_info("addr=%d, length=%ld\n",
-				(int)((raw_cmd->kernel_data -
-				       floppy_track_buffer) >> 9),
-				current_count_sectors);
+		pr_info("addr=%d, length=%ld\n",
+			(int)((raw_cmd->kernel_data -
+			       floppy_track_buffer) >> 9),
+			current_count_sectors);
 		pr_info("st=%d ast=%d mse=%d msi=%d\n",
 			fsector_t, aligned_sector_t, max_sector, max_size);
 		pr_info("ssize=%x SIZECODE=%d\n", ssize, raw_cmd->cmd[SIZECODE]);
@@ -2805,31 +2730,21 @@ static int make_raw_rw_request(void)
 		return 0;
 	}
 
-	if (raw_cmd->kernel_data != bio_data(current_req->bio)) {
-		if (raw_cmd->kernel_data < floppy_track_buffer ||
-		    current_count_sectors < 0 ||
-		    raw_cmd->length < 0 ||
-		    raw_cmd->kernel_data + raw_cmd->length >
-		    floppy_track_buffer + (max_buffer_sectors << 10)) {
-			DPRINT("buffer overrun in schedule dma\n");
-			pr_info("fsector_t=%d buffer_min=%d current_count=%ld\n",
-				fsector_t, buffer_min, raw_cmd->length >> 9);
-			pr_info("current_count_sectors=%ld\n",
-				current_count_sectors);
-			if (CT(raw_cmd->cmd[COMMAND]) == FD_READ)
-				pr_info("read\n");
-			if (CT(raw_cmd->cmd[COMMAND]) == FD_WRITE)
-				pr_info("write\n");
-			return 0;
-		}
-	} else if (raw_cmd->length > blk_rq_bytes(current_req) ||
-		   current_count_sectors > blk_rq_sectors(current_req)) {
-		DPRINT("buffer overrun in direct transfer\n");
+	if (raw_cmd->kernel_data < floppy_track_buffer ||
+	    current_count_sectors < 0 ||
+	    raw_cmd->length < 0 ||
+	    raw_cmd->kernel_data + raw_cmd->length >
+	    floppy_track_buffer + (max_buffer_sectors << 10)) {
+		DPRINT("buffer overrun in schedule dma\n");
+		pr_info("fsector_t=%d buffer_min=%d current_count=%ld\n",
+			fsector_t, buffer_min, raw_cmd->length >> 9);
+		pr_info("current_count_sectors=%ld\n",
+			current_count_sectors);
+		if (CT(raw_cmd->cmd[COMMAND]) == FD_READ)
+			pr_info("read\n");
+		if (CT(raw_cmd->cmd[COMMAND]) == FD_WRITE)
+			pr_info("write\n");
 		return 0;
-	} else if (raw_cmd->length < current_count_sectors << 9) {
-		DPRINT("more sectors than bytes\n");
-		pr_info("bytes=%ld\n", raw_cmd->length >> 9);
-		pr_info("sectors=%ld\n", current_count_sectors);
 	}
 	if (raw_cmd->length == 0) {
 		DPRINT("zero dma transfer attempted from make_raw_request\n");
@@ -3071,8 +2986,6 @@ static const char *drive_name(int type, int drive)
 /* raw commands */
 static void raw_cmd_done(int flag)
 {
-	int i;
-
 	if (!flag) {
 		raw_cmd->flags |= FD_RAW_FAILURE;
 		raw_cmd->flags |= FD_RAW_HARDFAILURE;
@@ -3080,8 +2993,7 @@ static void raw_cmd_done(int flag)
 		raw_cmd->reply_count = inr;
 		if (raw_cmd->reply_count > FD_RAW_REPLY_SIZE)
 			raw_cmd->reply_count = 0;
-		for (i = 0; i < raw_cmd->reply_count; i++)
-			raw_cmd->reply[i] = reply_buffer[i];
+		memcpy(raw_cmd->reply, reply_buffer, raw_cmd->reply_count);
 
 		if (raw_cmd->flags & (FD_RAW_READ | FD_RAW_WRITE)) {
 			unsigned long flags;
@@ -3173,7 +3085,6 @@ static int raw_cmd_copyin(int cmd, void __user *param,
 {
 	struct floppy_raw_cmd *ptr;
 	int ret;
-	int i;
 
 	*rcmd = NULL;
 
@@ -3192,8 +3103,7 @@ loop:
 	if (ptr->cmd_count > FD_RAW_CMD_FULLSIZE)
 		return -EINVAL;
 
-	for (i = 0; i < FD_RAW_REPLY_SIZE; i++)
-		ptr->reply[i] = 0;
+	memset(ptr->reply, 0, FD_RAW_REPLY_SIZE);
 	ptr->resultcode = 0;
 
 	if (ptr->flags & (FD_RAW_READ | FD_RAW_WRITE)) {
@@ -3275,7 +3185,8 @@ static int invalidate_drive(struct block_device *bdev)
 	/* invalidate the buffer track to force a reread */
 	set_bit((long)bdev->bd_disk->private_data, &fake_change);
 	process_fd_request();
-	check_disk_change(bdev);
+	if (bdev_check_media_change(bdev))
+		floppy_revalidate(bdev->bd_disk);
 	return 0;
 }
 
@@ -4109,7 +4020,7 @@ static int floppy_open(struct block_device *bdev, fmode_t mode)
 
 	new_dev = MINOR(bdev->bd_dev);
 	drive_state[drive].fd_device = new_dev;
-	set_capacity(disks[drive], floppy_sizes[new_dev]);
+	set_capacity(disks[drive][ITYPE(new_dev)], floppy_sizes[new_dev]);
 	if (old_dev != -1 && old_dev != new_dev) {
 		if (buffer_drive == drive)
 			buffer_track = -1;
@@ -4118,22 +4029,23 @@ static int floppy_open(struct block_device *bdev, fmode_t mode)
 	if (fdc_state[FDC(drive)].rawcmd == 1)
 		fdc_state[FDC(drive)].rawcmd = 2;
 
-	if (!(mode & FMODE_NDELAY)) {
-		if (mode & (FMODE_READ|FMODE_WRITE)) {
-			drive_state[drive].last_checked = 0;
-			clear_bit(FD_OPEN_SHOULD_FAIL_BIT,
-				  &drive_state[drive].flags);
-			check_disk_change(bdev);
-			if (test_bit(FD_DISK_CHANGED_BIT, &drive_state[drive].flags))
-				goto out;
-			if (test_bit(FD_OPEN_SHOULD_FAIL_BIT, &drive_state[drive].flags))
-				goto out;
-		}
-		res = -EROFS;
-		if ((mode & FMODE_WRITE) &&
-		    !test_bit(FD_DISK_WRITABLE_BIT, &drive_state[drive].flags))
+	if (mode & (FMODE_READ|FMODE_WRITE)) {
+		drive_state[drive].last_checked = 0;
+		clear_bit(FD_OPEN_SHOULD_FAIL_BIT, &drive_state[drive].flags);
+		if (bdev_check_media_change(bdev))
+			floppy_revalidate(bdev->bd_disk);
+		if (test_bit(FD_DISK_CHANGED_BIT, &drive_state[drive].flags))
+			goto out;
+		if (test_bit(FD_OPEN_SHOULD_FAIL_BIT, &drive_state[drive].flags))
 			goto out;
 	}
+
+	res = -EROFS;
+
+	if ((mode & FMODE_WRITE) &&
+			!test_bit(FD_DISK_WRITABLE_BIT, &drive_state[drive].flags))
+		goto out;
+
 	mutex_unlock(&open_lock);
 	mutex_unlock(&floppy_mutex);
 	return 0;
@@ -4291,7 +4203,6 @@ static const struct block_device_operations floppy_fops = {
 	.ioctl			= fd_ioctl,
 	.getgeo			= fd_getgeo,
 	.check_events		= floppy_check_events,
-	.revalidate_disk	= floppy_revalidate,
 #ifdef CONFIG_COMPAT
 	.compat_ioctl		= fd_compat_ioctl,
 #endif
@@ -4314,7 +4225,7 @@ static char __init get_fdc_version(int fdc)
 	r = result(fdc);
 	if (r <= 0x00)
 		return FDC_NONE;	/* No FDC present ??? */
-	if ((r == 1) && (reply_buffer[0] == 0x80)) {
+	if ((r == 1) && (reply_buffer[ST0] == 0x80)) {
 		pr_info("FDC %d is an 8272A\n", fdc);
 		return FDC_8272A;	/* 8272a/765 don't know DUMPREGS */
 	}
@@ -4339,12 +4250,12 @@ static char __init get_fdc_version(int fdc)
 
 	output_byte(fdc, FD_UNLOCK);
 	r = result(fdc);
-	if ((r == 1) && (reply_buffer[0] == 0x80)) {
+	if ((r == 1) && (reply_buffer[ST0] == 0x80)) {
 		pr_info("FDC %d is a pre-1991 82077\n", fdc);
 		return FDC_82077_ORIG;	/* Pre-1991 82077, doesn't know
 					 * LOCK/UNLOCK */
 	}
-	if ((r != 1) || (reply_buffer[0] != 0x00)) {
+	if ((r != 1) || (reply_buffer[ST0] != 0x00)) {
 		pr_info("FDC %d init: UNLOCK: unexpected return of %d bytes.\n",
 			fdc, r);
 		return FDC_UNKNOWN;
@@ -4356,11 +4267,11 @@ static char __init get_fdc_version(int fdc)
 			fdc, r);
 		return FDC_UNKNOWN;
 	}
-	if (reply_buffer[0] == 0x80) {
+	if (reply_buffer[ST0] == 0x80) {
 		pr_info("FDC %d is a post-1991 82077\n", fdc);
 		return FDC_82077;	/* Revised 82077AA passes all the tests */
 	}
-	switch (reply_buffer[0] >> 5) {
+	switch (reply_buffer[ST0] >> 5) {
 	case 0x0:
 		/* Either a 82078-1 or a 82078SL running at 5Volt */
 		pr_info("FDC %d is an 82078.\n", fdc);
@@ -4376,7 +4287,7 @@ static char __init get_fdc_version(int fdc)
 		return FDC_87306;
 	default:
 		pr_info("FDC %d init: 82078 variant with unknown PARTID=%d.\n",
-			fdc, reply_buffer[0] >> 5);
+			fdc, reply_buffer[ST0] >> 5);
 		return FDC_82078_UNKN;
 	}
 }				/* get_fdc_version */
@@ -4577,15 +4488,57 @@ static bool floppy_available(int drive)
 	return true;
 }
 
-static struct kobject *floppy_find(dev_t dev, int *part, void *data)
+static int floppy_alloc_disk(unsigned int drive, unsigned int type)
 {
-	int drive = (*part & 3) | ((*part & 0x80) >> 5);
-	if (drive >= N_DRIVE || !floppy_available(drive))
-		return NULL;
-	if (((*part >> 2) & 0x1f) >= ARRAY_SIZE(floppy_type))
-		return NULL;
-	*part = 0;
-	return get_disk_and_module(disks[drive]);
+	struct gendisk *disk;
+	int err;
+
+	disk = alloc_disk(1);
+	if (!disk)
+		return -ENOMEM;
+
+	disk->queue = blk_mq_init_queue(&tag_sets[drive]);
+	if (IS_ERR(disk->queue)) {
+		err = PTR_ERR(disk->queue);
+		disk->queue = NULL;
+		put_disk(disk);
+		return err;
+	}
+
+	blk_queue_max_hw_sectors(disk->queue, 64);
+	disk->major = FLOPPY_MAJOR;
+	disk->first_minor = TOMINOR(drive) | (type << 2);
+	disk->fops = &floppy_fops;
+	disk->events = DISK_EVENT_MEDIA_CHANGE;
+	if (type)
+		sprintf(disk->disk_name, "fd%d_type%d", drive, type);
+	else
+		sprintf(disk->disk_name, "fd%d", drive);
+	/* to be cleaned up... */
+	disk->private_data = (void *)(long)drive;
+	disk->flags |= GENHD_FL_REMOVABLE;
+
+	disks[drive][type] = disk;
+	return 0;
+}
+
+static DEFINE_MUTEX(floppy_probe_lock);
+
+static void floppy_probe(dev_t dev)
+{
+	unsigned int drive = (MINOR(dev) & 3) | ((MINOR(dev) & 0x80) >> 5);
+	unsigned int type = (MINOR(dev) >> 2) & 0x1f;
+
+	if (drive >= N_DRIVE || !floppy_available(drive) ||
+	    type >= ARRAY_SIZE(floppy_type))
+		return;
+
+	mutex_lock(&floppy_probe_lock);
+	if (!disks[drive][type]) {
+		if (floppy_alloc_disk(drive, type) == 0)
+			add_disk(disks[drive][type]);
+	}
+	mutex_unlock(&floppy_probe_lock);
 }
 
 static int __init do_floppy_init(void)
@@ -4607,42 +4560,31 @@ static int __init do_floppy_init(void)
 		return -ENOMEM;
 
 	for (drive = 0; drive < N_DRIVE; drive++) {
-		disks[drive] = alloc_disk(1);
-		if (!disks[drive]) {
-			err = -ENOMEM;
+		memset(&tag_sets[drive], 0, sizeof(tag_sets[drive]));
+		tag_sets[drive].ops = &floppy_mq_ops;
+		tag_sets[drive].nr_hw_queues = 1;
+		tag_sets[drive].nr_maps = 1;
+		tag_sets[drive].queue_depth = 2;
+		tag_sets[drive].numa_node = NUMA_NO_NODE;
+		tag_sets[drive].flags = BLK_MQ_F_SHOULD_MERGE;
+		err = blk_mq_alloc_tag_set(&tag_sets[drive]);
+		if (err)
 			goto out_put_disk;
-		}
 
-		disks[drive]->queue = blk_mq_init_sq_queue(&tag_sets[drive],
-							   &floppy_mq_ops, 2,
-							   BLK_MQ_F_SHOULD_MERGE);
-		if (IS_ERR(disks[drive]->queue)) {
-			err = PTR_ERR(disks[drive]->queue);
-			disks[drive]->queue = NULL;
+		err = floppy_alloc_disk(drive, 0);
+		if (err)
 			goto out_put_disk;
-		}
-
-		blk_queue_bounce_limit(disks[drive]->queue, BLK_BOUNCE_HIGH);
-		blk_queue_max_hw_sectors(disks[drive]->queue, 64);
-		disks[drive]->major = FLOPPY_MAJOR;
-		disks[drive]->first_minor = TOMINOR(drive);
-		disks[drive]->fops = &floppy_fops;
-		disks[drive]->events = DISK_EVENT_MEDIA_CHANGE;
-		sprintf(disks[drive]->disk_name, "fd%d", drive);
 
 		timer_setup(&motor_off_timer[drive], motor_off_callback, 0);
 	}
 
-	err = register_blkdev(FLOPPY_MAJOR, "fd");
+	err = __register_blkdev(FLOPPY_MAJOR, "fd", floppy_probe);
 	if (err)
 		goto out_put_disk;
 
 	err = platform_driver_register(&floppy_driver);
 	if (err)
 		goto out_unreg_blkdev;
-
-	blk_register_region(MKDEV(FLOPPY_MAJOR, 0), 256, THIS_MODULE,
-			    floppy_find, NULL, NULL);
 
 	for (i = 0; i < 256; i++)
 		if (ITYPE(i))
@@ -4671,7 +4613,7 @@ static int __init do_floppy_init(void)
 	if (fdc_state[0].address == -1) {
 		cancel_delayed_work(&fd_timeout);
 		err = -ENODEV;
-		goto out_unreg_region;
+		goto out_unreg_driver;
 	}
 #if N_FDC > 1
 	fdc_state[1].address = FDC2;
@@ -4682,7 +4624,7 @@ static int __init do_floppy_init(void)
 	if (err) {
 		cancel_delayed_work(&fd_timeout);
 		err = -EBUSY;
-		goto out_unreg_region;
+		goto out_unreg_driver;
 	}
 
 	/* initialise drive state */
@@ -4759,10 +4701,8 @@ static int __init do_floppy_init(void)
 		if (err)
 			goto out_remove_drives;
 
-		/* to be cleaned up... */
-		disks[drive]->private_data = (void *)(long)drive;
-		disks[drive]->flags |= GENHD_FL_REMOVABLE;
-		device_add_disk(&floppy_device[drive].dev, disks[drive], NULL);
+		device_add_disk(&floppy_device[drive].dev, disks[drive][0],
+				NULL);
 	}
 
 	return 0;
@@ -4770,30 +4710,27 @@ static int __init do_floppy_init(void)
 out_remove_drives:
 	while (drive--) {
 		if (floppy_available(drive)) {
-			del_gendisk(disks[drive]);
+			del_gendisk(disks[drive][0]);
 			platform_device_unregister(&floppy_device[drive]);
 		}
 	}
 out_release_dma:
 	if (atomic_read(&usage_count))
 		floppy_release_irq_and_dma();
-out_unreg_region:
-	blk_unregister_region(MKDEV(FLOPPY_MAJOR, 0), 256);
+out_unreg_driver:
 	platform_driver_unregister(&floppy_driver);
 out_unreg_blkdev:
 	unregister_blkdev(FLOPPY_MAJOR, "fd");
 out_put_disk:
 	destroy_workqueue(floppy_wq);
 	for (drive = 0; drive < N_DRIVE; drive++) {
-		if (!disks[drive])
+		if (!disks[drive][0])
 			break;
-		if (disks[drive]->queue) {
-			del_timer_sync(&motor_off_timer[drive]);
-			blk_cleanup_queue(disks[drive]->queue);
-			disks[drive]->queue = NULL;
-			blk_mq_free_tag_set(&tag_sets[drive]);
-		}
-		put_disk(disks[drive]);
+		del_timer_sync(&motor_off_timer[drive]);
+		blk_cleanup_queue(disks[drive][0]->queue);
+		disks[drive][0]->queue = NULL;
+		blk_mq_free_tag_set(&tag_sets[drive]);
+		put_disk(disks[drive][0]);
 	}
 	return err;
 }
@@ -5004,9 +4941,8 @@ module_init(floppy_module_init);
 
 static void __exit floppy_module_exit(void)
 {
-	int drive;
+	int drive, i;
 
-	blk_unregister_region(MKDEV(FLOPPY_MAJOR, 0), 256);
 	unregister_blkdev(FLOPPY_MAJOR, "fd");
 	platform_driver_unregister(&floppy_driver);
 
@@ -5016,10 +4952,16 @@ static void __exit floppy_module_exit(void)
 		del_timer_sync(&motor_off_timer[drive]);
 
 		if (floppy_available(drive)) {
-			del_gendisk(disks[drive]);
+			for (i = 0; i < ARRAY_SIZE(floppy_type); i++) {
+				if (disks[drive][i])
+					del_gendisk(disks[drive][i]);
+			}
 			platform_device_unregister(&floppy_device[drive]);
 		}
-		blk_cleanup_queue(disks[drive]->queue);
+		for (i = 0; i < ARRAY_SIZE(floppy_type); i++) {
+			if (disks[drive][i])
+				blk_cleanup_queue(disks[drive][i]->queue);
+		}
 		blk_mq_free_tag_set(&tag_sets[drive]);
 
 		/*
@@ -5027,10 +4969,17 @@ static void __exit floppy_module_exit(void)
 		 * queue reference in put_disk().
 		 */
 		if (!(allowed_drive_mask & (1 << drive)) ||
-		    fdc_state[FDC(drive)].version == FDC_NONE)
-			disks[drive]->queue = NULL;
+		    fdc_state[FDC(drive)].version == FDC_NONE) {
+			for (i = 0; i < ARRAY_SIZE(floppy_type); i++) {
+				if (disks[drive][i])
+					disks[drive][i]->queue = NULL;
+			}
+		}
 
-		put_disk(disks[drive]);
+		for (i = 0; i < ARRAY_SIZE(floppy_type); i++) {
+			if (disks[drive][i])
+				put_disk(disks[drive][i]);
+		}
 	}
 
 	cancel_delayed_work_sync(&fd_timeout);
@@ -5049,7 +4998,6 @@ module_param(floppy, charp, 0);
 module_param(FLOPPY_IRQ, int, 0);
 module_param(FLOPPY_DMA, int, 0);
 MODULE_AUTHOR("Alain L. Knaff");
-MODULE_SUPPORTED_DEVICE("fd");
 MODULE_LICENSE("GPL");
 
 /* This doesn't actually get used other than for module information */

@@ -44,7 +44,10 @@ s32 _rtw_init_xmit_priv(struct xmit_priv *pxmitpriv, struct adapter *padapter)
 	u32 max_xmit_extbuf_size = MAX_XMIT_EXTBUF_SZ;
 	u32 num_xmit_extbuf = NR_XMIT_EXTBUFF;
 
-	/*  We don't need to memset padapter->XXX to zero, because adapter is allocated by vzalloc(). */
+	/*
+	 * We don't need to memset padapter->XXX to zero because adapter is
+	 * allocated by alloc_etherdev_mq, which eventually calls kvzalloc.
+	 */
 
 	spin_lock_init(&pxmitpriv->lock);
 
@@ -1099,7 +1102,7 @@ void rtw_update_protection(struct adapter *padapter, u8 *ie, uint ie_len)
 		break;
 	case AUTO_VCS:
 	default:
-		perp = rtw_get_ie(ie, _ERPINFO_IE_, &erp_len, ie_len);
+		perp = rtw_get_ie(ie, WLAN_EID_ERP_INFO, &erp_len, ie_len);
 		if (!perp) {
 			pxmitpriv->vcs = NONE_VCS;
 		} else {
@@ -1240,7 +1243,7 @@ s32 rtw_free_xmitbuf(struct xmit_priv *pxmitpriv, struct xmit_buf *pxmitbuf)
  * If we turn on USE_RXTHREAD, then, no need for critical section.
  * Otherwise, we must use _enter/_exit critical to protect free_xmit_queue...
  *
- * Must be very very cautious...
+ * Must be very, very cautious...
  *
  */
 
@@ -1670,7 +1673,7 @@ int xmitframe_enqueue_for_sleeping_sta(struct adapter *padapter, struct xmit_fra
 			pstapriv->tim_bitmap |= BIT(0);/*  */
 			pstapriv->sta_dz_bitmap |= BIT(0);
 
-			update_beacon(padapter, _TIM_IE_, NULL, false);/* tx bc/mc packets after update bcn */
+			update_beacon(padapter, WLAN_EID_TIM, NULL, false);/* tx bc/mc packets after update bcn */
 
 			ret = true;
 		}
@@ -1721,7 +1724,7 @@ int xmitframe_enqueue_for_sleeping_sta(struct adapter *padapter, struct xmit_fra
 
 				if (psta->sleepq_len == 1) {
 					/* update BCN for TIM IE */
-					update_beacon(padapter, _TIM_IE_, NULL, false);
+					update_beacon(padapter, WLAN_EID_TIM, NULL, false);
 				}
 			}
 			ret = true;
@@ -1930,7 +1933,7 @@ void wakeup_sta_to_xmit(struct adapter *padapter, struct sta_info *psta)
 	}
 
 	if (update_mask)
-		update_beacon(padapter, _TIM_IE_, NULL, false);
+		update_beacon(padapter, WLAN_EID_TIM, NULL, false);
 }
 
 void xmit_delivery_enabled_frames(struct adapter *padapter, struct sta_info *psta)
@@ -1995,7 +1998,7 @@ void xmit_delivery_enabled_frames(struct adapter *padapter, struct sta_info *pst
 			pstapriv->tim_bitmap &= ~BIT(psta->aid);
 
 			/* update BCN for TIM IE */
-			update_beacon(padapter, _TIM_IE_, NULL, false);
+			update_beacon(padapter, WLAN_EID_TIM, NULL, false);
 		}
 	}
 

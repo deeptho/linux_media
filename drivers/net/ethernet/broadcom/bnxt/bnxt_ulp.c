@@ -222,8 +222,12 @@ int bnxt_get_ulp_msix_base(struct bnxt *bp)
 
 int bnxt_get_ulp_stat_ctxs(struct bnxt *bp)
 {
-	if (bnxt_ulp_registered(bp->edev, BNXT_ROCE_ULP))
-		return BNXT_MIN_ROCE_STAT_CTXS;
+	if (bnxt_ulp_registered(bp->edev, BNXT_ROCE_ULP)) {
+		struct bnxt_en_dev *edev = bp->edev;
+
+		if (edev->ulp_tbl[BNXT_ROCE_ULP].msix_requested)
+			return BNXT_MIN_ROCE_STAT_CTXS;
+	}
 
 	return 0;
 }
@@ -487,3 +491,4 @@ struct bnxt_en_dev *bnxt_ulp_probe(struct net_device *dev)
 	}
 	return bp->edev;
 }
+EXPORT_SYMBOL(bnxt_ulp_probe);

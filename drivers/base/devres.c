@@ -58,8 +58,8 @@ static void devres_log(struct device *dev, struct devres_node *node,
 		       const char *op)
 {
 	if (unlikely(log_devres))
-		dev_err(dev, "DEVRES %3s %p %s (%lu bytes)\n",
-			op, node, node->name, (unsigned long)node->size);
+		dev_err(dev, "DEVRES %3s %p %s (%zu bytes)\n",
+			op, node, node->name, node->size);
 }
 #else /* CONFIG_DEBUG_DEVRES */
 #define set_node_dbginfo(node, n, s)	do {} while (0)
@@ -126,6 +126,14 @@ static void add_dr(struct device *dev, struct devres_node *node)
 	list_add_tail(&node->entry, &dev->devres_head);
 }
 
+static void replace_dr(struct device *dev,
+		       struct devres_node *old, struct devres_node *new)
+{
+	devres_log(dev, old, "REPLACE");
+	BUG_ON(!list_empty(&new->entry));
+	list_replace(&old->entry, &new->entry);
+}
+
 #ifdef CONFIG_DEBUG_DEVRES
 void * __devres_alloc_node(dr_release_t release, size_t size, gfp_t gfp, int nid,
 		      const char *name)
@@ -141,7 +149,7 @@ void * __devres_alloc_node(dr_release_t release, size_t size, gfp_t gfp, int nid
 EXPORT_SYMBOL_GPL(__devres_alloc_node);
 #else
 /**
- * devres_alloc - Allocate device resource data
+ * devres_alloc_node - Allocate device resource data
  * @release: Release function devres will be associated with
  * @size: Allocation size
  * @gfp: Allocation flags
@@ -838,6 +846,103 @@ void *devm_kmalloc(struct device *dev, size_t size, gfp_t gfp)
 EXPORT_SYMBOL_GPL(devm_kmalloc);
 
 /**
+ * devm_krealloc - Resource-managed krealloc()
+ * @dev: Device to re-allocate memory for
+ * @ptr: Pointer to the memory chunk to re-allocate
+ * @new_size: New allocation size
+ * @gfp: Allocation gfp flags
+ *
+ * Managed krealloc(). Resizes the memory chunk allocated with devm_kmalloc().
+ * Behaves similarly to regular krealloc(): if @ptr is NULL or ZERO_SIZE_PTR,
+ * it's the equivalent of devm_kmalloc(). If new_size is zero, it frees the
+ * previously allocated memory and returns ZERO_SIZE_PTR. This function doesn't
+ * change the order in which the release callback for the re-alloc'ed devres
+ * will be called (except when falling back to devm_kmalloc() or when freeing
+ * resources when new_size is zero). The contents of the memory are preserved
+ * up to the lesser of new and old sizes.
+ */
+void *devm_krealloc(struct device *dev, void *ptr, size_t new_size, gfp_t gfp)
+{
+	size_t total_new_size, total_old_size;
+	struct devres *old_dr, *new_dr;
+	unsigned long flags;
+
+	if (unlikely(!new_size)) {
+		devm_kfree(dev, ptr);
+		return ZERO_SIZE_PTR;
+	}
+
+	if (unlikely(ZERO_OR_NULL_PTR(ptr)))
+		return devm_kmalloc(dev, new_size, gfp);
+
+	if (WARN_ON(is_kernel_rodata((unsigned long)ptr)))
+		/*
+		 * We cannot reliably realloc a const string returned by
+		 * devm_kstrdup_const().
+		 */
+		return NULL;
+
+	if (!check_dr_size(new_size, &total_new_size))
+		return NULL;
+
+	total_old_size = ksize(container_of(ptr, struct devres, data));
+	if (total_old_size == 0) {
+		WARN(1, "Pointer doesn't point to dynamically allocated memory.");
+		return NULL;
+	}
+
+	/*
+	 * If new size is smaller or equal to the actual number of bytes
+	 * allocated previously - just return the same pointer.
+	 */
+	if (total_new_size <= total_old_size)
+		return ptr;
+
+	/*
+	 * Otherwise: allocate new, larger chunk. We need to allocate before
+	 * taking the lock as most probably the caller uses GFP_KERNEL.
+	 */
+	new_dr = alloc_dr(devm_kmalloc_release,
+			  total_new_size, gfp, dev_to_node(dev));
+	if (!new_dr)
+		return NULL;
+
+	/*
+	 * The spinlock protects the linked list against concurrent
+	 * modifications but not the resource itself.
+	 */
+	spin_lock_irqsave(&dev->devres_lock, flags);
+
+	old_dr = find_dr(dev, devm_kmalloc_release, devm_kmalloc_match, ptr);
+	if (!old_dr) {
+		spin_unlock_irqrestore(&dev->devres_lock, flags);
+		kfree(new_dr);
+		WARN(1, "Memory chunk not managed or managed by a different device.");
+		return NULL;
+	}
+
+	replace_dr(dev, &old_dr->node, &new_dr->node);
+
+	spin_unlock_irqrestore(&dev->devres_lock, flags);
+
+	/*
+	 * We can copy the memory contents after releasing the lock as we're
+	 * no longer modyfing the list links.
+	 */
+	memcpy(new_dr->data, old_dr->data,
+	       total_old_size - offsetof(struct devres, data));
+	/*
+	 * Same for releasing the old devres - it's now been removed from the
+	 * list. This is also the reason why we must not use devm_kfree() - the
+	 * links are no longer valid.
+	 */
+	kfree(old_dr);
+
+	return new_dr->data;
+}
+EXPORT_SYMBOL_GPL(devm_krealloc);
+
+/**
  * devm_kstrdup - Allocate resource managed space and
  *                copy an existing string into that.
  * @dev: Device to allocate memory for
@@ -1123,6 +1228,6 @@ EXPORT_SYMBOL_GPL(__devm_alloc_percpu);
 void devm_free_percpu(struct device *dev, void __percpu *pdata)
 {
 	WARN_ON(devres_destroy(dev, devm_percpu_release, devm_percpu_match,
-			       (void *)pdata));
+			       (__force void *)pdata));
 }
 EXPORT_SYMBOL_GPL(devm_free_percpu);

@@ -26,6 +26,7 @@
 #include <asm/tlbflush.h>
 #include <asm/tlb.h>
 #include <asm/hugetlb.h>
+#include <asm/pte-walk.h>
 
 static inline int is_exec_fault(void)
 {
@@ -81,9 +82,9 @@ static pte_t set_pte_filter_hash(pte_t pte)
 		struct page *pg = maybe_pte_to_page(pte);
 		if (!pg)
 			return pte;
-		if (!test_bit(PG_arch_1, &pg->flags)) {
+		if (!test_bit(PG_dcache_clean, &pg->flags)) {
 			flush_dcache_icache_page(pg);
-			set_bit(PG_arch_1, &pg->flags);
+			set_bit(PG_dcache_clean, &pg->flags);
 		}
 	}
 	return pte;
@@ -116,13 +117,13 @@ static inline pte_t set_pte_filter(pte_t pte)
 		return pte;
 
 	/* If the page clean, we move on */
-	if (test_bit(PG_arch_1, &pg->flags))
+	if (test_bit(PG_dcache_clean, &pg->flags))
 		return pte;
 
 	/* If it's an exec fault, we flush the cache and make it clean */
 	if (is_exec_fault()) {
 		flush_dcache_icache_page(pg);
-		set_bit(PG_arch_1, &pg->flags);
+		set_bit(PG_dcache_clean, &pg->flags);
 		return pte;
 	}
 
@@ -161,12 +162,12 @@ static pte_t set_access_flags_filter(pte_t pte, struct vm_area_struct *vma,
 		goto bail;
 
 	/* If the page is already clean, we move on */
-	if (test_bit(PG_arch_1, &pg->flags))
+	if (test_bit(PG_dcache_clean, &pg->flags))
 		goto bail;
 
-	/* Clean the page and set PG_arch_1 */
+	/* Clean the page and set PG_dcache_clean */
 	flush_dcache_icache_page(pg);
-	set_bit(PG_arch_1, &pg->flags);
+	set_bit(PG_dcache_clean, &pg->flags);
 
  bail:
 	return pte_mkexec(pte);
@@ -183,9 +184,6 @@ void set_pte_at(struct mm_struct *mm, unsigned long addr, pte_t *ptep,
 	 * tlb flush for this update.
 	 */
 	VM_WARN_ON(pte_hw_valid(*ptep) && !pte_protnone(*ptep));
-
-	/* Add the pte bit when trying to set a pte */
-	pte = pte_mkpte(pte);
 
 	/* Note: mm->context.id might not yet have been assigned as
 	 * this context might not have been activated yet when this
@@ -266,8 +264,7 @@ void set_huge_pte_at(struct mm_struct *mm, unsigned long addr, pte_t *ptep, pte_
 	pmd_t *pmd = pmd_off(mm, addr);
 	pte_basic_t val;
 	pte_basic_t *entry = &ptep->pte;
-	int num = is_hugepd(*((hugepd_t *)pmd)) ? 1 : SZ_512K / SZ_4K;
-	int i;
+	int num, i;
 
 	/*
 	 * Make sure hardware valid bit is not set. We don't do
@@ -275,11 +272,12 @@ void set_huge_pte_at(struct mm_struct *mm, unsigned long addr, pte_t *ptep, pte_
 	 */
 	VM_WARN_ON(pte_hw_valid(*ptep) && !pte_protnone(*ptep));
 
-	pte = pte_mkpte(pte);
-
 	pte = set_pte_filter(pte);
 
 	val = pte_val(pte);
+
+	num = number_of_cells_per_pte(pmd, val, 1);
+
 	for (i = 0; i < num; i++, entry++, val += SZ_4K)
 		*entry = val;
 }

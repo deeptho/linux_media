@@ -230,6 +230,7 @@ static int wait_hwif_ready(struct hinic_hwif *hwif)
  * @hwif: the HW interface of a pci function device
  * @attr0: the first attribute that was read from the hw
  * @attr1: the second attribute that was read from the hw
+ * @attr2: the third attribute that was read from the hw
  **/
 static void set_hwif_attr(struct hinic_hwif *hwif, u32 attr0, u32 attr1,
 			  u32 attr2)
@@ -333,7 +334,7 @@ static void set_dma_attr(struct hinic_hwif *hwif, u32 entry_idx,
 }
 
 /**
- * dma_attr_table_init - initialize the the default dma attributes
+ * dma_attr_table_init - initialize the default dma attributes
  * @hwif: the HW interface of a pci function device
  **/
 static void dma_attr_init(struct hinic_hwif *hwif)

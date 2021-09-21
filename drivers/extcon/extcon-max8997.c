@@ -44,6 +44,8 @@ static struct max8997_muic_irq muic_irqs[] = {
 	{ MAX8997_MUICIRQ_ChgDetRun,	"muic-CHGDETRUN" },
 	{ MAX8997_MUICIRQ_ChgTyp,	"muic-CHGTYP" },
 	{ MAX8997_MUICIRQ_OVP,		"muic-OVP" },
+	{ MAX8997_PMICIRQ_CHGINS,	"pmic-CHGINS" },
+	{ MAX8997_PMICIRQ_CHGRM,	"pmic-CHGRM" },
 };
 
 /* Define supported cable type */
@@ -538,6 +540,8 @@ static void max8997_muic_irq_work(struct work_struct *work)
 	case MAX8997_MUICIRQ_DCDTmr:
 	case MAX8997_MUICIRQ_ChgDetRun:
 	case MAX8997_MUICIRQ_ChgTyp:
+	case MAX8997_PMICIRQ_CHGINS:
+	case MAX8997_PMICIRQ_CHGRM:
 		/* Handle charger cable */
 		ret = max8997_muic_chg_handler(info);
 		break;
@@ -674,7 +678,7 @@ static int max8997_muic_probe(struct platform_device *pdev)
 	info->edev = devm_extcon_dev_allocate(&pdev->dev, max8997_extcon_cable);
 	if (IS_ERR(info->edev)) {
 		dev_err(&pdev->dev, "failed to allocate memory for extcon\n");
-		ret = -ENOMEM;
+		ret = PTR_ERR(info->edev);
 		goto err_irq;
 	}
 

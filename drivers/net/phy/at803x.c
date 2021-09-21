@@ -132,12 +132,20 @@
 #define AT803X_MIN_DOWNSHIFT 2
 #define AT803X_MAX_DOWNSHIFT 9
 
+#define AT803X_MMD3_SMARTEEE_CTL1		0x805b
+#define AT803X_MMD3_SMARTEEE_CTL2		0x805c
+#define AT803X_MMD3_SMARTEEE_CTL3		0x805d
+#define AT803X_MMD3_SMARTEEE_CTL3_LPI_EN	BIT(8)
+
 #define ATH9331_PHY_ID 0x004dd041
 #define ATH8030_PHY_ID 0x004dd076
 #define ATH8031_PHY_ID 0x004dd074
 #define ATH8032_PHY_ID 0x004dd023
 #define ATH8035_PHY_ID 0x004dd072
 #define AT8030_PHY_ID_MASK			0xffffffef
+
+#define AT803X_PAGE_FIBER		0
+#define AT803X_PAGE_COPPER		1
 
 MODULE_DESCRIPTION("Qualcomm Atheros AR803x PHY driver");
 MODULE_AUTHOR("Matus Ujhelyi");
@@ -146,8 +154,11 @@ MODULE_LICENSE("GPL");
 struct at803x_priv {
 	int flags;
 #define AT803X_KEEP_PLL_ENABLED	BIT(0)	/* don't turn off internal PLL */
+#define AT803X_DISABLE_SMARTEEE	BIT(1)
 	u16 clk_25m_reg;
 	u16 clk_25m_mask;
+	u8 smarteee_lpi_tw_1g;
+	u8 smarteee_lpi_tw_100m;
 	struct regulator_dev *vddio_rdev;
 	struct regulator_dev *vddh_rdev;
 	struct regulator *vddio;
@@ -188,6 +199,35 @@ static int at803x_debug_reg_mask(struct phy_device *phydev, u16 reg,
 	val |= set;
 
 	return phy_write(phydev, AT803X_DEBUG_DATA, val);
+}
+
+static int at803x_write_page(struct phy_device *phydev, int page)
+{
+	int mask;
+	int set;
+
+	if (page == AT803X_PAGE_COPPER) {
+		set = AT803X_BT_BX_REG_SEL;
+		mask = 0;
+	} else {
+		set = 0;
+		mask = AT803X_BT_BX_REG_SEL;
+	}
+
+	return __phy_modify(phydev, AT803X_REG_CHIP_CONFIG, mask, set);
+}
+
+static int at803x_read_page(struct phy_device *phydev)
+{
+	int ccr = __phy_read(phydev, AT803X_REG_CHIP_CONFIG);
+
+	if (ccr < 0)
+		return ccr;
+
+	if (ccr & AT803X_BT_BX_REG_SEL)
+		return AT803X_PAGE_COPPER;
+
+	return AT803X_PAGE_FIBER;
 }
 
 static int at803x_enable_rx_delay(struct phy_device *phydev)
@@ -343,7 +383,7 @@ static int at803x_rgmii_reg_get_voltage_sel(struct regulator_dev *rdev)
 	return (val & AT803X_DEBUG_RGMII_1V8) ? 1 : 0;
 }
 
-static struct regulator_ops vddio_regulator_ops = {
+static const struct regulator_ops vddio_regulator_ops = {
 	.list_voltage = regulator_list_voltage_table,
 	.set_voltage_sel = at803x_rgmii_reg_set_voltage_sel,
 	.get_voltage_sel = at803x_rgmii_reg_get_voltage_sel,
@@ -364,7 +404,7 @@ static const struct regulator_desc vddio_desc = {
 	.owner = THIS_MODULE,
 };
 
-static struct regulator_ops vddh_regulator_ops = {
+static const struct regulator_ops vddh_regulator_ops = {
 };
 
 static const struct regulator_desc vddh_desc = {
@@ -411,12 +451,31 @@ static int at803x_parse_dt(struct phy_device *phydev)
 {
 	struct device_node *node = phydev->mdio.dev.of_node;
 	struct at803x_priv *priv = phydev->priv;
-	u32 freq, strength;
+	u32 freq, strength, tw;
 	unsigned int sel;
 	int ret;
 
 	if (!IS_ENABLED(CONFIG_OF_MDIO))
 		return 0;
+
+	if (of_property_read_bool(node, "qca,disable-smarteee"))
+		priv->flags |= AT803X_DISABLE_SMARTEEE;
+
+	if (!of_property_read_u32(node, "qca,smarteee-tw-us-1g", &tw)) {
+		if (!tw || tw > 255) {
+			phydev_err(phydev, "invalid qca,smarteee-tw-us-1g\n");
+			return -EINVAL;
+		}
+		priv->smarteee_lpi_tw_1g = tw;
+	}
+
+	if (!of_property_read_u32(node, "qca,smarteee-tw-us-100m", &tw)) {
+		if (!tw || tw > 255) {
+			phydev_err(phydev, "invalid qca,smarteee-tw-us-100m\n");
+			return -EINVAL;
+		}
+		priv->smarteee_lpi_tw_100m = tw;
+	}
 
 	ret = of_property_read_u32(node, "qca,clk-out-frequency", &freq);
 	if (!ret) {
@@ -495,10 +554,6 @@ static int at803x_parse_dt(struct phy_device *phydev)
 			phydev_err(phydev, "failed to get VDDIO regulator\n");
 			return PTR_ERR(priv->vddio);
 		}
-
-		ret = regulator_enable(priv->vddio);
-		if (ret < 0)
-			return ret;
 	}
 
 	return 0;
@@ -508,6 +563,7 @@ static int at803x_probe(struct phy_device *phydev)
 {
 	struct device *dev = &phydev->mdio.dev;
 	struct at803x_priv *priv;
+	int ret;
 
 	priv = devm_kzalloc(dev, sizeof(*priv), GFP_KERNEL);
 	if (!priv)
@@ -515,7 +571,35 @@ static int at803x_probe(struct phy_device *phydev)
 
 	phydev->priv = priv;
 
-	return at803x_parse_dt(phydev);
+	ret = at803x_parse_dt(phydev);
+	if (ret)
+		return ret;
+
+	if (priv->vddio) {
+		ret = regulator_enable(priv->vddio);
+		if (ret < 0)
+			return ret;
+	}
+
+	/* Some bootloaders leave the fiber page selected.
+	 * Switch to the copper page, as otherwise we read
+	 * the PHY capabilities from the fiber side.
+	 */
+	if (at803x_match_phy_id(phydev, ATH8031_PHY_ID)) {
+		phy_lock_mdio_bus(phydev);
+		ret = at803x_write_page(phydev, AT803X_PAGE_COPPER);
+		phy_unlock_mdio_bus(phydev);
+		if (ret)
+			goto err;
+	}
+
+	return 0;
+
+err:
+	if (priv->vddio)
+		regulator_disable(priv->vddio);
+
+	return ret;
 }
 
 static void at803x_remove(struct phy_device *phydev)
@@ -526,22 +610,47 @@ static void at803x_remove(struct phy_device *phydev)
 		regulator_disable(priv->vddio);
 }
 
+static int at803x_smarteee_config(struct phy_device *phydev)
+{
+	struct at803x_priv *priv = phydev->priv;
+	u16 mask = 0, val = 0;
+	int ret;
+
+	if (priv->flags & AT803X_DISABLE_SMARTEEE)
+		return phy_modify_mmd(phydev, MDIO_MMD_PCS,
+				      AT803X_MMD3_SMARTEEE_CTL3,
+				      AT803X_MMD3_SMARTEEE_CTL3_LPI_EN, 0);
+
+	if (priv->smarteee_lpi_tw_1g) {
+		mask |= 0xff00;
+		val |= priv->smarteee_lpi_tw_1g << 8;
+	}
+	if (priv->smarteee_lpi_tw_100m) {
+		mask |= 0x00ff;
+		val |= priv->smarteee_lpi_tw_100m;
+	}
+	if (!mask)
+		return 0;
+
+	ret = phy_modify_mmd(phydev, MDIO_MMD_PCS, AT803X_MMD3_SMARTEEE_CTL1,
+			     mask, val);
+	if (ret)
+		return ret;
+
+	return phy_modify_mmd(phydev, MDIO_MMD_PCS, AT803X_MMD3_SMARTEEE_CTL3,
+			      AT803X_MMD3_SMARTEEE_CTL3_LPI_EN,
+			      AT803X_MMD3_SMARTEEE_CTL3_LPI_EN);
+}
+
 static int at803x_clk_out_config(struct phy_device *phydev)
 {
 	struct at803x_priv *priv = phydev->priv;
-	int val;
 
 	if (!priv->clk_25m_mask)
 		return 0;
 
-	val = phy_read_mmd(phydev, MDIO_MMD_AN, AT803X_MMD7_CLK25M);
-	if (val < 0)
-		return val;
-
-	val &= ~priv->clk_25m_mask;
-	val |= priv->clk_25m_reg;
-
-	return phy_write_mmd(phydev, MDIO_MMD_AN, AT803X_MMD7_CLK25M, val);
+	return phy_modify_mmd(phydev, MDIO_MMD_AN, AT803X_MMD7_CLK25M,
+			      priv->clk_25m_mask, priv->clk_25m_reg);
 }
 
 static int at8031_pll_config(struct phy_device *phydev)
@@ -584,6 +693,10 @@ static int at803x_config_init(struct phy_device *phydev)
 	if (ret < 0)
 		return ret;
 
+	ret = at803x_smarteee_config(phydev);
+	if (ret < 0)
+		return ret;
+
 	ret = at803x_clk_out_config(phydev);
 	if (ret < 0)
 		return ret;
@@ -594,7 +707,13 @@ static int at803x_config_init(struct phy_device *phydev)
 			return ret;
 	}
 
-	return 0;
+	/* Ar803x extended next page bit is enabled by default. Cisco
+	 * multigig switches read this bit and attempt to negotiate 10Gbps
+	 * rates even if the next page bit is disabled. This is incorrect
+	 * behaviour but we still need to accommodate it. XNP is only needed
+	 * for 10Gbps support, so disable XNP.
+	 */
+	return phy_modify(phydev, MII_ADVERTISE, MDIO_AN_CTRL1_XNP, 0);
 }
 
 static int at803x_ack_interrupt(struct phy_device *phydev)
@@ -614,6 +733,11 @@ static int at803x_config_intr(struct phy_device *phydev)
 	value = phy_read(phydev, AT803X_INTR_ENABLE);
 
 	if (phydev->interrupts == PHY_INTERRUPT_ENABLED) {
+		/* Clear any pending interrupts */
+		err = at803x_ack_interrupt(phydev);
+		if (err)
+			return err;
+
 		value |= AT803X_INTR_ENABLE_AUTONEG_ERR;
 		value |= AT803X_INTR_ENABLE_SPEED_CHANGED;
 		value |= AT803X_INTR_ENABLE_DUPLEX_CHANGED;
@@ -621,11 +745,42 @@ static int at803x_config_intr(struct phy_device *phydev)
 		value |= AT803X_INTR_ENABLE_LINK_SUCCESS;
 
 		err = phy_write(phydev, AT803X_INTR_ENABLE, value);
-	}
-	else
+	} else {
 		err = phy_write(phydev, AT803X_INTR_ENABLE, 0);
+		if (err)
+			return err;
+
+		/* Clear any pending interrupts */
+		err = at803x_ack_interrupt(phydev);
+	}
 
 	return err;
+}
+
+static irqreturn_t at803x_handle_interrupt(struct phy_device *phydev)
+{
+	int irq_status, int_enabled;
+
+	irq_status = phy_read(phydev, AT803X_INTR_STATUS);
+	if (irq_status < 0) {
+		phy_error(phydev);
+		return IRQ_NONE;
+	}
+
+	/* Read the current enabled interrupts */
+	int_enabled = phy_read(phydev, AT803X_INTR_ENABLE);
+	if (int_enabled < 0) {
+		phy_error(phydev);
+		return IRQ_NONE;
+	}
+
+	/* See if this was one of our enabled interrupts */
+	if (!(irq_status & int_enabled))
+		return IRQ_NONE;
+
+	phy_trigger_machine(phydev);
+
+	return IRQ_HANDLED;
 }
 
 static void at803x_link_change_notify(struct phy_device *phydev)
@@ -651,36 +806,6 @@ static void at803x_link_change_notify(struct phy_device *phydev)
 
 		phydev_dbg(phydev, "%s(): phy was reset\n", __func__);
 	}
-}
-
-static int at803x_aneg_done(struct phy_device *phydev)
-{
-	int ccr;
-
-	int aneg_done = genphy_aneg_done(phydev);
-	if (aneg_done != BMSR_ANEGCOMPLETE)
-		return aneg_done;
-
-	/*
-	 * in SGMII mode, if copper side autoneg is successful,
-	 * also check SGMII side autoneg result
-	 */
-	ccr = phy_read(phydev, AT803X_REG_CHIP_CONFIG);
-	if ((ccr & AT803X_MODE_CFG_MASK) != AT803X_MODE_CFG_SGMII)
-		return aneg_done;
-
-	/* switch to SGMII/fiber page */
-	phy_write(phydev, AT803X_REG_CHIP_CONFIG, ccr & ~AT803X_BT_BX_REG_SEL);
-
-	/* check if the SGMII link is OK. */
-	if (!(phy_read(phydev, AT803X_PSSR) & AT803X_PSSR_MR_AN_COMPLETE)) {
-		phydev_warn(phydev, "803x_aneg_done: SGMII link is not ok\n");
-		aneg_done = 0;
-	}
-	/* switch back to copper page */
-	phy_write(phydev, AT803X_REG_CHIP_CONFIG, ccr | AT803X_BT_BX_REG_SEL);
-
-	return aneg_done;
 }
 
 static int at803x_read_status(struct phy_device *phydev)
@@ -1062,8 +1187,8 @@ static struct phy_driver at803x_driver[] = {
 	.resume			= at803x_resume,
 	/* PHY_GBIT_FEATURES */
 	.read_status		= at803x_read_status,
-	.ack_interrupt		= at803x_ack_interrupt,
 	.config_intr		= at803x_config_intr,
+	.handle_interrupt	= at803x_handle_interrupt,
 	.get_tunable		= at803x_get_tunable,
 	.set_tunable		= at803x_set_tunable,
 	.cable_test_start	= at803x_cable_test_start,
@@ -1082,8 +1207,8 @@ static struct phy_driver at803x_driver[] = {
 	.suspend		= at803x_suspend,
 	.resume			= at803x_resume,
 	/* PHY_BASIC_FEATURES */
-	.ack_interrupt		= at803x_ack_interrupt,
 	.config_intr		= at803x_config_intr,
+	.handle_interrupt	= at803x_handle_interrupt,
 }, {
 	/* Qualcomm Atheros AR8031/AR8033 */
 	PHY_ID_MATCH_EXACT(ATH8031_PHY_ID),
@@ -1092,16 +1217,18 @@ static struct phy_driver at803x_driver[] = {
 	.probe			= at803x_probe,
 	.remove			= at803x_remove,
 	.config_init		= at803x_config_init,
+	.config_aneg		= at803x_config_aneg,
 	.soft_reset		= genphy_soft_reset,
 	.set_wol		= at803x_set_wol,
 	.get_wol		= at803x_get_wol,
 	.suspend		= at803x_suspend,
 	.resume			= at803x_resume,
+	.read_page		= at803x_read_page,
+	.write_page		= at803x_write_page,
 	/* PHY_GBIT_FEATURES */
 	.read_status		= at803x_read_status,
-	.aneg_done		= at803x_aneg_done,
-	.ack_interrupt		= &at803x_ack_interrupt,
 	.config_intr		= &at803x_config_intr,
+	.handle_interrupt	= at803x_handle_interrupt,
 	.get_tunable		= at803x_get_tunable,
 	.set_tunable		= at803x_set_tunable,
 	.cable_test_start	= at803x_cable_test_start,
@@ -1120,8 +1247,8 @@ static struct phy_driver at803x_driver[] = {
 	.suspend		= at803x_suspend,
 	.resume			= at803x_resume,
 	/* PHY_BASIC_FEATURES */
-	.ack_interrupt		= at803x_ack_interrupt,
 	.config_intr		= at803x_config_intr,
+	.handle_interrupt	= at803x_handle_interrupt,
 	.cable_test_start	= at803x_cable_test_start,
 	.cable_test_get_status	= at803x_cable_test_get_status,
 }, {
@@ -1132,8 +1259,8 @@ static struct phy_driver at803x_driver[] = {
 	.resume			= at803x_resume,
 	.flags			= PHY_POLL_CABLE_TEST,
 	/* PHY_BASIC_FEATURES */
-	.ack_interrupt		= &at803x_ack_interrupt,
 	.config_intr		= &at803x_config_intr,
+	.handle_interrupt	= at803x_handle_interrupt,
 	.cable_test_start	= at803x_cable_test_start,
 	.cable_test_get_status	= at803x_cable_test_get_status,
 	.read_status		= at803x_read_status,

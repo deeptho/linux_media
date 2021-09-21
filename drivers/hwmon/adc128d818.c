@@ -248,7 +248,7 @@ static ssize_t adc128_alarm_show(struct device *dev,
 static umode_t adc128_is_visible(struct kobject *kobj,
 				 struct attribute *attr, int index)
 {
-	struct device *dev = container_of(kobj, struct device, kobj);
+	struct device *dev = kobj_to_dev(kobj);
 	struct adc128_data *data = dev_get_drvdata(dev);
 
 	if (index < ADC128_ATTR_NUM_VOLT) {
@@ -427,8 +427,7 @@ static int adc128_init_client(struct adc128_data *data)
 	return 0;
 }
 
-static int adc128_probe(struct i2c_client *client,
-			const struct i2c_device_id *id)
+static int adc128_probe(struct i2c_client *client)
 {
 	struct device *dev = &client->dev;
 	struct regulator *regulator;
@@ -524,7 +523,7 @@ static struct i2c_driver adc128_driver = {
 		.name	= "adc128d818",
 		.of_match_table = of_match_ptr(adc128_of_match),
 	},
-	.probe		= adc128_probe,
+	.probe_new	= adc128_probe,
 	.remove		= adc128_remove,
 	.id_table	= adc128_id,
 	.detect		= adc128_detect,

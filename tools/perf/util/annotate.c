@@ -10,10 +10,6 @@
 #include <inttypes.h>
 #include <libgen.h>
 #include <stdlib.h>
-#include <bpf/bpf.h>
-#include <bpf/btf.h>
-#include <bpf/libbpf.h>
-#include <linux/btf.h>
 #include "util.h" // hex_width()
 #include "ui/ui.h"
 #include "sort.h"
@@ -152,6 +148,7 @@ static int arch__associate_ins_ops(struct arch* arch, const char *name, struct i
 #include "arch/arm/annotate/instructions.c"
 #include "arch/arm64/annotate/instructions.c"
 #include "arch/csky/annotate/instructions.c"
+#include "arch/mips/annotate/instructions.c"
 #include "arch/x86/annotate/instructions.c"
 #include "arch/powerpc/annotate/instructions.c"
 #include "arch/s390/annotate/instructions.c"
@@ -173,6 +170,13 @@ static struct arch architectures[] = {
 	{
 		.name = "csky",
 		.init = csky__annotate_init,
+	},
+	{
+		.name = "mips",
+		.init = mips__annotate_init,
+		.objdump = {
+			.comment_char = '#',
+		},
 	},
 	{
 		.name = "x86",
@@ -317,10 +321,16 @@ bool ins__is_call(const struct ins *ins)
 /*
  * Prevents from matching commas in the comment section, e.g.:
  * ffff200008446e70:       b.cs    ffff2000084470f4 <generic_exec_single+0x314>  // b.hs, b.nlast
+ *
+ * and skip comma as part of function arguments, e.g.:
+ * 1d8b4ac <linemap_lookup(line_maps const*, unsigned int)+0xcc>
  */
 static inline const char *validate_comma(const char *c, struct ins_operands *ops)
 {
 	if (ops->raw_comment && c > ops->raw_comment)
+		return NULL;
+
+	if (ops->raw_func_start && c > ops->raw_func_start)
 		return NULL;
 
 	return c;
@@ -337,6 +347,8 @@ static int jump__parse(struct arch *arch, struct ins_operands *ops, struct map_s
 	u64 start, end;
 
 	ops->raw_comment = strchr(ops->raw, arch->objdump.comment_char);
+	ops->raw_func_start = strchr(ops->raw, '<');
+
 	c = validate_comma(c, ops);
 
 	/*
@@ -1149,6 +1161,7 @@ struct annotate_args {
 	s64			  offset;
 	char			  *line;
 	int			  line_nr;
+	char			  *fileloc;
 };
 
 static void annotation_line__init(struct annotation_line *al,
@@ -1158,6 +1171,7 @@ static void annotation_line__init(struct annotation_line *al,
 	al->offset = args->offset;
 	al->line = strdup(args->line);
 	al->line_nr = args->line_nr;
+	al->fileloc = args->fileloc;
 	al->data_nr = nr;
 }
 
@@ -1354,7 +1368,6 @@ annotation_line__print(struct annotation_line *al, struct symbol *sym, u64 start
 {
 	struct disasm_line *dl = container_of(al, struct disasm_line, al);
 	static const char *prev_line;
-	static const char *prev_color;
 
 	if (al->offset != -1) {
 		double max_percent = 0.0;
@@ -1393,20 +1406,6 @@ annotation_line__print(struct annotation_line *al, struct symbol *sym, u64 start
 
 		color = get_percent_color(max_percent);
 
-		/*
-		 * Also color the filename and line if needed, with
-		 * the same color than the percentage. Don't print it
-		 * twice for close colored addr with the same filename:line
-		 */
-		if (al->path) {
-			if (!prev_line || strcmp(prev_line, al->path)
-				       || color != prev_color) {
-				color_fprintf(stdout, color, " %s", al->path);
-				prev_line = al->path;
-				prev_color = color;
-			}
-		}
-
 		for (i = 0; i < nr_percent; i++) {
 			struct annotation_data *data = &al->data[i];
 			double percent;
@@ -1427,6 +1426,19 @@ annotation_line__print(struct annotation_line *al, struct symbol *sym, u64 start
 		printf(" : ");
 
 		disasm_line__print(dl, start, addr_fmt_width);
+
+		/*
+		 * Also color the filename and line if needed, with
+		 * the same color than the percentage. Don't print it
+		 * twice for close colored addr with the same filename:line
+		 */
+		if (al->path) {
+			if (!prev_line || strcmp(prev_line, al->path)) {
+				color_fprintf(stdout, color, " // %s", al->path);
+				prev_line = al->path;
+			}
+		}
+
 		printf("\n");
 	} else if (max_lines && printed >= max_lines)
 		return 1;
@@ -1442,7 +1454,7 @@ annotation_line__print(struct annotation_line *al, struct symbol *sym, u64 start
 		if (!*al->line)
 			printf(" %*s:\n", width, " ");
 		else
-			printf(" %*s:     %*s %s\n", width, " ", addr_fmt_width, " ", al->line);
+			printf(" %*s: %-*d %s\n", width, " ", addr_fmt_width, al->line_nr, al->line);
 	}
 
 	return 0;
@@ -1470,7 +1482,7 @@ annotation_line__print(struct annotation_line *al, struct symbol *sym, u64 start
  */
 static int symbol__parse_objdump_line(struct symbol *sym,
 				      struct annotate_args *args,
-				      char *parsed_line, int *line_nr)
+				      char *parsed_line, int *line_nr, char **fileloc)
 {
 	struct map *map = args->ms.map;
 	struct annotation *notes = symbol__annotation(sym);
@@ -1482,6 +1494,7 @@ static int symbol__parse_objdump_line(struct symbol *sym,
 	/* /filename:linenr ? Save line number and ignore. */
 	if (regexec(&file_lineno, parsed_line, 2, match, 0) == 0) {
 		*line_nr = atoi(parsed_line + match[1].rm_so);
+		*fileloc = strdup(parsed_line);
 		return 0;
 	}
 
@@ -1501,6 +1514,7 @@ static int symbol__parse_objdump_line(struct symbol *sym,
 	args->offset  = offset;
 	args->line    = parsed_line;
 	args->line_nr = *line_nr;
+	args->fileloc = *fileloc;
 	args->ms.sym  = sym;
 
 	dl = disasm_line__new(args);
@@ -1578,8 +1592,7 @@ int symbol__strerror_disassemble(struct map_symbol *ms, int errnum, char *buf, s
 		char *build_id_msg = NULL;
 
 		if (dso->has_build_id) {
-			build_id__sprintf(dso->build_id,
-					  sizeof(dso->build_id), bf + 15);
+			build_id__sprintf(&dso->bid, bf + 15);
 			build_id_msg = bf;
 		}
 		scnprintf(buf, buflen,
@@ -1677,6 +1690,10 @@ fallback:
 #define PACKAGE "perf"
 #include <bfd.h>
 #include <dis-asm.h>
+#include <bpf/bpf.h>
+#include <bpf/btf.h>
+#include <bpf/libbpf.h>
+#include <linux/btf.h>
 
 static int symbol__disassemble_bpf(struct symbol *sym,
 				   struct annotate_args *args)
@@ -1792,6 +1809,7 @@ static int symbol__disassemble_bpf(struct symbol *sym,
 			args->offset = -1;
 			args->line = strdup(srcline);
 			args->line_nr = 0;
+			args->fileloc = NULL;
 			args->ms.sym  = sym;
 			dl = disasm_line__new(args);
 			if (dl) {
@@ -1803,6 +1821,7 @@ static int symbol__disassemble_bpf(struct symbol *sym,
 		args->offset = pc;
 		args->line = buf + prev_buf_size;
 		args->line_nr = 0;
+		args->fileloc = NULL;
 		args->ms.sym  = sym;
 		dl = disasm_line__new(args);
 		if (dl)
@@ -1837,6 +1856,7 @@ symbol__disassemble_bpf_image(struct symbol *sym,
 	args->offset = -1;
 	args->line = strdup("to be implemented");
 	args->line_nr = 0;
+	args->fileloc = NULL;
 	dl = disasm_line__new(args);
 	if (dl)
 		annotation_line__add(&dl->al, &notes->src->source);
@@ -1918,6 +1938,7 @@ static int symbol__disassemble(struct symbol *sym, struct annotate_args *args)
 	bool delete_extract = false;
 	bool decomp = false;
 	int lineno = 0;
+	char *fileloc = NULL;
 	int nline;
 	char *line;
 	size_t line_len;
@@ -2045,7 +2066,7 @@ static int symbol__disassemble(struct symbol *sym, struct annotate_args *args)
 		 * See disasm_line__new() and struct disasm_line::line_nr.
 		 */
 		if (symbol__parse_objdump_line(sym, args, expanded_line,
-					       &lineno) < 0)
+					       &lineno, &fileloc) < 0)
 			break;
 		nline++;
 	}
@@ -3127,6 +3148,12 @@ static int annotation__config(const char *var, const char *value, void *data)
 								value);
 	} else if (!strcmp(var, "annotate.use_offset")) {
 		opt->use_offset = perf_config_bool("use_offset", value);
+	} else if (!strcmp(var, "annotate.disassembler_style")) {
+		opt->disassembler_style = value;
+	} else if (!strcmp(var, "annotate.demangle")) {
+		symbol_conf.demangle = perf_config_bool("demangle", value);
+	} else if (!strcmp(var, "annotate.demangle_kernel")) {
+		symbol_conf.demangle_kernel = perf_config_bool("demangle_kernel", value);
 	} else {
 		pr_debug("%s variable unknown, ignoring...", var);
 	}

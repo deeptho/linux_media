@@ -271,12 +271,6 @@ Conventions
 First, Linus Torvalds's thoughts on C coding style can be found in the
 Documentation/process/coding-style.rst file.
 
-Next, there is a movement to "outlaw" typedefs introducing synonyms for
-struct tags. Both can be still found in the SCSI subsystem, but
-the typedefs have been moved to a single file, scsi_typedefs.h to
-make their future removal easier, for example:
-"typedef struct scsi_cmnd Scsi_Cmnd;"
-
 Also, most C99 enhancements are encouraged to the extent they are supported
 by the relevant gcc compilers. So C99 style structure and array
 initializers are encouraged where appropriate. Don't go too far,
@@ -1101,10 +1095,6 @@ of interest:
 		 - maximum number of commands that can be queued on devices
                    controlled by the host. Overridden by LLD calls to
                    scsi_change_queue_depth().
-    unchecked_isa_dma
-		 - 1=>only use bottom 16 MB of ram (ISA DMA addressing
-                   restriction), 0=>can use full 32 bit (or better) DMA
-                   address space
     no_async_abort
 		 - 1=>Asynchronous aborts are not supported
 		 - 0=>Timed-out commands will be aborted asynchronously

@@ -44,7 +44,7 @@ static u64 jiffies_read(struct clocksource *cs)
  * the timer interrupt frequency HZ and it suffers
  * inaccuracies caused by missed or lost timer
  * interrupts and the inability for the timer
- * interrupt hardware to accuratly tick at the
+ * interrupt hardware to accurately tick at the
  * requested HZ value. It is also not recommended
  * for "tick-less" systems.
  */
@@ -59,7 +59,8 @@ static struct clocksource clocksource_jiffies = {
 };
 
 __cacheline_aligned_in_smp DEFINE_RAW_SPINLOCK(jiffies_lock);
-__cacheline_aligned_in_smp seqcount_t jiffies_seq;
+__cacheline_aligned_in_smp seqcount_raw_spinlock_t jiffies_seq =
+	SEQCNT_RAW_SPINLOCK_ZERO(jiffies_seq, &jiffies_lock);
 
 #if (BITS_PER_LONG < 64)
 u64 get_jiffies_64(void)

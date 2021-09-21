@@ -369,7 +369,7 @@ all'inizio dell'avvio del sistema è attraverso la procedura
 Prima di inventare la vostra cache per gli oggetti più usati, considerate
 l'uso di una cache slab disponibile in ``include/linux/slab.h``.
 
-:c:func:`current()`
+:c:macro:`current`
 -------------------
 
 Definita in ``include/asm/current.h``
@@ -402,7 +402,7 @@ il valore convertito. Tutte le varianti supportano anche il processo inverso:
 :c:func:`be32_to_cpu()`, eccetera.
 
 Queste funzioni hanno principalmente due varianti: la variante per
-puntatori, come :c:func:`cpu_to_be32p(), che prende un puntatore
+puntatori, come :c:func:`cpu_to_be32p()`, che prende un puntatore
 ad un tipo, e ritorna il valore convertito. L'altra variante per
 la famiglia di conversioni "in-situ", come :c:func:`cpu_to_be32s()`,
 che convertono il valore puntato da un puntatore, e ritornano void.

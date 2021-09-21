@@ -29,7 +29,7 @@ bool snd_sof_dsp_only_d0i3_compatible_stream_active(struct snd_sof_dev *sdev)
 				continue;
 
 			/*
-			 * substream->runtime being not NULL indicates that
+			 * substream->runtime being not NULL indicates
 			 * that the stream is open. No need to check the
 			 * stream state.
 			 */
@@ -142,6 +142,22 @@ static int sof_restore_kcontrols(struct device *dev)
 	return 0;
 }
 
+const struct sof_ipc_pipe_new *snd_sof_pipeline_find(struct snd_sof_dev *sdev,
+						     int pipeline_id)
+{
+	const struct snd_sof_widget *swidget;
+
+	list_for_each_entry(swidget, &sdev->widget_list, list)
+		if (swidget->id == snd_soc_dapm_scheduler) {
+			const struct sof_ipc_pipe_new *pipeline =
+				swidget->private;
+			if (pipeline->pipeline_id == pipeline_id)
+				return pipeline;
+		}
+
+	return NULL;
+}
+
 int sof_restore_pipelines(struct device *dev)
 {
 	struct snd_sof_dev *sdev = dev_get_drvdata(dev);
@@ -149,8 +165,9 @@ int sof_restore_pipelines(struct device *dev)
 	struct snd_sof_route *sroute;
 	struct sof_ipc_pipe_new *pipeline;
 	struct snd_sof_dai *dai;
-	struct sof_ipc_comp_dai *comp_dai;
 	struct sof_ipc_cmd_hdr *hdr;
+	struct sof_ipc_comp *comp;
+	size_t ipc_size;
 	int ret;
 
 	/* restore pipeline components */
@@ -161,15 +178,36 @@ int sof_restore_pipelines(struct device *dev)
 		if (!swidget->private)
 			continue;
 
+		ret = sof_pipeline_core_enable(sdev, swidget);
+		if (ret < 0) {
+			dev_err(dev,
+				"error: failed to enable target core: %d\n",
+				ret);
+
+			return ret;
+		}
+
 		switch (swidget->id) {
 		case snd_soc_dapm_dai_in:
 		case snd_soc_dapm_dai_out:
+			ipc_size = sizeof(struct sof_ipc_comp_dai) +
+				   sizeof(struct sof_ipc_comp_ext);
+			comp = kzalloc(ipc_size, GFP_KERNEL);
+			if (!comp)
+				return -ENOMEM;
+
 			dai = swidget->private;
-			comp_dai = &dai->comp_dai;
-			ret = sof_ipc_tx_message(sdev->ipc,
-						 comp_dai->comp.hdr.cmd,
-						 comp_dai, sizeof(*comp_dai),
+			memcpy(comp, &dai->comp_dai,
+			       sizeof(struct sof_ipc_comp_dai));
+
+			/* append extended data to the end of the component */
+			memcpy((u8 *)comp + sizeof(struct sof_ipc_comp_dai),
+			       &swidget->comp_ext, sizeof(swidget->comp_ext));
+
+			ret = sof_ipc_tx_message(sdev->ipc, comp->hdr.cmd,
+						 comp, ipc_size,
 						 &r, sizeof(r));
+			kfree(comp);
 			break;
 		case snd_soc_dapm_scheduler:
 
@@ -229,7 +267,7 @@ int sof_restore_pipelines(struct device *dev)
 	/* restore dai links */
 	list_for_each_entry_reverse(dai, &sdev->dai_list, list) {
 		struct sof_ipc_reply reply;
-		struct sof_ipc_dai_config *config = dai->dai_config;
+		struct sof_ipc_dai_config *config = &dai->dai_config[dai->current_config];
 
 		if (!config) {
 			dev_err(dev, "error: no config for DAI %s\n",
@@ -396,6 +434,33 @@ struct snd_sof_dai *snd_sof_find_dai(struct snd_soc_component *scomp,
 }
 
 /*
+ * Helper to get SSP MCLK from a pcm_runtime.
+ * Return 0 if not exist.
+ */
+int sof_dai_get_mclk(struct snd_soc_pcm_runtime *rtd)
+{
+	struct snd_soc_component *component =
+		snd_soc_rtdcom_lookup(rtd, SOF_AUDIO_PCM_DRV_NAME);
+	struct snd_sof_dai *dai =
+		snd_sof_find_dai(component, (char *)rtd->dai_link->name);
+
+	/* use the tplg configured mclk if existed */
+	if (!dai || !dai->dai_config)
+		return 0;
+
+	switch (dai->dai_config->type) {
+	case SOF_DAI_INTEL_SSP:
+		return dai->dai_config->ssp.mclk_rate;
+	default:
+		/* not yet implemented for platforms other than the above */
+		dev_err(rtd->dev, "mclk for dai_config->type %d not supported yet!\n",
+			dai->dai_config->type);
+		return -EINVAL;
+	}
+}
+EXPORT_SYMBOL(sof_dai_get_mclk);
+
+/*
  * SOF Driver enumeration.
  */
 int sof_machine_check(struct snd_sof_dev *sdev)
@@ -403,28 +468,24 @@ int sof_machine_check(struct snd_sof_dev *sdev)
 	struct snd_sof_pdata *sof_pdata = sdev->pdata;
 	const struct sof_dev_desc *desc = sof_pdata->desc;
 	struct snd_soc_acpi_mach *mach;
-	int ret;
 
-	/* force nocodec mode */
-#if IS_ENABLED(CONFIG_SND_SOC_SOF_FORCE_NOCODEC_MODE)
+	if (!IS_ENABLED(CONFIG_SND_SOC_SOF_FORCE_NOCODEC_MODE)) {
+
+		/* find machine */
+		snd_sof_machine_select(sdev);
+		if (sof_pdata->machine) {
+			snd_sof_set_mach_params(sof_pdata->machine, sdev);
+			return 0;
+		}
+
+		if (!IS_ENABLED(CONFIG_SND_SOC_SOF_NOCODEC)) {
+			dev_err(sdev->dev, "error: no matching ASoC machine driver found - aborting probe\n");
+			return -ENODEV;
+		}
+	} else {
 		dev_warn(sdev->dev, "Force to use nocodec mode\n");
-		goto nocodec;
-#endif
-
-	/* find machine */
-	snd_sof_machine_select(sdev);
-	if (sof_pdata->machine) {
-		snd_sof_set_mach_params(sof_pdata->machine, sdev->dev);
-		return 0;
 	}
 
-#if !IS_ENABLED(CONFIG_SND_SOC_SOF_NOCODEC)
-	dev_err(sdev->dev, "error: no matching ASoC machine driver found - aborting probe\n");
-	return -ENODEV;
-#endif
-#if IS_ENABLED(CONFIG_SND_SOC_SOF_FORCE_NOCODEC_MODE)
-nocodec:
-#endif
 	/* select nocodec mode */
 	dev_warn(sdev->dev, "Using nocodec machine driver\n");
 	mach = devm_kzalloc(sdev->dev, sizeof(*mach), GFP_KERNEL);
@@ -434,12 +495,8 @@ nocodec:
 	mach->drv_name = "sof-nocodec";
 	sof_pdata->tplg_filename = desc->nocodec_tplg_filename;
 
-	ret = sof_nocodec_setup(sdev->dev, desc->ops);
-	if (ret < 0)
-		return ret;
-
 	sof_pdata->machine = mach;
-	snd_sof_set_mach_params(sof_pdata->machine, sdev->dev);
+	snd_sof_set_mach_params(sof_pdata->machine, sdev);
 
 	return 0;
 }
@@ -447,13 +504,13 @@ EXPORT_SYMBOL(sof_machine_check);
 
 int sof_machine_register(struct snd_sof_dev *sdev, void *pdata)
 {
-	struct snd_sof_pdata *plat_data = (struct snd_sof_pdata *)pdata;
+	struct snd_sof_pdata *plat_data = pdata;
 	const char *drv_name;
 	const void *mach;
 	int size;
 
 	drv_name = plat_data->machine->drv_name;
-	mach = (const void *)plat_data->machine;
+	mach = plat_data->machine;
 	size = sizeof(*plat_data->machine);
 
 	/* register machine driver, pass machine info as pdata */
@@ -472,7 +529,7 @@ EXPORT_SYMBOL(sof_machine_register);
 
 void sof_machine_unregister(struct snd_sof_dev *sdev, void *pdata)
 {
-	struct snd_sof_pdata *plat_data = (struct snd_sof_pdata *)pdata;
+	struct snd_sof_pdata *plat_data = pdata;
 
 	if (!IS_ERR_OR_NULL(plat_data->pdev_mach))
 		platform_device_unregister(plat_data->pdev_mach);

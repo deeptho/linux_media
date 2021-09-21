@@ -20,7 +20,7 @@
 #include <crypto/internal/des.h>
 #include <crypto/aes.h>
 #include <crypto/hmac.h>
-#include <crypto/sha.h>
+#include <crypto/sha1.h>
 #include <crypto/algapi.h>
 #include <crypto/internal/aead.h>
 #include <crypto/internal/skcipher.h>
@@ -265,7 +265,7 @@ static int setup_crypt_desc(void)
 	return 0;
 }
 
-static spinlock_t desc_lock;
+static DEFINE_SPINLOCK(desc_lock);
 static struct crypt_ctl *get_crypt_desc(void)
 {
 	int i;
@@ -293,7 +293,7 @@ static struct crypt_ctl *get_crypt_desc(void)
 	}
 }
 
-static spinlock_t emerg_lock;
+static DEFINE_SPINLOCK(emerg_lock);
 static struct crypt_ctl *get_crypt_desc_emerg(void)
 {
 	int i;
@@ -528,7 +528,7 @@ static void release_ixp_crypto(struct device *dev)
 
 	if (crypt_virt) {
 		dma_free_coherent(dev,
-			NPE_QLEN_TOTAL * sizeof( struct crypt_ctl),
+			NPE_QLEN * sizeof(struct crypt_ctl),
 			crypt_virt, crypt_phys);
 	}
 }
@@ -1378,9 +1378,6 @@ static int __init ixp_module_init(void)
 	pdev = platform_device_register_full(&ixp_dev_info);
 	if (IS_ERR(pdev))
 		return PTR_ERR(pdev);
-
-	spin_lock_init(&desc_lock);
-	spin_lock_init(&emerg_lock);
 
 	err = init_ixp_crypto(&pdev->dev);
 	if (err) {

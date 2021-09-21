@@ -137,37 +137,14 @@ MODULE_PARM_DESC(maxframe, "Maximum frame size used by device (4096 to 65535)");
  */
 static struct tty_driver *serial_driver;
 
-static int  open(struct tty_struct *tty, struct file * filp);
-static void close(struct tty_struct *tty, struct file * filp);
-static void hangup(struct tty_struct *tty);
-static void set_termios(struct tty_struct *tty, struct ktermios *old_termios);
-
-static int  write(struct tty_struct *tty, const unsigned char *buf, int count);
-static int put_char(struct tty_struct *tty, unsigned char ch);
-static void send_xchar(struct tty_struct *tty, char ch);
 static void wait_until_sent(struct tty_struct *tty, int timeout);
-static int  write_room(struct tty_struct *tty);
-static void flush_chars(struct tty_struct *tty);
 static void flush_buffer(struct tty_struct *tty);
-static void tx_hold(struct tty_struct *tty);
 static void tx_release(struct tty_struct *tty);
 
-static int  ioctl(struct tty_struct *tty, unsigned int cmd, unsigned long arg);
-static int  chars_in_buffer(struct tty_struct *tty);
-static void throttle(struct tty_struct * tty);
-static void unthrottle(struct tty_struct * tty);
-static int set_break(struct tty_struct *tty, int break_state);
-
 /*
- * generic HDLC support and callbacks
+ * generic HDLC support
  */
-#if SYNCLINK_GENERIC_HDLC
 #define dev_to_port(D) (dev_to_hdlc(D)->priv)
-static void hdlcdev_tx_done(struct slgt_info *info);
-static void hdlcdev_rx(struct slgt_info *info, char *buf, int size);
-static int  hdlcdev_init(struct slgt_info *info);
-static void hdlcdev_exit(struct slgt_info *info);
-#endif
 
 
 /*
@@ -186,9 +163,6 @@ struct cond_wait {
 	wait_queue_entry_t wait;
 	unsigned int data;
 };
-static void init_cond_wait(struct cond_wait *w, unsigned int data);
-static void add_cond_wait(struct cond_wait **head, struct cond_wait *w);
-static void remove_cond_wait(struct cond_wait **head, struct cond_wait *w);
 static void flush_cond_wait(struct cond_wait **head);
 
 /*
@@ -443,12 +417,8 @@ static void shutdown(struct slgt_info *info);
 static void program_hw(struct slgt_info *info);
 static void change_params(struct slgt_info *info);
 
-static int  register_test(struct slgt_info *info);
-static int  irq_test(struct slgt_info *info);
-static int  loopback_test(struct slgt_info *info);
 static int  adapter_test(struct slgt_info *info);
 
-static void reset_adapter(struct slgt_info *info);
 static void reset_port(struct slgt_info *info);
 static void async_mode(struct slgt_info *info);
 static void sync_mode(struct slgt_info *info);
@@ -457,14 +427,12 @@ static void rx_stop(struct slgt_info *info);
 static void rx_start(struct slgt_info *info);
 static void reset_rbufs(struct slgt_info *info);
 static void free_rbufs(struct slgt_info *info, unsigned int first, unsigned int last);
-static void rdma_reset(struct slgt_info *info);
 static bool rx_get_frame(struct slgt_info *info);
 static bool rx_get_buf(struct slgt_info *info);
 
 static void tx_start(struct slgt_info *info);
 static void tx_stop(struct slgt_info *info);
 static void tx_set_idle(struct slgt_info *info);
-static unsigned int free_tbuf_count(struct slgt_info *info);
 static unsigned int tbuf_bytes(struct slgt_info *info);
 static void reset_tbufs(struct slgt_info *info);
 static void tdma_reset(struct slgt_info *info);
@@ -472,26 +440,10 @@ static bool tx_load(struct slgt_info *info, const char *buf, unsigned int count)
 
 static void get_signals(struct slgt_info *info);
 static void set_signals(struct slgt_info *info);
-static void enable_loopback(struct slgt_info *info);
 static void set_rate(struct slgt_info *info, u32 data_rate);
 
-static int  bh_action(struct slgt_info *info);
-static void bh_handler(struct work_struct *work);
 static void bh_transmit(struct slgt_info *info);
-static void isr_serial(struct slgt_info *info);
-static void isr_rdma(struct slgt_info *info);
 static void isr_txeom(struct slgt_info *info, unsigned short status);
-static void isr_tdma(struct slgt_info *info);
-
-static int  alloc_dma_bufs(struct slgt_info *info);
-static void free_dma_bufs(struct slgt_info *info);
-static int  alloc_desc(struct slgt_info *info);
-static void free_desc(struct slgt_info *info);
-static int  alloc_bufs(struct slgt_info *info, struct slgt_desc *bufs, int count);
-static void free_bufs(struct slgt_info *info, struct slgt_desc *bufs, int count);
-
-static int  alloc_tmp_rbuf(struct slgt_info *info);
-static void free_tmp_rbuf(struct slgt_info *info);
 
 static void tx_timeout(struct timer_list *t);
 static void rx_timeout(struct timer_list *t);
@@ -509,10 +461,6 @@ static int  tx_abort(struct slgt_info *info);
 static int  rx_enable(struct slgt_info *info, int enable);
 static int  modem_input_wait(struct slgt_info *info,int arg);
 static int  wait_mgsl_event(struct slgt_info *info, int __user *mask_ptr);
-static int  tiocmget(struct tty_struct *tty);
-static int  tiocmset(struct tty_struct *tty,
-				unsigned int set, unsigned int clear);
-static int set_break(struct tty_struct *tty, int break_state);
 static int  get_interface(struct slgt_info *info, int __user *if_mode);
 static int  set_interface(struct slgt_info *info, int if_mode);
 static int  set_gpio(struct slgt_info *info, struct gpio_desc __user *gpio);
@@ -526,9 +474,6 @@ static int  set_xctrl(struct slgt_info *info, int if_mode);
 /*
  * driver functions
  */
-static void add_device(struct slgt_info *info);
-static void device_init(int adapter_num, struct pci_dev *pdev);
-static int  claim_resources(struct slgt_info *info);
 static void release_resources(struct slgt_info *info);
 
 /*
@@ -620,7 +565,7 @@ static inline int sanity_check(struct slgt_info *info, char *devname, const char
 	return 0;
 }
 
-/**
+/*
  * line discipline callback wrappers
  *
  * The wrappers maintain line discipline references
@@ -672,7 +617,6 @@ static int open(struct tty_struct *tty, struct file *filp)
 	DBGINFO(("%s open, old ref count = %d\n", info->device_name, info->port.count));
 
 	mutex_lock(&info->port.mutex);
-	info->port.low_latency = (info->port.flags & ASYNC_LOW_LATENCY) ? 1 : 0;
 
 	spin_lock_irqsave(&info->netlock, flags);
 	if (info->netcount) {
@@ -1395,14 +1339,14 @@ static int set_break(struct tty_struct *tty, int break_state)
 #if SYNCLINK_GENERIC_HDLC
 
 /**
- * called by generic HDLC layer when protocol selected (PPP, frame relay, etc.)
- * set encoding and frame check sequence (FCS) options
+ * hdlcdev_attach - called by generic HDLC layer when protocol selected (PPP, frame relay, etc.)
+ * @dev:      pointer to network device structure
+ * @encoding: serial encoding setting
+ * @parity:   FCS setting
  *
- * dev       pointer to network device structure
- * encoding  serial encoding setting
- * parity    FCS setting
+ * Set encoding and frame check sequence (FCS) options.
  *
- * returns 0 if success, otherwise error code
+ * Return: 0 if success, otherwise error code
  */
 static int hdlcdev_attach(struct net_device *dev, unsigned short encoding,
 			  unsigned short parity)
@@ -1446,10 +1390,9 @@ static int hdlcdev_attach(struct net_device *dev, unsigned short encoding,
 }
 
 /**
- * called by generic HDLC layer to send frame
- *
- * skb  socket buffer containing HDLC frame
- * dev  pointer to network device structure
+ * hdlcdev_xmit - called by generic HDLC layer to send a frame
+ * @skb: socket buffer containing HDLC frame
+ * @dev: pointer to network device structure
  */
 static netdev_tx_t hdlcdev_xmit(struct sk_buff *skb,
 				      struct net_device *dev)
@@ -1483,12 +1426,12 @@ static netdev_tx_t hdlcdev_xmit(struct sk_buff *skb,
 }
 
 /**
- * called by network layer when interface enabled
- * claim resources and initialize hardware
+ * hdlcdev_open - called by network layer when interface enabled
+ * @dev: pointer to network device structure
  *
- * dev  pointer to network device structure
+ * Claim resources and initialize hardware.
  *
- * returns 0 if success, otherwise error code
+ * Return: 0 if success, otherwise error code
  */
 static int hdlcdev_open(struct net_device *dev)
 {
@@ -1544,12 +1487,12 @@ static int hdlcdev_open(struct net_device *dev)
 }
 
 /**
- * called by network layer when interface is disabled
- * shutdown hardware and release resources
+ * hdlcdev_close - called by network layer when interface is disabled
+ * @dev:  pointer to network device structure
  *
- * dev  pointer to network device structure
+ * Shutdown hardware and release resources.
  *
- * returns 0 if success, otherwise error code
+ * Return: 0 if success, otherwise error code
  */
 static int hdlcdev_close(struct net_device *dev)
 {
@@ -1574,13 +1517,12 @@ static int hdlcdev_close(struct net_device *dev)
 }
 
 /**
- * called by network layer to process IOCTL call to network device
+ * hdlcdev_ioctl - called by network layer to process IOCTL call to network device
+ * @dev: pointer to network device structure
+ * @ifr: pointer to network interface request structure
+ * @cmd: IOCTL command code
  *
- * dev  pointer to network device structure
- * ifr  pointer to network interface request structure
- * cmd  IOCTL command code
- *
- * returns 0 if success, otherwise error code
+ * Return: 0 if success, otherwise error code
  */
 static int hdlcdev_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 {
@@ -1678,9 +1620,9 @@ static int hdlcdev_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 }
 
 /**
- * called by network layer when transmit timeout is detected
- *
- * dev  pointer to network device structure
+ * hdlcdev_tx_timeout - called by network layer when transmit timeout is detected
+ * @dev: pointer to network device structure
+ * @txqueue: unused
  */
 static void hdlcdev_tx_timeout(struct net_device *dev, unsigned int txqueue)
 {
@@ -1700,10 +1642,10 @@ static void hdlcdev_tx_timeout(struct net_device *dev, unsigned int txqueue)
 }
 
 /**
- * called by device driver when transmit completes
- * reenable network layer transmit if stopped
+ * hdlcdev_tx_done - called by device driver when transmit completes
+ * @info: pointer to device instance information
  *
- * info  pointer to device instance information
+ * Reenable network layer transmit if stopped.
  */
 static void hdlcdev_tx_done(struct slgt_info *info)
 {
@@ -1712,12 +1654,12 @@ static void hdlcdev_tx_done(struct slgt_info *info)
 }
 
 /**
- * called by device driver when frame received
- * pass frame to network layer
+ * hdlcdev_rx - called by device driver when frame received
+ * @info: pointer to device instance information
+ * @buf:  pointer to buffer contianing frame data
+ * @size: count of data bytes in buf
  *
- * info  pointer to device instance information
- * buf   pointer to buffer contianing frame data
- * size  count of data bytes in buf
+ * Pass frame to network layer.
  */
 static void hdlcdev_rx(struct slgt_info *info, char *buf, int size)
 {
@@ -1751,12 +1693,12 @@ static const struct net_device_ops hdlcdev_ops = {
 };
 
 /**
- * called by device driver when adding device instance
- * do generic HDLC initialization
+ * hdlcdev_init - called by device driver when adding device instance
+ * @info: pointer to device instance information
  *
- * info  pointer to device instance information
+ * Do generic HDLC initialization.
  *
- * returns 0 if success, otherwise error code
+ * Return: 0 if success, otherwise error code
  */
 static int hdlcdev_init(struct slgt_info *info)
 {
@@ -1800,10 +1742,10 @@ static int hdlcdev_init(struct slgt_info *info)
 }
 
 /**
- * called by device driver when removing device instance
- * do generic HDLC cleanup
+ * hdlcdev_exit - called by device driver when removing device instance
+ * @info: pointer to device instance information
  *
- * info  pointer to device instance information
+ * Do generic HDLC cleanup.
  */
 static void hdlcdev_exit(struct slgt_info *info)
 {
@@ -3341,8 +3283,8 @@ static int alloc_desc(struct slgt_info *info)
 	unsigned int pbufs;
 
 	/* allocate memory to hold descriptor lists */
-	info->bufs = pci_zalloc_consistent(info->pdev, DESC_LIST_SIZE,
-					   &info->bufs_dma_addr);
+	info->bufs = dma_alloc_coherent(&info->pdev->dev, DESC_LIST_SIZE,
+					&info->bufs_dma_addr, GFP_KERNEL);
 	if (info->bufs == NULL)
 		return -ENOMEM;
 
@@ -3384,7 +3326,8 @@ static int alloc_desc(struct slgt_info *info)
 static void free_desc(struct slgt_info *info)
 {
 	if (info->bufs != NULL) {
-		pci_free_consistent(info->pdev, DESC_LIST_SIZE, info->bufs, info->bufs_dma_addr);
+		dma_free_coherent(&info->pdev->dev, DESC_LIST_SIZE,
+				  info->bufs, info->bufs_dma_addr);
 		info->bufs  = NULL;
 		info->rbufs = NULL;
 		info->tbufs = NULL;
@@ -3395,7 +3338,9 @@ static int alloc_bufs(struct slgt_info *info, struct slgt_desc *bufs, int count)
 {
 	int i;
 	for (i=0; i < count; i++) {
-		if ((bufs[i].buf = pci_alloc_consistent(info->pdev, DMABUFSIZE, &bufs[i].buf_dma_addr)) == NULL)
+		bufs[i].buf = dma_alloc_coherent(&info->pdev->dev, DMABUFSIZE,
+						 &bufs[i].buf_dma_addr, GFP_KERNEL);
+		if (!bufs[i].buf)
 			return -ENOMEM;
 		bufs[i].pbuf  = cpu_to_le32((unsigned int)bufs[i].buf_dma_addr);
 	}
@@ -3408,7 +3353,8 @@ static void free_bufs(struct slgt_info *info, struct slgt_desc *bufs, int count)
 	for (i=0; i < count; i++) {
 		if (bufs[i].buf == NULL)
 			continue;
-		pci_free_consistent(info->pdev, DMABUFSIZE, bufs[i].buf, bufs[i].buf_dma_addr);
+		dma_free_coherent(&info->pdev->dev, DMABUFSIZE, bufs[i].buf,
+				  bufs[i].buf_dma_addr);
 		bufs[i].buf = NULL;
 	}
 }
@@ -3565,8 +3511,6 @@ static struct slgt_info *alloc_dev(int adapter_num, int port_num, struct pci_dev
 		info->max_frame_size = 4096;
 		info->base_clock = 14745600;
 		info->rbuf_fill_level = DMABUFSIZE;
-		info->port.close_delay = 5*HZ/10;
-		info->port.closing_wait = 30*HZ;
 		init_waitqueue_head(&info->status_event_wait_q);
 		init_waitqueue_head(&info->event_wait_q);
 		spin_lock_init(&info->netlock);
@@ -3704,7 +3648,6 @@ static const struct tty_operations ops = {
 
 static void slgt_cleanup(void)
 {
-	int rc;
 	struct slgt_info *info;
 	struct slgt_info *tmp;
 
@@ -3713,9 +3656,7 @@ static void slgt_cleanup(void)
 	if (serial_driver) {
 		for (info=slgt_device_list ; info != NULL ; info=info->next_device)
 			tty_unregister_device(serial_driver, info->line);
-		rc = tty_unregister_driver(serial_driver);
-		if (rc)
-			DBGERR(("tty_unregister_driver error=%d\n", rc));
+		tty_unregister_driver(serial_driver);
 		put_tty_driver(serial_driver);
 	}
 
@@ -5017,7 +4958,7 @@ static int loopback_test(struct slgt_info *info)
 #define TESTFRAMESIZE 20
 
 	unsigned long timeout;
-	u16 count = TESTFRAMESIZE;
+	u16 count;
 	unsigned char buf[TESTFRAMESIZE];
 	int rc = -ENODEV;
 	unsigned long flags;

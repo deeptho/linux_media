@@ -108,8 +108,12 @@ static inline void cpu_maps_update_done(void)
 {
 }
 
+static inline int add_cpu(unsigned int cpu) { return 0;}
+
 #endif /* CONFIG_SMP */
 extern struct bus_type cpu_subsys;
+
+extern int lockdep_is_cpus_held(void);
 
 #ifdef CONFIG_HOTPLUG_CPU
 extern void cpus_write_lock(void);
@@ -135,6 +139,7 @@ static inline int  cpus_read_trylock(void) { return true; }
 static inline void lockdep_assert_cpus_held(void) { }
 static inline void cpu_hotplug_disable(void) { }
 static inline void cpu_hotplug_enable(void) { }
+static inline int remove_cpu(unsigned int cpu) { return -EPERM; }
 static inline void smp_shutdown_nonboot_cpus(unsigned int primary_cpu) { }
 #endif	/* !CONFIG_HOTPLUG_CPU */
 
@@ -173,7 +178,7 @@ void cpu_startup_entry(enum cpuhp_state state);
 void cpu_idle_poll_ctrl(bool enable);
 
 /* Attach to any functions which should be considered cpuidle. */
-#define __cpuidle	__attribute__((__section__(".cpuidle.text")))
+#define __cpuidle	__section(".cpuidle.text")
 
 bool cpu_in_idle(unsigned long pc);
 

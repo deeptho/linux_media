@@ -627,7 +627,7 @@ err:
 	return ret;
 }
 
-static int debug_remove(struct amba_device *adev)
+static void debug_remove(struct amba_device *adev)
 {
 	struct device *dev = &adev->dev;
 	struct debug_drvdata *drvdata = amba_get_drvdata(adev);
@@ -642,8 +642,6 @@ static int debug_remove(struct amba_device *adev)
 
 	if (!--debug_count)
 		debug_func_exit();
-
-	return 0;
 }
 
 static const struct amba_cs_uci_id uci_id_debug[] = {
@@ -664,6 +662,8 @@ static const struct amba_id debug_ids[] = {
 	CS_AMBA_UCI_ID(0x000f0211, uci_id_debug),	/* Qualcomm Kryo */
 	{},
 };
+
+MODULE_DEVICE_TABLE(amba, debug_ids);
 
 static struct amba_driver debug_driver = {
 	.drv = {

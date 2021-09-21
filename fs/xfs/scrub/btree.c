@@ -9,6 +9,7 @@
 #include "xfs_format.h"
 #include "xfs_trans_resv.h"
 #include "xfs_mount.h"
+#include "xfs_inode.h"
 #include "xfs_btree.h"
 #include "scrub/scrub.h"
 #include "scrub/common.h"
@@ -442,6 +443,30 @@ xchk_btree_check_owner(
 	return xchk_btree_check_block_owner(bs, level, XFS_BUF_ADDR(bp));
 }
 
+/* Decide if we want to check minrecs of a btree block in the inode root. */
+static inline bool
+xchk_btree_check_iroot_minrecs(
+	struct xchk_btree	*bs)
+{
+	/*
+	 * xfs_bmap_add_attrfork_btree had an implementation bug wherein it
+	 * would miscalculate the space required for the data fork bmbt root
+	 * when adding an attr fork, and promote the iroot contents to an
+	 * external block unnecessarily.  This went unnoticed for many years
+	 * until scrub found filesystems in this state.  Inode rooted btrees are
+	 * not supposed to have immediate child blocks that are small enough
+	 * that the contents could fit in the inode root, but we can't fail
+	 * existing filesystems, so instead we disable the check for data fork
+	 * bmap btrees when there's an attr fork.
+	 */
+	if (bs->cur->bc_btnum == XFS_BTNUM_BMAP &&
+	    bs->cur->bc_ino.whichfork == XFS_DATA_FORK &&
+	    XFS_IFORK_Q(bs->sc->ip))
+		return false;
+
+	return true;
+}
+
 /*
  * Check that this btree block has at least minrecs records or is one of the
  * special blocks that don't require that.
@@ -452,32 +477,42 @@ xchk_btree_check_minrecs(
 	int			level,
 	struct xfs_btree_block	*block)
 {
-	unsigned int		numrecs;
-	int			ok_level;
-
-	numrecs = be16_to_cpu(block->bb_numrecs);
+	struct xfs_btree_cur	*cur = bs->cur;
+	unsigned int		root_level = cur->bc_nlevels - 1;
+	unsigned int		numrecs = be16_to_cpu(block->bb_numrecs);
 
 	/* More records than minrecs means the block is ok. */
-	if (numrecs >= bs->cur->bc_ops->get_minrecs(bs->cur, level))
+	if (numrecs >= cur->bc_ops->get_minrecs(cur, level))
 		return;
 
 	/*
-	 * Certain btree blocks /can/ have fewer than minrecs records.  Any
-	 * level greater than or equal to the level of the highest dedicated
-	 * btree block are allowed to violate this constraint.
-	 *
-	 * For a btree rooted in a block, the btree root can have fewer than
-	 * minrecs records.  If the btree is rooted in an inode and does not
-	 * store records in the root, the direct children of the root and the
-	 * root itself can have fewer than minrecs records.
+	 * For btrees rooted in the inode, it's possible that the root block
+	 * contents spilled into a regular ondisk block because there wasn't
+	 * enough space in the inode root.  The number of records in that
+	 * child block might be less than the standard minrecs, but that's ok
+	 * provided that there's only one direct child of the root.
 	 */
-	ok_level = bs->cur->bc_nlevels - 1;
-	if (bs->cur->bc_flags & XFS_BTREE_ROOT_IN_INODE)
-		ok_level--;
-	if (level >= ok_level)
-		return;
+	if ((cur->bc_flags & XFS_BTREE_ROOT_IN_INODE) &&
+	    level == cur->bc_nlevels - 2) {
+		struct xfs_btree_block	*root_block;
+		struct xfs_buf		*root_bp;
+		int			root_maxrecs;
 
-	xchk_btree_set_corrupt(bs->sc, bs->cur, level);
+		root_block = xfs_btree_get_block(cur, root_level, &root_bp);
+		root_maxrecs = cur->bc_ops->get_dmaxrecs(cur, root_level);
+		if (xchk_btree_check_iroot_minrecs(bs) &&
+		    (be16_to_cpu(root_block->bb_numrecs) != 1 ||
+		     numrecs <= root_maxrecs))
+			xchk_btree_set_corrupt(bs->sc, cur, level);
+		return;
+	}
+
+	/*
+	 * Otherwise, only the root level is allowed to have fewer than minrecs
+	 * records or keyptrs.
+	 */
+	if (level < root_level)
+		xchk_btree_set_corrupt(bs->sc, cur, level);
 }
 
 /*

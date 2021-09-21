@@ -210,7 +210,7 @@ static int sprd_adi_read(struct sprd_adi *sadi, u32 reg_paddr, u32 *read_val)
 	 * address. Then we can check the returned register address to validate
 	 * data.
 	 */
-	rd_addr = (val & RD_ADDR_MASK ) >> RD_ADDR_SHIFT;
+	rd_addr = (val & RD_ADDR_MASK) >> RD_ADDR_SHIFT;
 
 	if (rd_addr != (reg_paddr & REG_ADDR_LOW_MASK)) {
 		dev_err(sadi->dev, "read error, reg addr = 0x%x, val = 0x%x\n",
@@ -504,10 +504,7 @@ static int sprd_adi_probe(struct platform_device *pdev)
 			dev_info(&pdev->dev, "no hardware spinlock supplied\n");
 			break;
 		default:
-			dev_err(&pdev->dev,
-				"failed to find hwlock id, %d\n", ret);
-			fallthrough;
-		case -EPROBE_DEFER:
+			dev_err_probe(&pdev->dev, ret, "failed to find hwlock id\n");
 			goto put_ctlr;
 		}
 	}

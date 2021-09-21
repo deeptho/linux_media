@@ -10,6 +10,7 @@
 #include <asm/daifflags.h>
 #include <asm/debug-monitors.h>
 #include <asm/exec.h>
+#include <asm/mte.h>
 #include <asm/memory.h>
 #include <asm/mmu_context.h>
 #include <asm/smp_plat.h>
@@ -57,7 +58,6 @@ void notrace __cpu_suspend_exit(void)
 	 * features that might not have been set correctly.
 	 */
 	__uaccess_enable_hw_pan();
-	uao_thread_switch(current);
 
 	/*
 	 * Restore HW breakpoint registers to sane values
@@ -72,8 +72,11 @@ void notrace __cpu_suspend_exit(void)
 	 * have turned the mitigation on. If the user has forcefully
 	 * disabled it, make sure their wishes are obeyed.
 	 */
-	if (arm64_get_ssbd_state() == ARM64_SSBD_FORCE_DISABLE)
-		arm64_set_ssbd_mitigation(false);
+	spectre_v4_enable_mitigation(NULL);
+
+	/* Restore additional feature-specific configuration */
+	mte_suspend_exit();
+	ptrauth_suspend_exit();
 }
 
 /*
@@ -88,6 +91,9 @@ int cpu_suspend(unsigned long arg, int (*fn)(unsigned long))
 	int ret = 0;
 	unsigned long flags;
 	struct sleep_stack_data state;
+
+	/* Report any MTE async fault before going to suspend */
+	mte_suspend_enter();
 
 	/*
 	 * From this point debug exceptions are disabled to prevent
@@ -117,7 +123,7 @@ int cpu_suspend(unsigned long arg, int (*fn)(unsigned long))
 		if (!ret)
 			ret = -EOPNOTSUPP;
 	} else {
-		__cpu_suspend_exit();
+		RCU_NONIDLE(__cpu_suspend_exit());
 	}
 
 	unpause_graph_tracing();

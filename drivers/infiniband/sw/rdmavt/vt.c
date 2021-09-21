@@ -95,9 +95,7 @@ struct rvt_dev_info *rvt_alloc_device(size_t size, int nports)
 	if (!rdi)
 		return rdi;
 
-	rdi->ports = kcalloc(nports,
-			     sizeof(struct rvt_ibport **),
-			     GFP_KERNEL);
+	rdi->ports = kcalloc(nports, sizeof(*rdi->ports), GFP_KERNEL);
 	if (!rdi->ports)
 		ib_dealloc_device(&rdi->ibdev);
 
@@ -153,15 +151,12 @@ static int rvt_modify_device(struct ib_device *device,
  *
  * Return: 0 on success
  */
-static int rvt_query_port(struct ib_device *ibdev, u8 port_num,
+static int rvt_query_port(struct ib_device *ibdev, u32 port_num,
 			  struct ib_port_attr *props)
 {
 	struct rvt_dev_info *rdi = ib_to_rvt(ibdev);
 	struct rvt_ibport *rvp;
-	int port_index = ibport_num_to_idx(ibdev, port_num);
-
-	if (port_index < 0)
-		return -EINVAL;
+	u32 port_index = ibport_num_to_idx(ibdev, port_num);
 
 	rvp = rdi->ports[port_index];
 	/* props being zeroed by the caller, avoid zeroing it here */
@@ -188,16 +183,13 @@ static int rvt_query_port(struct ib_device *ibdev, u8 port_num,
  *
  * Return: 0 on success
  */
-static int rvt_modify_port(struct ib_device *ibdev, u8 port_num,
+static int rvt_modify_port(struct ib_device *ibdev, u32 port_num,
 			   int port_modify_mask, struct ib_port_modify *props)
 {
 	struct rvt_dev_info *rdi = ib_to_rvt(ibdev);
 	struct rvt_ibport *rvp;
 	int ret = 0;
-	int port_index = ibport_num_to_idx(ibdev, port_num);
-
-	if (port_index < 0)
-		return -EINVAL;
+	u32 port_index = ibport_num_to_idx(ibdev, port_num);
 
 	rvp = rdi->ports[port_index];
 	if (port_modify_mask & IB_PORT_OPA_MASK_CHG) {
@@ -227,7 +219,7 @@ static int rvt_modify_port(struct ib_device *ibdev, u8 port_num,
  *
  * Return: 0 on failure pkey otherwise
  */
-static int rvt_query_pkey(struct ib_device *ibdev, u8 port_num, u16 index,
+static int rvt_query_pkey(struct ib_device *ibdev, u32 port_num, u16 index,
 			  u16 *pkey)
 {
 	/*
@@ -237,11 +229,9 @@ static int rvt_query_pkey(struct ib_device *ibdev, u8 port_num, u16 index,
 	 * no way to protect against that anyway.
 	 */
 	struct rvt_dev_info *rdi = ib_to_rvt(ibdev);
-	int port_index;
+	u32 port_index;
 
 	port_index = ibport_num_to_idx(ibdev, port_num);
-	if (port_index < 0)
-		return -EINVAL;
 
 	if (index >= rvt_get_npkeys(rdi))
 		return -EINVAL;
@@ -259,12 +249,12 @@ static int rvt_query_pkey(struct ib_device *ibdev, u8 port_num, u16 index,
  *
  * Return: 0 on success
  */
-static int rvt_query_gid(struct ib_device *ibdev, u8 port_num,
+static int rvt_query_gid(struct ib_device *ibdev, u32 port_num,
 			 int guid_index, union ib_gid *gid)
 {
 	struct rvt_dev_info *rdi;
 	struct rvt_ibport *rvp;
-	int port_index;
+	u32 port_index;
 
 	/*
 	 * Driver is responsible for updating the guid table. Which will be used
@@ -272,8 +262,6 @@ static int rvt_query_gid(struct ib_device *ibdev, u8 port_num,
 	 * is being done.
 	 */
 	port_index = ibport_num_to_idx(ibdev, port_num);
-	if (port_index < 0)
-		return -EINVAL;
 
 	rdi = ib_to_rvt(ibdev);
 	rvp = rdi->ports[port_index];
@@ -296,23 +284,19 @@ static int rvt_alloc_ucontext(struct ib_ucontext *uctx, struct ib_udata *udata)
 
 /**
  * rvt_dealloc_ucontext - Free a user context
- * @context - Free this
+ * @context: Unused
  */
 static void rvt_dealloc_ucontext(struct ib_ucontext *context)
 {
 	return;
 }
 
-static int rvt_get_port_immutable(struct ib_device *ibdev, u8 port_num,
+static int rvt_get_port_immutable(struct ib_device *ibdev, u32 port_num,
 				  struct ib_port_immutable *immutable)
 {
 	struct rvt_dev_info *rdi = ib_to_rvt(ibdev);
 	struct ib_port_attr attr;
-	int err, port_index;
-
-	port_index = ibport_num_to_idx(ibdev, port_num);
-	if (port_index < 0)
-		return -EINVAL;
+	int err;
 
 	immutable->core_cap_flags = rdi->dparms.core_cap_flags;
 
@@ -386,6 +370,7 @@ static const struct ib_device_ops rvt_dev_ops = {
 	.create_cq = rvt_create_cq,
 	.create_qp = rvt_create_qp,
 	.create_srq = rvt_create_srq,
+	.create_user_ah = rvt_create_ah,
 	.dealloc_pd = rvt_dealloc_pd,
 	.dealloc_ucontext = rvt_dealloc_ucontext,
 	.dereg_mr = rvt_dereg_mr,
@@ -580,9 +565,6 @@ int rvt_register_device(struct rvt_dev_info *rdi)
 	/* Completion queues */
 	spin_lock_init(&rdi->n_cqs_lock);
 
-	/* DMA Operations */
-	rdi->ibdev.dev.dma_ops = rdi->ibdev.dev.dma_ops ? : &dma_virt_ops;
-
 	/* Protection Domain */
 	spin_lock_init(&rdi->n_pds_lock);
 	rdi->n_pds_allocated = 0;
@@ -593,43 +575,18 @@ int rvt_register_device(struct rvt_dev_info *rdi)
 	 * exactly which functions rdmavt supports, nor do they know the ABI
 	 * version, so we do all of this sort of stuff here.
 	 */
-	rdi->ibdev.uverbs_cmd_mask =
-		(1ull << IB_USER_VERBS_CMD_GET_CONTEXT)         |
-		(1ull << IB_USER_VERBS_CMD_QUERY_DEVICE)        |
-		(1ull << IB_USER_VERBS_CMD_QUERY_PORT)          |
-		(1ull << IB_USER_VERBS_CMD_ALLOC_PD)            |
-		(1ull << IB_USER_VERBS_CMD_DEALLOC_PD)          |
-		(1ull << IB_USER_VERBS_CMD_CREATE_AH)           |
-		(1ull << IB_USER_VERBS_CMD_MODIFY_AH)           |
-		(1ull << IB_USER_VERBS_CMD_QUERY_AH)            |
-		(1ull << IB_USER_VERBS_CMD_DESTROY_AH)          |
-		(1ull << IB_USER_VERBS_CMD_REG_MR)              |
-		(1ull << IB_USER_VERBS_CMD_DEREG_MR)            |
-		(1ull << IB_USER_VERBS_CMD_CREATE_COMP_CHANNEL) |
-		(1ull << IB_USER_VERBS_CMD_CREATE_CQ)           |
-		(1ull << IB_USER_VERBS_CMD_RESIZE_CQ)           |
-		(1ull << IB_USER_VERBS_CMD_DESTROY_CQ)          |
+	rdi->ibdev.uverbs_cmd_mask |=
 		(1ull << IB_USER_VERBS_CMD_POLL_CQ)             |
 		(1ull << IB_USER_VERBS_CMD_REQ_NOTIFY_CQ)       |
-		(1ull << IB_USER_VERBS_CMD_CREATE_QP)           |
-		(1ull << IB_USER_VERBS_CMD_QUERY_QP)            |
-		(1ull << IB_USER_VERBS_CMD_MODIFY_QP)           |
-		(1ull << IB_USER_VERBS_CMD_DESTROY_QP)          |
 		(1ull << IB_USER_VERBS_CMD_POST_SEND)           |
 		(1ull << IB_USER_VERBS_CMD_POST_RECV)           |
-		(1ull << IB_USER_VERBS_CMD_ATTACH_MCAST)        |
-		(1ull << IB_USER_VERBS_CMD_DETACH_MCAST)        |
-		(1ull << IB_USER_VERBS_CMD_CREATE_SRQ)          |
-		(1ull << IB_USER_VERBS_CMD_MODIFY_SRQ)          |
-		(1ull << IB_USER_VERBS_CMD_QUERY_SRQ)           |
-		(1ull << IB_USER_VERBS_CMD_DESTROY_SRQ)         |
 		(1ull << IB_USER_VERBS_CMD_POST_SRQ_RECV);
 	rdi->ibdev.node_type = RDMA_NODE_IB_CA;
 	if (!rdi->ibdev.num_comp_vectors)
 		rdi->ibdev.num_comp_vectors = 1;
 
 	/* We are now good to announce we exist */
-	ret = ib_register_device(&rdi->ibdev, dev_name(&rdi->ibdev.dev));
+	ret = ib_register_device(&rdi->ibdev, dev_name(&rdi->ibdev.dev), NULL);
 	if (ret) {
 		rvt_pr_err(rdi, "Failed to register driver with ib core.\n");
 		goto bail_wss;

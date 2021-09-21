@@ -912,7 +912,7 @@ static void atmel_tdes_skcipher_alg_init(struct skcipher_alg *alg)
 {
 	alg->base.cra_priority = ATMEL_TDES_PRIORITY;
 	alg->base.cra_flags = CRYPTO_ALG_ASYNC;
-	alg->base.cra_ctxsize = sizeof(struct atmel_tdes_ctx),
+	alg->base.cra_ctxsize = sizeof(struct atmel_tdes_ctx);
 	alg->base.cra_module = THIS_MODULE;
 
 	alg->init = atmel_tdes_init_tfm;
@@ -1217,7 +1217,6 @@ static int atmel_tdes_probe(struct platform_device *pdev)
 
 	tdes_dd->io_base = devm_ioremap_resource(&pdev->dev, tdes_res);
 	if (IS_ERR(tdes_dd->io_base)) {
-		dev_err(dev, "can't ioremap\n");
 		err = PTR_ERR(tdes_dd->io_base);
 		goto err_tasklet_kill;
 	}

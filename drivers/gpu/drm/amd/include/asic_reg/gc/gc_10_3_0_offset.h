@@ -3661,6 +3661,8 @@
 #define mmGCMC_VM_XGMI_LFB_CNTL_BASE_IDX                                                               0
 #define mmGCMC_VM_XGMI_LFB_SIZE                                                                        0x16f8
 #define mmGCMC_VM_XGMI_LFB_SIZE_BASE_IDX                                                               0
+#define mmGCMC_VM_FB_NOALLOC_CNTL                                                                      0x16f9
+#define mmGCMC_VM_FB_NOALLOC_CNTL_BASE_IDX                                                             0
 #define mmGCUTCL2_HARVEST_BYPASS_GROUPS                                                                0x16fa
 #define mmGCUTCL2_HARVEST_BYPASS_GROUPS_BASE_IDX                                                       0
 
@@ -5379,6 +5381,8 @@
 #define mmDB_RESERVED_REG_1_BASE_IDX                                                                   1
 #define mmDB_RESERVED_REG_3                                                                            0x0017
 #define mmDB_RESERVED_REG_3_BASE_IDX                                                                   1
+#define mmDB_VRS_OVERRIDE_CNTL                                                                         0x0019
+#define mmDB_VRS_OVERRIDE_CNTL_BASE_IDX                                                                1
 #define mmDB_Z_READ_BASE_HI                                                                            0x001a
 #define mmDB_Z_READ_BASE_HI_BASE_IDX                                                                   1
 #define mmDB_STENCIL_READ_BASE_HI                                                                      0x001b
@@ -6049,6 +6053,8 @@
 #define mmPA_STEREO_CNTL_BASE_IDX                                                                      1
 #define mmPA_STATE_STEREO_X                                                                            0x0211
 #define mmPA_STATE_STEREO_X_BASE_IDX                                                                   1
+#define mmPA_CL_VRS_CNTL                                                                               0x0212
+#define mmPA_CL_VRS_CNTL_BASE_IDX                                                                      1
 #define mmPA_SU_POINT_SIZE                                                                             0x0280
 #define mmPA_SU_POINT_SIZE_BASE_IDX                                                                    1
 #define mmPA_SU_POINT_MINMAX                                                                           0x0281
@@ -6949,6 +6955,12 @@
 #define mmCP_CE_IB2_BASE_HI_BASE_IDX                                                                   1
 #define mmCP_CE_IB2_BUFSZ                                                                              0x20cb
 #define mmCP_CE_IB2_BUFSZ_BASE_IDX                                                                     1
+#define mmCP_IB1_BASE_LO                                                                               0x20cc
+#define mmCP_IB1_BASE_LO_BASE_IDX                                                                      1
+#define mmCP_IB1_BASE_HI                                                                               0x20cd
+#define mmCP_IB1_BASE_HI_BASE_IDX                                                                      1
+#define mmCP_IB1_BUFSZ                                                                                 0x20ce
+#define mmCP_IB1_BUFSZ_BASE_IDX                                                                        1
 #define mmCP_IB2_BASE_LO                                                                               0x20cf
 #define mmCP_IB2_BASE_LO_BASE_IDX                                                                      1
 #define mmCP_IB2_BASE_HI                                                                               0x20d0
@@ -9180,6 +9192,8 @@
 #define mmRLC_GPM_THREAD_ENABLE_BASE_IDX                                                               1
 #define mmRLC_RLCG_DOORBELL_RANGE                                                                      0x4c47
 #define mmRLC_RLCG_DOORBELL_RANGE_BASE_IDX                                                             1
+#define mmRLC_CGTT_MGCG_OVERRIDE                                                                       0x4c48
+#define mmRLC_CGTT_MGCG_OVERRIDE_BASE_IDX                                                              1
 #define mmRLC_CGCG_CGLS_CTRL                                                                           0x4c49
 #define mmRLC_CGCG_CGLS_CTRL_BASE_IDX                                                                  1
 #define mmRLC_CGCG_RAMP_CTRL                                                                           0x4c4a

@@ -238,6 +238,7 @@ static int send_msg_to_mgmt(struct hinic_pf_to_mgmt *pf_to_mgmt,
  * @out_size: response length
  * @direction: the direction of the original message
  * @resp_msg_id: msg id to response for
+ * @timeout: time-out period of waiting for response
  *
  * Return 0 - Success, negative - Failure
  **/
@@ -439,18 +440,14 @@ static void mgmt_recv_msg_handler(struct hinic_pf_to_mgmt *pf_to_mgmt,
 				  struct hinic_recv_msg *recv_msg)
 {
 	struct hinic_mgmt_msg_handle_work *mgmt_work = NULL;
-	struct pci_dev *pdev = pf_to_mgmt->hwif->pdev;
 
 	mgmt_work = kzalloc(sizeof(*mgmt_work), GFP_KERNEL);
-	if (!mgmt_work) {
-		dev_err(&pdev->dev, "Allocate mgmt work memory failed\n");
+	if (!mgmt_work)
 		return;
-	}
 
 	if (recv_msg->msg_len) {
 		mgmt_work->msg = kzalloc(recv_msg->msg_len, GFP_KERNEL);
 		if (!mgmt_work->msg) {
-			dev_err(&pdev->dev, "Allocate mgmt msg memory failed\n");
 			kfree(mgmt_work);
 			return;
 		}

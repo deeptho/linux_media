@@ -2897,7 +2897,7 @@ static netdev_tx_t myri10ge_sw_tso(struct sk_buff *skb,
 			dev_kfree_skb_any(curr);
 			if (segs != NULL) {
 				curr = segs;
-				segs = segs->next;
+				segs = next;
 				curr->next = NULL;
 				dev_kfree_skb_any(segs);
 			}
@@ -3543,11 +3543,10 @@ static void myri10ge_free_slices(struct myri10ge_priv *mgp)
 					  ss->fw_stats, ss->fw_stats_bus);
 			ss->fw_stats = NULL;
 		}
-		napi_hash_del(&ss->napi);
-		netif_napi_del(&ss->napi);
+		__netif_napi_del(&ss->napi);
 	}
 	/* Wait till napi structs are no longer used, and then free ss. */
-	synchronize_rcu();
+	synchronize_net();
 	kfree(mgp->ss);
 	mgp->ss = NULL;
 }

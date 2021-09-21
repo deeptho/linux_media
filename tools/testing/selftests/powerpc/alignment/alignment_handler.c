@@ -10,16 +10,7 @@
  *
  * We create two sets of source and destination buffers, one in regular memory,
  * the other cache-inhibited (by default we use /dev/fb0 for this, but an
- * alterative path for cache-inhibited memory may be provided).
- *
- * One way to get cache-inhibited memory is to use the "mem" kernel parameter
- * to limit the kernel to less memory than actually exists.  Addresses above
- * the limit may still be accessed but will be treated as cache-inhibited. For
- * example, if there is actually 4GB of memory and the parameter "mem=3GB" is
- * used, memory from address 0xC0000000 onwards is treated as cache-inhibited.
- * To access this region /dev/mem is used. The kernel should be configured
- * without CONFIG_STRICT_DEVMEM. In this case use:
- *         ./alignment_handler /dev/mem 0xc0000000
+ * alterative path for cache-inhibited memory may be provided, e.g. memtrace).
  *
  * We initialise the source buffers, then use whichever set of load/store
  * instructions is under test to copy bytes from the source buffers to the
@@ -55,8 +46,6 @@
 #include <setjmp.h>
 #include <signal.h>
 
-#include <asm/cputable.h>
-
 #include "utils.h"
 #include "instructions.h"
 
@@ -64,6 +53,7 @@ int bufsize;
 int debug;
 int testing;
 volatile int gotsig;
+bool prefixes_enabled;
 char *cipath = "/dev/fb0";
 long cioffset;
 
@@ -77,7 +67,12 @@ void sighandler(int sig, siginfo_t *info, void *ctx)
 	}
 	gotsig = sig;
 #ifdef __powerpc64__
-	ucp->uc_mcontext.gp_regs[PT_NIP] += 4;
+	if (prefixes_enabled) {
+		u32 inst = *(u32 *)ucp->uc_mcontext.gp_regs[PT_NIP];
+		ucp->uc_mcontext.gp_regs[PT_NIP] += ((inst >> 26 == 1) ? 8 : 4);
+	} else {
+		ucp->uc_mcontext.gp_regs[PT_NIP] += 4;
+	}
 #else
 	ucp->uc_mcontext.uc_regs->gregs[PT_NIP] += 4;
 #endif
@@ -262,8 +257,12 @@ int do_test(char *test_name, void (*test_func)(char *, char *))
 	}
 
 	rc = 0;
-	/* offset = 0 no alignment fault, so skip */
-	for (offset = 1; offset < 16; offset++) {
+	/*
+	 * offset = 0 is aligned but tests the workaround for the P9N
+	 * DD2.1 vector CI load issue (see 5080332c2c89 "powerpc/64s:
+	 * Add workaround for P9 vector CI load issue")
+	 */
+	for (offset = 0; offset < 16; offset++) {
 		width = 16; /* vsx == 16 bytes */
 		r = 0;
 
@@ -435,7 +434,6 @@ int test_alignment_handler_integer(void)
 	LOAD_DFORM_TEST(ldu);
 	LOAD_XFORM_TEST(ldx);
 	LOAD_XFORM_TEST(ldux);
-	LOAD_DFORM_TEST(lmw);
 	STORE_DFORM_TEST(stb);
 	STORE_XFORM_TEST(stbx);
 	STORE_DFORM_TEST(stbu);
@@ -454,7 +452,11 @@ int test_alignment_handler_integer(void)
 	STORE_XFORM_TEST(stdx);
 	STORE_DFORM_TEST(stdu);
 	STORE_XFORM_TEST(stdux);
+
+#ifdef __BIG_ENDIAN__
+	LOAD_DFORM_TEST(lmw);
 	STORE_DFORM_TEST(stmw);
+#endif
 
 	return rc;
 }
@@ -647,6 +649,8 @@ int main(int argc, char *argv[])
 		perror("sigaction");
 		exit(1);
 	}
+
+	prefixes_enabled = have_hwcap2(PPC_FEATURE2_ARCH_3_1);
 
 	rc |= test_harness(test_alignment_handler_vsx_206,
 			   "test_alignment_handler_vsx_206");

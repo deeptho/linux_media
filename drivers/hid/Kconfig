@@ -351,6 +351,17 @@ config HID_EZKEY
 	help
 	Support for Ezkey BTC 8193 keyboard.
 
+config HID_FT260
+	tristate "FTDI FT260 USB HID to I2C host support"
+	depends on USB_HID && HIDRAW && I2C
+	help
+	  Provides I2C host adapter functionality over USB-HID through FT260
+	  device. The customizable USB descriptor fields are exposed as sysfs
+	  attributes.
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called hid-ft260.
+
 config HID_GEMBIRD
 	tristate "Gembird Joypad"
 	depends on HID
@@ -396,6 +407,15 @@ config HID_GOOGLE_HAMMER
 	depends on USB_HID && LEDS_CLASS && CROS_EC
 	help
 	Say Y here if you have a Google Hammer device.
+
+config HID_VIVALDI
+	tristate "Vivaldi Keyboard"
+	depends on HID
+	help
+	  Say Y here if you want to enable support for Vivaldi keyboards.
+
+	  Vivaldi keyboards use a vendor-specific (Google) HID usage to report
+	  how the keys in the top row are physically ordered.
 
 config HID_GT683R
 	tristate "MSI GT68xR LED support"
@@ -844,6 +864,24 @@ config HID_PLANTRONICS
 
 	  Say M here if you may ever plug in a Plantronics USB audio device.
 
+config HID_PLAYSTATION
+	tristate "PlayStation HID Driver"
+	depends on HID
+	select CRC32
+	select POWER_SUPPLY
+	help
+	  Provides support for Sony PS5 controllers including support for
+	  its special functionalities e.g. touchpad, lights and motion
+	  sensors.
+
+config PLAYSTATION_FF
+	bool "PlayStation force feedback support"
+	depends on HID_PLAYSTATION
+	select INPUT_FF_MEMLESS
+	help
+	  Say Y here if you would like to enable force feedback support for
+	  PlayStation game controllers.
+
 config HID_PRIMAX
 	tristate "Primax non-fully HID-compliant devices"
 	depends on HID
@@ -890,6 +928,7 @@ config HID_SONY
 	depends on NEW_LEDS
 	depends on LEDS_CLASS
 	select POWER_SUPPLY
+	select CRC32
 	help
 	Support for
 
@@ -898,6 +937,8 @@ config HID_SONY
 	  * Buzz controllers
 	  * Sony PS3 Blue-ray Disk Remote Control (Bluetooth)
 	  * Logitech Harmony adapter for Sony Playstation 3 (Bluetooth)
+	  * Guitar Hero Live PS3 and Wii U guitar dongles
+	  * Guitar Hero PS3 and PC guitar dongles
 
 config SONY_FF
 	bool "Sony PS2/3/4 accessories force feedback support" 
@@ -1012,10 +1053,11 @@ config HID_THINGM
 
 config HID_THRUSTMASTER
 	tristate "ThrustMaster devices support"
-	depends on HID
+	depends on USB_HID
 	help
-	  Say Y here if you have a THRUSTMASTER FireStore Dual Power 2 or
-	  a THRUSTMASTER Ferrari GT Rumble Wheel.
+	  Say Y here if you have a THRUSTMASTER FireStore Dual Power 2,
+	  a THRUSTMASTER Ferrari GT Rumble Wheel or Thrustmaster FFB
+	  Wheel (T150RS, T300RS, T300 Ferrari Alcantara Edition, T500RS).
 
 config THRUSTMASTER_FF
 	bool "ThrustMaster devices force feedback support"
@@ -1173,5 +1215,9 @@ source "drivers/hid/usbhid/Kconfig"
 source "drivers/hid/i2c-hid/Kconfig"
 
 source "drivers/hid/intel-ish-hid/Kconfig"
+
+source "drivers/hid/amd-sfh-hid/Kconfig"
+
+source "drivers/hid/surface-hid/Kconfig"
 
 endmenu

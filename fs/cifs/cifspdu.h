@@ -147,6 +147,12 @@
  */
 #define SMB3_SIGN_KEY_SIZE (16)
 
+/*
+ * Size of the smb3 encryption/decryption key storage.
+ * This size is big enough to store any cipher key types.
+ */
+#define SMB3_ENC_DEC_KEY_SIZE (32)
+
 #define CIFS_CLIENT_CHALLENGE_SIZE (8)
 #define CIFS_SERVER_CHALLENGE_SIZE (8)
 #define CIFS_HMAC_MD5_HASH_SIZE (16)
@@ -240,6 +246,8 @@
 #define SYNCHRONIZE           0x00100000  /* The file handle can waited on to */
 					  /* synchronize with the completion  */
 					  /* of an input/output request       */
+#define SYSTEM_SECURITY       0x01000000  /* The system access control list   */
+					  /* can be read and changed          */
 #define GENERIC_ALL           0x10000000
 #define GENERIC_EXECUTE       0x20000000
 #define GENERIC_WRITE         0x40000000
@@ -262,7 +270,7 @@
 				| WRITE_OWNER | SYNCHRONIZE)
 #define SET_FILE_WRITE_RIGHTS (FILE_WRITE_DATA | FILE_APPEND_DATA \
 				| FILE_READ_EA | FILE_WRITE_EA \
-				| FILE_DELETE_CHILD | FILE_READ_ATTRIBUTES \
+				| FILE_READ_ATTRIBUTES \
 				| FILE_WRITE_ATTRIBUTES \
 				| DELETE | READ_CONTROL | WRITE_DAC \
 				| WRITE_OWNER | SYNCHRONIZE)
@@ -1896,7 +1904,7 @@ typedef struct smb_com_transaction2_fnext_req {
 	__le16 InformationLevel;
 	__u32 ResumeKey;
 	__le16 SearchFlags;
-	char ResumeFileName[1];
+	char ResumeFileName[];
 } __attribute__((packed)) TRANSACTION2_FNEXT_REQ;
 
 typedef struct smb_com_transaction2_fnext_rsp {

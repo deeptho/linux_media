@@ -34,8 +34,6 @@ algorithms work.
    quota
    seq_file
    sharedsubtree
-   sysfs-pci
-   sysfs-tagging
 
    automount-support
 
@@ -55,6 +53,7 @@ filesystem implementations.
    journalling
    fscrypt
    fsverity
+   netfs_library
 
 Filesystems
 ===========
@@ -85,6 +84,7 @@ Documentation for filesystem implementations.
    erofs
    ext2
    ext3
+   ext4/index
    f2fs
    gfs2
    gfs2-uevents
@@ -115,7 +115,7 @@ Documentation for filesystem implementations.
    sysv-fs
    tmpfs
    ubifs
-   ubifs-authentication.rst
+   ubifs-authentication
    udf
    virtiofs
    vfat

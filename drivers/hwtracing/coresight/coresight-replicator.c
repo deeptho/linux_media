@@ -45,12 +45,14 @@ struct replicator_drvdata {
 
 static void dynamic_replicator_reset(struct replicator_drvdata *drvdata)
 {
+	struct coresight_device *csdev = drvdata->csdev;
+
 	CS_UNLOCK(drvdata->base);
 
-	if (!coresight_claim_device_unlocked(drvdata->base)) {
+	if (!coresight_claim_device_unlocked(csdev)) {
 		writel_relaxed(0xff, drvdata->base + REPLICATOR_IDFILTER0);
 		writel_relaxed(0xff, drvdata->base + REPLICATOR_IDFILTER1);
-		coresight_disclaim_device_unlocked(drvdata->base);
+		coresight_disclaim_device_unlocked(csdev);
 	}
 
 	CS_LOCK(drvdata->base);
@@ -70,6 +72,7 @@ static int dynamic_replicator_enable(struct replicator_drvdata *drvdata,
 {
 	int rc = 0;
 	u32 id0val, id1val;
+	struct coresight_device *csdev = drvdata->csdev;
 
 	CS_UNLOCK(drvdata->base);
 
@@ -84,7 +87,7 @@ static int dynamic_replicator_enable(struct replicator_drvdata *drvdata,
 		id0val = id1val = 0xff;
 
 	if (id0val == 0xff && id1val == 0xff)
-		rc = coresight_claim_device_unlocked(drvdata->base);
+		rc = coresight_claim_device_unlocked(csdev);
 
 	if (!rc) {
 		switch (outport) {
@@ -140,6 +143,7 @@ static void dynamic_replicator_disable(struct replicator_drvdata *drvdata,
 				       int inport, int outport)
 {
 	u32 reg;
+	struct coresight_device *csdev = drvdata->csdev;
 
 	switch (outport) {
 	case 0:
@@ -160,7 +164,7 @@ static void dynamic_replicator_disable(struct replicator_drvdata *drvdata,
 
 	if ((readl_relaxed(drvdata->base + REPLICATOR_IDFILTER0) == 0xff) &&
 	    (readl_relaxed(drvdata->base + REPLICATOR_IDFILTER1) == 0xff))
-		coresight_disclaim_device_unlocked(drvdata->base);
+		coresight_disclaim_device_unlocked(csdev);
 	CS_LOCK(drvdata->base);
 }
 
@@ -254,6 +258,7 @@ static int replicator_probe(struct device *dev, struct resource *res)
 		}
 		drvdata->base = base;
 		desc.groups = replicator_groups;
+		desc.access = CSDEV_ACCESS_IOMEM(base);
 	}
 
 	if (fwnode_property_present(dev_fwnode(dev),
@@ -291,6 +296,14 @@ out_disable_clk:
 	return ret;
 }
 
+static int replicator_remove(struct device *dev)
+{
+	struct replicator_drvdata *drvdata = dev_get_drvdata(dev);
+
+	coresight_unregister(drvdata->csdev);
+	return 0;
+}
+
 static int static_replicator_probe(struct platform_device *pdev)
 {
 	int ret;
@@ -308,6 +321,13 @@ static int static_replicator_probe(struct platform_device *pdev)
 	}
 
 	return ret;
+}
+
+static int static_replicator_remove(struct platform_device *pdev)
+{
+	replicator_remove(&pdev->dev);
+	pm_runtime_disable(&pdev->dev);
+	return 0;
 }
 
 #ifdef CONFIG_PM
@@ -343,29 +363,39 @@ static const struct of_device_id static_replicator_match[] = {
 	{}
 };
 
+MODULE_DEVICE_TABLE(of, static_replicator_match);
+
 #ifdef CONFIG_ACPI
 static const struct acpi_device_id static_replicator_acpi_ids[] = {
 	{"ARMHC985", 0}, /* ARM CoreSight Static Replicator */
 	{}
 };
+
+MODULE_DEVICE_TABLE(acpi, static_replicator_acpi_ids);
 #endif
 
 static struct platform_driver static_replicator_driver = {
 	.probe          = static_replicator_probe,
+	.remove         = static_replicator_remove,
 	.driver         = {
 		.name   = "coresight-static-replicator",
+		/* THIS_MODULE is taken care of by platform_driver_register() */
 		.of_match_table = of_match_ptr(static_replicator_match),
 		.acpi_match_table = ACPI_PTR(static_replicator_acpi_ids),
 		.pm	= &replicator_dev_pm_ops,
 		.suppress_bind_attrs = true,
 	},
 };
-builtin_platform_driver(static_replicator_driver);
 
 static int dynamic_replicator_probe(struct amba_device *adev,
 				    const struct amba_id *id)
 {
 	return replicator_probe(&adev->dev, &adev->res);
+}
+
+static void dynamic_replicator_remove(struct amba_device *adev)
+{
+	replicator_remove(&adev->dev);
 }
 
 static const struct amba_id dynamic_replicator_ids[] = {
@@ -374,13 +404,49 @@ static const struct amba_id dynamic_replicator_ids[] = {
 	{},
 };
 
+MODULE_DEVICE_TABLE(amba, dynamic_replicator_ids);
+
 static struct amba_driver dynamic_replicator_driver = {
 	.drv = {
 		.name	= "coresight-dynamic-replicator",
 		.pm	= &replicator_dev_pm_ops,
+		.owner	= THIS_MODULE,
 		.suppress_bind_attrs = true,
 	},
 	.probe		= dynamic_replicator_probe,
+	.remove         = dynamic_replicator_remove,
 	.id_table	= dynamic_replicator_ids,
 };
-builtin_amba_driver(dynamic_replicator_driver);
+
+static int __init replicator_init(void)
+{
+	int ret;
+
+	ret = platform_driver_register(&static_replicator_driver);
+	if (ret) {
+		pr_info("Error registering platform driver\n");
+		return ret;
+	}
+
+	ret = amba_driver_register(&dynamic_replicator_driver);
+	if (ret) {
+		pr_info("Error registering amba driver\n");
+		platform_driver_unregister(&static_replicator_driver);
+	}
+
+	return ret;
+}
+
+static void __exit replicator_exit(void)
+{
+	platform_driver_unregister(&static_replicator_driver);
+	amba_driver_unregister(&dynamic_replicator_driver);
+}
+
+module_init(replicator_init);
+module_exit(replicator_exit);
+
+MODULE_AUTHOR("Pratik Patel <pratikp@codeaurora.org>");
+MODULE_AUTHOR("Mathieu Poirier <mathieu.poirier@linaro.org>");
+MODULE_DESCRIPTION("Arm CoreSight Replicator Driver");
+MODULE_LICENSE("GPL v2");

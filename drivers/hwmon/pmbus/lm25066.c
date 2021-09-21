@@ -211,6 +211,8 @@ struct lm25066_data {
 
 #define to_lm25066_data(x)  container_of(x, struct lm25066_data, info)
 
+static const struct i2c_device_id lm25066_id[];
+
 static int lm25066_read_word_data(struct i2c_client *client, int page,
 				  int phase, int reg)
 {
@@ -369,21 +371,18 @@ static int lm25066_write_word_data(struct i2c_client *client, int page, int reg,
 	case PMBUS_VIN_OV_WARN_LIMIT:
 		word = ((s16)word < 0) ? 0 : clamp_val(word, 0, data->rlimit);
 		ret = pmbus_write_word_data(client, 0, reg, word);
-		pmbus_clear_cache(client);
 		break;
 	case PMBUS_IIN_OC_WARN_LIMIT:
 		word = ((s16)word < 0) ? 0 : clamp_val(word, 0, data->rlimit);
 		ret = pmbus_write_word_data(client, 0,
 					    LM25066_MFR_IIN_OC_WARN_LIMIT,
 					    word);
-		pmbus_clear_cache(client);
 		break;
 	case PMBUS_PIN_OP_WARN_LIMIT:
 		word = ((s16)word < 0) ? 0 : clamp_val(word, 0, data->rlimit);
 		ret = pmbus_write_word_data(client, 0,
 					    LM25066_MFR_PIN_OP_WARN_LIMIT,
 					    word);
-		pmbus_clear_cache(client);
 		break;
 	case PMBUS_VIRT_VMON_UV_WARN_LIMIT:
 		/* Adjust from VIN coefficients (for LM25056) */
@@ -391,7 +390,6 @@ static int lm25066_write_word_data(struct i2c_client *client, int page, int reg,
 		word = ((s16)word < 0) ? 0 : clamp_val(word, 0, data->rlimit);
 		ret = pmbus_write_word_data(client, 0,
 					    LM25056_VAUX_UV_WARN_LIMIT, word);
-		pmbus_clear_cache(client);
 		break;
 	case PMBUS_VIRT_VMON_OV_WARN_LIMIT:
 		/* Adjust from VIN coefficients (for LM25056) */
@@ -399,7 +397,6 @@ static int lm25066_write_word_data(struct i2c_client *client, int page, int reg,
 		word = ((s16)word < 0) ? 0 : clamp_val(word, 0, data->rlimit);
 		ret = pmbus_write_word_data(client, 0,
 					    LM25056_VAUX_OV_WARN_LIMIT, word);
-		pmbus_clear_cache(client);
 		break;
 	case PMBUS_VIRT_RESET_PIN_HISTORY:
 		ret = pmbus_write_byte(client, 0, LM25066_CLEAR_PIN_PEAK);
@@ -416,8 +413,7 @@ static int lm25066_write_word_data(struct i2c_client *client, int page, int reg,
 	return ret;
 }
 
-static int lm25066_probe(struct i2c_client *client,
-			  const struct i2c_device_id *id)
+static int lm25066_probe(struct i2c_client *client)
 {
 	int config;
 	struct lm25066_data *data;
@@ -437,7 +433,7 @@ static int lm25066_probe(struct i2c_client *client,
 	if (config < 0)
 		return config;
 
-	data->id = id->driver_data;
+	data->id = i2c_match_id(lm25066_id, client)->driver_data;
 	info = &data->info;
 
 	info->pages = 1;
@@ -487,7 +483,7 @@ static int lm25066_probe(struct i2c_client *client,
 		info->b[PSC_POWER] = coeff[PSC_POWER].b;
 	}
 
-	return pmbus_do_probe(client, id, info);
+	return pmbus_do_probe(client, info);
 }
 
 static const struct i2c_device_id lm25066_id[] = {
@@ -506,8 +502,7 @@ static struct i2c_driver lm25066_driver = {
 	.driver = {
 		   .name = "lm25066",
 		   },
-	.probe = lm25066_probe,
-	.remove = pmbus_do_remove,
+	.probe_new = lm25066_probe,
 	.id_table = lm25066_id,
 };
 
@@ -516,3 +511,4 @@ module_i2c_driver(lm25066_driver);
 MODULE_AUTHOR("Guenter Roeck");
 MODULE_DESCRIPTION("PMBus driver for LM25066 and compatible chips");
 MODULE_LICENSE("GPL");
+MODULE_IMPORT_NS(PMBUS);

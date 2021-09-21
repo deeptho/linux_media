@@ -1,4 +1,5 @@
 .. SPDX-License-Identifier: GFDL-1.1-no-invariants-or-later
+.. c:namespace:: CEC
 
 .. _CEC_TRANSMIT:
 .. _CEC_RECEIVE:
@@ -12,21 +13,22 @@ Name
 
 CEC_RECEIVE, CEC_TRANSMIT - Receive or transmit a CEC message
 
-
 Synopsis
 ========
 
-.. c:function:: int ioctl( int fd, CEC_RECEIVE, struct cec_msg \*argp )
-    :name: CEC_RECEIVE
+.. c:macro:: CEC_RECEIVE
 
-.. c:function:: int ioctl( int fd, CEC_TRANSMIT, struct cec_msg \*argp )
-    :name: CEC_TRANSMIT
+``int ioctl(int fd, CEC_RECEIVE, struct cec_msg *argp)``
+
+.. c:macro:: CEC_TRANSMIT
+
+``int ioctl(int fd, CEC_TRANSMIT, struct cec_msg *argp)``
 
 Arguments
 =========
 
 ``fd``
-    File descriptor returned by :c:func:`open() <cec-open>`.
+    File descriptor returned by :c:func:`open()`.
 
 ``argp``
     Pointer to struct cec_msg.
@@ -82,7 +84,7 @@ physical address, but the cable is still connected and CEC still works.
 In order to detect/wake up the device it is allowed to send poll and 'Image/Text
 View On' messages from initiator 0xf ('Unregistered') to destination 0 ('TV').
 
-.. tabularcolumns:: |p{1.0cm}|p{3.5cm}|p{13.0cm}|
+.. tabularcolumns:: |p{1.0cm}|p{3.5cm}|p{12.8cm}|
 
 .. c:type:: cec_msg
 
@@ -194,8 +196,7 @@ View On' messages from initiator 0xf ('Unregistered') to destination 0 ('TV').
 	supports this, otherwise it is always 0. This counter is only
 	valid if the :ref:`CEC_TX_STATUS_ERROR <CEC-TX-STATUS-ERROR>` status bit is set.
 
-
-.. tabularcolumns:: |p{6.2cm}|p{1.0cm}|p{10.3cm}|
+.. tabularcolumns:: |p{6.2cm}|p{1.0cm}|p{10.1cm}|
 
 .. _cec-msg-flags:
 
@@ -228,8 +229,7 @@ View On' messages from initiator 0xf ('Unregistered') to destination 0 ('TV').
 	capability. If that is not set, then the ``EPERM`` error code is
 	returned.
 
-
-.. tabularcolumns:: |p{5.6cm}|p{0.9cm}|p{11.0cm}|
+.. tabularcolumns:: |p{5.6cm}|p{0.9cm}|p{10.8cm}|
 
 .. _cec-tx-status:
 
@@ -298,8 +298,7 @@ View On' messages from initiator 0xf ('Unregistered') to destination 0 ('TV').
       - The transmit timed out. This should not normally happen and this
 	indicates a driver problem.
 
-
-.. tabularcolumns:: |p{5.6cm}|p{0.9cm}|p{11.0cm}|
+.. tabularcolumns:: |p{5.6cm}|p{0.9cm}|p{10.8cm}|
 
 .. _cec-rx-status:
 
@@ -333,7 +332,6 @@ View On' messages from initiator 0xf ('Unregistered') to destination 0 ('TV').
         because the HDMI cable was disconnected, the adapter was unconfigured
 	or the :ref:`CEC_TRANSMIT <CEC_RECEIVE>` that waited for a
 	reply was interrupted.
-
 
 
 Return Value

@@ -91,6 +91,7 @@ make_no_sdt	    := NO_SDT=1
 make_no_syscall_tbl := NO_SYSCALL_TABLE=1
 make_with_clangllvm := LIBCLANGLLVM=1
 make_with_libpfm4   := LIBPFM4=1
+make_with_gtk2      := GTK2=1
 make_tags           := tags
 make_cscope         := cscope
 make_help           := help
@@ -170,7 +171,6 @@ run += make_install_prefix_slash
 # run += make_install_info
 # run += make_install_pdf
 run += make_minimal
-run += make_static
 
 ifneq ($(call has,ctags),)
 run += make_tags
@@ -296,6 +296,26 @@ MAKEFLAGS := --no-print-directory
 clean := @(cd $(PERF); $(MAKE_F) -s $(O_OPT) clean >/dev/null && $(MAKE) -s $(O_OPT) -C ../build clean >/dev/null)
 
 $(run):
+	$(call clean)
+	@TMP_DEST=$$(mktemp -d); \
+	cmd="cd $(PERF) && $(MAKE_F) $($@) $(PARALLEL_OPT) $(O_OPT) DESTDIR=$$TMP_DEST"; \
+	printf "%*.*s: %s\n" $(max_width) $(max_width) "$@" "$$cmd" && echo $$cmd > $@ && \
+	( eval $$cmd ) >> $@ 2>&1; \
+	echo "  test: $(call test,$@)" >> $@ 2>&1; \
+	$(call test,$@) && \
+	rm -rf $@ $$TMP_DEST || (cat $@ ; false)
+
+make_with_gtk2:
+	$(call clean)
+	@TMP_DEST=$$(mktemp -d); \
+	cmd="cd $(PERF) && $(MAKE_F) $($@) $(PARALLEL_OPT) $(O_OPT) DESTDIR=$$TMP_DEST"; \
+	printf "%*.*s: %s\n" $(max_width) $(max_width) "$@" "$$cmd" && echo $$cmd > $@ && \
+	( eval $$cmd ) >> $@ 2>&1; \
+	echo "  test: $(call test,$@)" >> $@ 2>&1; \
+	$(call test,$@) && \
+	rm -rf $@ $$TMP_DEST || (cat $@ ; false)
+
+make_static:
 	$(call clean)
 	@TMP_DEST=$$(mktemp -d); \
 	cmd="cd $(PERF) && $(MAKE_F) $($@) $(PARALLEL_OPT) $(O_OPT) DESTDIR=$$TMP_DEST"; \

@@ -154,7 +154,7 @@ static void fsl_dma_abort_stream(struct snd_pcm_substream *substream)
 /**
  * fsl_dma_update_pointers - update LD pointers to point to the next period
  *
- * As each period is completed, this function changes the the link
+ * As each period is completed, this function changes the link
  * descriptor pointers for that period to point to the next period.
  */
 static void fsl_dma_update_pointers(struct fsl_dma_private *dma_private)
@@ -392,7 +392,6 @@ static int fsl_dma_open(struct snd_soc_component *component,
 	dma_addr_t ld_buf_phys;
 	u64 temp_link;  	/* Pointer to next link descriptor */
 	u32 mr;
-	unsigned int channel;
 	int ret = 0;
 	unsigned int i;
 
@@ -407,8 +406,6 @@ static int fsl_dma_open(struct snd_soc_component *component,
 		dev_err(dev, "invalid buffer size\n");
 		return ret;
 	}
-
-	channel = substream->stream == SNDRV_PCM_STREAM_PLAYBACK ? 0 : 1;
 
 	if (dma->assigned) {
 		dev_err(dev, "dma channel already assigned\n");

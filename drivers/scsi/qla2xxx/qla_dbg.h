@@ -1,8 +1,7 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * QLogic Fibre Channel HBA Driver
  * Copyright (c)  2003-2014 QLogic Corporation
- *
- * See LICENSE.qla2xxx for copyright and licensing details.
  */
 
 #include "qla_def.h"
@@ -309,7 +308,7 @@ struct qla2xxx_fw_dump {
 };
 
 #define QL_MSGHDR "qla2xxx"
-#define QL_DBG_DEFAULT1_MASK    0x1e400000
+#define QL_DBG_DEFAULT1_MASK    0x1e600000
 
 #define ql_log_fatal		0 /* display fatal errors */
 #define ql_log_warn		1 /* display critical errors */

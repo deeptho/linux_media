@@ -158,6 +158,12 @@ static const struct stmmac_stats stmmac_gstrings_stats[] = {
 	/* TSO */
 	STMMAC_STAT(tx_tso_frames),
 	STMMAC_STAT(tx_tso_nfrags),
+	/* EST */
+	STMMAC_STAT(mtl_est_cgce),
+	STMMAC_STAT(mtl_est_hlbs),
+	STMMAC_STAT(mtl_est_hlbf),
+	STMMAC_STAT(mtl_est_btre),
+	STMMAC_STAT(mtl_est_btrlm),
 };
 #define STMMAC_STATS_LEN ARRAY_SIZE(stmmac_gstrings_stats)
 
@@ -268,6 +274,10 @@ static void stmmac_ethtool_getdrvinfo(struct net_device *dev,
 		strlcpy(info->driver, MAC100_ETHTOOL_NAME,
 			sizeof(info->driver));
 
+	if (priv->plat->pdev) {
+		strlcpy(info->bus_info, pci_name(priv->plat->pdev),
+			sizeof(info->bus_info));
+	}
 	strlcpy(info->version, DRV_MODULE_VERSION, sizeof(info->version));
 }
 
@@ -438,6 +448,33 @@ static int stmmac_nway_reset(struct net_device *dev)
 	struct stmmac_priv *priv = netdev_priv(dev);
 
 	return phylink_ethtool_nway_reset(priv->phylink);
+}
+
+static void stmmac_get_ringparam(struct net_device *netdev,
+				 struct ethtool_ringparam *ring)
+{
+	struct stmmac_priv *priv = netdev_priv(netdev);
+
+	ring->rx_max_pending = DMA_MAX_RX_SIZE;
+	ring->tx_max_pending = DMA_MAX_TX_SIZE;
+	ring->rx_pending = priv->dma_rx_size;
+	ring->tx_pending = priv->dma_tx_size;
+}
+
+static int stmmac_set_ringparam(struct net_device *netdev,
+				struct ethtool_ringparam *ring)
+{
+	if (ring->rx_mini_pending || ring->rx_jumbo_pending ||
+	    ring->rx_pending < DMA_MIN_RX_SIZE ||
+	    ring->rx_pending > DMA_MAX_RX_SIZE ||
+	    !is_power_of_2(ring->rx_pending) ||
+	    ring->tx_pending < DMA_MIN_TX_SIZE ||
+	    ring->tx_pending > DMA_MAX_TX_SIZE ||
+	    !is_power_of_2(ring->tx_pending))
+		return -EINVAL;
+
+	return stmmac_reinit_ringparam(netdev, ring->rx_pending,
+				       ring->tx_pending);
 }
 
 static void
@@ -665,6 +702,7 @@ static int stmmac_ethtool_op_get_eee(struct net_device *dev,
 	edata->eee_enabled = priv->eee_enabled;
 	edata->eee_active = priv->eee_active;
 	edata->tx_lpi_timer = priv->tx_lpi_timer;
+	edata->tx_lpi_enabled = priv->tx_lpi_enabled;
 
 	return phylink_ethtool_get_eee(priv->phylink, edata);
 }
@@ -675,24 +713,26 @@ static int stmmac_ethtool_op_set_eee(struct net_device *dev,
 	struct stmmac_priv *priv = netdev_priv(dev);
 	int ret;
 
-	if (!edata->eee_enabled) {
+	if (!priv->dma_cap.eee)
+		return -EOPNOTSUPP;
+
+	if (priv->tx_lpi_enabled != edata->tx_lpi_enabled)
+		netdev_warn(priv->dev,
+			    "Setting EEE tx-lpi is not supported\n");
+
+	if (!edata->eee_enabled)
 		stmmac_disable_eee_mode(priv);
-	} else {
-		/* We are asking for enabling the EEE but it is safe
-		 * to verify all by invoking the eee_init function.
-		 * In case of failure it will return an error.
-		 */
-		edata->eee_enabled = stmmac_eee_init(priv);
-		if (!edata->eee_enabled)
-			return -EOPNOTSUPP;
-	}
 
 	ret = phylink_ethtool_set_eee(priv->phylink, edata);
 	if (ret)
 		return ret;
 
-	priv->eee_enabled = edata->eee_enabled;
-	priv->tx_lpi_timer = edata->tx_lpi_timer;
+	if (edata->eee_enabled &&
+	    priv->tx_lpi_timer != edata->tx_lpi_timer) {
+		priv->tx_lpi_timer = edata->tx_lpi_timer;
+		stmmac_eee_init(priv);
+	}
+
 	return 0;
 }
 
@@ -722,28 +762,75 @@ static u32 stmmac_riwt2usec(u32 riwt, struct stmmac_priv *priv)
 	return (riwt * 256) / (clk / 1000000);
 }
 
-static int stmmac_get_coalesce(struct net_device *dev,
-			       struct ethtool_coalesce *ec)
+static int __stmmac_get_coalesce(struct net_device *dev,
+				 struct ethtool_coalesce *ec,
+				 int queue)
 {
 	struct stmmac_priv *priv = netdev_priv(dev);
+	u32 max_cnt;
+	u32 rx_cnt;
+	u32 tx_cnt;
 
-	ec->tx_coalesce_usecs = priv->tx_coal_timer;
-	ec->tx_max_coalesced_frames = priv->tx_coal_frames;
+	rx_cnt = priv->plat->rx_queues_to_use;
+	tx_cnt = priv->plat->tx_queues_to_use;
+	max_cnt = max(rx_cnt, tx_cnt);
 
-	if (priv->use_riwt) {
-		ec->rx_max_coalesced_frames = priv->rx_coal_frames;
-		ec->rx_coalesce_usecs = stmmac_riwt2usec(priv->rx_riwt, priv);
+	if (queue < 0)
+		queue = 0;
+	else if (queue >= max_cnt)
+		return -EINVAL;
+
+	if (queue < tx_cnt) {
+		ec->tx_coalesce_usecs = priv->tx_coal_timer[queue];
+		ec->tx_max_coalesced_frames = priv->tx_coal_frames[queue];
+	} else {
+		ec->tx_coalesce_usecs = 0;
+		ec->tx_max_coalesced_frames = 0;
+	}
+
+	if (priv->use_riwt && queue < rx_cnt) {
+		ec->rx_max_coalesced_frames = priv->rx_coal_frames[queue];
+		ec->rx_coalesce_usecs = stmmac_riwt2usec(priv->rx_riwt[queue],
+							 priv);
+	} else {
+		ec->rx_max_coalesced_frames = 0;
+		ec->rx_coalesce_usecs = 0;
 	}
 
 	return 0;
 }
 
-static int stmmac_set_coalesce(struct net_device *dev,
+static int stmmac_get_coalesce(struct net_device *dev,
 			       struct ethtool_coalesce *ec)
 {
+	return __stmmac_get_coalesce(dev, ec, -1);
+}
+
+static int stmmac_get_per_queue_coalesce(struct net_device *dev, u32 queue,
+					 struct ethtool_coalesce *ec)
+{
+	return __stmmac_get_coalesce(dev, ec, queue);
+}
+
+static int __stmmac_set_coalesce(struct net_device *dev,
+				 struct ethtool_coalesce *ec,
+				 int queue)
+{
 	struct stmmac_priv *priv = netdev_priv(dev);
-	u32 rx_cnt = priv->plat->rx_queues_to_use;
+	bool all_queues = false;
 	unsigned int rx_riwt;
+	u32 max_cnt;
+	u32 rx_cnt;
+	u32 tx_cnt;
+
+	rx_cnt = priv->plat->rx_queues_to_use;
+	tx_cnt = priv->plat->tx_queues_to_use;
+	max_cnt = max(rx_cnt, tx_cnt);
+
+	if (queue < 0)
+		all_queues = true;
+	else if (queue >= max_cnt)
+		return -EINVAL;
 
 	if (priv->use_riwt && (ec->rx_coalesce_usecs > 0)) {
 		rx_riwt = stmmac_usec2riwt(ec->rx_coalesce_usecs, priv);
@@ -751,8 +838,23 @@ static int stmmac_set_coalesce(struct net_device *dev,
 		if ((rx_riwt > MAX_DMA_RIWT) || (rx_riwt < MIN_DMA_RIWT))
 			return -EINVAL;
 
-		priv->rx_riwt = rx_riwt;
-		stmmac_rx_watchdog(priv, priv->ioaddr, priv->rx_riwt, rx_cnt);
+		if (all_queues) {
+			int i;
+
+			for (i = 0; i < rx_cnt; i++) {
+				priv->rx_riwt[i] = rx_riwt;
+				stmmac_rx_watchdog(priv, priv->ioaddr,
+						   rx_riwt, i);
+				priv->rx_coal_frames[i] =
+					ec->rx_max_coalesced_frames;
+			}
+		} else if (queue < rx_cnt) {
+			priv->rx_riwt[queue] = rx_riwt;
+			stmmac_rx_watchdog(priv, priv->ioaddr,
+					   rx_riwt, queue);
+			priv->rx_coal_frames[queue] =
+				ec->rx_max_coalesced_frames;
+		}
 	}
 
 	if ((ec->tx_coalesce_usecs == 0) &&
@@ -763,11 +865,35 @@ static int stmmac_set_coalesce(struct net_device *dev,
 	    (ec->tx_max_coalesced_frames > STMMAC_TX_MAX_FRAMES))
 		return -EINVAL;
 
-	/* Only copy relevant parameters, ignore all others. */
-	priv->tx_coal_frames = ec->tx_max_coalesced_frames;
-	priv->tx_coal_timer = ec->tx_coalesce_usecs;
-	priv->rx_coal_frames = ec->rx_max_coalesced_frames;
+	if (all_queues) {
+		int i;
+
+		for (i = 0; i < tx_cnt; i++) {
+			priv->tx_coal_frames[i] =
+				ec->tx_max_coalesced_frames;
+			priv->tx_coal_timer[i] =
+				ec->tx_coalesce_usecs;
+		}
+	} else if (queue < tx_cnt) {
+		priv->tx_coal_frames[queue] =
+			ec->tx_max_coalesced_frames;
+		priv->tx_coal_timer[queue] =
+			ec->tx_coalesce_usecs;
+	}
+
 	return 0;
+}
+
+static int stmmac_set_coalesce(struct net_device *dev,
+			       struct ethtool_coalesce *ec)
+{
+	return __stmmac_set_coalesce(dev, ec, -1);
+}
+
+static int stmmac_set_per_queue_coalesce(struct net_device *dev, u32 queue,
+					 struct ethtool_coalesce *ec)
+{
+	return __stmmac_set_coalesce(dev, ec, queue);
 }
 
 static int stmmac_get_rxnfc(struct net_device *dev,
@@ -838,6 +964,30 @@ static int stmmac_set_rxfh(struct net_device *dev, const u32 *indir,
 
 	return stmmac_rss_configure(priv, priv->hw, &priv->rss,
 				    priv->plat->rx_queues_to_use);
+}
+
+static void stmmac_get_channels(struct net_device *dev,
+				struct ethtool_channels *chan)
+{
+	struct stmmac_priv *priv = netdev_priv(dev);
+
+	chan->rx_count = priv->plat->rx_queues_to_use;
+	chan->tx_count = priv->plat->tx_queues_to_use;
+	chan->max_rx = priv->dma_cap.number_rx_queues;
+	chan->max_tx = priv->dma_cap.number_tx_queues;
+}
+
+static int stmmac_set_channels(struct net_device *dev,
+			       struct ethtool_channels *chan)
+{
+	struct stmmac_priv *priv = netdev_priv(dev);
+
+	if (chan->rx_count > priv->dma_cap.number_rx_queues ||
+	    chan->tx_count > priv->dma_cap.number_tx_queues ||
+	    !chan->rx_count || !chan->tx_count)
+		return -EINVAL;
+
+	return stmmac_reinit_queues(dev, chan->rx_count, chan->tx_count);
 }
 
 static int stmmac_get_ts_info(struct net_device *dev,
@@ -923,6 +1073,8 @@ static const struct ethtool_ops stmmac_ethtool_ops = {
 	.get_regs_len = stmmac_ethtool_get_regs_len,
 	.get_link = ethtool_op_get_link,
 	.nway_reset = stmmac_nway_reset,
+	.get_ringparam = stmmac_get_ringparam,
+	.set_ringparam = stmmac_set_ringparam,
 	.get_pauseparam = stmmac_get_pauseparam,
 	.set_pauseparam = stmmac_set_pauseparam,
 	.self_test = stmmac_selftest_run,
@@ -941,6 +1093,10 @@ static const struct ethtool_ops stmmac_ethtool_ops = {
 	.get_ts_info = stmmac_get_ts_info,
 	.get_coalesce = stmmac_get_coalesce,
 	.set_coalesce = stmmac_set_coalesce,
+	.get_per_queue_coalesce = stmmac_get_per_queue_coalesce,
+	.set_per_queue_coalesce = stmmac_set_per_queue_coalesce,
+	.get_channels = stmmac_get_channels,
+	.set_channels = stmmac_set_channels,
 	.get_tunable = stmmac_get_tunable,
 	.set_tunable = stmmac_set_tunable,
 	.get_link_ksettings = stmmac_ethtool_get_link_ksettings,

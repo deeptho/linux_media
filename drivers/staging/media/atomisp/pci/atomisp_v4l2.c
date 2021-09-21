@@ -1178,7 +1178,7 @@ static void atomisp_unregister_entities(struct atomisp_device *isp)
 		atomisp_mipi_csi2_unregister_entities(&isp->csi2_port[i]);
 
 	list_for_each_entry_safe(sd, next, &isp->v4l2_dev.subdevs, list)
-	v4l2_device_unregister_subdev(sd);
+		v4l2_device_unregister_subdev(sd);
 
 	v4l2_device_unregister(&isp->v4l2_dev);
 	media_device_unregister(&isp->media_dev);
@@ -1500,9 +1500,9 @@ static int init_atomisp_wdts(struct atomisp_device *isp)
 	for (i = 0; i < isp->num_of_streams; i++) {
 		struct atomisp_sub_device *asd = &isp->asd[i];
 
-		if (!IS_ISP2401)
+		if (!IS_ISP2401) {
 			timer_setup(&asd->wdt, atomisp_wdt, 0);
-		else {
+		} else {
 			timer_setup(&asd->video_out_capture.wdt,
 				    atomisp_wdt, 0);
 			timer_setup(&asd->video_out_preview.wdt,
@@ -1570,7 +1570,7 @@ static int atomisp_pci_probe(struct pci_dev *pdev, const struct pci_device_id *i
 	spin_lock_init(&isp->lock);
 
 	/* This is not a true PCI device on SoC, so the delay is not needed. */
-	pdev->d3_delay = 0;
+	pdev->d3hot_delay = 0;
 
 	pci_set_drvdata(pdev, isp);
 

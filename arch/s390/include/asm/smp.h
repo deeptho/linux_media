@@ -31,7 +31,6 @@ extern void smp_emergency_stop(void);
 extern int smp_find_processor_id(u16 address);
 extern int smp_store_status(int cpu);
 extern void smp_save_dump_cpus(void);
-extern int smp_vcpu_scheduled(int cpu);
 extern void smp_yield_cpu(int cpu);
 extern void smp_cpu_set_polarization(int cpu, int val);
 extern int smp_cpu_get_polarization(int cpu);
@@ -64,5 +63,6 @@ extern void __noreturn cpu_die(void);
 extern void __cpu_die(unsigned int cpu);
 extern int __cpu_disable(void);
 extern void schedule_mcck_handler(void);
+void notrace smp_yield_cpu(int cpu);
 
 #endif /* __ASM_SMP_H */

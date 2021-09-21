@@ -78,7 +78,7 @@ static DECLARE_WAIT_QUEUE_HEAD(u132_hcd_wait);
 * u132_module_lock exists to protect access to global variables
 *
 */
-static struct mutex u132_module_lock;
+static DEFINE_MUTEX(u132_module_lock);
 static int u132_exiting;
 static int u132_instances;
 /*
@@ -208,13 +208,13 @@ struct u132 {
 #define ftdi_read_pcimem(pdev, member, data) usb_ftdi_elan_read_pcimem(pdev, \
 	offsetof(struct ohci_regs, member), 0, data);
 #define ftdi_write_pcimem(pdev, member, data) usb_ftdi_elan_write_pcimem(pdev, \
-	offsetof(struct ohci_regs, member), 0, data);
+	offsetof(struct ohci_regs, member), 0, data)
 #define u132_read_pcimem(u132, member, data) \
 	usb_ftdi_elan_read_pcimem(u132->platform_dev, offsetof(struct \
-	ohci_regs, member), 0, data);
+	ohci_regs, member), 0, data)
 #define u132_write_pcimem(u132, member, data) \
 	usb_ftdi_elan_write_pcimem(u132->platform_dev, offsetof(struct \
-	ohci_regs, member), 0, data);
+	ohci_regs, member), 0, data)
 static inline struct u132 *udev_to_u132(struct u132_udev *udev)
 {
 	u8 udev_number = udev->udev_number;
@@ -3190,7 +3190,6 @@ static int __init u132_hcd_init(void)
 	int retval;
 	u132_instances = 0;
 	u132_exiting = 0;
-	mutex_init(&u132_module_lock);
 	if (usb_disabled())
 		return -ENODEV;
 	printk(KERN_INFO "driver %s\n", hcd_name);

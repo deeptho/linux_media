@@ -11,6 +11,14 @@
 #include <rtw_ioctl_set.h>
 #include <hal_intf.h>
 
+static const struct {
+        int channel_plan;
+        char *name;
+} channel_table[] = { { RT_CHANNEL_DOMAIN_FCC, "US" },
+        { RT_CHANNEL_DOMAIN_ETSI, "EU" },
+        { RT_CHANNEL_DOMAIN_MKK, "JP" },
+        { RT_CHANNEL_DOMAIN_CHINA, "CN"} };
+
 extern void indicate_wx_scan_complete_event(struct adapter *padapter);
 
 u8 rtw_do_join(struct adapter *padapter)
@@ -549,7 +557,7 @@ u16 rtw_get_cur_max_rate(struct adapter *adapter)
 		return 0;
 
 	if (pmlmeext->cur_wireless_mode & (WIRELESS_11_24N | WIRELESS_11_5N)) {
-		p = rtw_get_ie(&pcur_bss->ies[12], _HT_CAPABILITY_IE_,
+		p = rtw_get_ie(&pcur_bss->ies[12], WLAN_EID_HT_CAPABILITY,
 			       &ht_ielen, pcur_bss->ie_length - 12);
 		if (p && ht_ielen > 0) {
 			/* cur_bwmod is updated by beacon, pmlmeinfo is updated by association response */

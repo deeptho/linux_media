@@ -291,7 +291,7 @@ struct mptcp_sock *mptcp_token_iter_next(const struct net *net, long *s_slot,
 {
 	struct mptcp_sock *ret = NULL;
 	struct hlist_nulls_node *pos;
-	int slot, num;
+	int slot, num = 0;
 
 	for (slot = *s_slot; slot <= token_mask; *s_num = 0, slot++) {
 		struct token_bucket *bucket = &token_hash[slot];
@@ -402,7 +402,7 @@ void __init mptcp_token_init(void)
 	}
 }
 
-#if IS_MODULE(CONFIG_MPTCP_KUNIT_TESTS)
+#if IS_MODULE(CONFIG_MPTCP_KUNIT_TEST)
 EXPORT_SYMBOL_GPL(mptcp_token_new_request);
 EXPORT_SYMBOL_GPL(mptcp_token_new_connect);
 EXPORT_SYMBOL_GPL(mptcp_token_accept);

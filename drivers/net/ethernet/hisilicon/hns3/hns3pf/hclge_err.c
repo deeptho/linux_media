@@ -729,7 +729,7 @@ static int hclge_config_ncsi_hw_err_int(struct hclge_dev *hdev, bool en)
 	struct hclge_desc desc;
 	int ret;
 
-	if (hdev->pdev->revision < 0x21)
+	if (hdev->ae_dev->dev_version < HNAE3_DEVICE_VERSION_V2)
 		return 0;
 
 	/* configure NCSI error interrupts */
@@ -753,8 +753,9 @@ static int hclge_config_igu_egu_hw_err_int(struct hclge_dev *hdev, bool en)
 
 	/* configure IGU,EGU error interrupts */
 	hclge_cmd_setup_basic_desc(&desc, HCLGE_IGU_COMMON_INT_EN, false);
+	desc.data[0] = cpu_to_le32(HCLGE_IGU_ERR_INT_TYPE);
 	if (en)
-		desc.data[0] = cpu_to_le32(HCLGE_IGU_ERR_INT_EN);
+		desc.data[0] |= cpu_to_le32(HCLGE_IGU_ERR_INT_EN);
 
 	desc.data[1] = cpu_to_le32(HCLGE_IGU_ERR_INT_EN_MASK);
 
@@ -808,7 +809,7 @@ static int hclge_config_ppp_error_interrupt(struct hclge_dev *hdev, u32 cmd,
 			cpu_to_le32(HCLGE_PPP_MPF_ECC_ERR_INT0_EN_MASK);
 		desc[1].data[1] =
 			cpu_to_le32(HCLGE_PPP_MPF_ECC_ERR_INT1_EN_MASK);
-		if (hdev->pdev->revision >= 0x21)
+		if (hdev->ae_dev->dev_version >= HNAE3_DEVICE_VERSION_V2)
 			desc[1].data[2] =
 				cpu_to_le32(HCLGE_PPP_PF_ERR_INT_EN_MASK);
 	} else if (cmd == HCLGE_PPP_CMD1_INT_CMD) {
@@ -865,13 +866,7 @@ static int hclge_config_tm_hw_err_int(struct hclge_dev *hdev, bool en)
 	}
 
 	/* configure TM QCN hw errors */
-	ret = hclge_cmd_query_error(hdev, &desc, HCLGE_TM_QCN_MEM_INT_CFG, 0);
-	if (ret) {
-		dev_err(dev, "fail(%d) to read TM QCN CFG status\n", ret);
-		return ret;
-	}
-
-	hclge_cmd_reuse_desc(&desc, false);
+	hclge_cmd_setup_basic_desc(&desc, HCLGE_TM_QCN_MEM_INT_CFG, false);
 	if (en)
 		desc.data[1] = cpu_to_le32(HCLGE_TM_QCN_MEM_ERR_INT_EN);
 
@@ -1041,7 +1036,7 @@ static int hclge_config_ssu_hw_err_int(struct hclge_dev *hdev, bool en)
 	hclge_cmd_setup_basic_desc(&desc[1], HCLGE_SSU_COMMON_INT_CMD, false);
 
 	if (en) {
-		if (hdev->pdev->revision >= 0x21)
+		if (hdev->ae_dev->dev_version >= HNAE3_DEVICE_VERSION_V2)
 			desc[0].data[0] =
 				cpu_to_le32(HCLGE_SSU_COMMON_INT_EN);
 		else
@@ -1073,7 +1068,7 @@ static int hclge_config_ssu_hw_err_int(struct hclge_dev *hdev, bool en)
  * This function querys number of mpf and pf buffer descriptors.
  */
 static int hclge_query_bd_num(struct hclge_dev *hdev, bool is_ras,
-			      int *mpf_bd_num, int *pf_bd_num)
+			      u32 *mpf_bd_num, u32 *pf_bd_num)
 {
 	struct device *dev = &hdev->pdev->dev;
 	u32 mpf_min_bd_num, pf_min_bd_num;
@@ -1102,7 +1097,7 @@ static int hclge_query_bd_num(struct hclge_dev *hdev, bool is_ras,
 	*mpf_bd_num = le32_to_cpu(desc_bd.data[0]);
 	*pf_bd_num = le32_to_cpu(desc_bd.data[1]);
 	if (*mpf_bd_num < mpf_min_bd_num || *pf_bd_num < pf_min_bd_num) {
-		dev_err(dev, "Invalid bd num: mpf(%d), pf(%d)\n",
+		dev_err(dev, "Invalid bd num: mpf(%u), pf(%u)\n",
 			*mpf_bd_num, *pf_bd_num);
 		return -EINVAL;
 	}
@@ -1497,7 +1492,6 @@ hclge_log_and_clear_rocee_ras_error(struct hclge_dev *hdev)
 	}
 
 	status = le32_to_cpu(desc[0].data[0]);
-
 	if (status & HCLGE_ROCEE_AXI_ERR_INT_MASK) {
 		if (status & HCLGE_ROCEE_RERR_INT_MASK)
 			dev_err(dev, "ROCEE RAS AXI rresp error\n");
@@ -1506,6 +1500,8 @@ hclge_log_and_clear_rocee_ras_error(struct hclge_dev *hdev)
 			dev_err(dev, "ROCEE RAS AXI bresp error\n");
 
 		reset_type = HNAE3_FUNC_RESET;
+
+		hclge_report_hw_error(hdev, HNAE3_ROCEE_AXI_RESP_ERROR);
 
 		ret = hclge_log_rocee_axi_error(hdev);
 		if (ret)
@@ -1548,7 +1544,8 @@ int hclge_config_rocee_ras_interrupt(struct hclge_dev *hdev, bool en)
 	struct hclge_desc desc;
 	int ret;
 
-	if (hdev->pdev->revision < 0x21 || !hnae3_dev_roce_supported(hdev))
+	if (hdev->ae_dev->dev_version < HNAE3_DEVICE_VERSION_V2 ||
+	    !hnae3_dev_roce_supported(hdev))
 		return 0;
 
 	hclge_cmd_setup_basic_desc(&desc, HCLGE_CONFIG_ROCEE_RAS_INT_EN, false);
@@ -1574,8 +1571,7 @@ static void hclge_handle_rocee_ras_error(struct hnae3_ae_dev *ae_dev)
 	struct hclge_dev *hdev = ae_dev->priv;
 	enum hnae3_reset_type reset_type;
 
-	if (test_bit(HCLGE_STATE_RST_HANDLING, &hdev->state) ||
-	    hdev->pdev->revision < 0x21)
+	if (test_bit(HCLGE_STATE_RST_HANDLING, &hdev->state))
 		return;
 
 	reset_type = hclge_log_and_clear_rocee_ras_error(hdev);
@@ -1645,7 +1641,6 @@ pci_ers_result_t hclge_handle_hw_ras_error(struct hnae3_ae_dev *ae_dev)
 	}
 
 	status = hclge_read_dev(&hdev->hw, HCLGE_RAS_PF_OTHER_INT_STS_REG);
-
 	if (status & HCLGE_RAS_REG_NFE_MASK ||
 	    status & HCLGE_RAS_REG_ROCEE_ERR_MASK)
 		ae_dev->hw_err_reset_req = 0;
@@ -1661,7 +1656,7 @@ pci_ers_result_t hclge_handle_hw_ras_error(struct hnae3_ae_dev *ae_dev)
 	}
 
 	/* Handling Non-fatal Rocee RAS errors */
-	if (hdev->pdev->revision >= 0x21 &&
+	if (hdev->ae_dev->dev_version >= HNAE3_DEVICE_VERSION_V2 &&
 	    status & HCLGE_RAS_REG_ROCEE_ERR_MASK) {
 		dev_err(dev, "ROCEE Non-Fatal RAS error identified\n");
 		hclge_handle_rocee_ras_error(ae_dev);

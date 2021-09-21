@@ -1,4 +1,5 @@
 .. SPDX-License-Identifier: GFDL-1.1-no-invariants-or-later
+.. c:namespace:: DTV.dmx
 
 .. _DMX_SET_FILTER:
 
@@ -11,23 +12,22 @@ Name
 
 DMX_SET_FILTER
 
-
 Synopsis
 --------
 
-.. c:function:: int ioctl( int fd, DMX_SET_FILTER, struct dmx_sct_filter_params *params)
-    :name: DMX_SET_FILTER
+.. c:macro:: DMX_SET_FILTER
+
+``int ioctl(int fd, DMX_SET_FILTER, struct dmx_sct_filter_params *params)``
 
 Arguments
 ---------
 
 ``fd``
-    File descriptor returned by :c:func:`open() <dvb-dmx-open>`.
+    File descriptor returned by :c:func:`open()`.
 
 ``params``
 
     Pointer to structure containing filter parameters.
-
 
 Description
 -----------
@@ -37,16 +37,14 @@ parameters provided. A timeout may be defined stating number of seconds
 to wait for a section to be loaded. A value of 0 means that no timeout
 should be applied. Finally there is a flag field where it is possible to
 state whether a section should be CRC-checked, whether the filter should
-be a ”one-shot” filter, i.e. if the filtering operation should be
+be a "one-shot" filter, i.e. if the filtering operation should be
 stopped after the first section is received, and whether the filtering
 operation should be started immediately (without waiting for a
 :ref:`DMX_START` ioctl call). If a filter was previously set-up, this
 filter will be canceled, and the receive buffer will be flushed.
 
-
 Return Value
 ------------
-
 
 On success 0 is returned.
 

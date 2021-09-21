@@ -159,6 +159,7 @@ enum
 	UDP_MIB_SNDBUFERRORS,			/* SndbufErrors */
 	UDP_MIB_CSUMERRORS,			/* InCsumErrors */
 	UDP_MIB_IGNOREDMULTI,			/* IgnoredMulti */
+	UDP_MIB_MEMERRORS,			/* MemErrors */
 	__UDP_MIB_MAX
 };
 
@@ -288,6 +289,7 @@ enum
 	LINUX_MIB_TCPTIMEOUTREHASH,		/* TCPTimeoutRehash */
 	LINUX_MIB_TCPDUPLICATEDATAREHASH,	/* TCPDuplicateDataRehash */
 	LINUX_MIB_TCPDSACKRECVSEGS,		/* TCPDSACKRecvSegs */
+	LINUX_MIB_TCPDSACKIGNOREDDUBIOUS,	/* TCPDSACKIgnoredDubious */
 	__LINUX_MIB_MAX
 };
 

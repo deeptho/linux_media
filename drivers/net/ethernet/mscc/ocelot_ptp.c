@@ -4,6 +4,8 @@
  * Copyright (c) 2017 Microsemi Corporation
  * Copyright 2020 NXP
  */
+#include <linux/time64.h>
+
 #include <soc/mscc/ocelot_ptp.h>
 #include <soc/mscc/ocelot_sys.h>
 #include <soc/mscc/ocelot.h>
@@ -300,7 +302,8 @@ int ocelot_ptp_enable(struct ptp_clock_info *ptp,
 }
 EXPORT_SYMBOL(ocelot_ptp_enable);
 
-int ocelot_init_timestamp(struct ocelot *ocelot, struct ptp_clock_info *info)
+int ocelot_init_timestamp(struct ocelot *ocelot,
+			  const struct ptp_clock_info *info)
 {
 	struct ptp_clock *ptp_clock;
 	int i;

@@ -17,6 +17,8 @@
 #include <linux/clk/at91_pmc.h>
 #include <linux/platform_data/atmel.h>
 
+#include <soc/at91/pm.h>
+
 #include <asm/cacheflush.h>
 #include <asm/fncpy.h>
 #include <asm/system_misc.h>
@@ -24,17 +26,6 @@
 
 #include "generic.h"
 #include "pm.h"
-
-/*
- * FIXME: this is needed to communicate between the pinctrl driver and
- * the PM implementation in the machine. Possibly part of the PM
- * implementation should be moved down into the pinctrl driver and get
- * called as part of the generic suspend/resume path.
- */
-#ifdef CONFIG_PINCTRL_AT91
-extern void at91_pinctrl_gpio_suspend(void);
-extern void at91_pinctrl_gpio_resume(void);
-#endif
 
 struct at91_soc_pm {
 	int (*config_shdwc_ws)(void __iomem *shdwc, u32 *mode, u32 *polarity);
@@ -51,10 +42,11 @@ static struct at91_soc_pm soc_pm = {
 };
 
 static const match_table_t pm_modes __initconst = {
-	{ AT91_PM_STANDBY, "standby" },
-	{ AT91_PM_ULP0, "ulp0" },
-	{ AT91_PM_ULP1, "ulp1" },
-	{ AT91_PM_BACKUP, "backup" },
+	{ AT91_PM_STANDBY,	"standby" },
+	{ AT91_PM_ULP0,		"ulp0" },
+	{ AT91_PM_ULP0_FAST,    "ulp0-fast" },
+	{ AT91_PM_ULP1,		"ulp1" },
+	{ AT91_PM_BACKUP,	"backup" },
 	{ -1, NULL },
 };
 
@@ -325,6 +317,12 @@ static void at91_pm_suspend(suspend_state_t state)
 static int at91_pm_enter(suspend_state_t state)
 {
 #ifdef CONFIG_PINCTRL_AT91
+	/*
+	 * FIXME: this is needed to communicate between the pinctrl driver and
+	 * the PM implementation in the machine. Possibly part of the PM
+	 * implementation should be moved down into the pinctrl driver and get
+	 * called as part of the generic suspend/resume path.
+	 */
 	at91_pinctrl_gpio_suspend();
 #endif
 
@@ -557,11 +555,6 @@ static void at91rm9200_idle(void)
 	writel(AT91_PMC_PCK, soc_pm.data.pmc + AT91_PMC_SCDR);
 }
 
-static void at91sam9x60_idle(void)
-{
-	cpu_do_idle();
-}
-
 static void at91sam9_idle(void)
 {
 	writel(AT91_PMC_PCK, soc_pm.data.pmc + AT91_PMC_SCDR);
@@ -789,6 +782,51 @@ static const struct of_device_id atmel_pmc_ids[] __initconst = {
 	{ /* sentinel */ },
 };
 
+static void __init at91_pm_modes_validate(const int *modes, int len)
+{
+	u8 i, standby = 0, suspend = 0;
+	int mode;
+
+	for (i = 0; i < len; i++) {
+		if (standby && suspend)
+			break;
+
+		if (modes[i] == soc_pm.data.standby_mode && !standby) {
+			standby = 1;
+			continue;
+		}
+
+		if (modes[i] == soc_pm.data.suspend_mode && !suspend) {
+			suspend = 1;
+			continue;
+		}
+	}
+
+	if (!standby) {
+		if (soc_pm.data.suspend_mode == AT91_PM_STANDBY)
+			mode = AT91_PM_ULP0;
+		else
+			mode = AT91_PM_STANDBY;
+
+		pr_warn("AT91: PM: %s mode not supported! Using %s.\n",
+			pm_modes[soc_pm.data.standby_mode].pattern,
+			pm_modes[mode].pattern);
+		soc_pm.data.standby_mode = mode;
+	}
+
+	if (!suspend) {
+		if (soc_pm.data.standby_mode == AT91_PM_ULP0)
+			mode = AT91_PM_STANDBY;
+		else
+			mode = AT91_PM_ULP0;
+
+		pr_warn("AT91: PM: %s mode not supported! Using %s.\n",
+			pm_modes[soc_pm.data.suspend_mode].pattern,
+			pm_modes[mode].pattern);
+		soc_pm.data.suspend_mode = mode;
+	}
+}
+
 static void __init at91_pm_init(void (*pm_idle)(void))
 {
 	struct device_node *pmc_np;
@@ -800,6 +838,7 @@ static void __init at91_pm_init(void (*pm_idle)(void))
 
 	pmc_np = of_find_matching_node_and_match(NULL, atmel_pmc_ids, &of_id);
 	soc_pm.data.pmc = of_iomap(pmc_np, 0);
+	of_node_put(pmc_np);
 	if (!soc_pm.data.pmc) {
 		pr_err("AT91: PM not supported, PMC not found\n");
 		return;
@@ -830,6 +869,14 @@ void __init at91rm9200_pm_init(void)
 	if (!IS_ENABLED(CONFIG_SOC_AT91RM9200))
 		return;
 
+	/*
+	 * Force STANDBY and ULP0 mode to avoid calling
+	 * at91_pm_modes_validate() which may increase booting time.
+	 * Platform supports anyway only STANDBY and ULP0 modes.
+	 */
+	soc_pm.data.standby_mode = AT91_PM_STANDBY;
+	soc_pm.data.suspend_mode = AT91_PM_ULP0;
+
 	at91_dt_ramc();
 
 	/*
@@ -842,12 +889,17 @@ void __init at91rm9200_pm_init(void)
 
 void __init sam9x60_pm_init(void)
 {
+	static const int modes[] __initconst = {
+		AT91_PM_STANDBY, AT91_PM_ULP0, AT91_PM_ULP0_FAST, AT91_PM_ULP1,
+	};
+
 	if (!IS_ENABLED(CONFIG_SOC_SAM9X60))
 		return;
 
+	at91_pm_modes_validate(modes, ARRAY_SIZE(modes));
 	at91_pm_modes_init();
 	at91_dt_ramc();
-	at91_pm_init(at91sam9x60_idle);
+	at91_pm_init(NULL);
 
 	soc_pm.ws_ids = sam9x60_ws_ids;
 	soc_pm.config_pmc_ws = at91_sam9x60_config_pmc_ws;
@@ -858,26 +910,46 @@ void __init at91sam9_pm_init(void)
 	if (!IS_ENABLED(CONFIG_SOC_AT91SAM9))
 		return;
 
+	/*
+	 * Force STANDBY and ULP0 mode to avoid calling
+	 * at91_pm_modes_validate() which may increase booting time.
+	 * Platform supports anyway only STANDBY and ULP0 modes.
+	 */
+	soc_pm.data.standby_mode = AT91_PM_STANDBY;
+	soc_pm.data.suspend_mode = AT91_PM_ULP0;
+
 	at91_dt_ramc();
 	at91_pm_init(at91sam9_idle);
 }
 
 void __init sama5_pm_init(void)
 {
+	static const int modes[] __initconst = {
+		AT91_PM_STANDBY, AT91_PM_ULP0, AT91_PM_ULP0_FAST,
+	};
+
 	if (!IS_ENABLED(CONFIG_SOC_SAMA5))
 		return;
 
+	at91_pm_modes_validate(modes, ARRAY_SIZE(modes));
 	at91_dt_ramc();
 	at91_pm_init(NULL);
 }
 
 void __init sama5d2_pm_init(void)
 {
+	static const int modes[] __initconst = {
+		AT91_PM_STANDBY, AT91_PM_ULP0, AT91_PM_ULP0_FAST, AT91_PM_ULP1,
+		AT91_PM_BACKUP,
+	};
+
 	if (!IS_ENABLED(CONFIG_SOC_SAMA5D2))
 		return;
 
+	at91_pm_modes_validate(modes, ARRAY_SIZE(modes));
 	at91_pm_modes_init();
-	sama5_pm_init();
+	at91_dt_ramc();
+	at91_pm_init(NULL);
 
 	soc_pm.ws_ids = sama5d2_ws_ids;
 	soc_pm.config_shdwc_ws = at91_sama5d2_config_shdwc_ws;

@@ -68,8 +68,8 @@ enum ad5064_regmap_type {
  * struct ad5064_chip_info - chip specific information
  * @shared_vref:	whether the vref supply is shared between channels
  * @internal_vref:	internal reference voltage. 0 if the chip has no
-			internal vref.
- * @channel:		channel specification
+ *			internal vref.
+ * @channels:		channel specification
  * @num_channels:	number of channels
  * @regmap_type:	register map layout variant
  */
@@ -98,6 +98,7 @@ typedef int (*ad5064_write_func)(struct ad5064_state *st, unsigned int cmd,
  * @use_internal_vref:	set to true if the internal reference voltage should be
  *			used.
  * @write:		register write callback
+ * @lock:		maintain consistency between cached and dev state
  * @data:		i2c/spi transfer buffers
  */
 
@@ -111,7 +112,6 @@ struct ad5064_state {
 	bool				use_internal_vref;
 
 	ad5064_write_func		write;
-	/* Lock used to maintain consistency between cached and dev state */
 	struct mutex lock;
 
 	/*
@@ -277,7 +277,7 @@ static ssize_t ad5064_read_dac_powerdown(struct iio_dev *indio_dev,
 {
 	struct ad5064_state *st = iio_priv(indio_dev);
 
-	return sprintf(buf, "%d\n", st->pwr_down[chan->channel]);
+	return sysfs_emit(buf, "%d\n", st->pwr_down[chan->channel]);
 }
 
 static ssize_t ad5064_write_dac_powerdown(struct iio_dev *indio_dev,

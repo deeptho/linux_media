@@ -281,8 +281,8 @@ static s32 atl2_setup_ring_resources(struct atl2_adapter *adapter)
 		adapter->txs_ring_size * 4 + 7 +	/* dword align */
 		adapter->rxd_ring_size * 1536 + 127;	/* 128bytes align */
 
-	adapter->ring_vir_addr = pci_alloc_consistent(pdev, size,
-		&adapter->ring_dma);
+	adapter->ring_vir_addr = dma_alloc_coherent(&pdev->dev, size,
+						    &adapter->ring_dma, GFP_KERNEL);
 	if (!adapter->ring_vir_addr)
 		return -ENOMEM;
 
@@ -663,8 +663,8 @@ static int atl2_request_irq(struct atl2_adapter *adapter)
 static void atl2_free_ring_resources(struct atl2_adapter *adapter)
 {
 	struct pci_dev *pdev = adapter->pdev;
-	pci_free_consistent(pdev, adapter->ring_size, adapter->ring_vir_addr,
-		adapter->ring_dma);
+	dma_free_coherent(&pdev->dev, adapter->ring_size,
+			  adapter->ring_vir_addr, adapter->ring_dma);
 }
 
 /**
@@ -994,6 +994,7 @@ static int atl2_ioctl(struct net_device *netdev, struct ifreq *ifr, int cmd)
 /**
  * atl2_tx_timeout - Respond to a Tx Hang
  * @netdev: network interface device structure
+ * @txqueue: index of the hanging transmit queue
  */
 static void atl2_tx_timeout(struct net_device *netdev, unsigned int txqueue)
 {
@@ -1005,7 +1006,7 @@ static void atl2_tx_timeout(struct net_device *netdev, unsigned int txqueue)
 
 /**
  * atl2_watchdog - Timer Call-back
- * @data: pointer to netdev cast into an unsigned long
+ * @t: timer list containing a pointer to netdev cast into an unsigned long
  */
 static void atl2_watchdog(struct timer_list *t)
 {
@@ -1030,7 +1031,7 @@ static void atl2_watchdog(struct timer_list *t)
 
 /**
  * atl2_phy_config - Timer Call-back
- * @data: pointer to netdev cast into an unsigned long
+ * @t: timer list containing a pointer to netdev cast into an unsigned long
  */
 static void atl2_phy_config(struct timer_list *t)
 {
@@ -1085,7 +1086,6 @@ err_up:
 
 static void atl2_reinit_locked(struct atl2_adapter *adapter)
 {
-	WARN_ON(in_interrupt());
 	while (test_and_set_bit(__ATL2_RESETTING, &adapter->flags))
 		msleep(1);
 	atl2_down(adapter);
@@ -1235,6 +1235,7 @@ static int atl2_check_link(struct atl2_adapter *adapter)
 
 /**
  * atl2_link_chg_task - deal with link change event Out of interrupt context
+ * @work: pointer to work struct with private info
  */
 static void atl2_link_chg_task(struct work_struct *work)
 {
@@ -1328,8 +1329,8 @@ static int atl2_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	 * until the kernel has the proper infrastructure to support 64-bit DMA
 	 * on these devices.
 	 */
-	if (pci_set_dma_mask(pdev, DMA_BIT_MASK(32)) &&
-		pci_set_consistent_dma_mask(pdev, DMA_BIT_MASK(32))) {
+	if (dma_set_mask(&pdev->dev, DMA_BIT_MASK(32)) &&
+	    dma_set_coherent_mask(&pdev->dev, DMA_BIT_MASK(32))) {
 		printk(KERN_ERR "atl2: No usable DMA configuration, aborting\n");
 		err = -EIO;
 		goto err_dma;
@@ -1674,29 +1675,7 @@ static struct pci_driver atl2_driver = {
 	.shutdown = atl2_shutdown,
 };
 
-/**
- * atl2_init_module - Driver Registration Routine
- *
- * atl2_init_module is the first routine called when the driver is
- * loaded. All it does is register with the PCI subsystem.
- */
-static int __init atl2_init_module(void)
-{
-	return pci_register_driver(&atl2_driver);
-}
-module_init(atl2_init_module);
-
-/**
- * atl2_exit_module - Driver Exit Cleanup Routine
- *
- * atl2_exit_module is called just before the driver is removed
- * from memory.
- */
-static void __exit atl2_exit_module(void)
-{
-	pci_unregister_driver(&atl2_driver);
-}
-module_exit(atl2_exit_module);
+module_pci_driver(atl2_driver);
 
 static void atl2_read_pci_cfg(struct atl2_hw *hw, u32 reg, u16 *value)
 {
@@ -2548,7 +2527,6 @@ static s32 atl2_write_phy_reg(struct atl2_hw *hw, u32 reg_addr, u16 phy_data)
  */
 static s32 atl2_phy_setup_autoneg_adv(struct atl2_hw *hw)
 {
-	s32 ret_val;
 	s16 mii_autoneg_adv_reg;
 
 	/* Read the MII Auto-Neg Advertisement Register (Address 4). */
@@ -2604,12 +2582,7 @@ static s32 atl2_phy_setup_autoneg_adv(struct atl2_hw *hw)
 
 	hw->mii_autoneg_adv_reg = mii_autoneg_adv_reg;
 
-	ret_val = atl2_write_phy_reg(hw, MII_ADVERTISE, mii_autoneg_adv_reg);
-
-	if (ret_val)
-		return ret_val;
-
-	return 0;
+	return atl2_write_phy_reg(hw, MII_ADVERTISE, mii_autoneg_adv_reg);
 }
 
 /*

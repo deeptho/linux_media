@@ -403,37 +403,21 @@ static int adis16460_probe(struct spi_device *spi)
 	if (ret)
 		return ret;
 
-	ret = adis_setup_buffer_and_trigger(&st->adis, indio_dev, NULL);
+	/* We cannot mask the interrupt, so ensure it isn't auto enabled */
+	st->adis.irq_flag |= IRQF_NO_AUTOEN;
+	ret = devm_adis_setup_buffer_and_trigger(&st->adis, indio_dev, NULL);
 	if (ret)
 		return ret;
 
-	adis16460_enable_irq(&st->adis, 0);
-
 	ret = __adis_initial_startup(&st->adis);
 	if (ret)
-		goto error_cleanup_buffer;
+		return ret;
 
-	ret = iio_device_register(indio_dev);
+	ret = devm_iio_device_register(&spi->dev, indio_dev);
 	if (ret)
-		goto error_cleanup_buffer;
+		return ret;
 
 	adis16460_debugfs_init(indio_dev);
-
-	return 0;
-
-error_cleanup_buffer:
-	adis_cleanup_buffer_and_trigger(&st->adis, indio_dev);
-	return ret;
-}
-
-static int adis16460_remove(struct spi_device *spi)
-{
-	struct iio_dev *indio_dev = spi_get_drvdata(spi);
-	struct adis16460 *st = iio_priv(indio_dev);
-
-	iio_device_unregister(indio_dev);
-
-	adis_cleanup_buffer_and_trigger(&st->adis, indio_dev);
 
 	return 0;
 }
@@ -457,7 +441,6 @@ static struct spi_driver adis16460_driver = {
 	},
 	.id_table = adis16460_ids,
 	.probe = adis16460_probe,
-	.remove = adis16460_remove,
 };
 module_spi_driver(adis16460_driver);
 

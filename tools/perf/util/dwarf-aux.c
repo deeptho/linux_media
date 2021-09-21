@@ -91,7 +91,7 @@ static Dwarf_Line *cu_getsrc_die(Dwarf_Die *cu_die, Dwarf_Addr addr)
 			return NULL;
 	} while (laddr == addr);
 	l++;
-	/* Going foward to find the statement line */
+	/* Going forward to find the statement line */
 	do {
 		line = dwarf_onesrcline(lines, l++);
 		if (!line || dwarf_lineaddr(line, &laddr) != 0 ||
@@ -177,7 +177,7 @@ int cu_walk_functions_at(Dwarf_Die *cu_die, Dwarf_Addr addr,
  * die_get_linkage_name - Get the linkage name of the object
  * @dw_die: A DIE of the object
  *
- * Get the linkage name attiribute of given @dw_die.
+ * Get the linkage name attribute of given @dw_die.
  * For C++ binary, the linkage name will be the mangled symbol.
  */
 const char *die_get_linkage_name(Dwarf_Die *dw_die)
@@ -356,9 +356,25 @@ bool die_is_signed_type(Dwarf_Die *tp_die)
 bool die_is_func_def(Dwarf_Die *dw_die)
 {
 	Dwarf_Attribute attr;
+	Dwarf_Addr addr = 0;
 
-	return (dwarf_tag(dw_die) == DW_TAG_subprogram &&
-		dwarf_attr(dw_die, DW_AT_declaration, &attr) == NULL);
+	if (dwarf_tag(dw_die) != DW_TAG_subprogram)
+		return false;
+
+	if (dwarf_attr(dw_die, DW_AT_declaration, &attr))
+		return false;
+
+	/*
+	 * DW_AT_declaration can be lost from function declaration
+	 * by gcc's bug #97060.
+	 * So we need to check this subprogram DIE has DW_AT_inline
+	 * or an entry address.
+	 */
+	if (!dwarf_attr(dw_die, DW_AT_inline, &attr) &&
+	    die_entrypc(dw_die, &addr) < 0)
+		return false;
+
+	return true;
 }
 
 /**
@@ -373,12 +389,20 @@ bool die_is_func_def(Dwarf_Die *dw_die)
 int die_entrypc(Dwarf_Die *dw_die, Dwarf_Addr *addr)
 {
 	Dwarf_Addr base, end;
+	Dwarf_Attribute attr;
 
 	if (!addr)
 		return -EINVAL;
 
 	if (dwarf_entrypc(dw_die, addr) == 0)
 		return 0;
+
+	/*
+	 *  Since the dwarf_ranges() will return 0 if there is no
+	 * DW_AT_ranges attribute, we should check it first.
+	 */
+	if (!dwarf_attr(dw_die, DW_AT_ranges, &attr))
+		return -ENOENT;
 
 	return dwarf_ranges(dw_die, 0, &base, addr, &end) < 0 ? -ENOENT : 0;
 }
@@ -715,7 +739,7 @@ static int __die_walk_instances_cb(Dwarf_Die *inst, void *data)
  * @data: user data
  *
  * Walk on the instances of give @in_die. @in_die must be an inlined function
- * declartion. This returns the return value of @callback if it returns
+ * declaration. This returns the return value of @callback if it returns
  * non-zero value, or -ENOENT if there is no instance.
  */
 int die_walk_instances(Dwarf_Die *or_die, int (*callback)(Dwarf_Die *, void *),

@@ -102,6 +102,8 @@ restart:
 
 		if (dentry == vfsmnt->mnt_root || IS_ROOT(dentry)) {
 			struct mount *parent = READ_ONCE(mnt->mnt_parent);
+			struct mnt_namespace *mnt_ns;
+
 			/* Escaped? */
 			if (dentry != vfsmnt->mnt_root) {
 				bptr = *buffer;
@@ -116,7 +118,9 @@ restart:
 				vfsmnt = &mnt->mnt;
 				continue;
 			}
-			if (is_mounted(vfsmnt) && !is_anon_ns(mnt->mnt_ns))
+			mnt_ns = READ_ONCE(mnt->mnt_ns);
+			/* open-coded is_mounted() to use local mnt_ns */
+			if (!IS_ERR_OR_NULL(mnt_ns) && !is_anon_ns(mnt_ns))
 				error = 1;	// absolute root
 			else
 				error = 2;	// detached or not attached yet
@@ -322,9 +326,9 @@ char *simple_dname(struct dentry *dentry, char *buffer, int buflen)
 /*
  * Write full pathname from the root of the filesystem into the buffer.
  */
-static char *__dentry_path(struct dentry *d, char *buf, int buflen)
+static char *__dentry_path(const struct dentry *d, char *buf, int buflen)
 {
-	struct dentry *dentry;
+	const struct dentry *dentry;
 	char *end, *retval;
 	int len, seq = 0;
 	int error = 0;
@@ -343,7 +347,7 @@ restart:
 	*retval = '/';
 	read_seqbegin_or_lock(&rename_lock, &seq);
 	while (!IS_ROOT(dentry)) {
-		struct dentry *parent = dentry->d_parent;
+		const struct dentry *parent = dentry->d_parent;
 
 		prefetch(parent);
 		error = prepend_name(&end, &len, &dentry->d_name);
@@ -367,13 +371,13 @@ Elong:
 	return ERR_PTR(-ENAMETOOLONG);
 }
 
-char *dentry_path_raw(struct dentry *dentry, char *buf, int buflen)
+char *dentry_path_raw(const struct dentry *dentry, char *buf, int buflen)
 {
 	return __dentry_path(dentry, buf, buflen);
 }
 EXPORT_SYMBOL(dentry_path_raw);
 
-char *dentry_path(struct dentry *dentry, char *buf, int buflen)
+char *dentry_path(const struct dentry *dentry, char *buf, int buflen)
 {
 	char *p = NULL;
 	char *retval;

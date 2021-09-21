@@ -223,9 +223,7 @@ sa1100_rx_chars(struct sa1100_port *sport)
 			 UTSR0_TO_SM(UART_GET_UTSR0(sport));
 	}
 
-	spin_unlock(&sport->port.lock);
 	tty_flip_buffer_push(&sport->port.state->port);
-	spin_lock(&sport->port.lock);
 }
 
 static void sa1100_tx_chars(struct sa1100_port *sport)
@@ -879,22 +877,20 @@ static int sa1100_serial_add_one_port(struct sa1100_port *sport, struct platform
 
 static int sa1100_serial_probe(struct platform_device *dev)
 {
-	struct resource *res = dev->resource;
+	struct resource *res;
 	int i;
 
-	for (i = 0; i < dev->num_resources; i++, res++)
-		if (res->flags & IORESOURCE_MEM)
-			break;
+	res = platform_get_resource(dev, IORESOURCE_MEM, 0);
+	if (!res)
+		return -EINVAL;
 
-	if (i < dev->num_resources) {
-		for (i = 0; i < NR_PORTS; i++) {
-			if (sa1100_ports[i].port.mapbase != res->start)
-				continue;
-
-			sa1100_serial_add_one_port(&sa1100_ports[i], dev);
+	for (i = 0; i < NR_PORTS; i++)
+		if (sa1100_ports[i].port.mapbase == res->start)
 			break;
-		}
-	}
+	if (i == NR_PORTS)
+		return -ENODEV;
+
+	sa1100_serial_add_one_port(&sa1100_ports[i], dev);
 
 	return 0;
 }

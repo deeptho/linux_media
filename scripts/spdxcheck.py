@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-2.0
 # Copyright Thomas Gleixner <tglx@linutronix.de>
 
@@ -180,6 +180,9 @@ class id_parser(object):
                 # Remove trailing comment closure
                 if line.strip().endswith('*/'):
                     expr = expr.rstrip('*/').strip()
+                # Remove trailing xml comment closure
+                if line.strip().endswith('-->'):
+                    expr = expr.rstrip('-->').strip()
                 # Special case for SH magic boot code files
                 if line.startswith('LIST \"'):
                     expr = expr.rstrip('\"').strip()
@@ -240,7 +243,7 @@ if __name__ == '__main__':
         # Initialize SPDX data
         spdx = read_spdxdata(repo)
 
-        # Initilize the parser
+        # Initialize the parser
         parser = id_parser(spdx)
 
     except SPDXException as se:

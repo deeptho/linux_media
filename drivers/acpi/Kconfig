@@ -87,6 +87,14 @@ config ACPI_SPCR_TABLE
 	  This table provides information about the configuration of the
 	  earlycon console.
 
+config ACPI_FPDT
+	bool "ACPI Firmware Performance Data Table (FPDT) support"
+	depends on X86_64
+	help
+	  Enable support for the Firmware Performance Data Table (FPDT).
+	  This table provides information on the timing of the system
+	  boot, S3 suspend and S3 resume firmware code paths.
+
 config ACPI_LPIT
 	bool
 	depends on X86_64
@@ -326,6 +334,9 @@ config ACPI_THERMAL
 	  To compile this driver as a module, choose M here:
 	  the module will be called thermal.
 
+config ACPI_PLATFORM_PROFILE
+	tristate
+
 config ACPI_CUSTOM_DSDT_FILE
 	string "Custom DSDT Table file to include"
 	default ""
@@ -395,9 +406,6 @@ config ACPI_CONTAINER
 
 	  This helps support hotplug of nodes, CPUs, and memory.
 
-	  To compile this driver as a module, choose M here:
-	  the module will be called container.
-
 config ACPI_HOTPLUG_MEMORY
 	bool "Memory Hotplug"
 	depends on MEMORY_HOTPLUG
@@ -410,9 +418,6 @@ config ACPI_HOTPLUG_MEMORY
 	  If your hardware and firmware do not support adding or
 	  removing memory devices at runtime, you need not enable
 	  this driver.
-
-	  To compile this driver as a module, choose M here:
-	  the module will be called acpi_memhotplug.
 
 config ACPI_HOTPLUG_IOAPIC
 	bool
@@ -504,55 +509,6 @@ config ACPI_EXTLOG
 config ACPI_ADXL
 	bool
 
-menuconfig PMIC_OPREGION
-	bool "PMIC (Power Management Integrated Circuit) operation region support"
-	help
-	  Select this option to enable support for ACPI operation
-	  region of the PMIC chip. The operation region can be used
-	  to control power rails and sensor reading/writing on the
-	  PMIC chip.
-
-if PMIC_OPREGION
-config BYTCRC_PMIC_OPREGION
-	bool "ACPI operation region support for Bay Trail Crystal Cove PMIC"
-	depends on INTEL_SOC_PMIC
-	help
-	  This config adds ACPI operation region support for the Bay Trail
-	  version of the Crystal Cove PMIC.
-
-config CHTCRC_PMIC_OPREGION
-	bool "ACPI operation region support for Cherry Trail Crystal Cove PMIC"
-	depends on INTEL_SOC_PMIC
-	help
-	  This config adds ACPI operation region support for the Cherry Trail
-	  version of the Crystal Cove PMIC.
-
-config XPOWER_PMIC_OPREGION
-	bool "ACPI operation region support for XPower AXP288 PMIC"
-	depends on MFD_AXP20X_I2C && IOSF_MBI=y
-	help
-	  This config adds ACPI operation region support for XPower AXP288 PMIC.
-
-config BXT_WC_PMIC_OPREGION
-	bool "ACPI operation region support for BXT WhiskeyCove PMIC"
-	depends on INTEL_SOC_PMIC_BXTWC
-	help
-	  This config adds ACPI operation region support for BXT WhiskeyCove PMIC.
-
-config CHT_WC_PMIC_OPREGION
-	bool "ACPI operation region support for CHT Whiskey Cove PMIC"
-	depends on INTEL_SOC_PMIC_CHTWC
-	help
-	  This config adds ACPI operation region support for CHT Whiskey Cove PMIC.
-
-config CHT_DC_TI_PMIC_OPREGION
-	bool "ACPI operation region support for Dollar Cove TI PMIC"
-	depends on INTEL_SOC_PMIC_CHTDC_TI
-	help
-	  This config adds ACPI operation region support for Dollar Cove TI PMIC.
-
-endif
-
 config ACPI_CONFIGFS
 	tristate "ACPI configfs support"
 	select CONFIGFS_FS
@@ -568,21 +524,7 @@ config ACPI_PPTT
 	bool
 endif
 
-config TPS68470_PMIC_OPREGION
-	bool "ACPI operation region support for TPS68470 PMIC"
-	depends on MFD_TPS68470
-	help
-	  This config adds ACPI operation region support for TI TPS68470 PMIC.
-	  TPS68470 device is an advanced power management unit that powers
-	  a Compact Camera Module (CCM), generates clocks for image sensors,
-	  drives a dual LED for flash and incorporates two LED drivers for
-	  general purpose indicators.
-	  This driver enables ACPI operation region support control voltage
-	  regulators and clocks.
-
-	  This option is a bool as it provides an ACPI operation
-	  region, which must be available before any of the devices
-	  using this, are probed.
+source "drivers/acpi/pmic/Kconfig"
 
 endif	# ACPI
 

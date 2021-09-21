@@ -2002,7 +2002,7 @@ nr_pages_store(struct device *dev, struct device_attribute *attr,
 		}
 
 		nr_wins++;
-		rewin = krealloc(win, sizeof(*win) * nr_wins, GFP_KERNEL);
+		rewin = krealloc_array(win, nr_wins, sizeof(*win), GFP_KERNEL);
 		if (!rewin) {
 			kfree(win);
 			return -ENOMEM;
@@ -2095,7 +2095,7 @@ static struct attribute *msc_output_attrs[] = {
 	NULL,
 };
 
-static struct attribute_group msc_output_group = {
+static const struct attribute_group msc_output_group = {
 	.attrs	= msc_output_attrs,
 };
 

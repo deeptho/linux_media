@@ -67,7 +67,7 @@ extern void gfs2_rlist_add(struct gfs2_inode *ip, struct gfs2_rgrp_list *rlist,
 extern void gfs2_rlist_alloc(struct gfs2_rgrp_list *rlist);
 extern void gfs2_rlist_free(struct gfs2_rgrp_list *rlist);
 extern u64 gfs2_ri_total(struct gfs2_sbd *sdp);
-extern void gfs2_rgrp_dump(struct seq_file *seq, struct gfs2_glock *gl,
+extern void gfs2_rgrp_dump(struct seq_file *seq, struct gfs2_rgrpd *rgd,
 			   const char *fs_id_buf);
 extern int gfs2_rgrp_send_discards(struct gfs2_sbd *sdp, u64 offset,
 				   struct buffer_head *bh,
@@ -77,7 +77,7 @@ extern int gfs2_fitrim(struct file *filp, void __user *argp);
 /* This is how to tell if a reservation is in the rgrp tree: */
 static inline bool gfs2_rs_active(const struct gfs2_blkreserv *rs)
 {
-	return rs && !RB_EMPTY_NODE(&rs->rs_node);
+	return !RB_EMPTY_NODE(&rs->rs_node);
 }
 
 static inline int rgrp_contains_block(struct gfs2_rgrpd *rgd, u64 block)
@@ -88,4 +88,8 @@ static inline int rgrp_contains_block(struct gfs2_rgrpd *rgd, u64 block)
 }
 
 extern void check_and_update_goal(struct gfs2_inode *ip);
+
+extern void rgrp_lock_local(struct gfs2_rgrpd *rgd);
+extern void rgrp_unlock_local(struct gfs2_rgrpd *rgd);
+
 #endif /* __RGRP_DOT_H__ */

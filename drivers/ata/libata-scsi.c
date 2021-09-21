@@ -1003,7 +1003,7 @@ void ata_scsi_sdev_config(struct scsi_device *sdev)
 }
 
 /**
- *	atapi_drain_needed - Check whether data transfer may overflow
+ *	ata_scsi_dma_need_drain - Check whether data transfer may overflow
  *	@rq: request to be checked
  *
  *	ATAPI commands which transfer variable length data to host
@@ -1043,8 +1043,7 @@ int ata_scsi_dev_config(struct scsi_device *sdev, struct ata_device *dev)
 		blk_queue_max_segments(q, queue_max_segments(q) - 1);
 
 		sdev->dma_drain_len = ATAPI_MAX_DRAIN;
-		sdev->dma_drain_buf = kmalloc(sdev->dma_drain_len,
-				q->bounce_gfp | GFP_KERNEL);
+		sdev->dma_drain_buf = kmalloc(sdev->dma_drain_len, GFP_NOIO);
 		if (!sdev->dma_drain_buf) {
 			ata_dev_err(dev, "drain buffer allocation failed\n");
 			return -ENOMEM;

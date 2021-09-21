@@ -7,6 +7,7 @@
 
 #include <linux/memblock.h>
 #include <linux/clk.h>
+#include <linux/dma-direct.h> /* to test phys_to_dma/dma_to_phys */
 #include <linux/err.h>
 #include <linux/errno.h>
 #include <linux/hashtable.h>
@@ -21,6 +22,7 @@
 #include <linux/slab.h>
 #include <linux/device.h>
 #include <linux/platform_device.h>
+#include <linux/kernel.h>
 
 #include <linux/i2c.h>
 #include <linux/i2c-mux.h>
@@ -868,11 +870,32 @@ static void __init of_unittest_changeset(void)
 #endif
 }
 
-static void __init of_unittest_dma_ranges_one(const char *path,
-		u64 expect_dma_addr, u64 expect_paddr, u64 expect_size)
+static void __init of_unittest_dma_get_max_cpu_address(void)
 {
 	struct device_node *np;
-	u64 dma_addr, paddr, size;
+	phys_addr_t cpu_addr;
+
+	if (!IS_ENABLED(CONFIG_OF_ADDRESS))
+		return;
+
+	np = of_find_node_by_path("/testcase-data/address-tests");
+	if (!np) {
+		pr_err("missing testcase data\n");
+		return;
+	}
+
+	cpu_addr = of_dma_get_max_cpu_address(np);
+	unittest(cpu_addr == 0x4fffffff,
+		 "of_dma_get_max_cpu_address: wrong CPU addr %pad (expecting %x)\n",
+		 &cpu_addr, 0x4fffffff);
+}
+
+static void __init of_unittest_dma_ranges_one(const char *path,
+		u64 expect_dma_addr, u64 expect_paddr)
+{
+#ifdef CONFIG_HAS_DMA
+	struct device_node *np;
+	const struct bus_dma_region *map = NULL;
 	int rc;
 
 	np = of_find_node_by_path(path);
@@ -881,28 +904,40 @@ static void __init of_unittest_dma_ranges_one(const char *path,
 		return;
 	}
 
-	rc = of_dma_get_range(np, &dma_addr, &paddr, &size);
+	rc = of_dma_get_range(np, &map);
 
 	unittest(!rc, "of_dma_get_range failed on node %pOF rc=%i\n", np, rc);
+
 	if (!rc) {
-		unittest(size == expect_size,
-			 "of_dma_get_range wrong size on node %pOF size=%llx\n", np, size);
+		phys_addr_t	paddr;
+		dma_addr_t	dma_addr;
+		struct device	dev_bogus;
+
+		dev_bogus.dma_range_map = map;
+		paddr = dma_to_phys(&dev_bogus, expect_dma_addr);
+		dma_addr = phys_to_dma(&dev_bogus, expect_paddr);
+
 		unittest(paddr == expect_paddr,
-			 "of_dma_get_range wrong phys addr (%llx) on node %pOF", paddr, np);
+			 "of_dma_get_range: wrong phys addr %pap (expecting %llx) on node %pOF\n",
+			 &paddr, expect_paddr, np);
 		unittest(dma_addr == expect_dma_addr,
-			 "of_dma_get_range wrong DMA addr (%llx) on node %pOF", dma_addr, np);
+			 "of_dma_get_range: wrong DMA addr %pad (expecting %llx) on node %pOF\n",
+			 &dma_addr, expect_dma_addr, np);
+
+		kfree(map);
 	}
 	of_node_put(np);
+#endif
 }
 
 static void __init of_unittest_parse_dma_ranges(void)
 {
 	of_unittest_dma_ranges_one("/testcase-data/address-tests/device@70000000",
-		0x0, 0x20000000, 0x40000000);
+		0x0, 0x20000000);
 	of_unittest_dma_ranges_one("/testcase-data/address-tests/bus@80000000/device@1000",
-		0x100000000, 0x20000000, 0x2000000000);
+		0x100000000, 0x20000000);
 	of_unittest_dma_ranges_one("/testcase-data/address-tests/pci@90000000",
-		0x80000000, 0x20000000, 0x10000000);
+		0x80000000, 0x20000000);
 }
 
 static void __init of_unittest_pci_dma_ranges(void)
@@ -1252,7 +1287,7 @@ static void __init of_unittest_platform_populate(void)
 			unittest(pdev,
 				 "Could not create device for node '%pOFn'\n",
 				 grandchild);
-			of_dev_put(pdev);
+			platform_device_put(pdev);
 		}
 	}
 
@@ -1374,7 +1409,8 @@ static void attach_node_and_children(struct device_node *np)
 static int __init unittest_data_add(void)
 {
 	void *unittest_data;
-	struct device_node *unittest_data_node, *np;
+	void *unittest_data_align;
+	struct device_node *unittest_data_node = NULL, *np;
 	/*
 	 * __dtb_testcases_begin[] and __dtb_testcases_end[] are magically
 	 * created by cmd_dt_S_dtb in scripts/Makefile.lib
@@ -1383,21 +1419,29 @@ static int __init unittest_data_add(void)
 	extern uint8_t __dtb_testcases_end[];
 	const int size = __dtb_testcases_end - __dtb_testcases_begin;
 	int rc;
+	void *ret;
 
 	if (!size) {
-		pr_warn("%s: No testcase data to attach; not running tests\n",
-			__func__);
+		pr_warn("%s: testcases is empty\n", __func__);
 		return -ENODATA;
 	}
 
 	/* creating copy */
-	unittest_data = kmemdup(__dtb_testcases_begin, size, GFP_KERNEL);
+	unittest_data = kmalloc(size + FDT_ALIGN_SIZE, GFP_KERNEL);
 	if (!unittest_data)
 		return -ENOMEM;
 
-	of_fdt_unflatten_tree(unittest_data, NULL, &unittest_data_node);
+	unittest_data_align = PTR_ALIGN(unittest_data, FDT_ALIGN_SIZE);
+	memcpy(unittest_data_align, __dtb_testcases_begin, size);
+
+	ret = of_fdt_unflatten_tree(unittest_data_align, NULL, &unittest_data_node);
+	if (!ret) {
+		pr_warn("%s: unflatten testcases tree failed\n", __func__);
+		kfree(unittest_data);
+		return -ENODATA;
+	}
 	if (!unittest_data_node) {
-		pr_warn("%s: No tree to attach; not running tests\n", __func__);
+		pr_warn("%s: testcases tree is empty\n", __func__);
 		kfree(unittest_data);
 		return -ENODATA;
 	}
@@ -3252,6 +3296,7 @@ static int __init of_unittest(void)
 	of_unittest_changeset();
 	of_unittest_parse_interrupts();
 	of_unittest_parse_interrupts_extended();
+	of_unittest_dma_get_max_cpu_address();
 	of_unittest_parse_dma_ranges();
 	of_unittest_pci_dma_ranges();
 	of_unittest_match_node();

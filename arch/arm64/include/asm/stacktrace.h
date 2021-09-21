@@ -63,7 +63,7 @@ struct stackframe {
 
 extern int unwind_frame(struct task_struct *tsk, struct stackframe *frame);
 extern void walk_stackframe(struct task_struct *tsk, struct stackframe *frame,
-			    int (*fn)(struct stackframe *, void *), void *data);
+			    bool (*fn)(void *, unsigned long), void *data);
 extern void dump_backtrace(struct pt_regs *regs, struct task_struct *tsk,
 			   const char *loglvl);
 
@@ -148,27 +148,7 @@ static inline bool on_accessible_stack(const struct task_struct *tsk,
 	return false;
 }
 
-static inline void start_backtrace(struct stackframe *frame,
-				   unsigned long fp, unsigned long pc)
-{
-	frame->fp = fp;
-	frame->pc = pc;
-#ifdef CONFIG_FUNCTION_GRAPH_TRACER
-	frame->graph = 0;
-#endif
-
-	/*
-	 * Prime the first unwind.
-	 *
-	 * In unwind_frame() we'll check that the FP points to a valid stack,
-	 * which can't be STACK_TYPE_UNKNOWN, and the first unwind will be
-	 * treated as a transition to whichever stack that happens to be. The
-	 * prev_fp value won't be used, but we set it to 0 such that it is
-	 * definitely not an accessible stack address.
-	 */
-	bitmap_zero(frame->stacks_done, __NR_STACK_TYPES);
-	frame->prev_fp = 0;
-	frame->prev_type = STACK_TYPE_UNKNOWN;
-}
+void start_backtrace(struct stackframe *frame, unsigned long fp,
+		     unsigned long pc);
 
 #endif	/* __ASM_STACKTRACE_H */

@@ -8,6 +8,7 @@
 #include <linux/termios.h>
 #include <linux/tty.h>
 #include <linux/export.h>
+#include "tty.h"
 
 
 /*
@@ -119,8 +120,8 @@ EXPORT_SYMBOL(tty_termios_input_baud_rate);
 /**
  *	tty_termios_encode_baud_rate
  *	@termios: ktermios structure holding user requested state
- *	@ispeed: input speed
- *	@ospeed: output speed
+ *	@ibaud: input speed
+ *	@obaud: output speed
  *
  *	Encode the speeds set into the passed termios structure. This is
  *	used as a library helper for drivers so that they can report back
@@ -222,8 +223,9 @@ EXPORT_SYMBOL_GPL(tty_termios_encode_baud_rate);
 
 /**
  *	tty_encode_baud_rate		-	set baud rate of the tty
+ *	@tty:   terminal device
  *	@ibaud: input baud rate
- *	@obad: output baud rate
+ *	@obaud: output baud rate
  *
  *	Update the current termios data for the tty with the new speed
  *	settings. The caller must hold the termios_rwsem for the tty in

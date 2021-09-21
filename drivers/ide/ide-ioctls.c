@@ -49,7 +49,7 @@ read_val:
 	return err >= 0 ? put_user_long(err, arg) : err;
 
 set_val:
-	if (bdev != bdev->bd_contains)
+	if (bdev_is_partition(bdev))
 		err = -EINVAL;
 	else {
 		if (!capable(CAP_SYS_ADMIN))
@@ -137,7 +137,7 @@ static int ide_cmd_ioctl(ide_drive_t *drive, void __user *argp)
 
 		rq = blk_get_request(drive->queue, REQ_OP_DRV_IN, 0);
 		ide_req(rq)->type = ATA_PRIV_TASKFILE;
-		blk_execute_rq(drive->queue, NULL, rq, 0);
+		blk_execute_rq(NULL, rq, 0);
 		err = scsi_req(rq)->result ? -EIO : 0;
 		blk_put_request(rq);
 
@@ -235,7 +235,7 @@ static int generic_drive_reset(ide_drive_t *drive)
 	ide_req(rq)->type = ATA_PRIV_MISC;
 	scsi_req(rq)->cmd_len = 1;
 	scsi_req(rq)->cmd[0] = REQ_DRIVE_RESET;
-	blk_execute_rq(drive->queue, NULL, rq, 1);
+	blk_execute_rq(NULL, rq, 1);
 	ret = scsi_req(rq)->result;
 	blk_put_request(rq);
 	return ret;
@@ -257,7 +257,7 @@ int generic_ide_ioctl(ide_drive_t *drive, struct block_device *bdev,
 	switch (cmd) {
 	case HDIO_OBSOLETE_IDENTITY:
 	case HDIO_GET_IDENTITY:
-		if (bdev != bdev->bd_contains)
+		if (bdev_is_partition(bdev))
 			return -EINVAL;
 		return ide_get_identity_ioctl(drive, cmd, argp);
 	case HDIO_GET_NICE:

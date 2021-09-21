@@ -114,7 +114,7 @@ nfs4_do_check_delegation(struct inode *inode, fmode_t flags, bool mark)
 	return ret;
 }
 /**
- * nfs_have_delegation - check if inode has a delegation, mark it
+ * nfs4_have_delegation - check if inode has a delegation, mark it
  * NFS_DELEGATION_REFERENCED if there is one.
  * @inode: inode to check
  * @flags: delegation types to check for
@@ -481,6 +481,22 @@ int nfs_inode_set_delegation(struct inode *inode, const struct cred *cred,
 	if (freeme == NULL)
 		goto out;
 add_new:
+	/*
+	 * If we didn't revalidate the change attribute before setting
+	 * the delegation, then pre-emptively ask for a full attribute
+	 * cache revalidation.
+	 */
+	spin_lock(&inode->i_lock);
+	if (NFS_I(inode)->cache_validity & NFS_INO_INVALID_CHANGE)
+		nfs_set_cache_invalid(inode,
+			NFS_INO_INVALID_ATIME | NFS_INO_INVALID_CTIME |
+			NFS_INO_INVALID_MTIME | NFS_INO_INVALID_SIZE |
+			NFS_INO_INVALID_BLOCKS | NFS_INO_INVALID_NLINK |
+			NFS_INO_INVALID_OTHER | NFS_INO_INVALID_DATA |
+			NFS_INO_INVALID_ACCESS | NFS_INO_INVALID_ACL |
+			NFS_INO_INVALID_XATTR);
+	spin_unlock(&inode->i_lock);
+
 	list_add_tail_rcu(&delegation->super_list, &server->delegations);
 	rcu_assign_pointer(nfsi->delegation, delegation);
 	delegation = NULL;
@@ -488,11 +504,6 @@ add_new:
 	atomic_long_inc(&nfs_active_delegations);
 
 	trace_nfs4_set_delegation(inode, type);
-
-	spin_lock(&inode->i_lock);
-	if (NFS_I(inode)->cache_validity & (NFS_INO_INVALID_ATTR|NFS_INO_INVALID_ATIME))
-		NFS_I(inode)->cache_validity |= NFS_INO_REVAL_FORCED;
-	spin_unlock(&inode->i_lock);
 out:
 	spin_unlock(&clp->cl_lock);
 	if (delegation != NULL)
@@ -674,7 +685,7 @@ void nfs_inode_evict_delegation(struct inode *inode)
 }
 
 /**
- * nfs_inode_return_delegation - synchronously return a delegation
+ * nfs4_inode_return_delegation - synchronously return a delegation
  * @inode: inode to process
  *
  * This routine will always flush any dirty data to disk on the
@@ -697,7 +708,7 @@ int nfs4_inode_return_delegation(struct inode *inode)
 }
 
 /**
- * nfs_inode_return_delegation_on_close - asynchronously return a delegation
+ * nfs4_inode_return_delegation_on_close - asynchronously return a delegation
  * @inode: inode to process
  *
  * This routine is called on file close in order to determine if the
@@ -811,7 +822,7 @@ void nfs_expire_all_delegations(struct nfs_client *clp)
 }
 
 /**
- * nfs_super_return_all_delegations - return delegations for one superblock
+ * nfs_server_return_all_delegations - return delegations for one superblock
  * @server: pointer to nfs_server to process
  *
  */
@@ -1011,22 +1022,24 @@ nfs_delegation_find_inode_server(struct nfs_server *server,
 				 const struct nfs_fh *fhandle)
 {
 	struct nfs_delegation *delegation;
-	struct inode *freeme, *res = NULL;
+	struct super_block *freeme = NULL;
+	struct inode *res = NULL;
 
 	list_for_each_entry_rcu(delegation, &server->delegations, super_list) {
 		spin_lock(&delegation->lock);
 		if (delegation->inode != NULL &&
 		    !test_bit(NFS_DELEGATION_REVOKED, &delegation->flags) &&
 		    nfs_compare_fh(fhandle, &NFS_I(delegation->inode)->fh) == 0) {
-			freeme = igrab(delegation->inode);
-			if (freeme && nfs_sb_active(freeme->i_sb))
-				res = freeme;
+			if (nfs_sb_active(server->super)) {
+				freeme = server->super;
+				res = igrab(delegation->inode);
+			}
 			spin_unlock(&delegation->lock);
 			if (res != NULL)
 				return res;
 			if (freeme) {
 				rcu_read_unlock();
-				iput(freeme);
+				nfs_sb_deactive(freeme);
 				rcu_read_lock();
 			}
 			return ERR_PTR(-EAGAIN);

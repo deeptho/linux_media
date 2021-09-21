@@ -11,7 +11,7 @@
 
 /**
  * struct hl_eqe_work - This structure is used to schedule work of EQ
- *                      entry and armcp_reset event
+ *                      entry and cpucp_reset event
  *
  * @eq_work:          workqueue object to run when EQ entry is received
  * @hdev:             pointer to device structure
@@ -47,7 +47,7 @@ inline u32 hl_cq_inc_ptr(u32 ptr)
  * Increment ptr by 1. If it reaches the number of event queue
  * entries, set it to 0
  */
-inline u32 hl_eq_inc_ptr(u32 ptr)
+static inline u32 hl_eq_inc_ptr(u32 ptr)
 {
 	ptr++;
 	if (unlikely(ptr == HL_EQ_LENGTH))
@@ -90,7 +90,7 @@ irqreturn_t hl_irq_handler_cq(int irq, void *arg)
 		return IRQ_HANDLED;
 	}
 
-	cq_base = (struct hl_cq_entry *) (uintptr_t) cq->kernel_address;
+	cq_base = cq->kernel_address;
 
 	while (1) {
 		bool entry_ready = ((le32_to_cpu(cq_base[cq->ci].data) &
@@ -137,6 +137,62 @@ irqreturn_t hl_irq_handler_cq(int irq, void *arg)
 	return IRQ_HANDLED;
 }
 
+static void handle_user_cq(struct hl_device *hdev,
+			struct hl_user_interrupt *user_cq)
+{
+	struct hl_user_pending_interrupt *pend;
+
+	spin_lock(&user_cq->wait_list_lock);
+	list_for_each_entry(pend, &user_cq->wait_list_head, wait_list_node)
+		complete_all(&pend->fence.completion);
+	spin_unlock(&user_cq->wait_list_lock);
+}
+
+/**
+ * hl_irq_handler_user_cq - irq handler for user completion queues
+ *
+ * @irq: irq number
+ * @arg: pointer to user interrupt structure
+ *
+ */
+irqreturn_t hl_irq_handler_user_cq(int irq, void *arg)
+{
+	struct hl_user_interrupt *user_cq = arg;
+	struct hl_device *hdev = user_cq->hdev;
+
+	dev_dbg(hdev->dev,
+		"got user completion interrupt id %u",
+		user_cq->interrupt_id);
+
+	/* Handle user cq interrupts registered on all interrupts */
+	handle_user_cq(hdev, &hdev->common_user_interrupt);
+
+	/* Handle user cq interrupts registered on this specific interrupt */
+	handle_user_cq(hdev, user_cq);
+
+	return IRQ_HANDLED;
+}
+
+/**
+ * hl_irq_handler_default - default irq handler
+ *
+ * @irq: irq number
+ * @arg: pointer to user interrupt structure
+ *
+ */
+irqreturn_t hl_irq_handler_default(int irq, void *arg)
+{
+	struct hl_user_interrupt *user_interrupt = arg;
+	struct hl_device *hdev = user_interrupt->hdev;
+	u32 interrupt_id = user_interrupt->interrupt_id;
+
+	dev_err(hdev->dev,
+		"got invalid user interrupt %u",
+		interrupt_id);
+
+	return IRQ_HANDLED;
+}
+
 /**
  * hl_irq_handler_eq - irq handler for event queue
  *
@@ -152,7 +208,7 @@ irqreturn_t hl_irq_handler_eq(int irq, void *arg)
 	struct hl_eq_entry *eq_base;
 	struct hl_eqe_work *handle_eqe_work;
 
-	eq_base = (struct hl_eq_entry *) (uintptr_t) eq->kernel_address;
+	eq_base = eq->kernel_address;
 
 	while (1) {
 		bool entry_ready =
@@ -221,7 +277,7 @@ int hl_cq_init(struct hl_device *hdev, struct hl_cq *q, u32 hw_queue_id)
 		return -ENOMEM;
 
 	q->hdev = hdev;
-	q->kernel_address = (u64) (uintptr_t) p;
+	q->kernel_address = p;
 	q->hw_queue_id = hw_queue_id;
 	q->ci = 0;
 	q->pi = 0;
@@ -242,7 +298,8 @@ int hl_cq_init(struct hl_device *hdev, struct hl_cq *q, u32 hw_queue_id)
 void hl_cq_fini(struct hl_device *hdev, struct hl_cq *q)
 {
 	hdev->asic_funcs->asic_dma_free_coherent(hdev, HL_CQ_SIZE_IN_BYTES,
-			(void *) (uintptr_t) q->kernel_address, q->bus_address);
+						 q->kernel_address,
+						 q->bus_address);
 }
 
 void hl_cq_reset(struct hl_device *hdev, struct hl_cq *q)
@@ -259,7 +316,7 @@ void hl_cq_reset(struct hl_device *hdev, struct hl_cq *q)
 	 * when the device is operational again
 	 */
 
-	memset((void *) (uintptr_t) q->kernel_address, 0, HL_CQ_SIZE_IN_BYTES);
+	memset(q->kernel_address, 0, HL_CQ_SIZE_IN_BYTES);
 }
 
 /**
@@ -282,7 +339,7 @@ int hl_eq_init(struct hl_device *hdev, struct hl_eq *q)
 		return -ENOMEM;
 
 	q->hdev = hdev;
-	q->kernel_address = (u64) (uintptr_t) p;
+	q->kernel_address = p;
 	q->ci = 0;
 
 	return 0;
@@ -302,7 +359,7 @@ void hl_eq_fini(struct hl_device *hdev, struct hl_eq *q)
 
 	hdev->asic_funcs->cpu_accessible_dma_pool_free(hdev,
 					HL_EQ_SIZE_IN_BYTES,
-					(void *) (uintptr_t) q->kernel_address);
+					q->kernel_address);
 }
 
 void hl_eq_reset(struct hl_device *hdev, struct hl_eq *q)
@@ -316,5 +373,5 @@ void hl_eq_reset(struct hl_device *hdev, struct hl_eq *q)
 	 * when the device is operational again
 	 */
 
-	memset((void *) (uintptr_t) q->kernel_address, 0, HL_EQ_SIZE_IN_BYTES);
+	memset(q->kernel_address, 0, HL_EQ_SIZE_IN_BYTES);
 }

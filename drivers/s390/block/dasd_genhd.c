@@ -101,18 +101,11 @@ int dasd_scan_partitions(struct dasd_block *block)
 	struct block_device *bdev;
 	int rc;
 
-	bdev = bdget_disk(block->gdp, 0);
-	if (!bdev) {
-		DBF_DEV_EVENT(DBF_ERR, block->base, "%s",
-			      "scan partitions error, bdget returned NULL");
-		return -ENODEV;
-	}
-
-	rc = blkdev_get(bdev, FMODE_READ, NULL);
-	if (rc < 0) {
+	bdev = blkdev_get_by_dev(disk_devt(block->gdp), FMODE_READ, NULL);
+	if (IS_ERR(bdev)) {
 		DBF_DEV_EVENT(DBF_ERR, block->base,
-			      "scan partitions error, blkdev_get returned %d",
-			      rc);
+			      "scan partitions error, blkdev_get returned %ld",
+			      PTR_ERR(bdev));
 		return -ENODEV;
 	}
 
@@ -153,12 +146,11 @@ void dasd_destroy_partitions(struct dasd_block *block)
 	block->bdev = NULL;
 
 	mutex_lock(&bdev->bd_mutex);
-	blk_drop_partitions(bdev);
+	bdev_disk_changed(bdev, true);
 	mutex_unlock(&bdev->bd_mutex);
 
 	/* Matching blkdev_put to the blkdev_get in dasd_scan_partitions. */
 	blkdev_put(bdev, FMODE_READ);
-	set_capacity(block->gdp, 0);
 }
 
 int dasd_gendisk_init(void)

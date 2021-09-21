@@ -56,7 +56,7 @@ static int write_mmp_block(struct super_block *sb, struct buffer_head *bh)
 	wait_on_buffer(bh);
 	sb_end_write(sb);
 	if (unlikely(!buffer_uptodate(bh)))
-		return 1;
+		return -EIO;
 
 	return 0;
 }
@@ -85,15 +85,11 @@ static int read_mmp_block(struct super_block *sb, struct buffer_head **bh,
 		}
 	}
 
-	get_bh(*bh);
 	lock_buffer(*bh);
-	(*bh)->b_end_io = end_buffer_read_sync;
-	submit_bh(REQ_OP_READ, REQ_META | REQ_PRIO, *bh);
-	wait_on_buffer(*bh);
-	if (!buffer_uptodate(*bh)) {
-		ret = -EIO;
+	ret = ext4_read_bh(*bh, REQ_META | REQ_PRIO, NULL);
+	if (ret)
 		goto warn_exit;
-	}
+
 	mmp = (struct mmp_struct *)((*bh)->b_data);
 	if (le32_to_cpu(mmp->mmp_magic) != EXT4_MMP_MAGIC) {
 		ret = -EFSCORRUPTED;

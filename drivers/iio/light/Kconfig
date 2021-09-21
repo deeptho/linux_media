@@ -86,6 +86,21 @@ config APDS9960
 	  To compile this driver as a module, choose M here: the
 	  module will be called apds9960
 
+config AS73211
+	tristate "AMS AS73211 XYZ color sensor"
+	depends on I2C
+	select IIO_BUFFER
+	select IIO_TRIGGERED_BUFFER
+	help
+	 If you say yes here you get support for the AMS AS73211
+	 JENCOLOR(R) Digital XYZ Sensor.
+
+	 For triggered measurements, you will need an additional trigger driver
+	 like IIO_HRTIMER_TRIGGER or IIO_SYSFS_TRIGGER.
+
+	 This driver can also be built as a module.  If so, the module
+	 will be called as73211.
+
 config BH1750
 	tristate "ROHM BH1750 ambient light sensor"
 	depends on I2C
@@ -241,7 +256,6 @@ config ISL29125
 config HID_SENSOR_ALS
 	depends on HID_SENSOR_HUB
 	select IIO_BUFFER
-	select IIO_TRIGGERED_BUFFER
 	select HID_SENSOR_IIO_COMMON
 	select HID_SENSOR_IIO_TRIGGER
 	tristate "HID ALS"
@@ -255,7 +269,6 @@ config HID_SENSOR_ALS
 config HID_SENSOR_PROX
 	depends on HID_SENSOR_HUB
 	select IIO_BUFFER
-	select IIO_TRIGGERED_BUFFER
 	select HID_SENSOR_IIO_COMMON
 	select HID_SENSOR_IIO_TRIGGER
 	tristate "HID PROX"
@@ -529,6 +542,7 @@ config VCNL4000
 
 config VCNL4035
 	tristate "VCNL4035 combined ALS and proximity sensor"
+	select IIO_BUFFER
 	select IIO_TRIGGERED_BUFFER
 	select REGMAP_I2C
 	depends on I2C
