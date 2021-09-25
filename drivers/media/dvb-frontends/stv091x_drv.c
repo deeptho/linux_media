@@ -2452,7 +2452,7 @@ static int tune(struct dvb_frontend *fe, bool re_tune,
 	{
 		int max_num_samples = state->symbol_rate /5 ; //we spend max 500 ms on this
 		if(max_num_samples > 1024)
-			max_num_samples = 1204; //also set an upper limit which should be fast enough
+			max_num_samples = 1024; //also set an upper limit which should be fast enough
 		stv091x_constellation_start(fe, &p->constellation, max_num_samples);
 	}
 	if (r)
@@ -2814,7 +2814,7 @@ static int stv091x_constellation_start(struct dvb_frontend *fe,
 
 
 	stv091x_stop_task(fe);
-	dprintk("demod: %d: constellation num_samples=%d/%d  mode=%d\n", state->nr, user->num_samples, max_num_samples, (int)cs->constel_select);
+	dprintk("demod: %d: constellation num_samples: req=%d max=%d  mode=%d\n", state->nr, user->num_samples, max_num_samples, (int)cs->constel_select);
 
 	if(num_samples ==0) {
 		return -EINVAL;
@@ -2895,6 +2895,7 @@ static int stv091x_constellation_get(struct dvb_frontend *fe, struct dtv_fe_cons
 	struct stv *state = fe->demodulator_priv;
 	struct stv_constellation_scan_state* cs = &state->constellation_scan_state;
 	int error = 0;
+	dprintk("demod: %d: constellation num_samples=%d/%d\n", state->nr, cs->num_samples, user->num_samples);
 	if(user->num_samples > cs->num_samples)
 		user->num_samples = cs->num_samples;
 	if(cs->samples) {
@@ -2902,6 +2903,7 @@ static int stv091x_constellation_get(struct dvb_frontend *fe, struct dtv_fe_cons
 										 user->num_samples * sizeof(cs->samples[0]))) {
 			error = -EFAULT;
 		}
+
 	}
 	else
 		error = -EFAULT;
@@ -2948,9 +2950,6 @@ static struct dvb_frontend_ops stv091x_ops = {
 	.stop_task = stv091x_stop_task,
 	.spectrum_start = stv091x_spectrum_start,
 	.spectrum_get = stv091x_spectrum_get,
-#if 0
-	.constellation_start	= stv091x_constellation_start,
-#endif
 	.constellation_get	= stv091x_constellation_get,
 };
 
