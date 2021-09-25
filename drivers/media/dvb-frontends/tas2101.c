@@ -1,5 +1,5 @@
 /*
-    Tmax TAS2101 - DVBS/S2 Satellite demodulator driver
+2101 - DVBS/S2 Satellite demodulator driver
 
     Copyright (C) 2014 Luis Alves <ljalvs@gmail.com>
 
@@ -57,6 +57,9 @@ struct i2c_adapter *tas2101_get_i2c_adapter(struct dvb_frontend *fe, int bus)
 	}
 }
 EXPORT_SYMBOL_GPL(tas2101_get_i2c_adapter);
+
+
+static int tas2101_stop_task(struct dvb_frontend *fe);
 
 /* write multiple (continuous) registers */
 /* the first value is the starting address */
@@ -890,20 +893,40 @@ static int tas2101_get_frontend(struct dvb_frontend *fe,
 	return 0;
 }
 
+
+static int tas2101_constellation_start(struct dvb_frontend *fe,
+																			 struct dtv_fe_constellation* user, int max_num_samples);
+
+
+
 static int tas2101_tune(struct dvb_frontend *fe, bool re_tune,
 	unsigned int mode_flags, unsigned int *delay, enum fe_status *status)
 {
-	struct tas2101_priv *priv = fe->demodulator_priv;
+	struct tas2101_priv *state = fe->demodulator_priv;
+	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
 
-	dev_dbg(&priv->i2c->dev, "%s()\n", __func__);
+	int r;
+	dev_dbg(&state->i2c->dev, "%s()\n", __func__);
 
 	*delay = HZ/2;
 	if (re_tune) {
-		int ret = tas2101_set_frontend(fe);
-		if (ret)
-			return ret;
+		tas2101_stop_task(fe);
+		r = tas2101_set_frontend(fe);
+		if (r)
+			return r;
 	}
-	return tas2101_read_status(fe, status);
+	r = tas2101_read_status(fe, status);
+	{
+#ifdef TODO
+		int max_num_samples = state->symbol_rate /5 ; //we spend max 500 ms on this
+#else
+		int max_num_samples = 1024;
+#endif
+		if(max_num_samples > 1024)
+			max_num_samples = 1024; //also set an upper limit which should be fast enough
+		tas2101_constellation_start(fe, &p->constellation, max_num_samples);
+	}
+	return r;
 }
 
 static enum dvbfe_algo tas2101_get_algo(struct dvb_frontend *fe)
@@ -1037,6 +1060,102 @@ error:
 	return 0;
 }
 
+static int tas2101_constellation_start(struct dvb_frontend *fe,
+																			 struct dtv_fe_constellation* user, int max_num_samples)
+{
+	struct tas2101_priv *state = fe->demodulator_priv;
+	struct tas2101_constellation_scan_state* cs = &state->constellation_scan_state;
+	int num_samples = user->num_samples;
+	s8 buff[4];
+	u8 old_reg, val;
+	int i;
+	int sleeptime=0;
+
+	if(num_samples > max_num_samples)
+		num_samples = max_num_samples;
+
+
+	tas2101_stop_task(fe);
+	dprintk("constellation num_samples=%d/%d  mode=%d\n", user->num_samples, max_num_samples, (int)cs->constel_select);
+
+	if(num_samples ==0) {
+		return -EINVAL;
+	}
+	if(cs->samples_len != num_samples) {
+		if(cs->samples)
+			kfree(cs->samples);
+		cs->samples_len = num_samples;
+		cs->samples = kzalloc(cs->samples_len * (sizeof(cs->samples[0])), GFP_KERNEL);
+		if (!cs->samples) {
+			return  -ENOMEM;
+		}
+	}
+
+	cs->num_samples = 0;
+	cs->constel_select =  user->constel_select;
+
+
+	old_reg = tas2101_rd(state, 0x36, &old_reg);
+	tas2101_wr(state, 0x36, old_reg &0xFE);
+	tas2101_wr(state, 0x38, 0x53);
+
+	for (cs->num_samples = 0; cs->num_samples < cs->samples_len; ++cs->num_samples) {
+		if ((cs->num_samples% 20==19) &&  (kthread_should_stop() || dvb_frontend_task_should_stop(fe))) {
+			dprintk("exiting on should stop\n");
+			break;
+		}
+		for(i=0; i<20; ++i) {
+			if(tas2101_rd(state, 0x39, &val)<0) {
+				dprintk("XXXX tas2101_rd failed at num_samples=%d", cs->num_samples);
+				break;
+			}
+			dprintk("XXXX val=0x%x", val);
+			if(!(val & 0x80)) {
+				msleep(5);
+				continue;
+			}
+#if 0
+			if(tas2101_rdm(state, 0x3B, (u8*)buff, 4)<0) {
+				dprintk("XXXX tas2101_rd failed at num_samples=%d", cs->num_samples);
+				break;
+			}
+#else
+			if(tas2101_rd(state, 0x3B, &buff[0])<0) {
+				dprintk("XXXX tas2101_rd failed at num_samples=%d", cs->num_samples);
+				break;
+			}
+			if(tas2101_rd(state, 0x3B, &buff[1])<0) {
+				dprintk("XXXX tas2101_rd failed at num_samples=%d", cs->num_samples);
+				break;
+			}
+#endif
+			dprintk("XXXX read i=%d %02x %02x %02x %02x", i, buff[0], buff[1], buff[2], buff[3]);
+			buff[0] &= 0x7F;
+			buff[1] &= 0x7F;
+			if(buff[0] > 63)
+				buff[0] -= 128;
+			if(buff[1] > 63)
+				buff[1] -= 128;
+			cs->samples[cs->num_samples].imag = buff[0];
+			cs->samples[cs->num_samples].real = buff[1];
+			break;
+		}
+		sleeptime += i*5;
+		if (sleeptime>=200)
+			dprintk("XXX Giving up after 200ms at  num_samples=%d", cs->num_samples);
+		if(i==20) {
+			dprintk("XXX Giving up at  num_samples=%d", cs->num_samples);
+			break;
+		}
+		//GX_Delay_N_ms(5);
+	}
+
+	val = 0x50;
+	tas2101_wr(state, 0x38, 0x50);
+ 	tas2101_wr(state, 0x36, old_reg);
+
+	return 0;
+}
 
 static int tas2101_stop_task(struct dvb_frontend *fe)
 {
@@ -1052,7 +1171,6 @@ static int tas2101_stop_task(struct dvb_frontend *fe)
 		kfree(cs->samples);
 	memset(ss, 0, sizeof(*ss));
 	memset(cs, 0, sizeof(*cs));
-	dprintk("Freed memory\n");
 	return 0;
 }
 
@@ -1091,6 +1209,28 @@ static int tas2101_i2c_gate_ctrl(struct dvb_frontend* fe, int enable)
 	return ret;
 }
 #endif
+
+static int tas2101_constellation_get(struct dvb_frontend *fe, struct dtv_fe_constellation* user)
+{
+	struct tas2101_priv *state = fe->demodulator_priv;
+	struct tas2101_constellation_scan_state* cs = &state->constellation_scan_state;
+	int error = 0;
+	int adapter =0; //TODO
+	dprintk("demod: %d: constellation num_samples=%d/%d\n", adapter, cs->num_samples, user->num_samples);
+	if(user->num_samples > cs->num_samples)
+		user->num_samples = cs->num_samples;
+	if(cs->samples) {
+		if (copy_to_user((void __user*) user->samples, cs->samples,
+										 user->num_samples * sizeof(cs->samples[0]))) {
+			error = -EFAULT;
+		}
+	}
+	else
+		error = -EFAULT;
+	return error;
+}
+
+
 
 static struct dvb_frontend_ops tas2101_ops = {
 	.delsys = { SYS_DVBS, SYS_DVBS2 },
@@ -1141,7 +1281,7 @@ static struct dvb_frontend_ops tas2101_ops = {
 
 	.eeprom_read		= tas2101_eeprom_read,
 	.eeprom_write		= tas2101_eeprom_write,
-
+	.constellation_get	= tas2101_constellation_get,
 };
 
 MODULE_DESCRIPTION("DVB Frontend module for Tmax TAS2101");
