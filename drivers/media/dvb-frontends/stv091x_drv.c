@@ -4,7 +4,7 @@
  * Copyright (C) 2014-2015 Ralph Metzler <rjkm@metzlerbros.de>
  * Marcus Metzler <mocm@metzlerbros.de>
  * developed for Digital Devices GmbH
- * Copyright (C) 2020 Deep Thought <deeptho@gmail.com>
+ * Copyright (C) 2020 Deep Thought <deeptho@gmail.com>: blindscan, spectrum, constellation code
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * version 2 only, as published by the Free Software Foundation.
@@ -1240,69 +1240,6 @@ static int stv091x_set_search_standard(struct stv *state, struct dtv_frontend_pr
 	/* Reset demod */
 	write_reg(state, RSTV0910_P2_DMDISTATE + state->regoff, 0x1F);
 
-
-#if 0
-	switch(p->delivery_system) {
-	case SYS_DVBS:
-		write_reg_fields(state, RSTV0910_P2_DMDCFGMD,
-										 {FSTV0910_P2_DVBS1_ENABLE, 1},
-										 {FSTV0910_P2_DVBS2_ENABLE, 0}
-										 );
-		write_reg_field(state, FSTV0910_TSTRS_DISRS2, 0); //Reed-Solomon off
-
-		stv091x_set_viterbi(state, p);
-		write_reg(state, RSTV0910_P2_SFDLYSET2, 0); /* Enable Super FEC */
-
-		break;
-	case SYS_DSS:
-		/*If DVBS1/DSS only disable DVBS2 search*/
-		write_reg_fields(state, RSTV0910_P2_DMDCFGMD,
-										 {FSTV0910_P2_DVBS1_ENABLE, 1},
-										 {FSTV0910_P2_DVBS2_ENABLE, 0}
-										 );
-
-		write_reg_field(state, FSTV0910_TSTRS_DISRS2, 0); //Reed-solomon off
-
-		stv091x_set_viterbi(state, p);
-		write_reg(state, RSTV0910_P2_SFDLYSET2, 2); /* Stop Super FEC */
-
-		break;
-
-	case SYS_DVBS2:
-		/*If DVBS2 only activate the DVBS2 and stop the VITERBI*/
-		write_reg_fields(state, RSTV0910_P2_DMDCFGMD,
-										 {FSTV0910_P2_DVBS1_ENABLE, 0},
-										 {FSTV0910_P2_DVBS2_ENABLE, 1}
-										 );
-
-		write_reg_field(state, FSTV0910_TSTRS_DISRS2,1); //Reed-solomon on
-		break;
-
-	case SYS_AUTO: //auto search
-	default:
-		/*If automatic enable both DVBS1/DSS and DVBS2 search*/
-#if 0
-		write_reg_fields(state, RSTV0910_P2_DMDCFGMD,
-										 {FSTV0910_P2_DVBS1_ENABLE, 1},
-										 {FSTV0910_P2_DVBS2_ENABLE, 1}
-										 );
-#else
-		if(p->algorithm== ALGORITHM_BLIND || p->algorithm==ALGORITHM_BLIND_BEST_GUESS)
-			write_reg(state, RSTV0910_P2_DMDCFGMD + state->regoff,
-								regDMDCFGMD |= 0xF0); 	//enable DVBS2 and  DVBS1  search and scan
-		else
-		write_reg(state, RSTV0910_P2_DMDCFGMD + state->regoff,
-							regDMDCFGMD |= 0xC0); 	//enable DVBS
-#endif
-		//write_reg_field(state, FSTV0910_TSTRS_DISRS2, 1); //Reed-solomon on
-
-		//stv091x_set_viterbi(state, p);
-		write_reg(state, RSTV0910_P2_SFDLYSET2, 0); /* Enable Super FEC */
-
-
-		break;
-	}
-#endif
 	return 0;
 }
 
@@ -1865,7 +1802,7 @@ static int read_status(struct dvb_frontend *fe, enum fe_status *status)
 
 	p->strength.len = 2;
 	p->strength.stat[0].scale = FE_SCALE_DECIBEL;
-	p->strength.stat[0].svalue = signal_strength; //result in uints of 0.0001dB
+	p->strength.stat[0].svalue = signal_strength; //result in units of 0.001dB
 
 	p->strength.stat[1].scale = FE_SCALE_RELATIVE;
 	p->strength.stat[1].uvalue = (100 + signal_strength/1000) * 656; //todo: check range
@@ -2332,15 +2269,11 @@ static int tune_once(struct dvb_frontend *fe, bool* need_retune)
 	*need_retune = 0;
 
 	Stop(state);
-	//if (fe->ops.tuner_ops.get_if_frequency)
-	//	fe->ops.tuner_ops.get_if_frequency(fe, &IF);
-		/* Set the Init Symbol rate*/
 
 	dprintk("symbol_rate=%d\n", state->symbol_rate);
-
-
 	if (state->symbol_rate < 100000 || state->symbol_rate > 70000000)
 		return -EINVAL;
+
 	stv091x_compute_timeouts(&state->DemodTimeout, &state->FecTimeout, state->symbol_rate, p->algorithm);
 
 	dprintk("now symbol_rate=%d\n", state->symbol_rate);
@@ -2369,20 +2302,6 @@ static int tune_once(struct dvb_frontend *fe, bool* need_retune)
 	}
 
 	state->Started = 1;
-#if 0
-	switch(p->algorithm) {
-	case ALGORITHM_WARM:
-	case ALGORITHM_COLD:
-	case ALGORITHM_BLIND:
-	case ALGORITHM_BLIND_BEST_GUESS:
-		stv091x_set_cfrinc(state, 100000, 0);
-		break;
-	default:
-		stv091x_set_cfrinc(state, 0, 0);
-	};
-#endif
-
-
 
 	locked = wait_for_dmdlock(fe, 1 /*require_data*/);
 	dprintk("lock=%d timedout=%d\n", locked, state->timedout);
@@ -2426,9 +2345,7 @@ static int tune(struct dvb_frontend *fe, bool re_tune,
 
 
 	state->satellite_scan = false;
-		/*= (p->algorithm == ALGORITHM_SEARCH
-													 ||p->algorithm == ALGORITHM_SEARCH_NEXT);
-		*/
+
 	if (re_tune) {
 		dprintk("tune called with freq=%d srate=%d => %d re_tune=%d\n", p->frequency, p->symbol_rate,
 						state->symbol_rate, re_tune);
@@ -2457,7 +2374,6 @@ static int tune(struct dvb_frontend *fe, bool re_tune,
 	}
 	if (r)
 		return r;
-
 
 	if (*status & FE_HAS_LOCK) {
 		return 0;
@@ -2707,6 +2623,7 @@ static int stv091x_spectrum_start(struct dvb_frontend *fe,
 	struct stv *state = fe->demodulator_priv;
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
 	struct stv_spectrum_scan_state* ss = &state->scan_state;
+
 	int i;
 	u32 start_frequency = p->scan_start_frequency;
 	u32 end_frequency = p->scan_end_frequency;
@@ -2729,8 +2646,6 @@ static int stv091x_spectrum_start(struct dvb_frontend *fe,
 	state->tuner_bw = stv091x_bandwidth(ROLLOFF_AUTO, bandwidth);
 	s->scale =  FE_SCALE_DECIBEL; //in units of 0.001dB
 
-	//	p->algorithm = ALGORITHM_NONE;
-	//p->symbol_rate = frequency_step; //set bandwidth equal to frequency_step
 	dprintk("demod: %d: range=[%d,%d]kHz num_freq=%d resolution=%dkHz bw=%dkHz\n", state->nr,
 					start_frequency, end_frequency,
 					num_freq, resolution, bandwidth/1000);
@@ -2765,24 +2680,28 @@ static int stv091x_spectrum_start(struct dvb_frontend *fe,
 	stv091x_set_symbol_rate(state, resolution*1000);
 
 	write_reg(state, RSTV0910_P2_DMDISTATE, 0x5C); //stop demod
+#ifdef TEST
+#else
+		write_reg(state, RSTV0910_P2_DMDISTATE, 0x1C); //stop demod
+		write_reg(state, RSTV0910_P2_DMDISTATE, 0x18); //warm
+#endif
 
 	for (i = 0; i < num_freq; i++) {
 		if ((i% 20==19) &&  (kthread_should_stop() || dvb_frontend_task_should_stop(fe))) {
 			dprintk("exiting on should stop\n");
 			break;
 		}
+#ifdef TEST
 		write_reg(state, RSTV0910_P2_DMDISTATE, 0x1C); //stop demod
 		write_reg(state, RSTV0910_P2_DMDISTATE, 0x18); //warm
+#endif
 
 		ss->freq[i]= start_frequency + i*resolution;
 		frequency = ss->freq[i];
-#if 1
-		p->frequency = frequency;
+
 		if(fe->ops.tuner_ops.set_frequency_and_bandwidth)
 			fe->ops.tuner_ops.set_frequency_and_bandwidth(fe, frequency, bandwidth); //todo: check that this sets the proper bandwidth
-#else
-		fe->ops.tuner_ops.set_params(fe); //todo: check that this sets the proper bandwidth
-#endif
+
 		//usleep_range(12000, 13000);
 		if (i == 0) {
 			val1 = stv091x_narrow_band_signal_power_dbm(fe);
@@ -2792,10 +2711,13 @@ static int stv091x_spectrum_start(struct dvb_frontend *fe,
 		val3 = val2;
 		val2 = val1;
 		val1 = stv091x_narrow_band_signal_power_dbm(fe);
-		ss->spectrum[i-1] += (val1 + 2* val2 + val3)/4;
-
+		if(i>=2)
+			ss->spectrum[i-1]  = (val1 + val2 + val3)/3;
+		else if (i>=1)
+			ss->spectrum[i-1]  = (val1 + 2*val2)/2;
 	}
-	ss->spectrum[num_freq-1] = val1;
+	if(num_freq>0)
+		ss->spectrum[num_freq-1]  = (2*val1 + val2)/3;
 
 	dprintk("Ending spectrum_scan num_freq=%d\n", num_freq);
 	*status =  FE_HAS_SIGNAL|FE_HAS_CARRIER|FE_HAS_VITERBI|FE_HAS_SYNC|FE_HAS_LOCK;
