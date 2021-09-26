@@ -214,11 +214,12 @@ static int av201x_set_bandwith(struct dvb_frontend *fe, u32 bandwidth)
 		bw = 40000;
 	}
 	else if (bw < 4000) {
-		dprintk("Bandwidth %dkHz too small! increased to 4000\n", bw);
+		dprintk("Bandwidth %dkHz too small! increased to 4000\n", bw); //official limit is 4000
 		bw = 4000;
 	}
+	dprintk("Setting bandwidth %dkHz\n", bw);
 	/* bandwidth step = 211kHz */
-	bf = DIV_ROUND_CLOSEST(bandwidth * 127, 21100);
+	bf = DIV_ROUND_CLOSEST(bw * 127, 21100);
 	ret = av201x_wr(priv, REG_BWFILTER, (u8) bf);
 
 	/* enable fine tune agc */
@@ -226,9 +227,11 @@ static int av201x_set_bandwith(struct dvb_frontend *fe, u32 bandwidth)
 
 	ret |= av201x_wr(priv, REG_TUNER_CTRL, 0x96);
 
-	if (ret)
+	if (ret) {
 		dev_dbg(&priv->i2c->dev, "%s() failed\n", __func__);
-	return ret;
+		return -1;
+	}
+	return bw;
 }
 
 //frequency and bandwith in kHz
