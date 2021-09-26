@@ -32,6 +32,7 @@
 enum fe_extended_caps {
 	FE_EXTENDED_CAPS_IS_STUPID = 0x00,
 	FE_CAN_SPECTRUMSCAN        = 0x01,
+	FE_CAN_HR_SPECTRUMSCAN     = 0x08,
 	FE_CAN_IQ                  = 0x02,
 	FE_CAN_BLINDSEARCH         = 0x04,
 	FE_CAN_CONSTELLATION       = 0x10,
