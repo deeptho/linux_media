@@ -1,7 +1,8 @@
 /*
-2101 - DVBS/S2 Satellite demodulator driver
+	  2101 - DVBS/S2 Satellite demodulator driver
 
     Copyright (C) 2014 Luis Alves <ljalvs@gmail.com>
+		Copyright (C) 2020 Deep Thought <deeptho@gmail.com>: blindscan, spectrum, constellation code
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -38,6 +39,17 @@
 // #define TAS2101_USE_I2C_MUX
 #endif
 #endif
+
+static inline u32 MulDiv32(u32 a, u32 b, u32 c)
+{
+	u64 tmp64;
+
+	tmp64 = (u64)a * (u64)b;
+	do_div(tmp64, c);
+
+	return (u32) tmp64;
+}
+
 
 /* return i2c adapter */
 /* bus = 0   master   */
@@ -150,19 +162,40 @@ static int tas2101_wrtable(struct tas2101_priv *priv,
 	return 0;
 }
 
+static int tas2101_set_symbolrate(struct tas2101_priv *state, u32 symbol_rate) {
+	u32 sr;
+	u8 buf[3];
+	int ret = 0;
+	/* set symbol rate */
+	sr = symbol_rate / 1000;
+	buf[0] = SET_SRATE0;
+	buf[1] = (u8) sr;
+	buf[2] = (u8) (sr >> 8);
+	ret = tas2101_wrm(state, buf, 3);
+	if (ret)
+		return ret;
+
+	/* clear freq offset */
+	buf[0] = FREQ_OS0;
+	buf[1] = 0;
+	buf[2] = 0;
+	ret = tas2101_wrm(state, buf, 3);
+	return ret;
+}
+
 /*
 	signal power in the stv6120 tuner bandwidth (not representative for narrow band signals)
 	unit: 0.001dB
  */
-static s32 stv091x_signal_power_dbm(struct dvb_frontend *fe)
+static int tas2101_signal_power_dbm(struct dvb_frontend *fe, long* val)
 {
 	struct tas2101_priv *priv = fe->demodulator_priv;
-	long val;
+
 	int ret;
 	u16 raw;
 	u8 buf[2];
 	int i;
-	val = -1000;
+	*val = -1000;
 
 	/* Read signal strength */
 	ret = tas2101_rdm(priv, SIGSTR_0, buf, 2);
@@ -175,16 +208,21 @@ static s32 stv091x_signal_power_dbm(struct dvb_frontend *fe)
 		if (tas2101_dbmtable[i].raw < raw)
 			break;
 	if( i == 0 )
-		val = tas2101_dbmtable[i].dbm;
+		*val = tas2101_dbmtable[i].dbm;
 	else
 	{
 		/* linear interpolation between two calibrated values */
-		val = (raw - tas2101_dbmtable[i].raw) * tas2101_dbmtable[i-1].dbm;
-		val += (tas2101_dbmtable[i-1].raw - raw) * tas2101_dbmtable[i].dbm;
-		val /= (tas2101_dbmtable[i-1].raw - tas2101_dbmtable[i].raw);
+		*val = (raw - tas2101_dbmtable[i].raw) * tas2101_dbmtable[i-1].dbm;
+		*val += (tas2101_dbmtable[i-1].raw - raw) * tas2101_dbmtable[i].dbm;
+		*val /= (tas2101_dbmtable[i-1].raw - tas2101_dbmtable[i].raw);
 	}
+	*val *= 100;
+	return ret;
+}
 
-	return val*100;
+
+static inline int tas2101_narrow_band_signal_power_dbm(struct dvb_frontend *fe, long* val) {
+	return tas2101_signal_power_dbm(fe, val);
 }
 
 static int tas2101_read_status(struct dvb_frontend *fe, enum fe_status *status)
@@ -214,17 +252,16 @@ static int tas2101_read_status(struct dvb_frontend *fe, enum fe_status *status)
 			ret = tas2101_wr(priv, REG_04, buf[0] & ~0x08);
 	}
 
-	val = -1000;
 	c->strength.len = 1;
 	c->strength.stat[0].scale = FE_SCALE_NOT_AVAILABLE;
-	val = stv091x_signal_power_dbm(fe);
+
+	if(tas2101_signal_power_dbm(fe, &val)<0)
+		return -1;
 
 	c->strength.len = 2;
 	c->strength.stat[0].scale = FE_SCALE_DECIBEL;
 	c->strength.stat[0].svalue = val;
 
-	c->strength.stat[1].scale = FE_SCALE_RELATIVE;
-	c->strength.stat[1].uvalue = (100 + val/1000) * 656;
 
 	val = 0;
 	c->cnr.len = 1;
@@ -770,59 +807,51 @@ static int tas2101_sleep(struct dvb_frontend *fe)
 	return 0;
 }
 
-static int tas2101_set_frontend(struct dvb_frontend *fe)
+static int tune_once(struct dvb_frontend *fe, bool* need_retune)
 {
-	struct tas2101_priv *priv = fe->demodulator_priv;
+	struct tas2101_priv *state = fe->demodulator_priv;
 	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
 	enum fe_status tunerstat;
 	int ret, i;
-	u32 s;
-	u8 buf[3];
+	//u32 s;
+	//u8 buf[3];
 
-	dev_dbg(&priv->i2c->dev, "%s()\n", __func__);
+	*need_retune = 0;
+
+	dev_dbg(&state->i2c->dev, "%s()\n", __func__);
+	dprintk("symbol_rate=%d\n", state->symbol_rate);
+	if (state->symbol_rate < 100000 || state->symbol_rate > 70000000)
+		return -EINVAL;
+
+	//tas2101_compute_timeouts(&state->DemodTimeout, &state->FecTimeout, state->symbol_rate, p->algorithm);
 
 	/* do some basic parameter validation */
 	switch (c->delivery_system) {
 	case SYS_DVBS:
-		dev_dbg(&priv->i2c->dev, "%s() DVB-S\n", __func__);
+		dev_dbg(&state->i2c->dev, "%s() DVB-S\n", __func__);
 		/* Only QPSK is supported for DVB-S */
 		if (c->modulation != QPSK) {
-			dev_dbg(&priv->i2c->dev,
+			dev_dbg(&state->i2c->dev,
 				"%s() unsupported modulation (%d)\n",
 				__func__, c->modulation);
 			return -EINVAL;
 		}
 		break;
 	case SYS_DVBS2:
-		dev_dbg(&priv->i2c->dev, "%s() DVB-S2\n", __func__);
+		dev_dbg(&state->i2c->dev, "%s() DVB-S2\n", __func__);
 		break;
 	default:
-		dev_warn(&priv->i2c->dev,
+		dev_warn(&state->i2c->dev,
 			"%s() unsupported delivery system (%d)\n",
 			__func__, c->delivery_system);
 		return -EINVAL;
 	}
 
-	ret = tas2101_wrtable(priv, tas2101_setfe, ARRAY_SIZE(tas2101_setfe));
+	ret = tas2101_wrtable(state, tas2101_setfe, ARRAY_SIZE(tas2101_setfe));
 	if (ret)
 		return ret;
 
-	/* set symbol rate */
-	s = c->symbol_rate / 1000;
-	buf[0] = SET_SRATE0;
-	buf[1] = (u8) s;
-	buf[2] = (u8) (s >> 8);
-	ret = tas2101_wrm(priv, buf, 3);
-	if (ret)
-		return ret;
-
-	/* clear freq offset */
-	buf[0] = FREQ_OS0;
-	buf[1] = 0;
-	buf[2] = 0;
-	ret = tas2101_wrm(priv, buf, 3);
-	if (ret)
-		return ret;
+	tas2101_set_symbolrate(state, c->symbol_rate);
 
 	if (fe->ops.tuner_ops.set_params) {
 #ifndef TAS2101_USE_I2C_MUX
@@ -836,7 +865,7 @@ static int tas2101_set_frontend(struct dvb_frontend *fe)
 #endif
 	}
 
-	ret = tas2101_regmask(priv, REG_30, 0x01, 0);
+	ret = tas2101_regmask(state, REG_30, 0x01, 0);
 	if (ret)
 		return ret;
 
@@ -905,28 +934,45 @@ static int tas2101_tune(struct dvb_frontend *fe, bool re_tune,
 	struct tas2101_priv *state = fe->demodulator_priv;
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
 
+	bool blind = (p->algorithm == ALGORITHM_BLIND ||p->algorithm == ALGORITHM_BLIND_BEST_GUESS);
 	int r;
+	bool need_retune = false;// could be set during blind search
+
 	dev_dbg(&state->i2c->dev, "%s()\n", __func__);
 
-	*delay = HZ/2;
+	if(blind) {
+		if(p->delivery_system== SYS_UNDEFINED)
+			p->delivery_system = SYS_AUTO;
+	}
+
+	state->symbol_rate =
+		(p->symbol_rate==0) ? 60000000: p->symbol_rate; //determines tuner bandwidth set during blindscan
+
 	if (re_tune) {
+		dprintk("tune called with freq=%d srate=%d => %d re_tune=%d\n", p->frequency, p->symbol_rate,
+						state->symbol_rate, re_tune);
+
 		tas2101_stop_task(fe);
-		r = tas2101_set_frontend(fe);
+		r = tune_once(fe, &need_retune); //tune_once
 		if (r)
 			return r;
 	}
 	r = tas2101_read_status(fe, status);
 	{
-#ifdef TODO
 		int max_num_samples = state->symbol_rate /5 ; //we spend max 500 ms on this
-#else
-		int max_num_samples = 1024;
-#endif
 		if(max_num_samples > 1024)
 			max_num_samples = 1024; //also set an upper limit which should be fast enough
 		tas2101_constellation_start(fe, &p->constellation, max_num_samples);
 	}
-	return r;
+
+	if (r)
+		return r;
+
+	if (*status & FE_HAS_LOCK) {
+		return 0;
+	} else
+		*delay = HZ;
+	return 0;
 }
 
 static enum dvbfe_algo tas2101_get_algo(struct dvb_frontend *fe)
@@ -939,11 +985,12 @@ static enum dvbfe_search tas2101_search(struct dvb_frontend *fe)
 	struct tas2101_priv *priv = fe->demodulator_priv;
 	enum fe_status status = 0;
 	int ret, i;
+	bool retune = false;
 
 	priv->algo = TAS2101_TUNE;
 
 	/* set frontend */
-	ret = tas2101_set_frontend(fe);
+	ret = tune_once(fe, &retune);
 	if (ret)
 		goto error;
 
@@ -981,23 +1028,26 @@ error:
 
  static int tas2101_stop_task(struct dvb_frontend *fe);
 
- static int tas2101_spectrum_start(struct dvb_frontend *fe,
+static int tas2101_spectrum_start(struct dvb_frontend *fe,
 																	 struct dtv_fe_spectrum *s,
 																	 unsigned int *delay, enum fe_status *status)
 {
 	struct tas2101_priv* state = fe->demodulator_priv;
 	struct dtv_frontend_properties* p = &fe->dtv_property_cache;
 	struct tas2101_spectrum_scan_state* ss = &state->scan_state;
-	//long dbm_raw;
-	int ret, i;
-	u32 sr;
-	u8 buf[3];
+
+	int i, ret;
 	u32 start_frequency = p->scan_start_frequency;
-	uint32_t resolution =  (p->scan_resolution>0) ? p->scan_resolution : 1000; //in kHz
+	u32 end_frequency = p->scan_end_frequency;
+	//u32 bandwidth = end_frequency-start_frequency; //in kHz
+	uint32_t frequency;
+	long val1, val2, val3;
+	uint32_t resolution =  (p->scan_resolution>0) ? p->scan_resolution : 500; //in kHz
+	uint32_t bandwidth =  2*resolution; //in kHz
 	u32 num_freq = (p->scan_end_frequency-p->scan_start_frequency+ resolution-1)/resolution;
-	dprintk("tas2101 start spectrum scan\n");
 	tas2101_stop_task(fe);
 	s->num_freq = num_freq;
+	s->num_candidates = 0;
 	ss->spectrum_len = num_freq;
 	ss->freq = kzalloc(ss->spectrum_len * (sizeof(ss->freq[0])), GFP_KERNEL);
 	ss->spectrum = kzalloc(ss->spectrum_len * (sizeof(ss->spectrum[0])), GFP_KERNEL);
@@ -1005,57 +1055,89 @@ error:
 		return  -ENOMEM;
 	}
 
+	state->tuner_bw = bandwidth;
+	s->scale =  FE_SCALE_DECIBEL; //in units of 0.001dB
+#ifdef TODO
 	state->algo = TAS2101_NOTUNE;
+#endif
+
+	dprintk("demod: %d: range=[%d,%d]kHz num_freq=%d resolution=%dkHz bw=%dkHz\n", state->nr,
+					start_frequency, end_frequency,
+					num_freq, resolution, bandwidth/1000);
 
 	ret = tas2101_wrtable(state, tas2101_setfe, ARRAY_SIZE(tas2101_setfe));
 	if (ret)
 		return ret;
 
-	p->symbol_rate		= 1000000;
-	p->delivery_system	= SYS_DVBS;
 
-	/* set symbol rate */
-	sr = p->symbol_rate / 1000;
-	buf[0] = SET_SRATE0;
-	buf[1] = (u8) sr;
-	buf[2] = (u8) (sr >> 8);
-	ret = tas2101_wrm(state, buf, 3);
+	if(fe->ops.tuner_ops.set_bandwidth) {
+#ifndef TAS2101_USE_I2C_MUX
+		if (fe->ops.i2c_gate_ctrl)
+			fe->ops.i2c_gate_ctrl(fe, 1);
+#endif
+		state->tuner_bw = fe->ops.tuner_ops.set_bandwidth(fe, bandwidth); //todo: check that this sets the proper bandwidth
+#ifndef TAS2101_USE_I2C_MUX
+		if (fe->ops.i2c_gate_ctrl)
+			fe->ops.i2c_gate_ctrl(fe, 0);
+#endif
+		dprintk("Set bandwidth: req=%dkHz actual=%d", 	bandwidth, state->tuner_bw);
+		if (state->tuner_bw == 0)
+			state->tuner_bw = bandwidth;
+	}
+
+	state->tuner_bw = bandwidth;
+
+	dprintk("setting symbolrate");
+	tas2101_set_symbolrate(state, resolution*1000);
+	//tas2101_set_symbolrate(state, 2000*1000);
+
+	ret = tas2101_regmask(state, REG_30, 0x01, 0); //hot reset chip
 	if (ret)
 		return ret;
 
-	/* clear freq offset */
-	buf[0] = FREQ_OS0;
-	buf[1] = 0;
-	buf[2] = 0;
-	ret = tas2101_wrm(state, buf, 3);
-	if (ret)
-		return ret;
+	for (i = 0 ; i < num_freq; i++) {
+		if(i%20==19)
+			dprintk("reached i=%d", i);
 
-	for (i = 0 ; i < num_freq ; i++) {
 		if ((i%20==19) &&  (kthread_should_stop() || dvb_frontend_task_should_stop(fe))) {
 			dprintk("exiting on should stop\n");
 			break;
 		}
 
-		ss->freq[i]= start_frequency +i*resolution;
-		p->frequency = ss->freq[i];
+		ss->freq[i]= start_frequency + i*resolution;
+		frequency = ss->freq[i];
 
-		if (fe->ops.tuner_ops.set_params) {
 #ifndef TAS2101_USE_I2C_MUX
-			if (fe->ops.i2c_gate_ctrl)
-				fe->ops.i2c_gate_ctrl(fe, 1);
+		if (fe->ops.i2c_gate_ctrl)
+			fe->ops.i2c_gate_ctrl(fe, 1);
 #endif
+		if(fe->ops.tuner_ops.set_frequency) {
+			fe->ops.tuner_ops.set_frequency(fe, frequency); //todo: check that this sets the proper bandwidth
+			msleep(5);
+		} else if(fe->ops.tuner_ops.set_frequency_and_bandwidth)  {
+			fe->ops.tuner_ops.set_frequency_and_bandwidth(fe, frequency, bandwidth); //todo: check that this sets the proper bandwidth
+		} else {
+			p->frequency = frequency;
 			fe->ops.tuner_ops.set_params(fe);
+		}
 #ifndef TAS2101_USE_I2C_MUX
 		if (fe->ops.i2c_gate_ctrl)
 			fe->ops.i2c_gate_ctrl(fe, 0);
 #endif
 
-		msleep(20);
 
-		ss->spectrum[i] = stv091x_signal_power_dbm(fe);;
-		}
+		val3 = val2;
+		val2 = val1;
+		if(tas2101_narrow_band_signal_power_dbm(fe, &val1)<0)
+			break;
+		if(i>=2)
+			ss->spectrum[i-1]  = (val1 + val2 + val3)/3;
+		else if (i>=1)
+			ss->spectrum[i-1]  = (val1 + 2*val2)/3;
 	}
+	if(num_freq>0)
+		ss->spectrum[num_freq-1]  = (2*val1 + val2)/3;
+
 	*status =  FE_HAS_SIGNAL|FE_HAS_CARRIER|FE_HAS_VITERBI|FE_HAS_SYNC|FE_HAS_LOCK;
 	return 0;
 }
@@ -1066,7 +1148,7 @@ static int tas2101_constellation_start(struct dvb_frontend *fe,
 	struct tas2101_priv *state = fe->demodulator_priv;
 	struct tas2101_constellation_scan_state* cs = &state->constellation_scan_state;
 	int num_samples = user->num_samples;
-	s8 buff[4];
+	s8 buff[2];
 	u8 old_reg, val;
 	int i;
 	int sleeptime=0;
@@ -1096,7 +1178,7 @@ static int tas2101_constellation_start(struct dvb_frontend *fe,
 
 
 	old_reg = tas2101_rd(state, 0x36, &old_reg);
-	tas2101_wr(state, 0x36, old_reg &0xFE);
+	tas2101_wr(state, 0x36, old_reg &0xFE); //AUTO_RST
 	tas2101_wr(state, 0x38, 0x53);
 
 	for (cs->num_samples = 0; cs->num_samples < cs->samples_len; ++cs->num_samples) {
@@ -1109,17 +1191,10 @@ static int tas2101_constellation_start(struct dvb_frontend *fe,
 				dprintk("XXXX tas2101_rd failed at num_samples=%d", cs->num_samples);
 				break;
 			}
-			dprintk("XXXX val=0x%x", val);
 			if(!(val & 0x80)) {
 				msleep(5);
 				continue;
 			}
-#if 0
-			if(tas2101_rdm(state, 0x3B, (u8*)buff, 4)<0) {
-				dprintk("XXXX tas2101_rd failed at num_samples=%d", cs->num_samples);
-				break;
-			}
-#else
 			if(tas2101_rd(state, 0x3B, &buff[0])<0) {
 				dprintk("XXXX tas2101_rd failed at num_samples=%d", cs->num_samples);
 				break;
@@ -1128,14 +1203,11 @@ static int tas2101_constellation_start(struct dvb_frontend *fe,
 				dprintk("XXXX tas2101_rd failed at num_samples=%d", cs->num_samples);
 				break;
 			}
-#endif
-			dprintk("XXXX read i=%d %02x %02x %02x %02x", i, buff[0], buff[1], buff[2], buff[3]);
 			buff[0] &= 0x7F;
 			buff[1] &= 0x7F;
-			if(buff[0] > 63)
-				buff[0] -= 128;
-			if(buff[1] > 63)
-				buff[1] -= 128;
+			buff[0] *=2;
+			buff[1] *=2;
+
 			cs->samples[cs->num_samples].imag = buff[0];
 			cs->samples[cs->num_samples].real = buff[1];
 			break;
@@ -1152,7 +1224,7 @@ static int tas2101_constellation_start(struct dvb_frontend *fe,
 
 	val = 0x50;
 	tas2101_wr(state, 0x38, 0x50);
- 	tas2101_wr(state, 0x36, old_reg);
+	tas2101_wr(state, 0x36, old_reg); //AUTO_RST
 
 	return 0;
 }
@@ -1191,6 +1263,7 @@ int tas2101_spectrum_get(struct dvb_frontend *fe, struct dtv_fe_spectrum* user)
 	}
 	else
 		error = -EFAULT;
+	user->num_candidates = 0;
 	return error;
 }
 
@@ -1268,8 +1341,7 @@ static struct dvb_frontend_ops tas2101_ops = {
 	.diseqc_send_burst = tas2101_diseqc_send_burst,
 	.get_frontend_algo = tas2101_get_algo,
 	.tune = tas2101_tune,
-
-	.set_frontend = tas2101_set_frontend,
+	.set_frontend = tune_once,
 	.get_frontend = tas2101_get_frontend,
 
 	.spi_read			= tas2101_spi_read,

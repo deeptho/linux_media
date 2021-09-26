@@ -61,10 +61,13 @@ struct tas2101_priv {
 	struct i2c_adapter *i2c_tuner;
 
 	int i2c_ch;
-
+	int nr;
 	struct dvb_frontend fe;
 	const struct tas2101_config *cfg;
 	enum tas2101_algo algo;
+
+	s32 tuner_bw;
+	u32 symbol_rate;
 
 	struct tas2101_spectrum_scan_state scan_state;
 	struct tas2101_constellation_scan_state constellation_scan_state;
