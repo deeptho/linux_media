@@ -65,7 +65,7 @@ struct tas2101_priv {
 	struct dvb_frontend fe;
 	const struct tas2101_config *cfg;
 	enum tas2101_algo algo;
-
+	bool timedout;
 	s32 tuner_bw;
 	u32 symbol_rate;
 
@@ -245,12 +245,12 @@ static struct tas2101_regtable tas2100_initfe1[] = {
 };
 
 static struct tas2101_regtable tas2101_setfe[] = {
-	{REG_04, 0x08, 0x00, 0},
-	{0x36, 0x01, 0x00, 0},
-	{0x56, 0x01, 0x81, 0},
-	{0x05, 0x08, 0x00, 0},
-	{0x36, 0x40, 0x00, 0},
-	{0x58, 0x60, 0xe0, 0},
+	{REG_04, 0x08, 0x00, 0},  //TS_OUT enable
+	{0x36, 0x01, 0x00, 0},  //AUTO_RST - lock_TP (1)
+	{0x56, 0x01, 0x81, 0},  //BCS_RST   - Disable blindscan (1)
+	{0x05, 0x08, 0x00, 0},  //PLL_ADC_RD  - Enable Blindscan (4) -> anomaly
+	{0x36, 0x40, 0x00, 0},  //(AUTO_RST - Enable Blindscan (5) -> anomaly
+	{0x58, 0x60, 0xe0, 0},  //BCS_OUT_ADDR   lock_TP_BS (2)
 };
 
 struct tas2101_snrtable_pair {
