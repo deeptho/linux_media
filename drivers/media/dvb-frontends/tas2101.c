@@ -246,6 +246,7 @@ static int tas2101_signal_power_dbm(struct dvb_frontend *fe, long* val)
 		*val += (tas2101_dbmtable[i-1].raw - raw) * tas2101_dbmtable[i].dbm;
 		*val /= (tas2101_dbmtable[i-1].raw - tas2101_dbmtable[i].raw);
 	}
+
 	*val *= 100;
 	return ret;
 }

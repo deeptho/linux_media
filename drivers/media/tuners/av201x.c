@@ -214,7 +214,7 @@ static int av201x_set_bandwith(struct dvb_frontend *fe, u32 bandwidth)
 		bw = 40000;
 	}
 	else if (bw < 4000) {
-		dprintk("Bandwidth %dkHz too small! increased to 4000\n", bw); //official limit is 4000
+		dprintk("Bandwidth %dkHz too small! increased to 4000\n", bw); //official limit is 4000 (but 500 is possible)
 		bw = 4000;
 	}
 	dprintk("Setting bandwidth %dkHz\n", bw);

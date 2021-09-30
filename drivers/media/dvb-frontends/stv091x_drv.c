@@ -1800,12 +1800,18 @@ static int read_status(struct dvb_frontend *fe, enum fe_status *status)
 
 	/*pr_warn("%s: agc = %d iq_power = %d Padc = %d\n", __func__, agc, iq_power, Padc);*/
 
+	p->cnr.len = p->post_bit_error.len = p->post_bit_count.len = 1;
+	p->cnr.stat[0].scale = FE_SCALE_NOT_AVAILABLE;
+	p->post_bit_error.stat[0].scale = FE_SCALE_NOT_AVAILABLE;
+	p->post_bit_count.stat[0].scale = FE_SCALE_NOT_AVAILABLE;
+
 	p->strength.len = 2;
 	p->strength.stat[0].scale = FE_SCALE_DECIBEL;
 	p->strength.stat[0].svalue = signal_strength; //result in units of 0.001dB
 
 	p->strength.stat[1].scale = FE_SCALE_RELATIVE;
 	p->strength.stat[1].uvalue = (100 + signal_strength/1000) * 656; //todo: check range
+
 	//todo: if not locked, and signal is too low FE_HAS_SIGNAL should be removed
 	*status = FE_HAS_SIGNAL;
 
@@ -1860,10 +1866,6 @@ static int read_status(struct dvb_frontend *fe, enum fe_status *status)
 		if (state->base->set_lock_led)
 			state->base->set_lock_led(fe, 0);
 
-		p->cnr.len = p->post_bit_error.len = p->post_bit_count.len = 1;
-		p->cnr.stat[0].scale = FE_SCALE_NOT_AVAILABLE;
-		p->post_bit_error.stat[0].scale = FE_SCALE_NOT_AVAILABLE;
-		p->post_bit_count.stat[0].scale = FE_SCALE_NOT_AVAILABLE;
 		return 0;
 	}
 	dprintk("setting status ok\n");
@@ -2258,14 +2260,10 @@ static int scan_within_tuner_bw(struct dvb_frontend *fe, bool* locked_ret)
 
 static int tune_once(struct dvb_frontend *fe, bool* need_retune)
 {
-
-	bool locked;
-
 	struct stv *state = fe->demodulator_priv;
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
-	//	BUG_ON(state->satellite_scan);
+	bool locked;
 	state->timedout=false;
-	//u32 IF;
 	*need_retune = 0;
 
 	Stop(state);
@@ -2336,7 +2334,7 @@ static int tune(struct dvb_frontend *fe, bool re_tune,
 
 	bool blind = (p->algorithm == ALGORITHM_BLIND ||p->algorithm == ALGORITHM_BLIND_BEST_GUESS);
 	if(blind) {
-		if(p->delivery_system== SYS_UNDEFINED)
+		if(p->delivery_system == SYS_UNDEFINED)
 			p->delivery_system = SYS_AUTO;
 	}
 
