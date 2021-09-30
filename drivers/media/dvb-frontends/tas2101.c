@@ -227,7 +227,7 @@ static int tas2101_signal_power_dbm(struct dvb_frontend *fe, long* val)
 	int i;
 	*val = -1000;
 
-	/* Read signal strength */
+	/* Read AGC value */
 	ret = tas2101_rdm(priv, SIGSTR_0, buf, 2);
 	if (ret)
 		return ret;
@@ -330,6 +330,8 @@ static int tas2101_read_status(struct dvb_frontend *fe, enum fe_status *status)
 		*status |= FE_HAS_CARRIER;
 	else if((buf[0]&0x15)==0x15 )
 		*status |= FE_HAS_CARRIER;
+	if(state->timedout)
+		*status |= FE_TIMEDOUT;
 
 	if(! (*status & FE_HAS_LOCK))
 		return -1;
@@ -1220,13 +1222,13 @@ static int tas2101_spectrum_start(struct dvb_frontend *fe,
 	struct tas2101_priv* state = fe->demodulator_priv;
 	struct dtv_frontend_properties* p = &fe->dtv_property_cache;
 	struct tas2101_spectrum_scan_state* ss = &state->scan_state;
-
 	int i, ret;
+	u8 agc_speed;
 	u32 start_frequency = p->scan_start_frequency;
 	u32 end_frequency = p->scan_end_frequency;
 	//u32 bandwidth = end_frequency-start_frequency; //in kHz
 	uint32_t frequency;
-	long val1, val2, val3;
+	long val1;
 	uint32_t resolution =  (p->scan_resolution>0) ? p->scan_resolution : 500; //in kHz
 	uint32_t bandwidth =  2*resolution; //in kHz
 	u32 num_freq = (p->scan_end_frequency-p->scan_start_frequency+ resolution-1)/resolution;
@@ -1240,6 +1242,7 @@ static int tas2101_spectrum_start(struct dvb_frontend *fe,
 		return  -ENOMEM;
 	}
 
+
 	state->tuner_bw = bandwidth;
 	s->scale =  FE_SCALE_DECIBEL; //in units of 0.001dB
 #ifdef TODO
@@ -1250,10 +1253,11 @@ static int tas2101_spectrum_start(struct dvb_frontend *fe,
 					start_frequency, end_frequency,
 					num_freq, resolution, bandwidth/1000);
 
-	ret = tas2101_wrtable(state, tas2101_setfe, ARRAY_SIZE(tas2101_setfe));
 	if (ret)
 		return ret;
 
+	tas2101_rd(state, 0x40, & agc_speed);
+	tas2101_regmask(state, 0x40, 0x07, 0x07);
 
 	if(fe->ops.tuner_ops.set_bandwidth) {
 #ifndef TAS2101_USE_I2C_MUX
@@ -1279,6 +1283,10 @@ static int tas2101_spectrum_start(struct dvb_frontend *fe,
 	ret = tas2101_regmask(state, REG_30, 0x01, 0); //hot reset chip
 	if (ret)
 		return ret;
+#ifndef TAS2101_USE_I2C_MUX
+		if (fe->ops.i2c_gate_ctrl)
+			fe->ops.i2c_gate_ctrl(fe, 1);
+#endif
 
 	for (i = 0 ; i < num_freq; i++) {
 		if(i%20==19)
@@ -1292,36 +1300,28 @@ static int tas2101_spectrum_start(struct dvb_frontend *fe,
 		ss->freq[i]= start_frequency + i*resolution;
 		frequency = ss->freq[i];
 
-#ifndef TAS2101_USE_I2C_MUX
-		if (fe->ops.i2c_gate_ctrl)
-			fe->ops.i2c_gate_ctrl(fe, 1);
-#endif
 		if(fe->ops.tuner_ops.set_frequency) {
 			fe->ops.tuner_ops.set_frequency(fe, frequency); //todo: check that this sets the proper bandwidth
-			msleep(5);
+			//msleep(10);
 		} else if(fe->ops.tuner_ops.set_frequency_and_bandwidth)  {
 			fe->ops.tuner_ops.set_frequency_and_bandwidth(fe, frequency, bandwidth); //todo: check that this sets the proper bandwidth
 		} else {
 			p->frequency = frequency;
 			fe->ops.tuner_ops.set_params(fe);
 		}
+
+		if(tas2101_narrow_band_signal_power_dbm(fe, &val1)<0)
+			break;
+		ss->spectrum[i]  = val1;
+
+	}
+
 #ifndef TAS2101_USE_I2C_MUX
 		if (fe->ops.i2c_gate_ctrl)
 			fe->ops.i2c_gate_ctrl(fe, 0);
 #endif
 
-
-		val3 = val2;
-		val2 = val1;
-		if(tas2101_narrow_band_signal_power_dbm(fe, &val1)<0)
-			break;
-		if(i>=2)
-			ss->spectrum[i-1]  = (val1 + val2 + val3)/3;
-		else if (i>=1)
-			ss->spectrum[i-1]  = (val1 + 2*val2)/3;
-	}
-	if(num_freq>0)
-		ss->spectrum[num_freq-1]  = (2*val1 + val2)/3;
+	tas2101_regmask(state, 0x40, agc_speed, 0xff);
 
 	*status =  FE_HAS_SIGNAL|FE_HAS_CARRIER|FE_HAS_VITERBI|FE_HAS_SYNC|FE_HAS_LOCK;
 	return 0;
