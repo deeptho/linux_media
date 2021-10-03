@@ -1231,7 +1231,11 @@ static int tas2101_spectrum_start(struct dvb_frontend *fe,
 	long val1;
 	uint32_t resolution =  (p->scan_resolution>0) ? p->scan_resolution : 500; //in kHz
 	uint32_t bandwidth =  2*resolution; //in kHz
-	u32 num_freq = (p->scan_end_frequency-p->scan_start_frequency+ resolution-1)/resolution;
+	int num_freq = (p->scan_end_frequency-p->scan_start_frequency+ resolution-1)/resolution;
+	int warmup = 20000;
+	if (warmup  > p->scan_start_frequency -950000)
+		warmup = p->scan_start_frequency -950000;
+	int extra_at_start = (warmup + resolution-1)/resolution;
 	tas2101_stop_task(fe);
 	s->num_freq = num_freq;
 	s->num_candidates = 0;
@@ -1258,7 +1262,6 @@ static int tas2101_spectrum_start(struct dvb_frontend *fe,
 
 	tas2101_rd(state, 0x40, & agc_speed);
 	tas2101_regmask(state, 0x40, 0x07, 0x07);
-
 	if(fe->ops.tuner_ops.set_bandwidth) {
 #ifndef TAS2101_USE_I2C_MUX
 		if (fe->ops.i2c_gate_ctrl)
@@ -1287,18 +1290,19 @@ static int tas2101_spectrum_start(struct dvb_frontend *fe,
 		if (fe->ops.i2c_gate_ctrl)
 			fe->ops.i2c_gate_ctrl(fe, 1);
 #endif
-
-	for (i = 0 ; i < num_freq; i++) {
+		dprintk("loop: %d  %d\n", -extra_at_start, num_freq);
+		msleep(50);
+	for (i = -extra_at_start ; i < num_freq; i++) {
 		if(i%20==19)
 			dprintk("reached i=%d", i);
-
 		if ((i%20==19) &&  (kthread_should_stop() || dvb_frontend_task_should_stop(fe))) {
 			dprintk("exiting on should stop\n");
 			break;
 		}
 
-		ss->freq[i]= start_frequency + i*resolution;
-		frequency = ss->freq[i];
+		frequency = start_frequency + i*resolution;
+		if(i>=0)
+			ss->freq[i] = frequency;
 
 		if(fe->ops.tuner_ops.set_frequency) {
 			fe->ops.tuner_ops.set_frequency(fe, frequency); //todo: check that this sets the proper bandwidth
@@ -1312,9 +1316,11 @@ static int tas2101_spectrum_start(struct dvb_frontend *fe,
 
 		if(tas2101_narrow_band_signal_power_dbm(fe, &val1)<0)
 			break;
-		ss->spectrum[i]  = val1;
+		if(i>=0)
+			ss->spectrum[i]  = val1;
 
 	}
+	dprintk("loop exited at i=%d", i);
 
 #ifndef TAS2101_USE_I2C_MUX
 		if (fe->ops.i2c_gate_ctrl)
