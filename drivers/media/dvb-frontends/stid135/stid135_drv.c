@@ -10639,7 +10639,7 @@ fe_lla_error_t  set_stream_index(struct stv *state, int mis)
 		dev_dbg(&state->base->i2c->dev, "%s: disable ISI filtering !\n", __func__);
 		set_pls_mode_code(state, 0, 1);
 		err |= fe_stid135_set_mis_filtering(state,  FALSE, 0, 0xFF);
-		state->signal_info.isi = 0;
+		state->signal_info.isi = 0xff;
 	}
 	vprintk("[%d] error=%d locked=%d\n", state->nr+1, err, state->signal_info.has_lock);
 	if (err != FE_LLA_NO_ERROR)

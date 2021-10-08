@@ -2354,7 +2354,7 @@ static int tune(struct dvb_frontend *fe, bool re_tune,
 #if 0
 		/*the following does not seem to work for a DVB-S2/QPSK transponder: 28.2E 11385H.
 			This TP also has a stream_id and m_type set
-			In this case read_status seems to fail; sometthing extra is needed.
+			In this case read_status seems to fail; something extra is needed.
 		 */
 		if(need_retune) {
 			dprintk("re setting frequency, symbol rate and bandwidth\n");
