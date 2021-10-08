@@ -778,11 +778,11 @@ restart:
 
 					if (fe->ops.tune)
 						fe->ops.tune(fe, re_tune, fepriv->tune_mode_flags, &fepriv->delay, &s);
-					dprintk("read_status event: s=0x%x old=0x%x", s,  fepriv->status);
+					//dprintk("read_status event: s=0x%x old=0x%x", s,  fepriv->status);
 				}
 				if ((s != fepriv->status && !(fepriv->tune_mode_flags & FE_TUNE_MODE_ONESHOT))
 						|| (fepriv->heartbeat_interval>0)) {
-					dprintk("Adding event val=0x%x\n", s);
+					//dprintk("Adding event val=0x%x\n", s);
 					dev_dbg(fe->dvb->device, "%s: state changed, adding current state\n", __func__);
 					dvb_frontend_add_event(fe, s);
 					fepriv->status = s;
@@ -2797,7 +2797,7 @@ static int dtv_set_constellation(struct dvb_frontend *fe, struct dtv_fe_constell
 static int dtv_get_constellation(struct dvb_frontend *fe, struct dtv_fe_constellation* user)
 {
 	int err = 0;
-	dprintk("constellation retrieved user->num_samples=%d\n", user->num_samples);
+	//dprintk("constellation retrieved user->num_samples=%d\n", user->num_samples);
 
 	if(fe->ops.constellation_get)
 		fe->ops.constellation_get(fe, user);
