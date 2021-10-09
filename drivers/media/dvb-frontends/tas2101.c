@@ -228,26 +228,24 @@ static int tas2101_signal_power_dbm(struct dvb_frontend *fe, long* val)
 	*val = -1000;
 
 	/* Read AGC value */
-	ret = tas2101_rdm(priv, SIGSTR_0, buf, 2);
-	if (ret)
-		return ret;
-
-	raw = (((u16)buf[1] & 0xf0) << 4) | buf[0];
-
-	for (i = 0; i < ARRAY_SIZE(tas2101_dbmtable) - 1; i++)
-		if (tas2101_dbmtable[i].raw < raw)
+	for(i=0; i<10;++i) {
+		ret = tas2101_rdm(state, SIGSTR_0, buf, 2);
+		if (ret)
+			return ret;
+		if(buf[1]&0x1) {
 			break;
-	if( i == 0 )
-		*val = tas2101_dbmtable[i].dbm;
-	else
-	{
-		/* linear interpolation between two calibrated values */
-		*val = (raw - tas2101_dbmtable[i].raw) * tas2101_dbmtable[i-1].dbm;
-		*val += (tas2101_dbmtable[i-1].raw - raw) * tas2101_dbmtable[i].dbm;
-		*val /= (tas2101_dbmtable[i-1].raw - tas2101_dbmtable[i].raw);
+		}
+		msleep(5);
+	}
+	raw = (((buf[1] & 0xf0) >> 4)<<8) | buf[0];
+	if(fe->ops.tuner_ops.agc_to_gain_dbm) {
+		*val = fe->ops.tuner_ops.agc_to_gain_dbm(fe, raw);
+
+		dprintk("freq=%d.%d dbm=%ld MSB=0x%0x LSB=0x%0x", (9750000 +state->tuner_freq)/1000, (9750000 +state->tuner_freq)%1000,
+						*val, buf[1], buf[0]);
+
 	}
 
-	*val *= 100;
 	return ret;
 }
 
@@ -288,7 +286,7 @@ static int tas2101_snr(struct dvb_frontend *fe, s32* snr)
 }
 
 
-static int tas2101_read_status(struct dvb_frontend *fe, enum fe_status *status)
+static int tas2101_read_status(struct dvb_frontend *fe, enum fe_status* status)
 {
 	struct tas2101_priv *state = fe->demodulator_priv;
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
@@ -333,8 +331,11 @@ static int tas2101_read_status(struct dvb_frontend *fe, enum fe_status *status)
 	if(state->timedout)
 		*status |= FE_TIMEDOUT;
 
-	if(! (*status & FE_HAS_LOCK))
+	if(! (*status & FE_HAS_LOCK)) {
+		*status |= FE_TIMEDOUT;
+		dprintk("returning -1 because of timeout");
 		return -1;
+	}
 
 	ret = tas2101_rd(state, REG_04, buf);
 	if (buf[0] & 0x08)

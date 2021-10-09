@@ -267,29 +267,22 @@ static int av201x_set_params(struct dvb_frontend *fe)
 	return ret;
 }
 
-static  s32   AV201x_agc         [] = {     0,  82,   100,  116,  140,  162,  173,  187,  210,  223,  254,  255};
-static  s32   AV201x_level_dBm_10[] = {    90, -50,  -263, -361, -463, -563, -661, -761, -861, -891, -904, -910};
-
 static int av201x_agc_to_gain_dbm(struct dvb_frontend *fe, s32 if_agc)
 {
-	int   index, table_length, slope, *x, *y;
-	s32 gain;
-
-	x = AV201x_agc;
-	y = AV201x_level_dBm_10;
-	table_length = sizeof(AV201x_agc)/sizeof(int);
-
-
-	/* Finding in which segment the if_agc value is */
-	for (index = 0; index < table_length; index ++)
-		if (x[index] > if_agc ) break;
-
-	/* Computing segment slope */
-	slope =  ((y[index]-y[index-1])*1000)/(x[index]-x[index-1]);
-	/* Linear approximation of rssi value in segment (rssi values will be in 0.1dBm unit: '-523' means -52.3 dBm) */
-	gain = ((y[index-1] + ((if_agc - x[index-1])*slope + 500)/1000)) * 100;
-
-	return -gain;
+	int dbm = 0;
+	if((if_agc>2000)&&(if_agc<=4096))
+		dbm=(-((if_agc*1000-2000000)/140)-79000);
+	else if((if_agc>1500)&&(if_agc<=2000))
+		dbm=(-((if_agc*1000-1500000)/55)-69000);
+	else if((if_agc>1000)&&(if_agc<=1500))
+		dbm=(-((if_agc*1000-1000000)/25)-48000);
+	else if((if_agc>800)&&(if_agc<=1000))
+		dbm=(-((if_agc*1000-800000)/20)-37000);
+	else if((if_agc>260)&&(if_agc<=800))
+		dbm=(-((if_agc*1000-260000)/16)-0);
+	else
+		dbm=0;
+	return dbm + 7500;
 }
 
 static int av201x_get_rf_strength(struct dvb_frontend *fe, u16 *st)
