@@ -328,6 +328,9 @@ static struct tas2101_modfec tas2101_modfec_modes[] = {
 	{ SYS_DVBS, QPSK, FEC_7_8 },
 	{ SYS_DVBS, QPSK, FEC_8_9 },
 
+	{ SYS_DVBS2, QPSK, FEC_1_4},
+	{ SYS_DVBS2, QPSK, FEC_1_3},
+	{ SYS_DVBS2, QPSK, FEC_2_5},
 	{ SYS_DVBS2, QPSK, FEC_1_2 },
 	{ SYS_DVBS2, QPSK, FEC_3_5 },
 	{ SYS_DVBS2, QPSK, FEC_2_3 },

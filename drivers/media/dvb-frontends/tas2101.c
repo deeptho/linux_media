@@ -31,8 +31,15 @@
 #include "tas2101.h"
 #include "tas2101_priv.h"
 
+int tas2101_verbose=0;
+module_param(tas2101_verbose, int, 0644);
+MODULE_PARM_DESC(tas2101_verbose, "verbose debugging");
+
 #define dprintk(fmt, arg...)																					\
 	printk(KERN_DEBUG pr_fmt("%s:%d " fmt), __func__, __LINE__, ##arg)
+
+#define vprintk(fmt, arg...)																					\
+	if(tas2101_verbose) printk(KERN_DEBUG pr_fmt("%s:%d " fmt),  __func__, __LINE__, ##arg)
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 7, 0)
 #if IS_ENABLED(CONFIG_I2C_MUX)
@@ -168,9 +175,9 @@ static void tas2102_set_blindscan_mode(struct tas2101_priv *state, bool on)
 {
 
 	if(on) {
-		tas2101_regmask(state, 0x56, 0x01, 0x80);
-		tas2101_regmask(state, 0x05, 0x08, 0x00);
-		tas2101_regmask(state, 0x36, 0x40, 0x00);
+		tas2101_regmask(state, 0x56, 0x01, 0x80); //reset blindscan
+		tas2101_regmask(state, 0x05, 0x08, 0x00); //ADC
+		tas2101_regmask(state, 0x36, 0x40, 0x00); //AUTORESET
 	} else {
 		tas2101_regmask(state, 0x56, 0x81, 0x00);
 		tas2101_regmask(state, 0x05, 0x00, 0x08);
@@ -219,7 +226,7 @@ static u32 tas2101_bandwidth_for_symbol_rate(uint32_t symbol_rate)
  */
 static int tas2101_signal_power_dbm(struct dvb_frontend *fe, long* val)
 {
-	struct tas2101_priv *priv = fe->demodulator_priv;
+	struct tas2101_priv* state = fe->demodulator_priv;
 
 	int ret;
 	u16 raw;
@@ -407,13 +414,43 @@ static int tas2101_read_snr(struct dvb_frontend *fe, u16 *snr)
 	return 0;
 }
 
-static inline int tas2101_delsys(struct dvb_frontend *fe, int* delsys)
+//idx is a pointer into tas2101_modfec_modes
+static inline int tas2101_get_modulation(struct dvb_frontend *fe)
 {
 	struct tas2101_priv *state = fe->demodulator_priv;
 	u8 temp;
-	int r = tas2101_rd(state, 0xee, &temp);
-	if(r)
-		return r;
+	int idx =0;
+
+	tas2101_rd(state, 0xee, &temp);
+	switch((temp&0xc0)>>6) {
+	case 0:
+		//dvbs
+		idx = temp & 0x7;
+		break;
+	default:
+		//unknown; report dvbs2
+	case 2:
+	case 3:
+		//dvbs2
+		tas2101_rd(state, 0xef, &temp);
+		idx = temp + 8;
+		break;
+	}
+	if(idx >= sizeof(tas2101_modfec_modes)/sizeof(tas2101_modfec_modes[0])) {
+		dprintk("Illegal modulation system: idx=%d", idx);
+		idx =0;
+	}
+	return idx;
+}
+
+
+static inline int tas2101_delsys(struct dvb_frontend *fe, int* delsys)
+{
+	u8 temp;
+	struct tas2101_priv *state = fe->demodulator_priv;
+
+	tas2101_rd(state, 0xee, &temp);
+
 	switch((temp&0xc0)>>6) {
 	case 0:
 		*delsys = SYS_DVBS;
@@ -920,10 +957,11 @@ static int wait_for_dmdlock(struct dvb_frontend *fe, bool require_data)
 		}
 		dprintk("tas2101_read_status: status=0x%x", tunerstat);
 		if (tunerstat & FE_HAS_LOCK) {
+			dprintk("now locked");
 			lock =1;
 			break;
 		}
-		msleep(20);
+		msleep(30);
 	}
 #ifdef TODO
 	dprintk("initial lock: %s dstatus=0x%x dmdstate=0x%x vit=0x%x tsstatus=0x%x require_data=%d timing: %d/%d",
@@ -936,6 +974,133 @@ static int wait_for_dmdlock(struct dvb_frontend *fe, bool require_data)
 	return lock;
 }
 
+
+static bool tas2101_get_frequency_and_symbol_rate(struct dvb_frontend *fe)
+{
+	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
+	struct tas2101_priv *state = fe->demodulator_priv;
+	bool need_retune;
+	u8 regs[2];
+	u32 sym_rate;
+	s32 sym_rate1;
+	s32 carrier_frequency_offset;
+	s32 symbol_rate;
+	s32 frequency;
+
+	u8 	temp,temp1;
+	s32 offset_bcs;
+	bool bcs_on=0;
+	s32 temp_Fc_offset,temp_Fs_offset;
+	s32	fine_fc_offset;
+	s32	fine_srate_offset;
+
+	if( tas2101_rdm(state, 0x75, regs, 2) <0)
+		dprintk("error while reading frequency offset");
+
+	//rough estimate of carrier frequency
+	carrier_frequency_offset = (s16)((regs[1]<<8)|regs[0]);
+
+	//are we in blindscanMode or not?
+	if(tas2101_rd(state, 0x56, &temp1)<0)
+		dprintk("error while reading bcs");
+	bcs_on =  (temp1&0x80)==0x00;
+
+  if(tas2101_rdm(state, 0x73, regs, 2) <0) //what was written earlier as first estimate
+		dprintk("error while reading symbol_rate delta");
+  sym_rate= ((regs[1]<<8)|regs[0]);
+
+  if(tas2101_rdm(state, 0x8c, regs, 2) <0)
+		dprintk("error while reading carrier frequency delta");
+  temp_Fc_offset = (s16)((regs[1]<<8)|regs[0]);
+  fine_fc_offset=
+		(temp_Fc_offset*(s32)sym_rate)/65536;
+
+	if(tas2101_rd(state, 0x7d, &temp)<0)
+		dprintk("error while reading intg_out");
+	if(temp<=127)
+		temp_Fs_offset=temp;
+	else if(temp>127)
+		temp_Fs_offset=temp-256;
+
+	if(sym_rate<=2820)
+		fine_srate_offset=(temp_Fs_offset*91800000)/33554432;
+	else if(sym_rate<=5650)
+		fine_srate_offset=(temp_Fs_offset*91800000)/16777216;
+	else if(sym_rate<=11300)
+		fine_srate_offset=(temp_Fs_offset*91800000)/8388608;
+	else fine_srate_offset=(temp_Fs_offset*91800000)/4194304;
+
+
+	if(bcs_on==1) {
+		if(tas2101_rdm(state, 0x5a, regs, 2) <0)
+			dprintk("error while reading bcs_offset");
+
+		offset_bcs += (s16)((regs[1]<<8)|regs[0]);
+
+		frequency = carrier_frequency_offset + offset_bcs + fine_fc_offset;
+		if(tas2101_rdm(state, 0x5c, regs, 2) <0)
+			dprintk("error while reading symbol_rate");
+		sym_rate1 = (s16)((regs[1]<<8)|regs[0])*1000;
+		symbol_rate = sym_rate1 + fine_srate_offset;
+
+	} else  {
+		frequency = fine_fc_offset;
+		symbol_rate = /*(s32)Symbol_Rate_K*1000 */+ fine_srate_offset;
+	}
+
+	dprintk("bcs=%d; Freq: %d cfo=%d bcs=%d fine=%d "
+					"SR %d: sr=%d %d %d"
+					, bcs_on,
+					frequency, carrier_frequency_offset /* frequency selected within
+																													tuner band, to which we tuned.
+																													Usually 0 except in band scan*/,
+					offset_bcs, fine_fc_offset,
+					symbol_rate, sym_rate /*what was written to chip*/,  sym_rate1 /*actual symbolrate*/, fine_srate_offset);
+
+	need_retune = (frequency > 1000 || frequency < -1000);
+
+	p->frequency = state->tuner_freq + frequency;
+	p->symbol_rate = sym_rate1;
+	return need_retune;
+}
+
+
+static bool tas2101_get_signal_info(struct dvb_frontend *fe)
+{
+	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
+	//struct tas2101_priv *state = fe->demodulator_priv;
+	bool need_retune = false; //true if frequency offset too large
+
+
+	int idx = tas2101_get_modulation(fe);
+	p->fec_inner = tas2101_modfec_modes[idx].fec;
+	p->modulation = tas2101_modfec_modes[idx].modulation;
+	p->delivery_system = tas2101_modfec_modes[idx].delivery_system;
+	p->inversion = INVERSION_AUTO;
+	need_retune = tas2101_get_frequency_and_symbol_rate(fe);
+
+	return need_retune;
+}
+
+static inline void tas2101_ts_out_disable(struct tas2101_priv* state)
+{
+	if(tas2101_regmask(state,	0x04, 0x08, 0x00)<0) //TSTRI
+		dprintk("Error disabling ts_out");
+}
+
+static inline void tas2101_ts_out_enable(struct tas2101_priv* state)
+{
+	if(tas2101_regmask(state, 0x04, 0x00, 0x08)<0)
+		dprintk("error enabling ts_out");
+}
+
+static void tas2101_set_low_symbol_rate(struct tas2101_priv* state, bool low_sr_on)
+{
+	//todo
+}
+
+
+
 static int tune_once(struct dvb_frontend *fe, bool* need_retune)
 {
 	struct tas2101_priv *state = fe->demodulator_priv;
@@ -945,6 +1110,7 @@ static int tune_once(struct dvb_frontend *fe, bool* need_retune)
 	bool enable_blindscan = false;
 	int locked=0;
 	u32 bandwidth;
+	bool low_sr =false;
 
 	*need_retune = 0;
 
@@ -958,7 +1124,9 @@ static int tune_once(struct dvb_frontend *fe, bool* need_retune)
 	case ALGORITHM_COLD:
 	case ALGORITHM_BLIND:
 	case ALGORITHM_BLIND_BEST_GUESS:
-		enable_blindscan = p->algorithm ==  (ALGORITHM_BLIND ||  p->algorithm ==  ALGORITHM_BLIND_BEST_GUESS);
+		enable_blindscan = ((p->algorithm == ALGORITHM_BLIND) ||  (p->algorithm ==  ALGORITHM_BLIND_BEST_GUESS));
+		if(enable_blindscan)
+			p->symbol_rate = 20000000;
 #if 0
 	if(p->algorithm == ALGORITHM_WARM || p->algorithm == ALGORITHM_COLD ||
 		 p->algorithm == ALGORITHM_BLIND_BEST_GUESS)
@@ -996,20 +1164,35 @@ static int tune_once(struct dvb_frontend *fe, bool* need_retune)
 		return -EINVAL;
 	}
 
-	ret = tas2101_wrtable(state, tas2101_setfe, ARRAY_SIZE(tas2101_setfe));
+
+	tas2101_ts_out_disable(state);
+	low_sr = (p->symbol_rate<1600000 && ! enable_blindscan);
+	tas2101_set_low_symbol_rate(state, low_sr);
+
+	ret = tas2101_regmask(state, 0x36, 0x01, 0x00); //enable AUTO_RST
+	if(ret)
+		return ret;
+
+	tas2102_set_blindscan_mode(state, enable_blindscan);
+
 	if (ret)
 		return ret;
 
 	if(enable_blindscan) {
-		p->symbol_rate = 20000;
-		bandwidth = tas2101_bandwidth_for_symbol_rate(35500);
+		p->symbol_rate = 20000000;
+		bandwidth = tas2101_bandwidth_for_symbol_rate(35500000);
 	} else
 		bandwidth = tas2101_bandwidth_for_symbol_rate(p->symbol_rate);
+
+	dprintk("algo=%d bs=%d Setting symbol_rate=%d bw=%d freq=%d.%d", p->algorithm, enable_blindscan,
+					p->symbol_rate, bandwidth, p->frequency/1000, p->frequency%1000);
+
 
 	ret = tas2101_set_symbolrate(state, p->symbol_rate);
 	if (ret)
 		return ret;
 
+	state->tuner_freq = p->frequency;
 	// analyze freq shift
 	if (fe->ops.tuner_ops.set_frequency_and_bandwidth) {
 #ifndef TAS2101_USE_I2C_MUX
@@ -1030,6 +1213,8 @@ static int tune_once(struct dvb_frontend *fe, bool* need_retune)
 
 	locked = wait_for_dmdlock(fe, 1 /*require_data*/);
 	dprintk("lock=%d timedout=%d\n", locked, state->timedout);
+
+	if(locked) {
 #ifdef TODO
 	if(p->algorithm != ALGORITHM_WARM) {
 		if(!locked)
@@ -1038,30 +1223,20 @@ static int tune_once(struct dvb_frontend *fe, bool* need_retune)
 			locked = pls_search_range(fe);
 	}
 #endif
+	}
 	dprintk("setting timedout=%d\n", !locked);
 	state->timedout = !locked;
 	if(locked && p->algorithm != ALGORITHM_WARM ) {
-#ifdef TODO
 		*need_retune = tas2101_get_signal_info(fe);
-#else
-		*need_retune = false;
-#endif
 	}
+
+	tas2101_ts_out_enable(state);
 
 	return 0;
 }
 
 
-
-
-
 static int set_frontend(struct dvb_frontend *fe)
-{
-	bool need_retune;
-	return tune_once(fe, &need_retune);
-}
-
-int set_frequency(struct dvb_frontend *fe)
 {
 	bool need_retune;
 	return tune_once(fe, &need_retune);
@@ -1073,34 +1248,13 @@ static int tas2101_get_frontend(struct dvb_frontend *fe,
 {
 	struct tas2101_priv *priv = fe->demodulator_priv;
 	int ret;
-	u8 reg, buf[2];
-
+	u8 buf[2];
+	int idx;
 	dev_dbg(&priv->i2c->dev, "%s()\n", __func__);
-
-	ret = tas2101_rd(priv, MODFEC_0, &reg);
-	if (ret)
-		return ret;
-
-	if ((reg >> 6) == 0) {
-		/* DVB-S */
-		reg &= 0x07;
-	} else {
-		/* DVB-S2 */
-		ret = tas2101_rd(priv, MODFEC_1, &reg);
-		if (ret)
-			return ret;
-		reg += 5;
-	}
-
-	if (reg > 33) {
-		dev_dbg(&priv->i2c->dev, "%s() Unable to get current delivery"
-			" system and mode.\n", __func__);
-		reg = 0;
-	}
-
-	c->fec_inner = tas2101_modfec_modes[reg].fec;
-	c->modulation = tas2101_modfec_modes[reg].modulation;
-	c->delivery_system = tas2101_modfec_modes[reg].delivery_system;
+	idx =  tas2101_get_modulation(fe);
+	c->fec_inner = tas2101_modfec_modes[idx].fec;
+	c->modulation = tas2101_modfec_modes[idx].modulation;
+	c->delivery_system = tas2101_modfec_modes[idx].delivery_system;
 	c->inversion = INVERSION_AUTO;
 
 	/* symbol rate */
@@ -1134,7 +1288,7 @@ static int tas2101_tune(struct dvb_frontend *fe, bool re_tune,
 	}
 
 	state->symbol_rate =
-		(p->symbol_rate==0) ? 60000000: p->symbol_rate; //determines tuner bandwidth set during blindscan
+		(p->symbol_rate==0) ? 45000000: p->symbol_rate; //determines tuner bandwidth set during blindscan
 
 	if (re_tune) {
 		dprintk("tune called with freq=%d srate=%d => %d re_tune=%d\n", p->frequency, p->symbol_rate,
@@ -1144,9 +1298,19 @@ static int tas2101_tune(struct dvb_frontend *fe, bool re_tune,
 		r = tune_once(fe, &need_retune); //tune_once
 		if (r)
 			return r;
+		if(need_retune) {
+			dprintk("re tuning based on found frequency sift\n");
+			r = tune_once(fe, &need_retune); //tune_once
+			if (r)
+				return r;
+			need_retune = false;
+		}
+	} else {
+		vprintk("no retune");
 	}
 	r = tas2101_read_status(fe, status);
-	{
+	dprintk("read satus returned %d *status=0x%0x", r, *status);
+	if(!r) {
 		int max_num_samples = state->symbol_rate /5 ; //we spend max 500 ms on this
 		if(max_num_samples > 1024)
 			max_num_samples = 1024; //also set an upper limit which should be fast enough
@@ -1214,7 +1378,7 @@ error:
 	return DVBFE_ALGO_SEARCH_ERROR;
 }
 
- static int tas2101_stop_task(struct dvb_frontend *fe);
+static int tas2101_stop_task(struct dvb_frontend *fe);
 
 static int tas2101_spectrum_start(struct dvb_frontend *fe,
 																	 struct dtv_fe_spectrum *s,
@@ -1236,7 +1400,6 @@ static int tas2101_spectrum_start(struct dvb_frontend *fe,
 	int warmup = 20000;
 	if (warmup  > p->scan_start_frequency -950000)
 		warmup = p->scan_start_frequency -950000;
-	int extra_at_start = (warmup + resolution-1)/resolution;
 	tas2101_stop_task(fe);
 	s->num_freq = num_freq;
 	s->num_candidates = 0;
@@ -1269,6 +1432,9 @@ static int tas2101_spectrum_start(struct dvb_frontend *fe,
 			fe->ops.i2c_gate_ctrl(fe, 1);
 #endif
 		state->tuner_bw = fe->ops.tuner_ops.set_bandwidth(fe, bandwidth); //todo: check that this sets the proper bandwidth
+		if(fe->ops.tuner_ops.set_frequency) {
+			fe->ops.tuner_ops.set_frequency(fe, start_frequency); //todo: check that this sets the proper bandwidth
+		}
 #ifndef TAS2101_USE_I2C_MUX
 		if (fe->ops.i2c_gate_ctrl)
 			fe->ops.i2c_gate_ctrl(fe, 0);
@@ -1287,13 +1453,9 @@ static int tas2101_spectrum_start(struct dvb_frontend *fe,
 	ret = tas2101_regmask(state, REG_30, 0x01, 0); //hot reset chip
 	if (ret)
 		return ret;
-#ifndef TAS2101_USE_I2C_MUX
-		if (fe->ops.i2c_gate_ctrl)
-			fe->ops.i2c_gate_ctrl(fe, 1);
-#endif
-		dprintk("loop: %d  %d\n", -extra_at_start, num_freq);
-		msleep(50);
-	for (i = -extra_at_start ; i < num_freq; i++) {
+
+	msleep(100);
+	for (i = 0 ; i < num_freq; i++) {
 		if(i%20==19)
 			dprintk("reached i=%d", i);
 		if ((i%20==19) &&  (kthread_should_stop() || dvb_frontend_task_should_stop(fe))) {
@@ -1302,8 +1464,13 @@ static int tas2101_spectrum_start(struct dvb_frontend *fe,
 		}
 
 		frequency = start_frequency + i*resolution;
+		state->tuner_freq = frequency;
 		if(i>=0)
 			ss->freq[i] = frequency;
+#ifndef TAS2101_USE_I2C_MUX
+		if (fe->ops.i2c_gate_ctrl)
+			fe->ops.i2c_gate_ctrl(fe, 1);
+#endif
 
 		if(fe->ops.tuner_ops.set_frequency) {
 			fe->ops.tuner_ops.set_frequency(fe, frequency); //todo: check that this sets the proper bandwidth
@@ -1314,19 +1481,18 @@ static int tas2101_spectrum_start(struct dvb_frontend *fe,
 			p->frequency = frequency;
 			fe->ops.tuner_ops.set_params(fe);
 		}
+#ifndef TAS2101_USE_I2C_MUX
+		if (fe->ops.i2c_gate_ctrl)
+			fe->ops.i2c_gate_ctrl(fe, 0);
+#endif
+
 
 		if(tas2101_narrow_band_signal_power_dbm(fe, &val1)<0)
 			break;
 		if(i>=0)
 			ss->spectrum[i]  = val1;
-
 	}
 	dprintk("loop exited at i=%d", i);
-
-#ifndef TAS2101_USE_I2C_MUX
-		if (fe->ops.i2c_gate_ctrl)
-			fe->ops.i2c_gate_ctrl(fe, 0);
-#endif
 
 	tas2101_regmask(state, 0x40, agc_speed, 0xff);
 
@@ -1350,7 +1516,7 @@ static int tas2101_constellation_start(struct dvb_frontend *fe,
 
 
 	tas2101_stop_task(fe);
-	dprintk("constellation num_samples=%d/%d  mode=%d\n", user->num_samples, max_num_samples, (int)cs->constel_select);
+	vprintk("constellation num_samples=%d/%d  mode=%d\n", user->num_samples, max_num_samples, (int)cs->constel_select);
 
 	if(num_samples ==0) {
 		return -EINVAL;
@@ -1380,7 +1546,7 @@ static int tas2101_constellation_start(struct dvb_frontend *fe,
 		}
 		for(i=0; i<20; ++i) {
 			if(tas2101_rd(state, 0x39, &val)<0) {
-				dprintk("XXXX tas2101_rd failed at num_samples=%d", cs->num_samples);
+				dprintk("tas2101_rd failed at num_samples=%d", cs->num_samples);
 				break;
 			}
 			if(!(val & 0x80)) {
@@ -1388,11 +1554,11 @@ static int tas2101_constellation_start(struct dvb_frontend *fe,
 				continue;
 			}
 			if(tas2101_rd(state, 0x3B, &buff[0])<0) {
-				dprintk("XXXX tas2101_rd failed at num_samples=%d", cs->num_samples);
+				dprintk("tas2101_rd failed at num_samples=%d", cs->num_samples);
 				break;
 			}
 			if(tas2101_rd(state, 0x3B, &buff[1])<0) {
-				dprintk("XXXX tas2101_rd failed at num_samples=%d", cs->num_samples);
+				dprintk("tas2101_rd failed at num_samples=%d", cs->num_samples);
 				break;
 			}
 			buff[0] &= 0x7F;
@@ -1406,9 +1572,9 @@ static int tas2101_constellation_start(struct dvb_frontend *fe,
 		}
 		sleeptime += i*5;
 		if (sleeptime>=200)
-			dprintk("XXX Giving up after 200ms at  num_samples=%d", cs->num_samples);
+			dprintk("Giving up after 200ms at  num_samples=%d", cs->num_samples);
 		if(i==20) {
-			dprintk("XXX Giving up at  num_samples=%d", cs->num_samples);
+			dprintk("Giving up at  num_samples=%d", cs->num_samples);
 			break;
 		}
 		//GX_Delay_N_ms(5);
@@ -1481,7 +1647,7 @@ static int tas2101_constellation_get(struct dvb_frontend *fe, struct dtv_fe_cons
 	struct tas2101_constellation_scan_state* cs = &state->constellation_scan_state;
 	int error = 0;
 	int adapter =0; //TODO
-	dprintk("demod: %d: constellation num_samples=%d/%d\n", adapter, cs->num_samples, user->num_samples);
+	vprintk("demod: %d: constellation num_samples=%d/%d\n", adapter, cs->num_samples, user->num_samples);
 	if(user->num_samples > cs->num_samples)
 		user->num_samples = cs->num_samples;
 	if(cs->samples) {
