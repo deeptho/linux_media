@@ -399,8 +399,10 @@ static bool pls_search_range(struct dvb_frontend *fe)
 	int count=0;
 	u8 matype_info;
 	u8 isi;
-	if(p->pls_search_range_start >= p->pls_search_range_end)
+	if(p->pls_search_range_start >= p->pls_search_range_end) {
+		dprintk("Invalid PLS range: %d - %d", p->pls_search_range_start, p->pls_search_range_end);
 		return false;
+	}
 	if(timeout==0)
 		timeout = 25;
 	dprintk("pls search range: %d to %d timeout=%d\n",
@@ -447,7 +449,7 @@ static bool pls_search_range(struct dvb_frontend *fe)
 				break;
 		}
 	}
-	dprintk("PLS search endied\n"); //143816
+	dprintk("PLS search ended\n");
 	return locked;
 }
 
@@ -608,7 +610,7 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 			locked = pls_search_range(fe);
 		if(locked) {
 			state->signal_info.has_lock=true;
-			dprintk("PLS locked=%d\n", locked); //143816
+			dprintk("PLS locked=%d\n", locked);
 			print_signal_info("(PLS)", &state->signal_info);
 		}
 		if(locked) {
