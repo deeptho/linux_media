@@ -76,136 +76,9 @@
 
 
 
-s32 si2183_narrow_band_signal_power_dbm(struct dvb_frontend *fe)
-{
-	//		struct si2183_dev *state = fe->demodulator_priv;
-	struct i2c_client *client = fe->demodulator_priv;
-	struct si2183_cmd cmd;
-	u16 agc1;
-	s32 gain1=0;
-	int ret=0;
-	//todo: make better estimate
 
-	/*[0]=Si2183_DD_EXT_AGC_SAT_CMD
-		[1] =flags: agc1_mode, agc2_mode (not used), agc1_inv
-		[2,3,4,5] agc1_kloop, agc2_kloop agc1_min, agc2_min
-	*/
-	memcpy(cmd.args, "\x8a\x00\x00\x00\x00\x00", 6);
-	cmd.wlen = 6;
-	cmd.rlen = 3;
-	ret = si2183_cmd_execute(client, &cmd);
-	if (ret<0) {
-		dprintk("signal_power fe%d cmd_exec failed=%d\n", fe->id, ret);
-		dev_err(&client->dev, "signal_power fe%d cmd_exec failed=%d\n", fe->id, ret);
-		return 0;
-	}
-
-	agc1 = cmd.args[1];
-
-	if(fe->ops.tuner_ops.agc_to_gain_dbm)
-		gain1 = fe->ops.tuner_ops.agc_to_gain_dbm(fe, agc1); //in units of 0.001dB
-	else if (fe->ops.tuner_ops.get_rf_strength) {
-		gain1 = fe->ops.tuner_ops.get_rf_strength(fe, &agc1); //could be anything (drivers inconsistent)
-	}
-	dprintk("STRENGTH: %d => %d\n", agc1, gain1);
-	return -gain1;
-	//missing: agc ref gain
-}
-
-
-
-
-int si2183_stop_task(struct dvb_frontend *fe)
-{
-	struct i2c_client *client = fe->demodulator_priv;
-	struct si2183_dev *state = i2c_get_clientdata(client);
-	struct spectrum_scan_state* ss = &state->scan_state;
-	struct constellation_scan_state* cs = &state->constellation_scan_state;
-	dprintk("called ss=%p\n", ss);
-	dprintk("called %p %p %p\n", ss->freq, ss->spectrum, cs->samples);
-	if(ss->freq)
-		kfree(ss->freq);
-	if(ss->spectrum)
-		kfree(ss->spectrum);
-	if(cs->samples)
-		kfree(cs->samples);
-	memset(ss, 0, sizeof(*ss));
-	memset(cs, 0, sizeof(*cs));
-	dprintk("Freed memory\n");
-	return 0;
-}
-
-
-int si2183_constellation_start(struct dvb_frontend *fe,
-															 struct dtv_fe_constellation* user,
-															 unsigned int *delay, enum fe_status *status)
-{
-#if 0
-	struct si2183_dev *state = fe->demodulator_priv;
-	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
-	struct constellation_scan_state* cs = &state->constellation_scan_state;
-	s8 buff[2];
-	int i;
-
-	si2183_stop_task(fe);
-	cs->num_samples = 0;
-	cs->constel_select = user->constel_select;
-	cs->samples_len = user->num_samples;
-	dprintk("demod: %d: constellation %d samples mode=%d\n", state->nr, cs->samples_len, (int)cs->constel_select);
-	if(cs->samples_len ==0)
-		return -EINVAL;
-	cs->samples = kzalloc(cs->samples_len * (sizeof(cs->samples[0])), GFP_KERNEL);
-	if (!cs->samples) {
-		return -ENOMEM;
-	}
-
-	write_reg_fields(state, RSTV0910_P2_IQCONST,
-									 {FSTV0910_P2_CONSTEL_SELECT, 0}, //inverse mode
-									 {FSTV0910_P2_IQSYMB_SEL, cs->constel_select}
-									 );
-	//	write_reg(state, RSTV0910_P2_AGC2REF,0x10);
-	for (cs->num_samples = 0; cs->num_samples < cs->samples_len; ++cs->num_samples) {
-		if ((cs->num_samples% 20==19) && (kthread_should_stop() || dvb_frontend_task_should_stop(fe))) {
-			dprintk("exiting on should stop\n");
-			break;
-		}
-
-		read_regs(state, RSTV0910_P2_ISYMB, buff, 2);
-		cs->samples[cs->num_samples].imag = buff[0];
-		cs->samples[cs->num_samples].real = buff[1];
-	}
-
-	*status = FE_HAS_SIGNAL|FE_HAS_CARRIER|FE_HAS_VITERBI|FE_HAS_SYNC|FE_HAS_LOCK;
-#endif
-	return 0;
-}
-
-int si2183_constellation_get(struct dvb_frontend *fe, struct dtv_fe_constellation* user)
-{
-#if 0
-	struct si2183_dev *state = fe->demodulator_priv;
-	struct constellation_scan_state* cs = &state->constellation_scan_state;
-	int error = 0;
-	if(user->num_samples > cs->num_samples)
-		user->num_samples = cs->num_samples;
-	if(cs->samples) {
-		if (copy_to_user((void __user*) user->samples, cs->samples,
-										 user->num_samples * sizeof(cs->samples[0]))) {
-			error = -EFAULT;
-		}
-	}
-	else
-		error = -EFAULT;
-	return error;
-#else
-	return 0;
-#endif
-}
-
-#if 0
 static int si2183_get_register_unlocked(struct i2c_client *client, u32 address, s32* value_ret)
 {
-	 //Si2183_READ (front_end->demod, gp_reg16_0);
 	struct si2183_cmd cmd		= {{0x8f, /*get reg*/
 															address &0xff,
 															(address>>8)&0xff,
@@ -217,7 +90,21 @@ static int si2183_get_register_unlocked(struct i2c_client *client, u32 address, 
 	return ret;
  }
 
- static int si2183_set_register_unlocked(struct i2c_client *client, u32 address, s32 value)
+static int si2183_get_register_locked(struct i2c_client *client, u32 address, s32* value_ret)
+{
+		struct si2183_dev *dev = i2c_get_clientdata(client);
+	int ret;
+
+
+	mutex_lock(&dev->base->i2c_mutex);
+	ret = si2183_get_register_unlocked(client, address, value_ret);
+	mutex_unlock(&dev->base->i2c_mutex);
+
+	return ret;
+}
+
+#if 0
+static int si2183_set_register_unlocked(struct i2c_client *client, u32 address, s32 value)
  {
 	struct si2183_cmd cmd		= {{0x8e, /*set reg*/
 															address &0xff,
@@ -265,6 +152,184 @@ static int si2183_set_property(struct i2c_client *client, u16 property, u32 data
 
 	return ret;
 }
+
+
+static int si2183_get_iq_sample(struct dvb_frontend *fe, s16* ival, s16* qval)
+{
+	struct i2c_client *client = fe->demodulator_priv;
+	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
+
+	int ret=-1;
+  unsigned int  value;
+  switch (p->delivery_system)
+  {
+    case SYS_DVBC2:
+    case SYS_DVBT :
+    case SYS_DVBT2: {
+#ifdef TODO
+      if (Si2183_iq_demap != 0) {
+				ret = si2183_get_register_locked(client, 0x0edc1f, &value); //rx_iq
+      } else {
+#endif
+				ret = si2183_get_register_locked(client, 0x072c13, &value); //symb_iq
+#ifdef TODO
+      }
+#endif
+      //imask = 0x000ffc00 ; qmask = 0x000003ff ; ishift = 10 ; iq_coef = 4; limit = qmask+1;
+			*ival = ((value >>10) << 6); //range: -32768 ... +32767; 10 bit per component
+			*qval = (value << 6); //range: -32768 ... +32767
+      break;
+    }
+    case SYS_DVBC_ANNEX_A : {
+			ret = si2183_get_register_locked(client, 0x08e81f, &value); //iq_symb
+      //imask = 0xffff0000 ; qmask = 0x0000ffff ; ishift = 16 ; iq_coef = 2; limit = qmask+1;
+			*ival = (value >> 16); //range: -32768 ... +32767, 16 bit per componentn
+			*qval = value; //range: -32768 ... +32767
+      break;
+    }
+    case SYS_DSS  :
+    case SYS_DVBS :
+    case SYS_DVBS2: {
+			ret = si2183_get_register_locked(client, 0x05f80f, &value); //iq_demod_sat
+      //imask = 0x0000ff00 ; qmask = 0x000000ff ; ishift =  8 ; iq_coef = 4; limit = qmask+1;
+			*ival = ((value >> 8)<<8); //range: -32768 ... +32767, 8 bit per componentn
+			*qval = (value<<8); //range: -32768 ... +32767
+      break;
+    }
+    default : {
+			dprintk("unknown standard");
+      ret = -1;
+      break;
+		}
+  }
+	*ival >>= 8;
+	*qval >>= 8;
+  return ret;
+}
+
+
+
+s32 si2183_narrow_band_signal_power_dbm(struct dvb_frontend *fe)
+{
+	//		struct si2183_dev *state = fe->demodulator_priv;
+	struct i2c_client *client = fe->demodulator_priv;
+	struct si2183_cmd cmd;
+	u16 agc1, agc2;
+	s32 gain1=0;
+	int ret=0;
+	//todo: make better estimate
+
+	/*[0]=Si2183_DD_EXT_AGC_SAT_CMD
+		[1] =flags: agc1_mode, agc2_mode (not used), agc1_inv
+		[2,3,4,5] agc1_kloop, agc2_kloop agc1_min, agc2_min
+	*/
+	memcpy(cmd.args, "\x8a\x00\x00\x00\x00\x00", 6);
+	cmd.wlen = 6;
+	cmd.rlen = 3;
+	ret = si2183_cmd_execute(client, &cmd);
+	if (ret<0) {
+		dprintk("signal_power fe%d cmd_exec failed=%d\n", fe->id, ret);
+		dev_err(&client->dev, "signal_power fe%d cmd_exec failed=%d\n", fe->id, ret);
+		return 0;
+	}
+
+	agc1 = cmd.args[1];
+	agc2 = cmd.args[2];
+	dprintk("AGC: %d %d\n", agc1, agc2);
+	if(fe->ops.tuner_ops.agc_to_gain_dbm)
+		gain1 = fe->ops.tuner_ops.agc_to_gain_dbm(fe, ((int)agc1)<<4); //in units of 0.001dB
+	else if (fe->ops.tuner_ops.get_rf_strength) {
+		gain1 = fe->ops.tuner_ops.get_rf_strength(fe, &agc1); //could be anything (drivers inconsistent)
+	}
+	dprintk("STRENGTH: %d => %d\n", agc1, gain1);
+	return -gain1;
+	//missing: agc ref gain
+}
+
+
+
+
+int si2183_stop_task(struct dvb_frontend *fe)
+{
+	struct i2c_client *client = fe->demodulator_priv;
+	struct si2183_dev *state = i2c_get_clientdata(client);
+	struct spectrum_scan_state* ss = &state->scan_state;
+	struct constellation_scan_state* cs = &state->constellation_scan_state;
+	dprintk("called ss=%p\n", ss);
+	dprintk("called %p %p %p\n", ss->freq, ss->spectrum, cs->samples);
+	if(ss->freq)
+		kfree(ss->freq);
+	if(ss->spectrum)
+		kfree(ss->spectrum);
+	if(cs->samples)
+		kfree(cs->samples);
+	memset(ss, 0, sizeof(*ss));
+	memset(cs, 0, sizeof(*cs));
+	dprintk("Freed memory\n");
+	return 0;
+}
+
+
+int si2183_constellation_start(struct dvb_frontend *fe, struct dtv_fe_constellation* user, int max_num_samples)
+{
+	struct si2183_dev *state = fe->demodulator_priv;
+	struct constellation_scan_state* cs = &state->constellation_scan_state;
+
+	int num_samples = user->num_samples;
+	if(num_samples > max_num_samples)
+		num_samples = max_num_samples;
+	dprintk("demod: ??: constellation samples=%d/%d constel_select=%d\n", /*state->nr,*/ user->num_samples,
+					max_num_samples, (int)user->constel_select);
+	if(num_samples ==0) {
+		return -EINVAL;
+	}
+
+	if(cs->samples_len != num_samples) {
+		if(cs->samples)
+			kfree(cs->samples);
+		cs->samples_len = num_samples;
+		cs->samples = kzalloc(cs->samples_len * (sizeof(cs->samples[0])), GFP_KERNEL);
+		if (!cs->samples) {
+			return  -ENOMEM;
+		}
+	}
+
+	cs->constel_select =  user->constel_select;
+	cs->num_samples = 0;
+
+
+	for (cs->num_samples = 0; cs->num_samples < cs->samples_len; ++cs->num_samples) {
+		if ((cs->num_samples% 20==19) && (kthread_should_stop() || dvb_frontend_task_should_stop(fe))) {
+			dprintk("exiting on should stop\n");
+			break;
+		}
+		si2183_get_iq_sample(fe, &cs->samples[cs->num_samples].imag, &cs->samples[cs->num_samples].real);
+	}
+
+	dprintk("demod: ??: constellation retrieved samples=%d\n", /*state->nr,*/ cs->num_samples);
+	return 0;
+}
+
+int si2183_constellation_get(struct dvb_frontend *fe, struct dtv_fe_constellation* user)
+{
+	struct si2183_dev *state = fe->demodulator_priv;
+	struct constellation_scan_state* cs = &state->constellation_scan_state;
+	int error = 0;
+	if(user->num_samples > cs->num_samples)
+		user->num_samples = cs->num_samples;
+	if(cs->samples) {
+		if (copy_to_user((void __user*) user->samples, cs->samples,
+										 user->num_samples * sizeof(cs->samples[0]))) {
+			error = -EFAULT;
+		}
+	}
+	else
+		error = -EFAULT;
+	return error;
+}
+
+
+
 
 u8 Si2183_convert_to_byte (const u8* buffer, u8 shift, u8 mask) {
 	unsigned int rspBuffer = *buffer;

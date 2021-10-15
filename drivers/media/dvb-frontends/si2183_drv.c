@@ -197,8 +197,25 @@ static int si2183_get_prop(struct i2c_client *client, u16 prop, u16 *val)
 #endif
 
 
+#if 0
+static int si2183_read_reg(struct i2c_client *client, u16 prop, u16 *val)
+{
+	struct si2183_cmd cmd;
+	int ret;
 
-
+	cmd.args[0] = 0x14;
+	cmd.args[1] = 0x00;
+	cmd.args[2] = (u8) prop;
+	cmd.args[3] = (u8) (prop >> 8);
+	cmd.args[4] = (u8) (*val);
+	cmd.args[5] = (u8) (*val >> 8);
+	cmd.wlen = 6;
+	cmd.rlen = 4;
+	ret = si2183_cmd_execute(client, &cmd);
+	*val = (cmd.args[2] | (cmd.args[3] << 8));
+	return ret;
+}
+#endif
 
 
 int si2183_read_status(struct dvb_frontend *fe, enum fe_status *status)
@@ -338,7 +355,7 @@ int si2183_read_status(struct dvb_frontend *fe, enum fe_status *status)
 			break;
 			default:
 				c->modulation = QPSK;
-			break;	
+			break;
 		}
 		// fec_inner
 		switch (c->delivery_system) {
@@ -370,7 +387,7 @@ int si2183_read_status(struct dvb_frontend *fe, enum fe_status *status)
 			break;
 			default:
 				c->fec_inner = FEC_AUTO;
-			break;	
+			break;
 		}
 		break;
 	case SYS_DVBS:
@@ -398,7 +415,7 @@ int si2183_read_status(struct dvb_frontend *fe, enum fe_status *status)
 			break;
 			default:
 				c->fec_inner = FEC_AUTO;
-			break;	
+			break;
 		}
 		break;
 	case SYS_DVBS2:
@@ -438,7 +455,7 @@ int si2183_read_status(struct dvb_frontend *fe, enum fe_status *status)
 			break;
 			default:
 				c->fec_inner = FEC_AUTO;
-			break;	
+			break;
 		}
 		break;
 		default:
@@ -470,7 +487,7 @@ int si2183_read_status(struct dvb_frontend *fe, enum fe_status *status)
 			break;
 			default:
 				c->rolloff = ROLLOFF_AUTO;
-			break;	
+			break;
 			}
 			// pilot
 			switch ((cmd.args[8] >> 7) & 0x01){
@@ -482,20 +499,19 @@ int si2183_read_status(struct dvb_frontend *fe, enum fe_status *status)
 			break;
 			default:
 				c->pilot = PILOT_AUTO;
-			break;	
+			break;
 			}
 			break;
 			default:
 			c->rolloff = ROLLOFF_AUTO;
 			c->pilot = PILOT_AUTO;
-			break;	
-		}			
+			break;
+		}
 		break;
 	default:
 		c->cnr.stat[0].scale = FE_SCALE_NOT_AVAILABLE;
 		break;
 	}
-
 	c->modulation = si2183_modulation(cmd.args[8] &0x3f);
 	dprintk("MODU: %d =>%d\n", cmd.args[8] &0x3f, 	c->modulation);
 	c->inversion = ((cmd.args[8] >> 6) &1)? INVERSION_ON: INVERSION_OFF;
@@ -515,6 +531,7 @@ int si2183_read_status(struct dvb_frontend *fe, enum fe_status *status)
 		int i= (c->stream_id)%256;
 		c->isi_bitset[i/32] |= ((uint32_t)1) << (i%32);
 	}
+
 	dev->fe_status = *status;
 
 	dev_dbg(&client->dev, "status=%02x args=%*ph\n",
@@ -964,15 +981,14 @@ int si2183_set_frontend(struct dvb_frontend *fe)
 {
 	struct i2c_client *client = fe->demodulator_priv;
 	struct si2183_dev *dev = i2c_get_clientdata(client);
-	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
+	struct dtv_frontend_properties* p = &fe->dtv_property_cache;
 	int ret;
 	struct si2183_cmd cmd;
 
-	dev_dbg(&client->dev,
-					"delivery_system=%u modulation=%u frequency=%u bandwidth_hz=%u symbol_rate=%u inversion=%u stream_id=%d\n",
-					c->delivery_system, c->modulation, c->frequency,
-					c->bandwidth_hz, c->symbol_rate, c->inversion,
-					c->stream_id);
+	dprintk("delivery_system=%u modulation=%u frequency=%u bandwidth_hz=%u symbol_rate=%u inversion=%u stream_id=%d\n",
+					p->delivery_system, p->modulation, p->frequency,
+					p->bandwidth_hz, p->symbol_rate, p->inversion,
+					p->stream_id);
 
 	if (!dev->active_fe) {
 		dprintk("No active fe\n");
@@ -981,13 +997,13 @@ int si2183_set_frontend(struct dvb_frontend *fe)
 	}
 	if(dev->RF_switch)
 		{
-			switch (c->delivery_system) {
+			switch (p->delivery_system) {
 			case SYS_DVBT:
 			case SYS_DVBT2:
 			case SYS_DVBC_ANNEX_A:
 			case SYS_DVBC_ANNEX_B:
 			case SYS_ISDBT:
-				dprintk("RFSWITCH to %d 1\n", c->delivery_system);
+				dprintk("RFSWITCH to %d 1\n", p->delivery_system);
 				dev->RF_switch(dev->base->i2c,dev->rf_in,1);
 
 				break;
@@ -996,7 +1012,7 @@ int si2183_set_frontend(struct dvb_frontend *fe)
 			case SYS_DVBS2:
 			case SYS_DSS:
 			default:
-				dprintk("RFSWITCH to %d 0\n", c->delivery_system);
+				dprintk("RFSWITCH to %d 0\n", p->delivery_system);
 				dev->RF_switch(dev->base->i2c,dev->rf_in,0);
 				break;
 
@@ -1017,13 +1033,13 @@ int si2183_set_frontend(struct dvb_frontend *fe)
 		if (fe->ops.i2c_gate_ctrl)
 			fe->ops.i2c_gate_ctrl(fe, 0);
 #endif
-		if (ret) {
+		if (ret<0) {
 			dev_err(&client->dev, "err setting tuner params\n");
 			goto err;
 		}
 	}
-	dprintk("xxx delsys=%d\n", c->delivery_system);
-	switch (c->delivery_system) {
+	dprintk("xxx delsys=%d\n", p->delivery_system);
+	switch (p->delivery_system) {
 	case SYS_DVBT:
 	case SYS_DVBT2:
 		ret = si2183_set_dvbt(fe);
@@ -1044,7 +1060,7 @@ int si2183_set_frontend(struct dvb_frontend *fe)
 		ret = si2183_set_dvbs(fe);
 		break;
 	default:
-		dprintk("Bad delsys: %d\n",c->delivery_system);
+		dprintk("Bad delsys: %d\n",p->delivery_system);
 		ret = -EINVAL;
 		goto err;
 	}
@@ -1059,7 +1075,7 @@ int si2183_set_frontend(struct dvb_frontend *fe)
 		return ret;
 	}
 
-	dev->delivery_system = c->delivery_system;
+	dev->delivery_system = p->delivery_system;
 	return 0;
  err:
 	dev_err(&client->dev, "set_params failed=%d\n", ret);
@@ -1401,6 +1417,9 @@ static int i2c_gate_ctrl(struct dvb_frontend* fe, int enable)
 static int si2183_tune(struct dvb_frontend *fe, bool re_tune,
 											 unsigned int mode_flags, unsigned int *delay, enum fe_status *status)
 {
+	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
+	struct si2183_dev *state = fe->demodulator_priv;
+	int ret;
 	*delay = HZ / 5;
 	if (re_tune) {
 		int ret = si2183_set_frontend(fe);
@@ -1408,7 +1427,14 @@ static int si2183_tune(struct dvb_frontend *fe, bool re_tune,
 			return ret;
 		//msleep(500);
 	}
-	return si2183_read_status(fe, status);
+	ret = si2183_read_status(fe, status);
+	if(ret>=0 && p->constellation.num_samples>0) {
+		int max_num_samples = p->symbol_rate /5 ; //we spend max 500 ms on this
+		if(max_num_samples > 1024)
+			max_num_samples = 1024; //also set an upper limit which should be fast enough
+		ret = si2183_constellation_start(fe, &p->constellation, max_num_samples);
+	}
+	return ret;
 }
 
 static enum dvbfe_algo si2183_get_algo(struct dvb_frontend *fe)
@@ -1643,10 +1669,7 @@ static const struct dvb_frontend_ops si2183_ops = {
 			FE_CAN_MUTE_TS |
 			FE_CAN_2G_MODULATION |
 		FE_CAN_MULTISTREAM,
-		.extended_caps = FE_CAN_SPECTRUMSCAN
-#if 0
-		| FE_CAN_IQ
-#endif
+		.extended_caps = FE_CAN_SPECTRUMSCAN| FE_CAN_IQ
 	},
 
 	.get_tune_settings = si2183_get_tune_settings,
@@ -1685,8 +1708,8 @@ static const struct dvb_frontend_ops si2183_ops = {
 	.eeprom_write		= eeprom_write,
 #if 0
 	.constellation_start	= si2183_constellation_start,
-	.constellation_get	= si2183_constellation_get,
 #endif
+	.constellation_get	= si2183_constellation_get,
 };
 
 
