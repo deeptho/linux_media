@@ -44,11 +44,8 @@ static int dvbdev_debug;
 module_param(dvbdev_debug, int, 0644);
 MODULE_PARM_DESC(dvbdev_debug, "Turn on/off device debugging (default:off).");
 
-#define dprintk(fmt, arg...) do {					\
-	if (dvbdev_debug)						\
-		printk(KERN_DEBUG pr_fmt("%s: " fmt),			\
-		       __func__, ##arg);				\
-} while (0)
+#define dprintk(fmt, arg...)							\
+	printk(KERN_DEBUG pr_fmt("%s:%d " fmt), __func__, __LINE__, ##arg)
 
 static LIST_HEAD(dvb_adapter_list);
 static DEFINE_MUTEX(dvbdev_register_lock);
@@ -550,9 +547,6 @@ int dvb_register_device(struct dvb_adapter *adap, struct dvb_device **pdvbdev,
 		kfree(dvbdev);
 		return PTR_ERR(clsdev);
 	}
-	dprintk("DVB: register adapter%d/%s%d @ minor: %i (0x%02x)\n",
-		adap->num, dnames[type], id, minor, minor);
-
 	return 0;
 }
 EXPORT_SYMBOL(dvb_register_device);
@@ -1051,7 +1045,7 @@ static ssize_t version_show(struct kobject *kobj, struct kobj_attribute *attr,
 		scnprintf().*/
 	return sprintf(buf,
 								 "type = \"neumo\";\n"
-								 "version = \"1.0\";\n");
+								 "version = \"1.1\";\n");
 }
 
 static ssize_t version_store(struct kobject *kobj, struct kobj_attribute *attr,

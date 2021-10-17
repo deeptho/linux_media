@@ -156,6 +156,7 @@ static void __dvb_frontend_free(struct dvb_frontend *fe)
 	release_dtv_fe_spectrum_scan(fe);
 
 	kfree(fepriv);
+	fe->frontend_priv = NULL;
 }
 
 static void dvb_frontend_free(struct kref *ref)
@@ -2201,6 +2202,7 @@ static int dtv_property_process_set(struct dvb_frontend *fe,
 
 	switch(cmd) {
 	case DTV_CLEAR:
+		dprintk("cmd=DTV_CLEAR");
 		/*
 		 * Reset a cache of data specific to the frontend here. This does
 		 * not effect hardware.
@@ -2212,7 +2214,7 @@ static int dtv_property_process_set(struct dvb_frontend *fe,
 		 * Use the cached Digital TV properties to tune the
 		 * frontend
 		 */
-
+		dprintk("cmd=DTV_TUNE");
 		dev_dbg(fe->dvb->device,
 			"%s: Setting the frontend from property cache\n",
 			__func__);
@@ -2224,6 +2226,7 @@ static int dtv_property_process_set(struct dvb_frontend *fe,
 		 * Use the cached Digital TV properties to scan the
 		 * frontend
 		 */
+		dprintk("cmd=DTV_SCAN");
 		dprintk("sat scan called\n");
 		dev_dbg(fe->dvb->device,
 			"%s: Setting the frontend from property cache\n",
@@ -2235,6 +2238,7 @@ static int dtv_property_process_set(struct dvb_frontend *fe,
 		 * Use the cached Digital TV properties to scan the
 		 * frontend
 		 */
+		dprintk("cmd=DTV_SPECTRUM");
 		dprintk("get spectrum scan called\n");
 		dev_dbg(fe->dvb->device,
 			"%s: Setting the frontend from property cache\n",
@@ -2246,12 +2250,14 @@ static int dtv_property_process_set(struct dvb_frontend *fe,
 		 * Use the cached Digital TV properties to scan the
 		 * frontend
 		 */
+		dprintk("cmd=DTV_CONSTELLATION");
 		dev_dbg(fe->dvb->device,
 			"%s: Setting the frontend from property cache\n",
 			__func__);
 		r = dtv_set_constellation(fe, &tvp->u.constellation);
 		break;
 	case DTV_PLS_SEARCH_RANGE:
+		dprintk("cmd=PLS_SEARCH_RANGE");
 		if(tvp->u.buffer.len == sizeof(c->pls_search_range_start) + sizeof(c->pls_search_range_start)) {
 			int i= 0;
 			memcpy(&c->pls_search_range_start, &tvp->u.buffer.data[i], sizeof(c->pls_search_range_start));
@@ -2261,10 +2267,12 @@ static int dtv_property_process_set(struct dvb_frontend *fe,
 		}
 		break;
 	case DTV_PLS_SEARCH_LIST: {
+		dprintk("cmd=PLS_SEARCH_LIST");
 		r = dtv_set_pls_search_list(fe, &tvp->u.pls_search_codes);
 	}
 		break;
 	default:
+		dprintk("cmd=%d data=%d", cmd, tvp->u.data);
 		return dtv_property_process_set_int(fe, file, cmd, tvp->u.data);
 	}
 
@@ -2743,7 +2751,7 @@ static int dtv_set_pls_search_list(struct dvb_frontend *fe, struct dtv_pls_searc
 	int i;
 	dprintk("PLS: %d codes:\n", c->pls_search_codes_len);
 	for(i=0;i< c->pls_search_codes_len;++i)
-		dprintk("code=0x%x\n", c->pls_search_codes, &c->pls_search_codes[i]);
+		dprintk("code=0x%x\n", c->pls_search_codes[i]);
 
 	return 0;
 }
@@ -3602,13 +3610,12 @@ EXPORT_SYMBOL(dvb_register_frontend);
 int dvb_unregister_frontend(struct dvb_frontend *fe)
 {
 	struct dvb_frontend_private *fepriv = fe->frontend_priv;
-
 	dev_dbg(fe->dvb->device, "%s:\n", __func__);
 
 	mutex_lock(&frontend_mutex);
 	dvb_frontend_stop(fe);
-	dvb_remove_device(fepriv->dvbdev);
-
+	if(fepriv && fepriv->dvbdev)
+		dvb_remove_device(fepriv->dvbdev);
 	/* fe is invalid now */
 	mutex_unlock(&frontend_mutex);
 	dvb_frontend_put(fe);

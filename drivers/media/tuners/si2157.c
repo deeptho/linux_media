@@ -445,6 +445,7 @@ static int si2157_set_params(struct dvb_frontend *fe)
 		delivery_system = 0x60;
 		break;
 	default:
+		dprintk("ERROR");
 		ret = -EINVAL;
 		goto err;
 	}
@@ -775,7 +776,6 @@ err:
 
 static void si2157_release(struct dvb_frontend *fe)
 {
-	dprintk("release called. NOOP\n");
 }
 
 static const struct dvb_tuner_ops si2157_ops = {
@@ -938,6 +938,7 @@ static int si2157_remove(struct i2c_client *client)
 #endif
 	if(dev)
 		kfree(dev);
+	i2c_set_clientdata(client, NULL);
 
 	memset(&fe->ops.tuner_ops, 0, sizeof(struct dvb_tuner_ops));
 	fe->tuner_priv = NULL;

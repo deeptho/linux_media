@@ -118,7 +118,6 @@ static void av201x_release(struct dvb_frontend *fe)
 {
 	struct av201x_priv *priv = fe->tuner_priv;
 	dev_dbg(&priv->i2c->dev, "%s()\n", __func__);
-
 	kfree(fe->tuner_priv);
 	fe->tuner_priv = NULL;
 }

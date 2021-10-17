@@ -310,7 +310,6 @@ static u32 tbs_read_ext(struct tbsecp3_adapter *adap, u32 baseaddr, u8 address)
 
 static int tbs6308_read_mac_ext(struct tbsecp3_adapter *adap)
 {
-	struct tbsecp3_dev *dev = adap->dev;
 	int ret = 1;
 	int i =0;
 	u32 postaddr;
@@ -1425,7 +1424,7 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 	case TBSECP3_BOARD_TBS6301SE:
 		adapter->fe = dvb_attach(tas2971_attach, &tbs6301se_demod_cfg, i2c);
 		if (adapter->fe == NULL)
-		    goto frontend_atach_fail;
+			goto frontend_atach_fail;
 
 	case TBSECP3_BOARD_TBS690a: {
 		int regdata;
@@ -1704,33 +1703,31 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 		si2183_config.agc_mode = (adapter->nr %2)? 0x4 : 0x5;
 		info.platform_data = &si2183_config;
 		request_module(info.type);
-		client_demod = i2c_new_client_device(i2c, &info);
+		client_demod = i2c_new_client_device(i2c, &info); // fe->demodulator_priv= i2c_client
 		if (client_demod == NULL ||
 			client_demod->dev.driver == NULL)
 				goto frontend_atach_fail;
 		if (!try_module_get(client_demod->dev.driver->owner)) {
+			dprintk("unregistering i2c device because try_module_get failed");
 				i2c_unregister_device(client_demod);
 				goto frontend_atach_fail;
 		}
-
-
 		/*This needs to be repeated from above, because the dvb code
 			will decrease module refcnt once for each adapter and the
-			sat tuner would not have taken a reference*/
+			sat tuner would not have taken a reference: only the dvbt/dvbc tuner takes one and
+			fe2 is a copy of fe (see below)*/
 		if (!try_module_get(client_demod->dev.driver->owner)) {
-				i2c_unregister_device(client_demod);
+			dprintk("unregistering i2c device because try_module_get failed");
+			i2c_unregister_device(client_demod);
 				goto frontend_atach_fail;
 		}
-
 		adapter->i2c_client_demod = client_demod;
-
 		/* dvb core doesn't support 2 tuners for 1 demod so
 			we split the adapter in 2 frontends */
 		adapter->fe2 = &adapter->_fe2;
 		memcpy(adapter->fe2, adapter->fe, sizeof(struct dvb_frontend));
-
-
 		/* terrestrial tuner */
+		//This overrides the information produced by si2183_probe
 		memset(adapter->fe->ops.delsys, 0, MAX_DELSYS);
 		adapter->fe->ops.delsys[0] = SYS_DVBT;
 		adapter->fe->ops.delsys[1] = SYS_DVBT2;
@@ -1749,7 +1746,7 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 		info.addr = (adapter->nr %2) ? 0x61 : 0x60;
 		info.platform_data = &si2157_config;
 		request_module(info.type);
-		client_tuner = i2c_new_client_device(i2c, &info);
+		client_tuner = i2c_new_client_device(i2c, &info); //si2157
 		if (client_tuner == NULL ||
 			client_tuner->dev.driver == NULL)
 				goto frontend_atach_fail;
@@ -1769,6 +1766,7 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 		adapter->fe2->ops.delsys[2] = SYS_DSS;
 		adapter->fe2->ops.delsys[3] = SYS_AUTO;
 		adapter->fe2->id = 1;
+		//dvb_attach basically loads a module and calls (av201x_attach
 		if (dvb_attach(av201x_attach, adapter->fe2, &tbs6522_av201x_cfg[(adapter->nr %2)],
 					i2c) == NULL) {
 				dev_err(&dev->pci_dev->dev,
@@ -1776,7 +1774,7 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 					adapter->nr);
 				goto frontend_atach_fail;
 		}
-		if (tbsecp3_attach_sec(adapter, adapter->fe2) == NULL) {
+		if (tbsecp3_attach_sec(adapter, adapter->fe2) == NULL) { //hardware= for diseqc
 				dev_warn(&dev->pci_dev->dev,
 					"error attaching lnb control on adapter %d\n",
 					adapter->nr);
@@ -2094,7 +2092,7 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 	if (adapter->fe2) {
 		strlcpy(adapter->fe2->ops.info.name, dev->info->name, sizeof(adapter->fe2->ops.info.card_name));
 		strlcpy(adapter->fe2->ops.info.card_address, dev_name(&dev->pci_dev->dev), sizeof(adapter->fe2->ops.info.card_address));
-		strlcpy(adapter->fe2->ops.info.card_name, dev->info->name, sizeof(adapter->fe->ops.info.card_name));
+		strlcpy(adapter->fe2->ops.info.card_name, dev->info->name, sizeof(adapter->fe2->ops.info.card_name));
 		snprintf(adapter->fe2->ops.info.adapter_address, sizeof(adapter->fe2->ops.info.adapter_address),
 						 "%s:%d", adapter->fe->ops.info.card_address, adapter->nr);
 		snprintf(adapter->fe2->ops.info.adapter_name, sizeof(adapter->fe2->ops.info.adapter_name),
@@ -2122,7 +2120,6 @@ int tbsecp3_dvb_init(struct tbsecp3_adapter *adapter)
 		struct dmx_frontend *fe_hw;
 		struct dmx_frontend *fe_mem;
 		int ret;
-
 		ret = dvb_register_adapter(adap, "TBSECP3 DVB Adapter",
 						THIS_MODULE,
 						&adapter->dev->pci_dev->dev,
@@ -2135,7 +2132,6 @@ int tbsecp3_dvb_init(struct tbsecp3_adapter *adapter)
 										DVB_MAX_ADAPTERS);
 				return ret;
 		}
-
 		adap->priv = adapter;
 		dvbdemux->priv = adapter;
 		dvbdemux->filternum = 256;
@@ -2158,42 +2154,35 @@ int tbsecp3_dvb_init(struct tbsecp3_adapter *adapter)
 		dmxdev->filternum = 256;
 		dmxdev->demux = &dvbdemux->dmx;
 		dmxdev->capabilities = 0;
-
 		ret = dvb_dmxdev_init(dmxdev, adap);
 		if (ret < 0) {
 				dev_err(&dev->pci_dev->dev, "dvb_dmxdev_init failed\n");
 				goto err1;
 		}
-
 		fe_hw = &adapter->fe_hw;
 		fe_mem = &adapter->fe_mem;
-
 		fe_hw->source = DMX_FRONTEND_0;
 		ret = dvbdemux->dmx.add_frontend(&dvbdemux->dmx, fe_hw);
 		if ( ret < 0) {
 				dev_err(&dev->pci_dev->dev, "dvb_dmx_init failed");
 				goto err2;
 		}
-
 		fe_mem->source = DMX_MEMORY_FE;
 		ret = dvbdemux->dmx.add_frontend(&dvbdemux->dmx, fe_mem);
 		if (ret  < 0) {
 				dev_err(&dev->pci_dev->dev, "dvb_dmx_init failed");
 				goto err3;
 		}
-
 		ret = dvbdemux->dmx.connect_frontend(&dvbdemux->dmx, fe_hw);
 		if (ret < 0) {
 				dev_err(&dev->pci_dev->dev, "dvb_dmx_init failed");
 				goto err4;
 		}
-
 		ret = dvb_net_init(adap, &adapter->dvbnet, adapter->dmxdev.demux);
 		if (ret < 0) {
 				dev_err(&dev->pci_dev->dev, "dvb_net_init failed");
 				goto err5;
 		}
-
 		tbsecp3_frontend_attach(adapter);
 		if (adapter->fe == NULL) {
 				dev_err(&dev->pci_dev->dev, "frontend attach failed\n");
@@ -2223,6 +2212,7 @@ err6:
 		tbsecp3_release_sec(adapter->fe);
 
 		dvb_net_release(&adapter->dvbnet);
+
 err5:
 		dvbdemux->dmx.close(&dvbdemux->dmx);
 err4:
@@ -2238,6 +2228,7 @@ err0:
 		return ret;
 }
 
+
 void tbsecp3_dvb_exit(struct tbsecp3_adapter *adapter)
 {
 	struct dvb_adapter *adap = &adapter->dvb_adapter;
@@ -2249,19 +2240,30 @@ void tbsecp3_dvb_exit(struct tbsecp3_adapter *adapter)
 		tbsecp3_release_sec(adapter->fe);
 		dvb_frontend_detach(adapter->fe);
 		adapter->fe = NULL;
-
 		if (adapter->fe2 != NULL) {
 			dvb_unregister_frontend(adapter->fe2);
 			tbsecp3_release_sec(adapter->fe2);
+			/*
+				dvb_frontend_detach
+				This function should be called after dvb_unregister_frontend. It calls the SEC,
+				tuner and demod release functions: dvb_frontend_ops.release_sec, dvb_frontend_ops.tuner_ops.release, dvb_frontend_ops.analog_ops.release and dvb_frontend_ops.release.
+			 */
 			dvb_frontend_detach(adapter->fe2);
 			adapter->fe2 = NULL;
 		}
+
 	}
 	dvb_net_release(&adapter->dvbnet);
+	if(dvbdemux) {
 	dvbdemux->dmx.close(&dvbdemux->dmx);
 	dvbdemux->dmx.remove_frontend(&dvbdemux->dmx, &adapter->fe_mem);
 	dvbdemux->dmx.remove_frontend(&dvbdemux->dmx, &adapter->fe_hw);
+	}
+	if(adapter) {
 	dvb_dmxdev_release(&adapter->dmxdev);
 	dvb_dmx_release(&adapter->demux);
+	}
+	if(adap) {
 	dvb_unregister_adapter(adap);
+	}
 }

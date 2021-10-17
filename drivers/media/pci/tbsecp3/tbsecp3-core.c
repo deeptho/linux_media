@@ -21,6 +21,9 @@ static bool enable_msi = true;
 module_param(enable_msi, bool, 0444);
 MODULE_PARM_DESC(enable_msi, "use an msi interrupt if available");
 
+#define dprintk(fmt, arg...)																					\
+	printk(KERN_DEBUG pr_fmt("%s:%d " fmt), __func__, __LINE__, ##arg)
+
 
 void tbsecp3_gpio_set_pin(struct tbsecp3_dev *dev,
 		struct tbsecp3_gpio_pin *pin, int state)
@@ -90,6 +93,10 @@ static int tbsecp3_adapters_attach(struct tbsecp3_dev *dev)
 {
 	int i, ret = 0;
 	for (i = 0; i < dev->info->adapters; i++) {
+#ifdef NOV11
+		dprintk("adapter =%p dvbdemux=%p dev=%p dev->p=%p", &dev->adapter[i], &dev->adapter[i].demux,
+						&dev->adapter[i].dev->pci_dev->dev, dev->adapter[i].dev->pci_dev->dev.p);
+#endif
 		ret = tbsecp3_dvb_init(&dev->adapter[i]);
 		if (ret) {
 			dev_err(&dev->pci_dev->dev,
@@ -108,7 +115,6 @@ static void tbsecp3_adapters_detach(struct tbsecp3_dev *dev)
 
 	for (i = 0; i < dev->info->adapters; i++) {
 		adapter = &dev->adapter[i];
-
 		/* attach has failed, nothing to do */
 		if (adapter->nr == -1)
 			continue;
@@ -127,6 +133,7 @@ static void tbsecp3_adapters_init(struct tbsecp3_dev *dev)
 		adapter->cfg = &dev->info->adap_config[i];
 		adapter->dev = dev;
 		adapter->i2c = &dev->i2c_bus[adapter->cfg->i2c_bus_nr];
+
 	}
 }
 
@@ -179,7 +186,6 @@ static int tbsecp3_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 {
 	struct tbsecp3_dev *dev;
 	int ret = -ENODEV;
-
 	if (pci_enable_device(pdev) < 0)
 		return -ENODEV;
 
@@ -200,7 +206,6 @@ static int tbsecp3_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 
 	dev->pci_dev = pdev;
 	pci_set_drvdata(pdev, dev);
-
 	dev->info = (struct tbsecp3_board *) id->driver_data;
 	dev_info(&pdev->dev, "%s\n", dev->info->name);
 
@@ -213,9 +218,7 @@ static int tbsecp3_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 
 	tbs_write(TBSECP3_INT_BASE, TBSECP3_INT_EN, 0);
 	tbs_write(TBSECP3_INT_BASE, TBSECP3_INT_STAT, 0xff);
-
 	tbsecp3_adapters_init(dev);
-
 	/* dma */
 	ret = tbsecp3_dma_init(dev);
 	if (ret < 0)
