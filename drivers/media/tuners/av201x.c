@@ -245,7 +245,10 @@ static int av201x_set_frequency_and_bandwidth(struct dvb_frontend *fe, u32 frequ
 	if(ret)
 		return ret;
 	msleep(20);
-	return av201x_set_bandwith(fe, bandwidth);
+	ret = av201x_set_bandwith(fe, bandwidth);
+	if (ret>0)
+		ret =0;
+	return ret;
 }
 
 static int av201x_set_params(struct dvb_frontend *fe)
