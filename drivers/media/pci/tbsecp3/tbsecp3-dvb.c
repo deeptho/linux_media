@@ -2084,6 +2084,7 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 		break;
 	}
 	strlcpy(adapter->fe->ops.info.name, dev->info->name, sizeof(adapter->fe->ops.info.name));
+	strlcpy(adapter->fe->ops.info.card_name, dev->info->name, sizeof(adapter->fe->ops.info.card_name));
 	strlcpy(adapter->fe->ops.info.card_address, dev_name(&dev->pci_dev->dev), sizeof(adapter->fe->ops.info.card_address));
 	snprintf(adapter->fe->ops.info.adapter_address, sizeof(adapter->fe->ops.info.adapter_address),
 					 "%s:%d", adapter->fe->ops.info.card_address, adapter->nr);
@@ -2092,6 +2093,7 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 	if (adapter->fe2) {
 		strlcpy(adapter->fe2->ops.info.name, dev->info->name, sizeof(adapter->fe2->ops.info.card_name));
 		strlcpy(adapter->fe2->ops.info.card_address, dev_name(&dev->pci_dev->dev), sizeof(adapter->fe2->ops.info.card_address));
+		strlcpy(adapter->fe2->ops.info.card_name, dev->info->name, sizeof(adapter->fe->ops.info.card_name));
 		snprintf(adapter->fe2->ops.info.adapter_address, sizeof(adapter->fe2->ops.info.adapter_address),
 						 "%s:%d", adapter->fe->ops.info.card_address, adapter->nr);
 		snprintf(adapter->fe2->ops.info.adapter_name, sizeof(adapter->fe2->ops.info.adapter_name),
