@@ -309,7 +309,7 @@ struct tbsecp3_board tbsecp3_boards[] = {
 
 	[TBSECP3_BOARD_TBS6504] = {
 		.board_id	= TBSECP3_BOARD_TBS6504,
-		.name		= "TurboSight TBS 6504 DVB-S/S2/S2X/T/T2/C/C2/ISDB-T ",
+		.name		= "TurboSight TBS 6504 ",
 		.adapters	= 4,
 		.i2c_speed	= 39,
 		.eeprom_i2c	= 0,
@@ -1149,7 +1149,7 @@ struct tbsecp3_board tbsecp3_boards[] = {
 	},
 	[TBSECP3_BOARD_TBS6909X] = {
 		.board_id	= TBSECP3_BOARD_TBS6909X,
-		.name		= "TurboSight TBS 6909x (Octa DVB-S/S2/S2X)",
+		.name		= "TurboSight TBS 6909x ",
 		.adapters	= 8,
 		.eeprom_i2c	= 0,
 		.eeprom_addr	= 0x10,
@@ -1192,7 +1192,7 @@ struct tbsecp3_board tbsecp3_boards[] = {
 	},
 	[TBSECP3_BOARD_TBS6903X] = {
 		.board_id	= TBSECP3_BOARD_TBS6903X,
-		.name		= "TurboSight TBS 6903x (Dual DVB-S/S2/S2X)",
+		.name		= "TurboSight TBS 6903x ",
 		.adapters	= 2,
 		.eeprom_i2c	= 0,
 		.eeprom_addr	= 0x10,
