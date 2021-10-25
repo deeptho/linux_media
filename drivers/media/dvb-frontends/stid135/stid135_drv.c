@@ -10618,7 +10618,7 @@ fe_lla_error_t  set_pls_mode_code(struct stv *state, u8 pls_mode, u32 pls_code)
 	pls_code &= 0x3FFFF;
 	state->signal_info.pls_mode= pls_mode;
 	state->signal_info.pls_code= pls_code;
-	vprintk("[%d] SETTING PLS_MODE_CODE = %d %d\n", state->nr+1, pls_mode, pls_code);
+	//vprintk("[%d] SETTING PLS_MODE_CODE = %d %d\n", state->nr+1, pls_mode, pls_code);
 	return fe_stid135_set_pls(state, pls_mode, pls_code);
 }
 
