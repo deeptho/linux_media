@@ -168,13 +168,17 @@ static int av201x_sleep(struct dvb_frontend *fe)
 	return ret;
 }
 
-//frequency in kHz
+//frequency in kHz;
 static int av201x_set_frequency(struct dvb_frontend *fe, u32 frequency)
 {
 	struct av201x_priv *priv = fe->tuner_priv;
 	u8 buf[5];
 	int ret=0;
-	u32 n;
+	//u32 n;
+	//u32 n1;
+	int Int;
+  int Frac;
+	int RF;
 	dev_dbg(&priv->i2c->dev, "%s() frequency=%d\n", __func__, frequency);
 
 	/*
@@ -185,12 +189,15 @@ static int av201x_set_frequency(struct dvb_frontend *fe, u32 frequency)
 	   REG_FN = pll_M<24:0>
 	*/
 	buf[0] = REG_FN;
-	n = DIV_ROUND_CLOSEST(frequency, priv->cfg->xtal_freq);
-	buf[1] = (n > 0xff) ? 0xff : (u8) n;
-	n = DIV_ROUND_CLOSEST((frequency / 1000) << 17, priv->cfg->xtal_freq / 1000);
-	buf[2] = (u8) (n >> 9);
-	buf[3] = (u8) (n >> 1);
-	buf[4] = (u8) (((n << 7) & 0x80) | 0x50);
+
+	Int  =   DIV_ROUND_CLOSEST(frequency, priv->cfg->xtal_freq); //27000
+  Frac = (((s32)frequency -  Int*(s32)priv->cfg->xtal_freq  )<<17)/(s32)(priv->cfg->xtal_freq);
+  RF = (Int*(s32)priv->cfg->xtal_freq) + ((Frac*(s32)priv->cfg->xtal_freq)>>17);
+	buf[1] = (Int > 0xff) ? 0xff : (u8) Int;
+	//dprintk("xxx freq=%d Int=%d Frac=%d RF=%d", frequency, Int, Frac, RF);
+	buf[2] = (u8) (Frac >> 9);
+	buf[3] = (u8) (Frac >> 1);
+	buf[4] = (u8) (((Frac << 7) & 0x80) | 0x50);
 	ret = av201x_wrm(priv, buf, 5);
 	if (ret)
 		goto exit;
@@ -201,7 +208,7 @@ static int av201x_set_frequency(struct dvb_frontend *fe, u32 frequency)
 }
 
 
-// bw in kHz
+// bw in kHz; returns the actual set bandwidth, which may be different than requested; negative on error
 static int av201x_set_bandwith(struct dvb_frontend *fe, u32 bandwidth)
 {
 	struct av201x_priv *priv = fe->tuner_priv;
@@ -267,6 +274,8 @@ static int av201x_set_params(struct dvb_frontend *fe)
 
 	ret = av201x_set_frequency_and_bandwidth(fe, c->frequency, bw);
 	msleep(20);
+	if(ret)
+		dprintk("ERROR: ret=%d", ret);
 	return ret;
 }
 

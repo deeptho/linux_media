@@ -1762,6 +1762,7 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 
 
 		/* sattelite tuner */
+		//This overrides the information produced by si2183_probe
 		memset(adapter->fe2->ops.delsys, 0, MAX_DELSYS);
 		adapter->fe2->ops.delsys[0] = SYS_DVBS;
 		adapter->fe2->ops.delsys[1] = SYS_DVBS2;
