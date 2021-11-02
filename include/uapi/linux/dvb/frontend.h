@@ -726,7 +726,7 @@ enum fe_delivery_system {
 	SYS_DVBC2,
 	SYS_DVBS2X,
 	SYS_DCII,
-	SYS_AUTO
+	SYS_AUTO //22
 };
 
 /**

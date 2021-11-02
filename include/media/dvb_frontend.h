@@ -749,6 +749,7 @@ struct dtv_frontend_properties {
 	s32 scan_end_frequency;
 	s32 scan_resolution;
 	s32 scan_fft_size;
+	u8 plp_id;
 #endif
 };
 
