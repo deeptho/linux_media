@@ -66,6 +66,7 @@ struct tas2101_priv {
 	const struct tas2101_config *cfg;
 	enum tas2101_algo algo;
 	bool timedout;
+	s32 tuner_freq; //frequency we asked the tuner to tune to
 	s32 tuner_bw;
 	u32 symbol_rate;
 

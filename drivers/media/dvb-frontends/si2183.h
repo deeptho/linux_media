@@ -122,7 +122,7 @@ struct blindscan_state {
 };
 
 struct constellation_scan_state {
-	bool constallation_present;
+	bool constellation_present;
 	bool in_progress;
 
 	struct dtv_fe_constellation_sample* samples;
@@ -177,8 +177,7 @@ int si2183_spectrum_get(struct dvb_frontend *fe, struct dtv_fe_spectrum* user);
 int si2183_scan_sat(struct dvb_frontend *fe, bool init,
 										unsigned int *delay,  enum fe_status *status);
 int si2183_constellation_start(struct dvb_frontend *fe,
-															 struct dtv_fe_constellation* user,
-															 unsigned int *delay, enum fe_status *status);
+															 struct dtv_fe_constellation* user, int max_num_samples);
 int si2183_constellation_get(struct dvb_frontend *fe, struct dtv_fe_constellation* user);
 int si2183_stop_task(struct dvb_frontend *fe);
 int si2183_read_status(struct dvb_frontend *fe, enum fe_status *status);
