@@ -4,7 +4,7 @@ It contains patches for the following drivers
 * stid135: ts6909x and tbs6903x cards
 * stv091x: tbs5927
 * tas2101 (incomplete): tbs5990, tbs6904
-* si2183 based cards (incomplete): tbs6504
+* si2183 based cards: tbs6504
 
 based cards to support
 blindscan, to fix bugs and to make improvements.
