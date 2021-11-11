@@ -40,48 +40,48 @@ LIST_HEAD(stvlist);
 
 /* write multiple (continuous) registers */
 /* the first value is the starting address */
-static int tas2101_wrm(struct tas2971_priv *priv, u8 *buf, int len)
+static int tas2971_wrm(struct tas2971_priv *priv, u8 *buf, int len)
 {
 	return 0;
 
 }
 
 /* write one register */
-static int tas2101_wr(struct tas2971_priv *priv, u8 addr, u8 data)
+static int tas2971_wr(struct tas2971_priv *priv, u8 addr, u8 data)
 {
 	return 0;
 
 }
 
 /* read multiple (continuous) registers starting at addr */
-static int tas2101_rdm(struct tas2971_priv *priv, u8 addr, u8 *buf, int len)
+static int tas2971_rdm(struct tas2971_priv *priv, u8 addr, u8 *buf, int len)
 {
 	return 0;
 
 }
 
 /* read one register */
-static int tas2101_rd(struct tas2971_priv *priv, u8 addr, u8 *data)
+static int tas2971_rd(struct tas2971_priv *priv, u8 addr, u8 *data)
 {
 	return 0;
 
 }
 
-static int tas2101_regmask(struct tas2971_priv *priv,
+static int tas2971_regmask(struct tas2971_priv *priv,
 	u8 reg, u8 setmask, u8 clrmask)
 {
 	return 0;
 
 }
 
-static int tas2101_wrtable(struct tas2971_priv *priv,
-	struct tas2101_regtable *regtable, int len)
-{	
+static int tas2971_wrtable(struct tas2971_priv *priv,
+	struct tas2971_regtable *regtable, int len)
+{
 	return 0;
 
 }
 
-static int tas2101_read_ber(struct dvb_frontend *fe, u32 *ber)
+static int tas2971_read_ber(struct dvb_frontend *fe, u32 *ber)
 {
 
 *ber = 0;
@@ -89,18 +89,18 @@ return 0;
 
 }
 
-static int tas2101_read_signal_strength(struct dvb_frontend *fe,
+static int tas2971_read_signal_strength(struct dvb_frontend *fe,
 	u16 *signal_strength)
 {
 
 	*signal_strength = 62940;
 	return 0;
-	
+
 }
 
-static int tas2101_read_snr(struct dvb_frontend *fe, u16 *snr)
+static int tas2971_read_snr(struct dvb_frontend *fe, u16 *snr)
 {
- 
+
 	*snr = 26896;
 	return 0;
 
@@ -108,19 +108,19 @@ static int tas2101_read_snr(struct dvb_frontend *fe, u16 *snr)
 }
 
 /* unimplemented */
-static int tas2101_read_ucblocks(struct dvb_frontend *fe, u32 *ucblocks)
+static int tas2971_read_ucblocks(struct dvb_frontend *fe, u32 *ucblocks)
 {
 	return 0;
 }
 
-static int tas2101_read_status(struct dvb_frontend *fe, enum fe_status *status)
+static int tas2971_read_status(struct dvb_frontend *fe, enum fe_status *status)
 {
 *status = FE_HAS_SIGNAL | FE_HAS_CARRIER |
 			FE_HAS_VITERBI | FE_HAS_SYNC | FE_HAS_LOCK;
 return 0;
 
 }
-static void tas2101_spi_read(struct dvb_frontend *fe, struct ecp3_info *ecp3inf)
+static void tas2971_spi_read(struct dvb_frontend *fe, struct ecp3_info *ecp3inf)
 {
 
 	struct tas2971_priv *priv = fe->demodulator_priv;
@@ -129,7 +129,7 @@ static void tas2101_spi_read(struct dvb_frontend *fe, struct ecp3_info *ecp3inf)
 		priv->cfg->read_properties(adapter,ecp3inf->reg, &(ecp3inf->data));
 	return;
 }
-static void tas2101_spi_write(struct dvb_frontend *fe,struct ecp3_info *ecp3inf)
+static void tas2971_spi_write(struct dvb_frontend *fe,struct ecp3_info *ecp3inf)
 {
 	struct tas2971_priv *priv = fe->demodulator_priv;
 	struct i2c_adapter *adapter = priv->base->i2c;
@@ -137,7 +137,7 @@ static void tas2101_spi_write(struct dvb_frontend *fe,struct ecp3_info *ecp3inf)
 		priv->cfg->write_properties(adapter,ecp3inf->reg, ecp3inf->data);
 	return ;
 }
-static void tas2101_mcu_read(struct dvb_frontend *fe, struct mcu24cxx_info *mcu24cxxinf)
+static void tas2971_mcu_read(struct dvb_frontend *fe, struct mcu24cxx_info *mcu24cxxinf)
 {
 
 	struct tas2971_priv *priv = fe->demodulator_priv;
@@ -146,7 +146,7 @@ static void tas2101_mcu_read(struct dvb_frontend *fe, struct mcu24cxx_info *mcu2
 		priv->cfg->mcuRead_properties(adapter,mcu24cxxinf->bassaddr,mcu24cxxinf->reg, &(mcu24cxxinf->data));
 	return;
 }
-static void tas2101_mcu_write(struct dvb_frontend *fe,struct mcu24cxx_info *mcu24cxxinf)
+static void tas2971_mcu_write(struct dvb_frontend *fe,struct mcu24cxx_info *mcu24cxxinf)
 {
 	struct tas2971_priv *priv = fe->demodulator_priv;
 	struct i2c_adapter *adapter = priv->base->i2c;
@@ -155,7 +155,7 @@ static void tas2101_mcu_write(struct dvb_frontend *fe,struct mcu24cxx_info *mcu2
 	return ;
 }
 
-static void tas2101_reg_i2c_read(struct dvb_frontend *fe, struct usbi2c_access *pi2cinf)
+static void tas2971_reg_i2c_read(struct dvb_frontend *fe, struct usbi2c_access *pi2cinf)
 {
 
 	struct tas2971_priv *priv = fe->demodulator_priv;
@@ -164,7 +164,7 @@ static void tas2101_reg_i2c_read(struct dvb_frontend *fe, struct usbi2c_access *
 		priv->cfg->i2cRead_properties(adapter,pi2cinf->chip_addr,pi2cinf->reg, pi2cinf->num, pi2cinf->buf);
 	return;
 }
-static void tas2101_reg_i2c_write(struct dvb_frontend *fe,struct usbi2c_access *pi2cinf)
+static void tas2971_reg_i2c_write(struct dvb_frontend *fe,struct usbi2c_access *pi2cinf)
 {
 	struct tas2971_priv *priv = fe->demodulator_priv;
 	struct i2c_adapter *adapter = priv->base->i2c;
@@ -173,34 +173,34 @@ static void tas2101_reg_i2c_write(struct dvb_frontend *fe,struct usbi2c_access *
 	return ;
 }
 
-static int tas2101_set_voltage(struct dvb_frontend *fe,
+static int tas2971_set_voltage(struct dvb_frontend *fe,
 	enum fe_sec_voltage voltage)
 {
 	return 0;
-	
+
 }
 
-static int tas2101_set_tone(struct dvb_frontend *fe,
+static int tas2971_set_tone(struct dvb_frontend *fe,
 	enum fe_sec_tone_mode tone)
 {
 	return 0;
-	
+
 }
 
-static int tas2101_send_diseqc_msg(struct dvb_frontend *fe,
+static int tas2971_send_diseqc_msg(struct dvb_frontend *fe,
 	struct dvb_diseqc_master_cmd *d)
 {
 	return 0;
 
 }
 
-static int tas2101_diseqc_send_burst(struct dvb_frontend *fe,
+static int tas2971_diseqc_send_burst(struct dvb_frontend *fe,
 	enum fe_sec_mini_cmd burst)
 {
 	return 0;
 }
 
-static void tas2101_release(struct dvb_frontend *fe)
+static void tas2971_release(struct dvb_frontend *fe)
 {
 	struct tas2971_priv *priv = fe->demodulator_priv;
 
@@ -213,7 +213,7 @@ static void tas2101_release(struct dvb_frontend *fe)
 	i2c_del_mux_adapter(priv->base->i2c_tuner);
 #endif
 #endif
-	
+
 	priv->base->count--;
 	if(priv->base->count == 0){
 	list_del(&priv->base->stvlist);
@@ -227,12 +227,12 @@ static void tas2101_release(struct dvb_frontend *fe)
 /* channel 0: demod */
 /* channel 1: tuner */
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 7, 0)
-static int tas2101_i2c_select(struct i2c_mux_core *muxc, u32 chan_id)
+static int tas2971_i2c_select(struct i2c_mux_core *muxc, u32 chan_id)
 {
 	return 0;
 
 #else
-static int tas2101_i2c_select(struct i2c_adapter *adap,
+static int tas2971_i2c_select(struct i2c_adapter *adap,
 	void *mux_priv, u32 chan_id)
 {
 	return 0;
@@ -240,7 +240,7 @@ static int tas2101_i2c_select(struct i2c_adapter *adap,
 }
 #endif
 
-static struct dvb_frontend_ops tas2101_ops;
+static struct dvb_frontend_ops tas2971_ops;
 
 static struct tas2971_base *match_base(struct i2c_adapter  *i2c)
 {
@@ -278,7 +278,7 @@ struct dvb_frontend *tas2971_attach(const struct tas2101_config *cfg,
 		goto err;
 	base->count =1;
 	list_add(&base->stvlist, &stvlist);
-	
+
 	base->i2c = i2c;
 	base->i2c_ch = 0;
 
@@ -287,7 +287,7 @@ struct dvb_frontend *tas2971_attach(const struct tas2101_config *cfg,
 	/* create mux i2c adapter for tuner */
 	base->muxc = i2c_mux_alloc(i2c, &i2c->dev,
 				  2, 0, I2C_MUX_LOCKED,
-				  tas2101_i2c_select, NULL);
+				  tas2971_i2c_select, NULL);
 
 	if (!base->muxc) {
 		ret = -ENOMEM;
@@ -305,12 +305,12 @@ struct dvb_frontend *tas2971_attach(const struct tas2101_config *cfg,
 #else
 	/* create muxed i2c adapter for the demod */
 	base->i2c_demod = i2c_add_mux_adapter(i2c, &i2c->dev, priv, 0, 0, 0,
-		tas2101_i2c_select, NULL);
+		tas2971_i2c_select, NULL);
 	if (base->i2c_demod == NULL)
 		goto err1;
 	/* create muxed i2c adapter for the tuner */
 	base->i2c_tuner = i2c_add_mux_adapter(i2c, &i2c->dev, priv, 0, 1, 0,
-		tas2101_i2c_select, NULL);
+		tas2971_i2c_select, NULL);
 	if (base->i2c_tuner == NULL)
 		goto err2;
 #endif
@@ -320,10 +320,10 @@ struct dvb_frontend *tas2971_attach(const struct tas2101_config *cfg,
 #endif
 	priv->base = base;
 	}
-	
+
 	priv->cfg = cfg;
 	/* create dvb_frontend */
-	memcpy(&priv->fe.ops, &tas2101_ops,
+	memcpy(&priv->fe.ops, &tas2971_ops,
 		sizeof(struct dvb_frontend_ops));
 	priv->fe.demodulator_priv = priv;
 	/* reset demod */
@@ -333,12 +333,12 @@ struct dvb_frontend *tas2971_attach(const struct tas2101_config *cfg,
 	msleep(100);
 
 	/* check if demod is alive */
-	//ret = tas2101_rdm(priv, ID_0, id, 2);
+	//ret = tas2971_rdm(priv, ID_0, id, 2);
 	//if ((id[0] != 0x44) || (id[1] != 0x4c))
 	//	ret |= -EIO;
 	//if (ret)
 		//goto err3;
-	
+
 
 	printk(KERN_INFO "end Attaching frontend\n");
 	return &priv->fe;
@@ -363,25 +363,25 @@ err:
 }
 EXPORT_SYMBOL_GPL(tas2971_attach);
 
-static int tas2101_initfe(struct dvb_frontend *fe)
+static int tas2971_initfe(struct dvb_frontend *fe)
 {
 	return 0;
 
 }
 
-static int tas2101_sleep(struct dvb_frontend *fe)
+static int tas2971_sleep(struct dvb_frontend *fe)
 {
 
 	return 0;
 }
 
-static int tas2101_set_frontend(struct dvb_frontend *fe)
+static int tas2971_set_frontend(struct dvb_frontend *fe)
 {
 	return 0;
 
 }
 
-static int tas2101_get_frontend(struct dvb_frontend *fe,
+static int tas2971_get_frontend(struct dvb_frontend *fe,
 				struct dtv_frontend_properties *c)
 {
 c->fec_inner = 1;
@@ -391,31 +391,31 @@ c->inversion = 2;
 c->symbol_rate = 41260000;
 	return 0;
 
-	
+
 }
 
-static int tas2101_tune(struct dvb_frontend *fe, bool re_tune,
+static int tas2971_tune(struct dvb_frontend *fe, bool re_tune,
 	unsigned int mode_flags, unsigned int *delay, enum fe_status *status)
-{	
-	
-return tas2101_read_status(fe, status);//lucy
-	
+{
+
+return tas2971_read_status(fe, status);//lucy
+
 }
 
-static enum dvbfe_algo tas2101_get_algo(struct dvb_frontend *fe)
+static enum dvbfe_algo tas2971_get_algo(struct dvb_frontend *fe)
 {
 	return DVBFE_ALGO_HW;
 }
 
-#ifndef TAS2101_USE_I2C_MUX
-static int tas2101_i2c_gate_ctrl(struct dvb_frontend* fe, int enable)
+#ifndef TAS2971_USE_I2C_MUX
+static int tas2971_i2c_gate_ctrl(struct dvb_frontend* fe, int enable)
 {
 	return 0;
-	
+
 }
 #endif
 
-static struct dvb_frontend_ops tas2101_ops = {
+static struct dvb_frontend_ops tas2971_ops = {
 	.delsys = { SYS_DVBS, SYS_DVBS2 },
 	.info = {
 		.name = "Tmax TAS2101",
@@ -430,35 +430,35 @@ static struct dvb_frontend_ops tas2101_ops = {
 			FE_CAN_2G_MODULATION |
 			FE_CAN_QPSK | FE_CAN_RECOVER
 	},
-	.release = tas2101_release,
+	.release = tas2971_release,
 
-	.init = tas2101_initfe,
-	.sleep = tas2101_sleep,
+	.init = tas2971_initfe,
+	.sleep = tas2971_sleep,
 #ifndef TAS2971_USE_I2C_MUX
-	.i2c_gate_ctrl = tas2101_i2c_gate_ctrl,
+	.i2c_gate_ctrl = tas2971_i2c_gate_ctrl,
 #endif
-	.read_status = tas2101_read_status,
-	.read_ber = tas2101_read_ber,
-	.read_signal_strength = tas2101_read_signal_strength,
-	.read_snr = tas2101_read_snr,
-	.read_ucblocks = tas2101_read_ucblocks,
+	.read_status = tas2971_read_status,
+	.read_ber = tas2971_read_ber,
+	.read_signal_strength = tas2971_read_signal_strength,
+	.read_snr = tas2971_read_snr,
+	.read_ucblocks = tas2971_read_ucblocks,
 
-	.set_tone = tas2101_set_tone,
-	.set_voltage = tas2101_set_voltage,
-	.diseqc_send_master_cmd = tas2101_send_diseqc_msg,
-	.diseqc_send_burst = tas2101_diseqc_send_burst,
-	.get_frontend_algo = tas2101_get_algo,
-	.tune = tas2101_tune,
+	.set_tone = tas2971_set_tone,
+	.set_voltage = tas2971_set_voltage,
+	.diseqc_send_master_cmd = tas2971_send_diseqc_msg,
+	.diseqc_send_burst = tas2971_diseqc_send_burst,
+	.get_frontend_algo = tas2971_get_algo,
+	.tune = tas2971_tune,
 
-	.set_frontend = tas2101_set_frontend,
-	.get_frontend = tas2101_get_frontend,
+	.set_frontend = tas2971_set_frontend,
+	.get_frontend = tas2971_get_frontend,
 
-	.spi_read			= tas2101_spi_read,
-	.spi_write			= tas2101_spi_write,
-	.mcu_read			= tas2101_mcu_read,
-	.mcu_write			= tas2101_mcu_write,
-	.reg_i2cread			= tas2101_reg_i2c_read,
-	.reg_i2cwrite			= tas2101_reg_i2c_write,
+	.spi_read			= tas2971_spi_read,
+	.spi_write			= tas2971_spi_write,
+	.mcu_read			= tas2971_mcu_read,
+	.mcu_write			= tas2971_mcu_write,
+	.reg_i2cread			= tas2971_reg_i2c_read,
+	.reg_i2cwrite			= tas2971_reg_i2c_write,
 
 };
 
@@ -473,4 +473,3 @@ MODULE_DESCRIPTION("DVB Frontend module for Tmax TAS2101");
 MODULE_AUTHOR("Luis Alves (ljalvs@gmail.com)");
 MODULE_LICENSE("GPL");
 MODULE_VERSION("1.0");
-
