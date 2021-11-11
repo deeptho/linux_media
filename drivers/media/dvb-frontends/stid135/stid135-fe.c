@@ -89,7 +89,7 @@ void print_signal_info(const char* prefix, struct fe_sat_signal_info* i)
 	#endif
 }
 
-static int stid135_stop_task(struct dvb_frontend *fe);
+static int stid135_stop_task(struct dvb_frontend* fe);
 
 
 
@@ -282,7 +282,7 @@ static int stid135_probe(struct stv *state_demod1)
 	return err != FE_LLA_NO_ERROR ? -1 : 0;
 }
 
-static int stid135_init(struct dvb_frontend *fe)
+static int stid135_init(struct dvb_frontend* fe)
 {
 	struct stv *state = fe->demodulator_priv;
 	fe_lla_error_t err = FE_LLA_NO_ERROR;
@@ -310,7 +310,7 @@ static int stid135_init(struct dvb_frontend *fe)
 	return err != FE_LLA_NO_ERROR ? -1 : 0;
 }
 
-static void stid135_release(struct dvb_frontend *fe)
+static void stid135_release(struct dvb_frontend* fe)
 {
 	struct stv *state = fe->demodulator_priv;
 	dev_dbg(&state->base->i2c->dev, "%s: demod %d\n", __func__, state->nr);
@@ -328,7 +328,7 @@ static void stid135_release(struct dvb_frontend *fe)
 
 
 
-static bool pls_search_list(struct dvb_frontend *fe)
+static bool pls_search_list(struct dvb_frontend* fe)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
@@ -387,7 +387,7 @@ static bool pls_search_list(struct dvb_frontend *fe)
 }
 
 
-static bool pls_search_range(struct dvb_frontend *fe)
+static bool pls_search_range(struct dvb_frontend* fe)
 {
 	struct stv *state = fe->demodulator_priv;
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
@@ -454,7 +454,7 @@ static bool pls_search_range(struct dvb_frontend *fe)
 }
 
 
-static int stid135_set_parameters(struct dvb_frontend *fe)
+static int stid135_set_parameters(struct dvb_frontend* fe)
 {
 	struct stv *state = fe->demodulator_priv;
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
@@ -715,7 +715,7 @@ static int stid135_set_parameters(struct dvb_frontend *fe)
 	return err != FE_LLA_NO_ERROR ? -1 : 0;
 }
 
-static int stid135_get_frontend(struct dvb_frontend *fe, struct dtv_frontend_properties *p)
+static int stid135_get_frontend(struct dvb_frontend* fe, struct dtv_frontend_properties *p)
 {
 	struct stv *state = fe->demodulator_priv;
 
@@ -855,7 +855,7 @@ static int stid135_get_frontend(struct dvb_frontend *fe, struct dtv_frontend_pro
 	return 0;
 }
 
-static int stid135_read_status_(struct dvb_frontend *fe, enum fe_status *status)
+static int stid135_read_status_(struct dvb_frontend* fe, enum fe_status *status)
 {
 	struct stv *state = fe->demodulator_priv;
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
@@ -964,7 +964,7 @@ static int stid135_read_status_(struct dvb_frontend *fe, enum fe_status *status)
 }
 
 
-static int stid135_read_status(struct dvb_frontend *fe, enum fe_status *status)
+static int stid135_read_status(struct dvb_frontend* fe, enum fe_status *status)
 {
 	struct stv *state = fe->demodulator_priv;
 	int ret = 0;
@@ -981,7 +981,7 @@ static int stid135_read_status(struct dvb_frontend *fe, enum fe_status *status)
 }
 
 
-static int stid135_tune_(struct dvb_frontend *fe, bool re_tune,
+static int stid135_tune_(struct dvb_frontend* fe, bool re_tune,
 		unsigned int mode_flags,
 		unsigned int *delay, enum fe_status *status)
 {
@@ -1021,9 +1021,9 @@ static int stid135_tune_(struct dvb_frontend *fe, bool re_tune,
 	return 0;
 }
 
-static int stid135_constellation_start_(struct dvb_frontend *fe, struct dtv_fe_constellation* user, int max_num_samples);
+static int stid135_constellation_start_(struct dvb_frontend* fe, struct dtv_fe_constellation* user, int max_num_samples);
 
-static int stid135_tune(struct dvb_frontend *fe, bool re_tune,
+static int stid135_tune(struct dvb_frontend* fe, bool re_tune,
 		unsigned int mode_flags,
 		unsigned int *delay, enum fe_status *status)
 {
@@ -1043,12 +1043,12 @@ static int stid135_tune(struct dvb_frontend *fe, bool re_tune,
 }
 
 
-static enum dvbfe_algo stid135_get_algo(struct dvb_frontend *fe)
+static enum dvbfe_algo stid135_get_algo(struct dvb_frontend* fe)
 {
 	return DVBFE_ALGO_HW;
 }
 
-static int stid135_set_voltage(struct dvb_frontend *fe, enum fe_sec_voltage voltage)
+static int stid135_set_voltage(struct dvb_frontend* fe, enum fe_sec_voltage voltage)
 {
 	struct stv *state = fe->demodulator_priv;
 
@@ -1069,7 +1069,7 @@ static int stid135_set_voltage(struct dvb_frontend *fe, enum fe_sec_voltage volt
 	return 0;
 }
 
-static int stid135_set_tone(struct dvb_frontend *fe, enum fe_sec_tone_mode tone)
+static int stid135_set_tone(struct dvb_frontend* fe, enum fe_sec_tone_mode tone)
 {
 	struct stv *state = fe->demodulator_priv;
 	fe_lla_error_t err = FE_LLA_NO_ERROR;
@@ -1098,7 +1098,7 @@ static int stid135_set_tone(struct dvb_frontend *fe, enum fe_sec_tone_mode tone)
 	return err != FE_LLA_NO_ERROR ? -1 : 0;
 }
 
-static int stid135_send_master_cmd(struct dvb_frontend *fe,
+static int stid135_send_master_cmd(struct dvb_frontend* fe,
 				 struct dvb_diseqc_master_cmd *cmd)
 {
 	struct stv *state = fe->demodulator_priv;
@@ -1120,7 +1120,7 @@ static int stid135_send_master_cmd(struct dvb_frontend *fe,
 	return err != FE_LLA_NO_ERROR ? -1 : 0;
 }
 
-static int stid135_recv_slave_reply(struct dvb_frontend *fe,
+static int stid135_recv_slave_reply(struct dvb_frontend* fe,
 					struct dvb_diseqc_slave_reply *reply)
 {
 	struct stv *state = fe->demodulator_priv;
@@ -1141,7 +1141,7 @@ static int stid135_recv_slave_reply(struct dvb_frontend *fe,
 	return err != FE_LLA_NO_ERROR ? -1 : 0;
 }
 
-static int stid135_send_burst(struct dvb_frontend *fe, enum fe_sec_mini_cmd burst)
+static int stid135_send_burst(struct dvb_frontend* fe, enum fe_sec_mini_cmd burst)
 {
 	struct stv *state = fe->demodulator_priv;
 	fe_lla_error_t err = FE_LLA_NO_ERROR;
@@ -1152,7 +1152,7 @@ static int stid135_send_burst(struct dvb_frontend *fe, enum fe_sec_mini_cmd burs
 	return err != FE_LLA_NO_ERROR ? -1 : 0;
 }
 
-static int stid135_sleep(struct dvb_frontend *fe)
+static int stid135_sleep(struct dvb_frontend* fe)
 {
 	struct stv *state = fe->demodulator_priv;
 	fe_lla_error_t err = FE_LLA_NO_ERROR;
@@ -1178,7 +1178,7 @@ static int stid135_sleep(struct dvb_frontend *fe)
 	return err != FE_LLA_NO_ERROR ? -1 : 0;
 }
 
-static int stid135_read_signal_strength(struct dvb_frontend *fe, u16 *strength)
+static int stid135_read_signal_strength(struct dvb_frontend* fe, u16 *strength)
 {
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
 	int i;
@@ -1195,7 +1195,7 @@ static int stid135_read_signal_strength(struct dvb_frontend *fe, u16 *strength)
 	return 0;
 }
 
-static int stid135_read_snr(struct dvb_frontend *fe, u16 *snr)
+static int stid135_read_snr(struct dvb_frontend* fe, u16 *snr)
 {
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
 	int i;
@@ -1209,7 +1209,7 @@ static int stid135_read_snr(struct dvb_frontend *fe, u16 *snr)
 	return 0;
 }
 
-static int stid135_read_ber(struct dvb_frontend *fe, u32 *ber)
+static int stid135_read_ber(struct dvb_frontend* fe, u32 *ber)
 {
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
 	int i;
@@ -1223,13 +1223,13 @@ static int stid135_read_ber(struct dvb_frontend *fe, u32 *ber)
 	return 0;
 }
 
-static int stid135_read_ucblocks(struct dvb_frontend *fe, u32 *ucblocks)
+static int stid135_read_ucblocks(struct dvb_frontend* fe, u32 *ucblocks)
 {
 	*ucblocks = 0;
 	return 0;
 }
 
-static void spi_read(struct dvb_frontend *fe, struct ecp3_info *ecp3inf)
+static void spi_read(struct dvb_frontend* fe, struct ecp3_info *ecp3inf)
 {
 	struct stv *state = fe->demodulator_priv;
 	struct i2c_adapter *adapter = state->base->i2c;
@@ -1239,7 +1239,7 @@ static void spi_read(struct dvb_frontend *fe, struct ecp3_info *ecp3inf)
 	return ;
 }
 
-static void spi_write(struct dvb_frontend *fe,struct ecp3_info *ecp3inf)
+static void spi_write(struct dvb_frontend* fe,struct ecp3_info *ecp3inf)
 {
 	struct stv *state = fe->demodulator_priv;
 	struct i2c_adapter *adapter = state->base->i2c;
@@ -1249,7 +1249,7 @@ static void spi_write(struct dvb_frontend *fe,struct ecp3_info *ecp3inf)
 	return ;
 }
 
-static void eeprom_read(struct dvb_frontend *fe, struct eeprom_info *eepinf)
+static void eeprom_read(struct dvb_frontend* fe, struct eeprom_info *eepinf)
 {
 	struct stv *state = fe->demodulator_priv;
 	struct i2c_adapter *adapter = state->base->i2c;
@@ -1259,7 +1259,7 @@ static void eeprom_read(struct dvb_frontend *fe, struct eeprom_info *eepinf)
 	return ;
 }
 
-static void eeprom_write(struct dvb_frontend *fe,struct eeprom_info *eepinf)
+static void eeprom_write(struct dvb_frontend* fe,struct eeprom_info *eepinf)
 {
 	struct stv *state = fe->demodulator_priv;
 	struct i2c_adapter *adapter = state->base->i2c;
@@ -1269,7 +1269,7 @@ static void eeprom_write(struct dvb_frontend *fe,struct eeprom_info *eepinf)
 	return ;
 }
 
-static int stid135_read_temp(struct dvb_frontend *fe, s16 *temp)
+static int stid135_read_temp(struct dvb_frontend* fe, s16 *temp)
 {
 	struct stv *state = fe->demodulator_priv;
 	fe_lla_error_t err = FE_LLA_NO_ERROR;
@@ -1284,7 +1284,7 @@ static int stid135_read_temp(struct dvb_frontend *fe, s16 *temp)
 }
 
 
-static int stid135_get_spectrum_scan_fft(struct dvb_frontend *fe, unsigned int *delay,  enum fe_status *status)
+static int stid135_get_spectrum_scan_fft(struct dvb_frontend* fe, unsigned int *delay,  enum fe_status *status)
 {
 	int error = stid135_spectral_scan_start(fe);
 	if(!error) {
@@ -1301,7 +1301,7 @@ static int stid135_get_spectrum_scan_fft(struct dvb_frontend *fe, unsigned int *
 
 
 
-static int stid135_get_spectrum_scan_sweep(struct dvb_frontend *fe,
+static int stid135_get_spectrum_scan_sweep(struct dvb_frontend* fe,
 																						 unsigned int *delay,  enum fe_status *status)
 {
 	struct stv *state = fe->demodulator_priv;
@@ -1455,7 +1455,7 @@ static int stid135_get_spectrum_scan_sweep(struct dvb_frontend *fe,
 /*
 	stops the current frontend task
  */
-static int stid135_stop_task(struct dvb_frontend *fe)
+static int stid135_stop_task(struct dvb_frontend* fe)
 {
 	struct stv *state = fe->demodulator_priv;
 	struct spectrum_scan_state_t* ss = &state->scan_state;
@@ -1476,7 +1476,7 @@ static int stid135_stop_task(struct dvb_frontend *fe)
 	return 0;
 }
 
-static int stid135_spectrum_start(struct dvb_frontend *fe,
+static int stid135_spectrum_start(struct dvb_frontend* fe,
 																	struct dtv_fe_spectrum* s,
 																	unsigned int *delay, enum fe_status *status)
 {
@@ -1507,7 +1507,7 @@ static int stid135_spectrum_start(struct dvb_frontend *fe,
 	return -1;
 }
 
-int stid135_spectrum_get(struct dvb_frontend *fe, struct dtv_fe_spectrum* user)
+int stid135_spectrum_get(struct dvb_frontend* fe, struct dtv_fe_spectrum* user)
 {
 	struct stv *state = fe->demodulator_priv;
 	int error=0;
@@ -1544,7 +1544,7 @@ fe_lla_error_t FE_STiD135_GetCarrierFrequency(struct stv* state, u32 MasterClock
 	init = 1: start the scan at the search range specified by the user
 	init = 0: start the scan just beyond the last found frequency
  */
-static int stid135_scan_sat(struct dvb_frontend *fe, bool init,
+static int stid135_scan_sat(struct dvb_frontend* fe, bool init,
 														unsigned int *delay,  enum fe_status *status)
 {
  	fe_lla_error_t error = FE_LLA_NO_ERROR;
@@ -1656,7 +1656,7 @@ static int stid135_scan_sat(struct dvb_frontend *fe, bool init,
 }
 
 
-static int stid135_constellation_start_(struct dvb_frontend *fe, struct dtv_fe_constellation* user, int max_num_samples)
+static int stid135_constellation_start_(struct dvb_frontend* fe, struct dtv_fe_constellation* user, int max_num_samples)
 {
 	struct stv *state = fe->demodulator_priv;
 	struct constellation_scan_state* cs = &state->constellation_scan_state;
@@ -1703,7 +1703,7 @@ static int stid135_constellation_start_(struct dvb_frontend *fe, struct dtv_fe_c
 }
 
 #if 0
-int stid135_constellation_start(struct dvb_frontend *fe,
+int stid135_constellation_start(struct dvb_frontend* fe,
 																			 struct dtv_fe_constellation* user,
 																			 unsigned int *delay, enum fe_status *status)
 {
@@ -1718,7 +1718,7 @@ int stid135_constellation_start(struct dvb_frontend *fe,
 }
 #endif
 
-static int stid135_constellation_get(struct dvb_frontend *fe, struct dtv_fe_constellation* user)
+static int stid135_constellation_get(struct dvb_frontend* fe, struct dtv_fe_constellation* user)
 {
 	struct stv *state = fe->demodulator_priv;
 	struct constellation_scan_state* cs = &state->constellation_scan_state;
@@ -1807,7 +1807,7 @@ static struct stv_base *match_base(struct i2c_adapter  *i2c, u8 adr)
 	state->base is created exactly once and is shared
 	between the 8 demods; provides access to the i2c hardware and such
 */
-struct dvb_frontend *stid135_attach(struct i2c_adapter *i2c,
+struct dvb_frontend* stid135_attach(struct i2c_adapter *i2c,
 						struct stid135_cfg *cfg,
 						int nr, int rf_in)
 {
