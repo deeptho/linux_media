@@ -2825,9 +2825,13 @@ fe_lla_error_t	fe_stid135_search(struct stv* state,
 	s32 fld_value;
 	struct fe_stid135_internal_param *pParams = &state->base->ip;
 
-	if ((!(INRANGE(100000, pSearch->symbol_rate,  520000000))) ||
-			(!(INRANGE(500000, pSearch->search_range_hz, 70000000)))) {
-		dprintk("[%d] error=FE_LLA_BAD_PARAMETER\n", state->nr+1);
+	if ((!(INRANGE(100000, pSearch->symbol_rate,  520000000)))) {
+		dprintk("[%d] error=FE_LLA_BAD_PARAMETER: symbol_rate=%d\n", state->nr+1,  pSearch->symbol_rate);
+		return FE_LLA_BAD_PARAMETER;
+	}
+
+	if ((!(INRANGE(500000, pSearch->search_range_hz, 70000000)))) {
+		dprintk("[%d] error=FE_LLA_BAD_PARAMETER: search_range=%d\n", state->nr+1,  pSearch->search_range_hz);
 		return FE_LLA_BAD_PARAMETER;
 	}
 
