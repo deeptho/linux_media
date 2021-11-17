@@ -1123,7 +1123,7 @@ static int si2183_get_spectrum_scan_fft_one_band(struct dvb_frontend *fe, u32* f
 }
 
 int si2183_spectrum_start(struct dvb_frontend *fe,
-																 struct dtv_fe_spectrum* s,
+													struct dtv_fe_spectrum* s,
 													unsigned int *delay, enum fe_status *status)
 {
 	struct i2c_client *client = fe->demodulator_priv;
@@ -1154,7 +1154,7 @@ int si2183_spectrum_start(struct dvb_frontend *fe,
 	ss->spectrum_len = 0;
 
 	if(!fe->ops.tuner_ops.set_frequency_and_bandwidth ||
-		 !(fe->ops.tuner_ops.set_frequency && fe->ops.tuner_ops.set_frequency)) {
+		 !(fe->ops.tuner_ops.set_frequency && fe->ops.tuner_ops.set_bandwidth)) {
 		dprintk("No tuner support %p %p %p", fe->ops.tuner_ops.set_frequency_and_bandwidth,
 						fe->ops.tuner_ops.set_frequency,fe->ops.tuner_ops.set_frequency);
 	 return -EINVAL; //TODO
