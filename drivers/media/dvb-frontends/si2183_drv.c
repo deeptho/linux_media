@@ -61,6 +61,20 @@ static inline int fff(int freq) {
 }
 #endif
 
+static inline bool is_blind(struct dtv_frontend_properties* p)
+{
+	switch(p->algorithm) {
+	case ALGORITHM_WARM:
+	case ALGORITHM_COLD:
+	case ALGORITHM_COLD_BEST_GUESS:
+		return false;
+	case  ALGORITHM_BLIND:
+	case ALGORITHM_BLIND_BEST_GUESS:
+		return true;
+	}
+	return false;
+}
+
 /* Own I2C adapter locking is needed because of I2C gate logic. */
 static int si2183_i2c_master_send_unlocked(const struct i2c_client *client,
 																					 const char *buf, int count)
@@ -398,7 +412,7 @@ int si2183_read_status(struct dvb_frontend *fe, enum fe_status *status)
 			bool is_mis = !((cmd.args[10]>>4) & 0x1);
 			si2183_misc_data(client, &issyi, &npd);
 			c->rolloff = si2183_rolloff(cmd.args[10] & 0x07);
-			c->vcm =  !((cmd.args[10]>>3) & 0x1);
+			c->vcm =  ((cmd.args[10]>>3) & 0x1);
 			/*
 				bits 0,1,2: rolloff
 				bit 3: vcm/ccm
@@ -410,7 +424,6 @@ int si2183_read_status(struct dvb_frontend *fe, enum fe_status *status)
 				(npd &0x1)<<2 |
 				(issyi &0x1)<<3 |
 				(c->vcm &0x1)<<4 |
-				(is_mis &0x1)<<5 |
 				(is_mis &0x1)<<5 |
 				(stream_type&0x3) <<6l //msb not used
 				;
@@ -911,7 +924,7 @@ int si2183_set_frontend(struct dvb_frontend *fe)
 	struct dtv_frontend_properties* p = &fe->dtv_property_cache;
 	int ret;
 	struct si2183_cmd cmd;
-	bool blind = (p->algorithm !=ALGORITHM_WARM);
+	bool blind = is_blind(p);
 	if(blind) {
 		bool need_retune = blind_tune(fe);
 		if(! need_retune)
@@ -920,7 +933,9 @@ int si2183_set_frontend(struct dvb_frontend *fe)
 	}
 
 	if (p->delivery_system == SYS_AUTO)
-		p->delivery_system = SYS_DVBS2; //TODO: remove this
+		p->delivery_system = SYS_DVBS2; /*TODO: remove this and instead relax user specified choice:
+																			e.g., dvbs and dvbs2 are interpreted as "any dvbs type"
+																		*/
 
 	dprintk("delivery_system=%u modulation=%u frequency=%u bandwidth_hz=%u symbol_rate=%u inversion=%u stream_id=%d",
 					p->delivery_system, p->modulation, p->frequency,
