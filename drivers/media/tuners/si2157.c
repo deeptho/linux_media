@@ -430,19 +430,19 @@ static int si2157_set_params(struct dvb_frontend *fe)
 		break;
 	case SYS_DVBT:
 	case SYS_DVBT2: /* it seems DVB-T and DVB-T2 both are 0x20 here */
-		delivery_system = 0x20;
+		delivery_system = 0x20; //DVBT
 		break;
 	case SYS_DVBC_ANNEX_A:
-		delivery_system = 0x30;
+		delivery_system = 0x30; //DVBC
 		break;
 	case SYS_DVBC_ANNEX_B:
-		delivery_system = 0x10;
+		delivery_system = 0x10; //QAM_US
 		break;
 	case SYS_ISDBT:
-		delivery_system = 0x40;
+		delivery_system = 0x40; //ISDB_T
 		break;
 	case SYS_DTMB:
-		delivery_system = 0x60;
+		delivery_system = 0x60; //DTMB
 		break;
 	default:
 		dprintk("ERROR");
@@ -450,7 +450,12 @@ static int si2157_set_params(struct dvb_frontend *fe)
 		goto err;
 	}
 
-	memcpy(cmd.args, "\x14\x00\x03\x07\x00\x00", 6);
+	memcpy(cmd.args, "\x14\x00\x03\x07\x00\x00", 6); /*0x14: set property reserved=0x00 prop=0x0307 data=0x0000
+																										 0x0307 = DTV_MODE
+																										 next byte = (bandwidth&0xf) | ((modulation&0xf) <<4)
+																										 last_byte = spectral_inversion&1
+																										*/
+
 	cmd.args[4] = delivery_system | bandwidth;
 	if (dev->inversion)
 		cmd.args[5] = 0x01;
@@ -463,7 +468,9 @@ static int si2157_set_params(struct dvb_frontend *fe)
 	if (dev->chiptype == SI2157_CHIPTYPE_SI2146)
 		memcpy(cmd.args, "\x14\x00\x02\x07\x00\x01", 6);
 	else
-		memcpy(cmd.args, "\x14\x00\x02\x07\x00\x00", 6);
+		memcpy(cmd.args, "\x14\x00\x02\x07\x00\x00", 6); /*0x14: set property reserved=0x00 prop=0x0207 data=0x0000
+																											0207 = DTV_CONFIG_IF_PORT
+																											*/
 	cmd.args[4] = dev->if_port;
 	cmd.wlen = 6;
 	cmd.rlen = 4;
@@ -473,7 +480,8 @@ static int si2157_set_params(struct dvb_frontend *fe)
 
 	/* set digital if frequency if needed */
 	if (if_frequency != dev->if_frequency) {
-		memcpy(cmd.args, "\x14\x00\x06\x07", 4);
+		memcpy(cmd.args, "\x14\x00\x06\x07", 4); /*0x14: set property reserved=0x00 prop=0x0607 data=....
+																							*/
 		cmd.args[4] = (if_frequency / 1000) & 0xff;
 		cmd.args[5] = ((if_frequency / 1000) >> 8) & 0xff;
 		cmd.wlen = 6;
@@ -482,11 +490,15 @@ static int si2157_set_params(struct dvb_frontend *fe)
 		if (ret)
 			goto err;
 
-		dev->if_frequency = if_frequency;
+		dev->if_frequency = if_frequency; //5Mhz or 3.25Mhz
 	}
 
 	/* set digital frequency */
-	memcpy(cmd.args, "\x41\x00\x00\x00\x00\x00\x00\x00", 8);
+	memcpy(cmd.args, "\x41\x00\x00\x00\x00\x00\x00\x00", 8); /*0x41 = TUNER_TUNE_FREQ_CMD
+																														 0x00: mode =0x0 (=digital; 1=analog)
+																														 0x0000: 0
+																														 [4-7] frequency
+																														*/
 	cmd.args[4] = (c->frequency >>  0) & 0xff;
 	cmd.args[5] = (c->frequency >>  8) & 0xff;
 	cmd.args[6] = (c->frequency >> 16) & 0xff;
