@@ -1098,7 +1098,10 @@ static int stv091x_set_search_range(struct stv *state, struct dtv_frontend_prope
 			range +=  600;
 		else
 			range += 80;
-	} else if(p->algorithm == ALGORITHM_BLIND || ALGORITHM_SEARCH_NEXT||
+	} else if(p->algorithm == ALGORITHM_BLIND ||
+#if 0
+						ALGORITHM_SEARCH_NEXT||
+#endif
 						p->algorithm == ALGORITHM_BLIND_BEST_GUESS) {
 		if(state->satellite_scan) {
 			//set limits on how far we can search for a carrier
@@ -1280,12 +1283,14 @@ static int stv091x_start_scan(struct stv *state, struct dtv_frontend_properties 
 	case ALGORITHM_COLD_BEST_GUESS:
 		write_reg(state, RSTV0910_P2_DMDISTATE + state->regoff, 0x05); //cold best guess
 		break;
+#if 0
 	case ALGORITHM_SEARCH_NEXT:
 		write_reg(state, RSTV0910_P2_DMDISTATE + state->regoff, 0x14);
 		break;
 	case ALGORITHM_BANDWIDTH:
 		write_reg(state, RSTV0910_P2_DMDISTATE + state->regoff, 0x11);
 		break;
+#endif
 	case ALGORITHM_WARM: //todo
 		/*better for low symbol rate - only choice which allows tuning to symbolrate 667
 			Note that tuner bandwith still takes into account known symbol rate
@@ -2216,6 +2221,7 @@ static int scan_within_tuner_bw(struct dvb_frontend *fe, bool* locked_ret)
 	state->ReceiveMode = Mode_None;
 	state->DemodLockTime = 0;
 
+#if 0
 	switch(p->algorithm) {
 	case ALGORITHM_SEARCH_NEXT:
 		break;
@@ -2223,6 +2229,7 @@ static int scan_within_tuner_bw(struct dvb_frontend *fe, bool* locked_ret)
 		dprintk("This function should not be called with algorithm=%d\n", p->algorithm);
 		break;
 	}
+#endif
 
 	asperity = stv091x_carrier_search(state, &frequency_jump);
 	dprintk("asperity=%d frequency=%dkHz jump=%dkHz\n", asperity, p->frequency, frequency_jump);
@@ -2422,8 +2429,9 @@ static int stv091x_sat_scan(struct dvb_frontend *fe, bool init,
 			dprintk("Invalid ranged");
 			return -1;
 		}
-
+#if 0
 		p->algorithm = ALGORITHM_SEARCH_NEXT;
+#endif
 		asperity = scan_within_tuner_bw(fe, &locked);
 		dprintk("asperity=%d locked=%d freq=%dkHz start_freq=%dkHz end_freq=%dkHz\n", asperity, locked,
 						p->frequency/1000, state->scan_next_frequency/1000, state->scan_end_frequency);

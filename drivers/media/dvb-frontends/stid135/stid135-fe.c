@@ -498,7 +498,9 @@ static int stid135_set_parameters(struct dvb_frontend* fe)
 
 	case ALGORITHM_BLIND:
 	case ALGORITHM_BLIND_BEST_GUESS:
+#if 0
 	case ALGORITHM_BANDWIDTH:
+#endif
 		search_params.search_algo		= FE_SAT_BLIND_SEARCH;
 		search_params.standard = FE_SAT_AUTO_SEARCH;
 		search_params.puncture_rate = FE_SAT_PR_UNKNOWN;
@@ -507,6 +509,7 @@ static int stid135_set_parameters(struct dvb_frontend* fe)
 		else
 			search_params.symbol_rate = p->symbol_rate;
 		break;
+#if 0
 	case ALGORITHM_SEARCH_NEXT:
 		search_params.search_algo		= FE_SAT_NEXT;
 		search_params.standard = FE_SAT_AUTO_SEARCH;
@@ -519,6 +522,7 @@ static int stid135_set_parameters(struct dvb_frontend* fe)
 	case ALGORITHM_SEARCH:
 		//todo
 		break;
+#endif
 	}
 	if(p->algorithm != ALGORITHM_WARM)
 		vprintk("[%d] Algorithm is not  WARM: %d\n", state->nr+1, p->algorithm);
