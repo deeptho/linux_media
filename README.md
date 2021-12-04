@@ -6,8 +6,13 @@ It contains patches for the following drivers
 * tas2101 (incomplete): tbs5990, tbs6904
 * si2183 based cards: tbs6504
 
-based cards to support
-blindscan, to fix bugs and to make improvements.
+to support blindscan, to fix bugs and to make improvements.
+
+
+# Known problems
+* si2183 based cards: blindscan cannot discover stream_ids in multistreams, unless it is given
+ one of them when starting the blindscan. In that case, it will find the other ones
+
 
 User space tools for using blindscan can be found at
 https://github.com/deeptho/blindscan
