@@ -809,8 +809,9 @@ static int stid135_get_frontend(struct dvb_frontend* fe, struct dtv_frontend_pro
 	}
 
 	p->inversion = state->signal_info.spectrum == FE_SAT_IQ_SWAPPED ? INVERSION_ON : INVERSION_OFF;
+	p->modcode = state->signal_info.modcode;
 	if (p->delivery_system == SYS_DVBS2) {
-		enum fe_code_rate modcod2fec[0x20] = {
+		static enum fe_code_rate modcod2fec[0x82] = {
 			FEC_NONE, FEC_1_4, FEC_1_3, FEC_2_5,
 			FEC_1_2, FEC_3_5, FEC_2_3, FEC_3_4,
 			FEC_4_5, FEC_5_6, FEC_8_9, FEC_9_10,
@@ -818,10 +819,35 @@ static int stid135_get_frontend(struct dvb_frontend* fe, struct dtv_frontend_pro
 			FEC_8_9, FEC_9_10, FEC_2_3, FEC_3_4,
 			FEC_4_5, FEC_5_6, FEC_8_9, FEC_9_10,
 			FEC_3_4, FEC_4_5, FEC_5_6, FEC_8_9,
-			FEC_9_10
+			FEC_9_10, FEC_NONE, FEC_NONE, FEC_NONE,
+			FEC_1_2, FEC_2_3, FEC_3_4, FEC_5_6,
+			FEC_6_7, FEC_7_8,   FEC_NONE, FEC_NONE,
+			FEC_NONE, FEC_NONE, FEC_NONE, FEC_NONE,
+			FEC_NONE, FEC_NONE, FEC_NONE, FEC_NONE,
+			FEC_NONE, FEC_NONE, FEC_NONE, FEC_NONE,
+			FEC_NONE, FEC_NONE, FEC_NONE, FEC_NONE,
+			FEC_NONE, FEC_NONE, FEC_NONE, FEC_NONE,
+			FEC_NONE, FEC_NONE, FEC_NONE, FEC_NONE,
+			FEC_NONE, FEC_NONE, FEC_13_45, FEC_9_20,
+			FEC_11_20, FEC_5_9, FEC_26_45, FEC_23_36,
+			FEC_25_36, FEC_13_18, FEC_1_2, FEC_8_15,
+			FEC_5_9, FEC_26_45, FEC_3_5, FEC_3_5,
+			FEC_28_45, FEC_23_36, FEC_2_3, FEC_25_36,
+			FEC_13_18, FEC_7_9, FEC_77_90, FEC_2_3,
+			FEC_NONE, FEC_32_45, FEC_11_15, FEC_7_9,
+			FEC_32_45, FEC_11_15, FEC_NONE, FEC_7_9,
+			FEC_NONE, FEC_4_5, FEC_NONE, FEC_5_6,
+			FEC_3_4, FEC_7_9, FEC_29_45, FEC_2_3,
+			FEC_31_45, FEC_32_45, FEC_11_15, FEC_3_4,
+			FEC_11_45, FEC_4_15, FEC_14_45, FEC_7_15,
+			FEC_8_15, FEC_32_45, FEC_7_15, FEC_8_15,
+			FEC_26_45, FEC_32_45, FEC_7_15, FEC_8_15,
+			FEC_26_45, FEC_3_5, FEC_32_45, FEC_2_3,
+			FEC_32_45, FEC_NONE, FEC_NONE, FEC_NONE,
+			FEC_NONE, FEC_NONE, FEC_NONE, FEC_NONE
 		};
-		if (state->signal_info.modcode < FE_SAT_MODCODE_UNKNOWN) {
-			BUG_ON(state->signal_info.modcode <0 || state->signal_info.modcode>=0x20);
+
+		if (state->signal_info.modcode < sizeof(modcod2fec)) {
 			p->fec_inner = modcod2fec[state->signal_info.modcode];
 		} else
 			p->fec_inner = FEC_AUTO;
