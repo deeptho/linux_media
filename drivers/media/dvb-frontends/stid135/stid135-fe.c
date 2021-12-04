@@ -844,7 +844,7 @@ static int stid135_get_frontend(struct dvb_frontend* fe, struct dtv_frontend_pro
 			FEC_26_45, FEC_32_45, FEC_7_15, FEC_8_15,
 			FEC_26_45, FEC_3_5, FEC_32_45, FEC_2_3,
 			FEC_32_45, FEC_NONE, FEC_NONE, FEC_NONE,
-			FEC_NONE, FEC_NONE, FEC_NONE, FEC_NONE
+			FEC_NONE, FEC_NONE
 		};
 
 		if (state->signal_info.modcode < sizeof(modcod2fec)) {
