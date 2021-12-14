@@ -1697,7 +1697,7 @@ fe_lla_error_t fe_stid135_get_lock_status(struct stv* state, bool*carrier_lock, 
 	struct fe_stid135_internal_param *pParams;
 	enum fe_sat_search_state demodState;
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
-	s32 fld_value[3];
+	s32 fld_value[4];
 	int error1;
 	if(carrier_lock)
 		*carrier_lock = false;
@@ -1735,11 +1735,14 @@ fe_lla_error_t fe_stid135_get_lock_status(struct stv* state, bool*carrier_lock, 
 			//fld_value[2]==0 means that packets with erros have been received
 			error |= (error1=ChipGetField(state->base->ip.handle_demod,
 																		FLD_FC8CODEW_DVBSX_HWARE_TSSTATUS_TSFIFO_LINEOK(state->nr+1), &(fld_value[2])));
-			state->signal_info.has_carrier = fld_value[0];
+			error |= ChipGetField(state->base->ip.handle_demod,
+													FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS_CAR_LOCK(state->nr+1),
+													&(fld_value[3]));
+			state->signal_info.has_carrier = 	fld_value[3];
 			state->signal_info.has_viterbi = fld_value[0] & fld_value[1];
 			state->signal_info.has_sync = fld_value[0] & fld_value[1] & fld_value[2];
 			if(carrier_lock)
-				*carrier_lock = fld_value[0];
+				*carrier_lock =  state->signal_info.has_carrier;
 			if(has_viterbi)
 				*has_viterbi  = fld_value[0] & fld_value[1];
 			if(has_sync) {
@@ -1754,6 +1757,7 @@ fe_lla_error_t fe_stid135_get_lock_status(struct stv* state, bool*carrier_lock, 
 		case FE_SAT_DVBS_FOUND:
 			error |= (error1=ChipGetField(state->base->ip.handle_demod,
 																		FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS_LOCK_DEFINITIF(state->nr+1), &(fld_value[0])));
+
 			if(error1)
 				dprintk("error=%d\n", error1);
 			error |= (error1=ChipGetField(state->base->ip.handle_demod,
@@ -1767,11 +1771,13 @@ fe_lla_error_t fe_stid135_get_lock_status(struct stv* state, bool*carrier_lock, 
 																		FLD_FC8CODEW_DVBSX_HWARE_TSSTATUS_TSFIFO_LINEOK(state->nr+1), &(fld_value[2])));
 			if(error1)
 				dprintk("error=%d\n", error1);
-			state->signal_info.has_carrier = fld_value[0];
+			ChipGetField(state->base->ip.handle_demod,
+									 FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS_CAR_LOCK(state->nr+1), &(fld_value[3]));
+			state->signal_info.has_carrier = fld_value[3];
 			state->signal_info.has_viterbi = fld_value[0] & fld_value[1];
 			state->signal_info.has_sync = fld_value[0] & fld_value[1] & fld_value[2];
 			if(carrier_lock)
-				*carrier_lock = fld_value[0];
+				*carrier_lock = state->signal_info.has_carrier;
 			if(has_viterbi)
 				*has_viterbi  = fld_value[0] & fld_value[1];
 			if(has_sync) {
@@ -2953,10 +2959,10 @@ fe_lla_error_t	fe_stid135_search(struct stv* state,
 			error |= (error1=ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG2_MODE_HAUTDEBIT(demod), 3));
 			if(error1)
 				vprintk("[%d] error=%d\n", state->nr+1, error1);
-				WAIT_N_MS(10);
-				error |= (error1=ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_PEGALCFG(demod), 0x1C));
-				if(error1)
-					dprintk("[%d] error=%d\n", state->nr+1, error1);
+			WAIT_N_MS(10);
+			error |= (error1=ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_PEGALCFG(demod), 0x1C));
+			if(error1)
+				dprintk("[%d] error=%d\n", state->nr+1, error1);
 			} else {
 			error |= (error1=ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG2_MODE_HAUTDEBIT(demod), 2));
 			if(error1)
