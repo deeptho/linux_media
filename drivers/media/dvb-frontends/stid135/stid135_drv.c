@@ -1732,7 +1732,7 @@ fe_lla_error_t fe_stid135_get_lock_status(struct stv* state, bool*carrier_lock, 
 																		FLD_FC8CODEW_DVBSX_PKTDELIN_PDELSTATUS1_PKTDELIN_LOCK(state->nr+1), &(fld_value[1])));
 
 			//TODO: stv091x does not check TSFIFO_LINEOK
-			//fld_value[2]==0 means that packets with erros have been received
+			//fld_value[2]==0 means that packets with errros have been received
 			error |= (error1=ChipGetField(state->base->ip.handle_demod,
 																		FLD_FC8CODEW_DVBSX_HWARE_TSSTATUS_TSFIFO_LINEOK(state->nr+1), &(fld_value[2])));
 			error |= ChipGetField(state->base->ip.handle_demod,
@@ -1766,7 +1766,7 @@ fe_lla_error_t fe_stid135_get_lock_status(struct stv* state, bool*carrier_lock, 
 				dprintk("error=%d\n", error1);
 
 			//TODO: stv091x does not check TSFIFO_LINEOK
-			//fld_value[2]==0 means that packets with erros have been received
+			//fld_value[2]==0 means that packets with errors have been received
 			error |= (error1=ChipGetField(state->base->ip.handle_demod,
 																		FLD_FC8CODEW_DVBSX_HWARE_TSSTATUS_TSFIFO_LINEOK(state->nr+1), &(fld_value[2])));
 			if(error1)
@@ -1912,6 +1912,7 @@ fe_lla_error_t FE_STiD135_WaitForLock(struct stv* state,
 
 	/* LINEOK check is not performed during Satellite Scan */
 	if (satellite_scan == FALSE) {
+#if 0
 		if (*lock_p) {
 			*lock_p = 0;
 
@@ -1924,6 +1925,7 @@ fe_lla_error_t FE_STiD135_WaitForLock(struct stv* state,
 				timer++;
 			}
 		}
+#endif
 	}
 	state->signal_info.fec_locked = *lock_p;
 	state->signal_info.has_sync = *lock_p;
