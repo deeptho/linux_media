@@ -916,7 +916,7 @@ static int stid135_read_status_(struct dvb_frontend* fe, enum fe_status *status)
 		return -EIO;
 	}
 
-	if (!state->signal_info.has_viterbi) { //XXX should perhaps be has_sync instead
+	if (!state->signal_info.has_carrier) { //XXX should perhaps be has_sync instead
 		/* demod not locked */
 		*status |= FE_HAS_SIGNAL;
 		vprintk("HAS_SIGNAL AND TUNED/no viterbi sync=%d status=%d\n", state->signal_info.has_sync, *status);
@@ -1062,7 +1062,7 @@ static int stid135_tune(struct dvb_frontend* fe, bool re_tune,
 	int r;
 	mutex_lock(&state->base->status_lock);
 	r = stid135_tune_(fe, re_tune, mode_flags, delay, status);
-	if(state->signal_info.has_carrier && p->constellation.num_samples>0) {
+	if(/*state->signal_info.has_carrier &&*/ p->constellation.num_samples>0) {
 		int max_num_samples = state->signal_info.symbol_rate /5 ; //we spend max 500 ms on this
 		if(max_num_samples > 1024)
 			max_num_samples = 1024; //also set an upper limit which should be fast enough
