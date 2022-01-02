@@ -4792,7 +4792,7 @@ static fe_lla_error_t FE_STiD135_StartSearch(struct stv* state)
 		vprintk("[%d] XXX set to 0x0\n", state->nr+1);
 		/*Trigger an acquisition (start the search)*/
 		error |= ChipSetOneRegister(state->base->ip.handle_demod,
-																(u16)REG_RC8CODEW_DVBSX_DEMOD_DMDISTATE(Demod), 0x0); //WAS 0x1
+																(u16)REG_RC8CODEW_DVBSX_DEMOD_DMDISTATE(Demod), 0x1); //WAS 0x1
 
 		break;
 	case FE_SAT_NEXT:
