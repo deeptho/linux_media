@@ -5784,7 +5784,7 @@ fe_lla_error_t fe_stid135_manage_matype_info(struct stv* state)
 
 			/* If TS/GS = 11 (MPEG TS), reset matype force bit and do NOT load frames in MPEG packets */
 			if(((genuine_matype>>6) & 0x3) == 0x3) {
-#if 1 //present in main driver
+#if 0 //present in main driver; removed in tbs commit de809bd2e2ec572b5dbf6cba0e93fca192844939
 					if((genuine_matype >> 3) & 0x3) {
 					/* CCM or ISSYI used */
 					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSSTATE1_TSOUT_NOSYNC(Demod), 0);
