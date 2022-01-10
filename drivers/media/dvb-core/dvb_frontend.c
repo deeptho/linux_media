@@ -2813,6 +2813,10 @@ static int dtv_get_constellation(struct dvb_frontend *fe, struct dtv_fe_constell
 
 	if(fe->ops.constellation_get)
 		fe->ops.constellation_get(fe, user);
+	else if(user) {
+
+		user->num_samples = 0;
+	}
 	return err;
 }
 
