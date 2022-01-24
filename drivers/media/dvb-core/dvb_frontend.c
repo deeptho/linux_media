@@ -1846,9 +1846,10 @@ static int dvbv5_set_delivery_system(struct dvb_frontend *fe,
 	ncaps = 0;
 
 	while (ncaps < MAX_DELSYS && fe->ops.delsys[ncaps]) {
-		dprintk("delsys [%d]=%d <> %d\n", ncaps, fe->ops.delsys[ncaps], desired_system);
+		dprintk("trying delsys [%d]=%d <> %d\n", ncaps, fe->ops.delsys[ncaps], desired_system);
 		if (fe->ops.delsys[ncaps] == desired_system) {
 			c->delivery_system = desired_system;
+			dprintk("found delsys [%d]=%d <> %d\n", ncaps, fe->ops.delsys[ncaps], desired_system);
 			dev_dbg(fe->dvb->device,
 							"%s: Changing delivery system to %d\n",
 								__func__, desired_system);
@@ -2214,12 +2215,12 @@ static int dtv_property_process_set(struct dvb_frontend *fe,
 		 * Use the cached Digital TV properties to tune the
 		 * frontend
 		 */
-		dprintk("cmd=DTV_TUNE");
 		dev_dbg(fe->dvb->device,
 			"%s: Setting the frontend from property cache\n",
 			__func__);
 
 		r = dtv_set_frontend(fe);
+		dprintk("cmd=DTV_TUNE r=%d", r);
 		break;
 	case DTV_SCAN:
 		/*
@@ -2272,8 +2273,8 @@ static int dtv_property_process_set(struct dvb_frontend *fe,
 	}
 		break;
 	default:
-		dprintk("cmd=%d data=%d", cmd, tvp->u.data);
-		return dtv_property_process_set_int(fe, file, cmd, tvp->u.data);
+		r = dtv_property_process_set_int(fe, file, cmd, tvp->u.data);
+		dprintk("cmd=%d data=%d ret=%d", cmd, tvp->u.data, r);
 	}
 
 	return r;
