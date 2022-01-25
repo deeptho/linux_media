@@ -1248,6 +1248,12 @@ static int m88ds3103_get_frontend(struct dvb_frontend *fe,
 			goto err;
 
 		switch ((buf[0] >> 0) & 0x0f) {
+		case 0:
+			c->fec_inner = FEC_1_4;
+			break;
+		case 1:
+			c->fec_inner = FEC_1_3;
+			break;
 		case 2:
 			c->fec_inner = FEC_2_5;
 			break;
