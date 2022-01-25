@@ -271,7 +271,7 @@ static int ts2020_set_params(struct dvb_frontend *fe)
 	value = utmp;
 
 	f3db = (c->bandwidth_hz / 1000 / 2) + 2000;
-	f3db += FREQ_OFFSET_LOW_SYM_RATE; /* FIXME: ~always too wide filter */
+	f3db += (c->symbol_rate < 5000000) ? FREQ_OFFSET_LOW_SYM_RATE : 0;
 	f3db = clamp(f3db, 7000U, 40000U);
 
 	gdiv28 = gdiv28 * 207 / (value * 2 + 151);
