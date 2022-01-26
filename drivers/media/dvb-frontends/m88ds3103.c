@@ -1243,7 +1243,7 @@ static int m88ds3103_get_frontend(struct dvb_frontend *fe,
 		if (ret)
 			goto err;
 
-		ret = regmap_bulk_read(dev->regmap, 0xf2, &buf[2], 1);
+		ret = regmap_bulk_read(dev->regmap, 0x76, &buf[2], 1);
 		if (ret)
 			goto err;
 
