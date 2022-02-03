@@ -1005,6 +1005,14 @@ static int m88ds3103_set_frontend(struct dvb_frontend *fe)
 	if (ret)
 		goto err;
 
+	ret = regmap_read(dev->regmap, 0x76, &tmp);
+	if (ret)
+		goto err;
+	tmp &= 0x7f;
+	ret = regmap_write(dev->regmap, 0x76, tmp);
+	if (ret)
+		goto err;
+
 	ret = regmap_write(dev->regmap, 0x00, 0x00);
 	if (ret)
 		goto err;
