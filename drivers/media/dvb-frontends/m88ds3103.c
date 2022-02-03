@@ -973,6 +973,14 @@ static int m88ds3103_set_frontend(struct dvb_frontend *fe)
 	if (ret)
 		goto err;
 
+	ret = regmap_read(dev->regmap, 0x25, &tmp);
+	if (ret)
+		goto err;
+	tmp |= 0x08;
+	ret = regmap_write(dev->regmap, 0x25, tmp);
+	if (ret)
+		goto err;
+
 	if (dev->chiptype == M88DS3103_CHIPTYPE_3103B) {
 		/* enable/disable 192M LDPC clock */
 		ret = m88ds3103_update_bits(dev, 0x29, 0x10,
