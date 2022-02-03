@@ -626,6 +626,7 @@ static int m88ds3103_set_frontend(struct dvb_frontend *fe)
 	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
 	int ret, len;
 	const struct m88ds3103_reg_val *init;
+	unsigned tmp;
 	u8 u8tmp, u8tmp1 = 0, u8tmp2 = 0; /* silence compiler warning */
 	u8 buf[3];
 	u16 u16tmp;
@@ -993,6 +994,14 @@ static int m88ds3103_set_frontend(struct dvb_frontend *fe)
 	buf[0] = (s32tmp >> 0) & 0xff;
 	buf[1] = (s32tmp >> 8) & 0xff;
 	ret = regmap_bulk_write(dev->regmap, 0x5e, buf, 2);
+	if (ret)
+		goto err;
+
+	ret = regmap_read(dev->regmap, 0x56, &tmp);
+	if (ret)
+		goto err;
+	tmp &= 0xfe;
+	ret = regmap_write(dev->regmap, 0x56, tmp);
 	if (ret)
 		goto err;
 
