@@ -226,7 +226,7 @@ static int m88ds3103_read_status(struct dvb_frontend *fe,
 	dev_dbg(&client->dev, "lock=%02x status=%02x\n", utmp, *status);
 
 	/* CNR */
-	if (dev->fe_status & FE_HAS_VITERBI) {
+	if (dev->fe_status & FE_HAS_LOCK) {
 		unsigned int cnr, noise, signal, noise_tot, signal_tot;
 
 		cnr = 0;
