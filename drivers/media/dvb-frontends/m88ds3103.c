@@ -189,20 +189,32 @@ static int m88ds3103_read_status(struct dvb_frontend *fe,
 		if (ret)
 			goto err;
 
-		if ((utmp & 0x07) == 0x07)
-			*status = FE_HAS_SIGNAL | FE_HAS_CARRIER |
-					FE_HAS_VITERBI | FE_HAS_SYNC |
-					FE_HAS_LOCK;
+		if ((utmp & 0x07) == 0x07) {
+			ret = regmap_read(dev->regmap, 0x0d, &utmp);
+			if (ret)
+				goto err;
+			if ((utmp & 0x01) == 0x01)
+				*status = FE_HAS_SIGNAL;
+			if ((utmp & 0x02) == 0x02)
+				*status |= FE_HAS_LOCK;
+			if ((utmp & 0x04) == 0x04)
+				*status |= FE_HAS_CARRIER;
+			}
 		break;
 	case SYS_DVBS2:
 		ret = regmap_read(dev->regmap, 0x0d, &utmp);
 		if (ret)
 			goto err;
-
-		if ((utmp & 0x8f) == 0x8f)
-			*status = FE_HAS_SIGNAL | FE_HAS_CARRIER |
-					FE_HAS_VITERBI | FE_HAS_SYNC |
-					FE_HAS_LOCK;
+		if ((utmp & 0x01) == 0x01)
+			*status = FE_HAS_SIGNAL;
+		if ((utmp & 0x02) == 0x02)
+			*status |= FE_HAS_LOCK;
+		if ((utmp & 0x04) == 0x04)
+			*status |= FE_HAS_CARRIER;
+		if ((utmp & 0x08) == 0x08)
+			*status |= FE_HAS_SYNC;
+		if ((utmp & 0x80) == 0x80)
+			*status |= FE_HAS_VITERBI;
 		break;
 	default:
 		dev_dbg(&client->dev, "invalid delivery_system\n");
