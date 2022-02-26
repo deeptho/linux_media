@@ -709,8 +709,14 @@ static int stid135_set_parameters(struct dvb_frontend* fe)
 		dev_dbg(&state->base->i2c->dev, "%s: disable ISI filtering !\n", __func__);
 		err |= fe_stid135_set_mis_filtering(state, FALSE, 0, 0xFF);
 	}
-	state->signal_info.pls_mode = ((p->stream_id >>26) & 0x3);
-	state->signal_info.pls_code = ((p->stream_id >> 8)  & 0x3FFFF);
+	if(p->stream_id == -1) {
+		state->signal_info.pls_mode = 0x00; //ROOT
+		state->signal_info.pls_code = 1;
+	} else {
+		state->signal_info.pls_mode = ((p->stream_id >>26) & 0x3);
+		state->signal_info.pls_code = ((p->stream_id >> 8)  & 0x3FFFF);
+	}
+
 	if(	state->signal_info.pls_code ==0)
 			state->signal_info.pls_code = 1;
 	if (err != FE_LLA_NO_ERROR)
