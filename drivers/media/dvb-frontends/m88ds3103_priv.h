@@ -49,6 +49,7 @@ struct m88ds3103_dev {
 	u64 post_bit_error;
 	u64 post_bit_count;
 	u8 dt_addr;
+	u16 prevUCBS2;
 };
 
 struct m88ds3103_reg_val {
