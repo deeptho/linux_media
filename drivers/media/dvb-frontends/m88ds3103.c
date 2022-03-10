@@ -166,6 +166,31 @@ int m88ds3103_get_agc_pwm(struct dvb_frontend *fe, u8 *_agc_pwm)
 }
 EXPORT_SYMBOL(m88ds3103_get_agc_pwm);
 
+static int m88ds3103_low_sr_regwrite(struct dvb_frontend *fe)
+{
+	struct m88ds3103_dev *dev = fe->demodulator_priv;
+	struct i2c_client *client = dev->client;
+	int ret;
+
+	ret = regmap_write(dev->regmap, 0xc0, 0x04);
+	if (ret)
+		goto err;
+	ret = regmap_write(dev->regmap, 0x8a, 0x09);
+	if (ret)
+		goto err;
+	ret = regmap_write(dev->regmap, 0x8b, 0x22);
+	if (ret)
+		goto err;
+	ret = regmap_write(dev->regmap, 0x8c, 0x88);
+	if (ret)
+		goto err;
+
+	return 0;
+err:
+	dev_dbg(&client->dev, "failed=%d\n", ret);
+	return ret;
+}
+
 static int m88ds3103_read_status(struct dvb_frontend *fe,
 				 enum fe_status *status)
 {
@@ -816,19 +841,13 @@ static int m88ds3103_set_frontend(struct dvb_frontend *fe)
 			goto err;
 	}
 
+	if (c->symbol_rate <= 5000000 && c->delivery_system == SYS_DVBS2) {
+		ret = m88ds3103_low_sr_regwrite(fe);
+		if (ret)
+			goto err;
+	}
+
 	if (dev->chip_id == M88RS6000_CHIP_ID) {
-		if (c->delivery_system == SYS_DVBS2 &&
-		    c->symbol_rate <= 5000000) {
-			ret = regmap_write(dev->regmap, 0xc0, 0x04);
-			if (ret)
-				goto err;
-			buf[0] = 0x09;
-			buf[1] = 0x22;
-			buf[2] = 0x88;
-			ret = regmap_bulk_write(dev->regmap, 0x8a, buf, 3);
-			if (ret)
-				goto err;
-		}
 		ret = m88ds3103_update_bits(dev, 0x9d, 0x08, 0x08);
 		if (ret)
 			goto err;
