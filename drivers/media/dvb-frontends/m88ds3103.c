@@ -411,6 +411,64 @@ err:
 	return ret;
 }
 
+static int m88ds3103_read_ucblocks(struct dvb_frontend *fe, u32 *ucblocks)
+{
+	struct m88ds3103_dev *dev = fe->demodulator_priv;
+	struct i2c_client *client = dev->client;
+	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
+	unsigned tmp1, tmp2, tmp3;
+	u16 uc_blocks;
+	int ret;
+
+	switch (c->delivery_system) {
+	case SYS_DVBS:
+		ret = regmap_read(dev->regmap, 0xf5, &tmp1);
+		if (ret)
+			goto err;
+		ret = regmap_read(dev->regmap, 0xf4, &tmp2);
+		if (ret)
+			goto err;
+		*ucblocks = tmp1 << 8 | tmp2;
+		ret = regmap_read(dev->regmap, 0xf8, &tmp3);
+		if (ret)
+			goto err;
+		/* clear packet counters */
+		tmp3 &= ~0x20;
+		ret = regmap_write(dev->regmap, 0xf8, tmp3);
+		if (ret)
+			goto err;
+		/* enable packet counters */
+		tmp3 |= 0x20;
+		ret = regmap_write(dev->regmap, 0xf8, tmp3);
+		if (ret)
+			goto err;
+		break;
+	case SYS_DVBS2:
+		ret = regmap_read(dev->regmap, 0xe2, &tmp1);
+		if (ret)
+			goto err;
+		ret = regmap_read(dev->regmap, 0xe1, &tmp2);
+		if (ret)
+			goto err;
+		uc_blocks = tmp1 << 8 | tmp2;
+		if (uc_blocks > dev->prevUCBS2)
+			*ucblocks = uc_blocks - dev->prevUCBS2;
+		else
+			*ucblocks = dev->prevUCBS2 - uc_blocks;
+		dev->prevUCBS2 = uc_blocks;
+		break;
+	default:
+		dev_dbg(&client->dev, "invalid delivery_system\n");
+		ret = -EINVAL;
+		goto err;
+	}
+
+	return 0;
+err:
+	dev_dbg(&client->dev, "failed=%d\n", ret);
+	return ret;
+}
+
 static int m88ds3103b_select_mclk(struct m88ds3103_dev *dev)
 {
 	struct i2c_client *client = dev->client;
@@ -1800,6 +1858,7 @@ static const struct dvb_frontend_ops m88ds3103_ops = {
 	.read_status = m88ds3103_read_status,
 	.read_snr = m88ds3103_read_snr,
 	.read_ber = m88ds3103_read_ber,
+	.read_ucblocks = m88ds3103_read_ucblocks,
 
 	.diseqc_send_master_cmd = m88ds3103_diseqc_send_master_cmd,
 	.diseqc_send_burst = m88ds3103_diseqc_send_burst,
