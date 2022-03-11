@@ -191,6 +191,47 @@ err:
 	return ret;
 }
 
+static int m88ds3103_set_carrier_offset(struct dvb_frontend *fe, s16 lpfoffset)
+{
+	struct m88ds3103_dev *dev = fe->demodulator_priv;
+	struct i2c_client *client = dev->client;
+	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
+	u32 tuner_frequency_khz;
+	s32 s32tmp;
+	u8 buf[3];
+	int ret;
+
+	if (fe->ops.tuner_ops.get_frequency) {
+		ret = fe->ops.tuner_ops.get_frequency(fe, &tuner_frequency_khz);
+		if (ret)
+			goto err;
+	} else {
+		/*
+		 * Use nominal target frequency as tuner driver does not provide
+		 * actual frequency used. Carrier offset calculation is not
+		 * valid.
+		 */
+		tuner_frequency_khz = c->frequency;
+	}
+
+	/* Use 32-bit calc as there is no s64 version of DIV_ROUND_CLOSEST() */
+	s32tmp = 0x10000 * (tuner_frequency_khz - c->frequency - lpfoffset);
+	s32tmp = DIV_ROUND_CLOSEST(s32tmp, dev->mclk / 1000);
+	buf[0] = (s32tmp >> 0) & 0xff;
+	buf[1] = (s32tmp >> 8) & 0xff;
+	ret = regmap_bulk_write(dev->regmap, 0x5e, buf, 2);
+	if (ret)
+		goto err;
+
+	dev_dbg(&client->dev, "carrier offset=%d\n",
+		(tuner_frequency_khz - c->frequency - lpfoffset));
+
+	return 0;
+err:
+	dev_dbg(&client->dev, "failed=%d\n", ret);
+	return ret;
+}
+
 static int m88ds3103_read_status(struct dvb_frontend *fe,
 				 enum fe_status *status)
 {
@@ -1085,12 +1126,7 @@ static int m88ds3103_set_frontend(struct dvb_frontend *fe)
 	dev_dbg(&client->dev, "carrier offset=%d\n",
 		(tuner_frequency_khz - c->frequency));
 
-	/* Use 32-bit calc as there is no s64 version of DIV_ROUND_CLOSEST() */
-	s32tmp = 0x10000 * (tuner_frequency_khz - c->frequency);
-	s32tmp = DIV_ROUND_CLOSEST(s32tmp, dev->mclk / 1000);
-	buf[0] = (s32tmp >> 0) & 0xff;
-	buf[1] = (s32tmp >> 8) & 0xff;
-	ret = regmap_bulk_write(dev->regmap, 0x5e, buf, 2);
+	ret = m88ds3103_set_carrier_offset(fe, 0);
 	if (ret)
 		goto err;
 
