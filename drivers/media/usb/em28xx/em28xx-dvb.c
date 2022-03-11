@@ -1178,7 +1178,7 @@ static int em28178_dvb_init_pctv_461e(struct em28xx *dev)
 	m88ds3103_pdata.clk = 27000000;
 	m88ds3103_pdata.i2c_wr_max = 33;
 	m88ds3103_pdata.ts_mode = M88DS3103_TS_PARALLEL;
-	m88ds3103_pdata.ts_clk = 16000;
+	m88ds3103_pdata.ts_clk = 20000; /* BUG: TS breaks at 24000 */
 	m88ds3103_pdata.ts_clk_pol = 1;
 	m88ds3103_pdata.agc = 0x99;
 
