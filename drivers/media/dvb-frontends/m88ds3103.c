@@ -766,8 +766,7 @@ static int m88ds3103_set_frontend(struct dvb_frontend *fe)
 	u8 u8tmp, u8tmp1 = 0, u8tmp2 = 0; /* silence compiler warning */
 	u8 buf[3];
 	u16 u16tmp;
-	u32 tuner_frequency_khz, target_mclk, u32tmp;
-	s32 s32tmp;
+	u32 target_mclk, u32tmp;
 	static const struct reg_sequence reset_buf[] = {
 		{0x07, 0x80}, {0x07, 0x00}
 	};
@@ -813,19 +812,6 @@ static int m88ds3103_set_frontend(struct dvb_frontend *fe)
 		ret = fe->ops.tuner_ops.set_params(fe);
 		if (ret)
 			goto err;
-	}
-
-	if (fe->ops.tuner_ops.get_frequency) {
-		ret = fe->ops.tuner_ops.get_frequency(fe, &tuner_frequency_khz);
-		if (ret)
-			goto err;
-	} else {
-		/*
-		 * Use nominal target frequency as tuner driver does not provide
-		 * actual frequency used. Carrier offset calculation is not
-		 * valid.
-		 */
-		tuner_frequency_khz = c->frequency;
 	}
 
 	/* set M88RS6000/DS3103B demod main mclk and ts mclk from tuner die */
@@ -1122,9 +1108,6 @@ static int m88ds3103_set_frontend(struct dvb_frontend *fe)
 		if (ret)
 			goto err;
 	}
-
-	dev_dbg(&client->dev, "carrier offset=%d\n",
-		(tuner_frequency_khz - c->frequency));
 
 	ret = m88ds3103_set_carrier_offset(fe, 0);
 	if (ret)
