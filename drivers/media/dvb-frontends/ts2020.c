@@ -157,7 +157,7 @@ static int ts2020_tuner_gate_ctrl(struct dvb_frontend *fe, u8 offset)
 	ret |= regmap_write(priv->regmap, 0x51, 0x1f);
 	ret |= regmap_write(priv->regmap, 0x50, offset);
 	ret |= regmap_write(priv->regmap, 0x50, 0x00);
-	msleep(20);
+
 	return ret;
 }
 
@@ -305,8 +305,6 @@ static int ts2020_set_params(struct dvb_frontend *fe)
 	ret |= ts2020_tuner_gate_ctrl(fe, 0x04);
 
 	ret |= ts2020_tuner_gate_ctrl(fe, 0x01);
-
-	msleep(80);
 
 	return (ret < 0) ? -EINVAL : 0;
 }
