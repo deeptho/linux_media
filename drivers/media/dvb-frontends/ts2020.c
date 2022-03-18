@@ -439,7 +439,7 @@ static void ts2020_stat_work(struct work_struct *work)
 	c->strength.stat[0].scale = FE_SCALE_DECIBEL;
 
 	if (!priv->dont_poll)
-		schedule_delayed_work(&priv->stat_work, msecs_to_jiffies(2000));
+		schedule_delayed_work(&priv->stat_work, msecs_to_jiffies(1000));
 	return;
 err:
 	dev_dbg(&client->dev, "failed=%d\n", ret);
