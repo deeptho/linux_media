@@ -239,7 +239,7 @@ static int m88ds3103_read_status(struct dvb_frontend *fe,
 	struct i2c_client *client = dev->client;
 	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
 	int ret, i, itmp;
-	unsigned int utmp;
+	unsigned int utmp, utmp1;
 	u8 buf[3];
 
 	*status = 0;
@@ -256,16 +256,20 @@ static int m88ds3103_read_status(struct dvb_frontend *fe,
 			goto err;
 
 		if ((utmp & 0x07) == 0x07) {
-			ret = regmap_read(dev->regmap, 0x0d, &utmp);
+			ret = regmap_read(dev->regmap, 0x0d, &utmp1);
 			if (ret)
 				goto err;
-			if ((utmp & 0x01) == 0x01)
+			if ((utmp1 & 0x01) == 0x01)
 				*status = FE_HAS_SIGNAL;
-			if ((utmp & 0x02) == 0x02)
+			if ((utmp1 & 0x02) == 0x02)
 				*status |= FE_HAS_LOCK;
-			if ((utmp & 0x04) == 0x04)
+			if ((utmp1 & 0x04) == 0x04)
 				*status |= FE_HAS_CARRIER;
 			}
+		if ((utmp & 0x02) == 0x02)
+			*status |= FE_HAS_SYNC;
+		if ((utmp & 0x04) == 0x04)
+			*status |= FE_HAS_VITERBI;
 		break;
 	case SYS_DVBS2:
 		ret = regmap_read(dev->regmap, 0x0d, &utmp);
