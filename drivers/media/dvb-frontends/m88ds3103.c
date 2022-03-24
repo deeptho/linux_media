@@ -924,11 +924,9 @@ static int m88ds3103_set_frontend(struct dvb_frontend *fe)
 	}
 
 	/* program init table */
-	if (c->delivery_system != dev->delivery_system) {
-		ret = m88ds3103_wr_reg_val_tab(dev, init, len);
-		if (ret)
-			goto err;
-	}
+	ret = m88ds3103_wr_reg_val_tab(dev, init, len);
+	if (ret)
+		goto err;
 
 	if (c->symbol_rate <= 5000000 && c->delivery_system == SYS_DVBS2) {
 		ret = m88ds3103_low_sr_regwrite(fe);
@@ -1140,8 +1138,6 @@ static int m88ds3103_set_frontend(struct dvb_frontend *fe)
 	ret = regmap_write(dev->regmap, 0xb2, 0x00);
 	if (ret)
 		goto err;
-
-	dev->delivery_system = c->delivery_system;
 
 	return 0;
 err:
