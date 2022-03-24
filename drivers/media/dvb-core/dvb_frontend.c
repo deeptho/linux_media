@@ -983,6 +983,7 @@ static void dvb_frontend_get_frequency_limits(struct dvb_frontend *fe,
 
 	/* If the standard is for satellite, convert frequencies to kHz */
 	switch (c->delivery_system) {
+	case SYS_AUTO:
 	case SYS_DVBS:
 	case SYS_DVBS2:
 	case SYS_TURBO:
