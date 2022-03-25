@@ -1488,11 +1488,14 @@ err:
 static int m88ds3103_read_snr(struct dvb_frontend *fe, u16 *snr)
 {
 	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
+	u16 tmp;
 
-	if (c->cnr.stat[0].scale == FE_SCALE_DECIBEL)
-		*snr = div_s64(c->cnr.stat[0].svalue, 100);
+	tmp = div_s64(c->cnr.stat[0].svalue, 100);
+
+	if (c->delivery_system == SYS_DVBS)
+		*snr = (tmp > 0x7d) 0xffff : tmp * 524;
 	else
-		*snr = 0;
+		*snr = (tmp > 0xc8) 0xffff : tmp * 327;
 
 	return 0;
 }
