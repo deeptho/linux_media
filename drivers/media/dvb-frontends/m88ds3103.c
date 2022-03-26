@@ -1632,6 +1632,8 @@ static int m88ds3103_diseqc_send_master_cmd(struct dvb_frontend *fe,
 	if (ret)
 		goto err;
 
+	msleep(1);
+
 	ret = regmap_bulk_write(dev->regmap, 0xa3, diseqc_cmd->msg,
 			diseqc_cmd->msg_len);
 	if (ret)
