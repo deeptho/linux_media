@@ -243,6 +243,22 @@ static int ts2020_set_params(struct dvb_frontend *fe)
 
 	ts2020_tuner_gate_ctrl(fe, 0x10);
 
+	if (priv->tuner == TS2020_M88TS2022) {
+		regmap_read(priv->regmap, 0x10, &utmp);
+		if (frequency_khz < 1103000 || frequency_khz > 1710000) {
+			utmp |= 0x80;
+			regmap_write(priv->regmap, 0x10, utmp);
+			regmap_write(priv->regmap, 0x11, 0x6f);
+			ts2020_tuner_gate_ctrl(fe, 0x10);
+		}
+
+		if ((frequency_khz >= 1103000 && frequency_khz < 1220000) ||
+			(frequency_khz > 1710000 && frequency_khz < 1745000)) {
+			utmp &= 0xfd;
+			regmap_write(priv->regmap, 0x10, utmp);
+		}
+	}
+
 	ts2020_tuner_gate_ctrl(fe, 0x08);
 
 	if (priv->tuner == TS2020_M88TS2022) {
@@ -311,7 +327,7 @@ static int ts2020_set_params(struct dvb_frontend *fe)
 			ts2020_tuner_gate_ctrl(fe, 0x01);
 	}
 
-	return (ret < 0) ? -EINVAL : 0;
+	return 0;
 }
 
 static int ts2020_get_frequency(struct dvb_frontend *fe, u32 *frequency)
