@@ -761,7 +761,7 @@ restart:
 					if (fe->ops.scan)
 						fe->ops.scan(fe, fepriv->state & FESTATE_SCAN_NEXT , &fepriv->delay, &s);
 					fepriv->state = FESTATE_IDLE;
-				}	 else if (fepriv->state & FESTATE_GETTING_SPECTRUM) {
+				} else if (fepriv->state & FESTATE_GETTING_SPECTRUM) {
 					dev_dbg(fe->dvb->device, "%s: Spectrum requested, DTV_SPECTRUM\n", __func__);
 					dprintk("starting spectrum scan\n");
 					if (fe->ops.spectrum_start)
@@ -792,7 +792,23 @@ restart:
 				break;
 			case DVBFE_ALGO_SW:
 				dev_dbg(fe->dvb->device, "%s: Frontend ALGO = DVBFE_ALGO_SW\n", __func__);
-				dvb_frontend_swzigzag(fe);
+
+				if (fepriv->state & FESTATE_SCANNING) {
+					dev_dbg(fe->dvb->device, "%s: Sscan requested, FESTATE_SCANNING\n", __func__);
+					if (fe->ops.scan)
+						fe->ops.scan(fe, fepriv->state & FESTATE_SCAN_NEXT , &fepriv->delay, &s);
+					fepriv->state = FESTATE_IDLE;
+				} else if (fepriv->state & FESTATE_GETTING_SPECTRUM) {
+					dev_dbg(fe->dvb->device, "%s: Spectrum requested, DTV_SPECTRUM\n", __func__);
+					dprintk("starting spectrum scan\n");
+					if (fe->ops.spectrum_start)
+						fe->ops.spectrum_start(fe,  &fepriv->spectrum, &fepriv->delay, &s);
+					dprintk("spectrum scan ended s=0x%x\n", s);
+					fepriv->state = FESTATE_IDLE;
+				} else {
+					dvb_frontend_swzigzag(fe);
+				}
+				atomic_set(&fe->algo_state.task_should_stop, false);
 				break;
 			case DVBFE_ALGO_CUSTOM:
 				dev_dbg(fe->dvb->device, "%s: Frontend ALGO = DVBFE_ALGO_CUSTOM, state=%d\n", __func__, fepriv->state);
