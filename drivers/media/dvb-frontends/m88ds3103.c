@@ -1773,6 +1773,11 @@ static int m88ds3103_get_tune_settings(struct dvb_frontend *fe,
 	return 0;
 }
 
+static enum dvbfe_algo m88ds3103_get_algo(struct dvb_frontend *fe)
+{
+	return DVBFE_ALGO_SW;
+}
+
 static void m88ds3103_release(struct dvb_frontend *fe)
 {
 	struct m88ds3103_dev *dev = fe->demodulator_priv;
@@ -1872,6 +1877,7 @@ static const struct dvb_frontend_ops m88ds3103_ops = {
 	.release = m88ds3103_release,
 
 	.get_tune_settings = m88ds3103_get_tune_settings,
+	.get_frontend_algo = m88ds3103_get_algo,
 
 	.init = m88ds3103_init,
 	.sleep = m88ds3103_sleep,
