@@ -770,7 +770,7 @@ static int m88ds3103_set_frontend(struct dvb_frontend *fe)
 	u8 u8tmp, u8tmp1 = 0, u8tmp2 = 0; /* silence compiler warning */
 	u8 buf[3];
 	u16 u16tmp;
-	u32 target_mclk, u32tmp;
+	u32 target_mclk = 96000000, ts_clk = dev->cfg->ts_clk, u32tmp;
 	static const struct reg_sequence reset_buf[] = {
 		{0x07, 0x80}, {0x07, 0x00}
 	};
@@ -847,13 +847,19 @@ static int m88ds3103_set_frontend(struct dvb_frontend *fe)
 		switch (dev->cfg->ts_mode) {
 		case M88DS3103_TS_SERIAL:
 		case M88DS3103_TS_SERIAL_D7:
-			target_mclk = dev->cfg->ts_clk;
+			ts_clk = 0;
+			if (c->delivery_system == SYS_DVBS2) {
+				if (c->symbol_rate > 18000000)
+					target_mclk = 144000000;
+				else
+					target_mclk = 96000000;
+			}
 			break;
-		case M88DS3103_TS_PARALLEL:
 		case M88DS3103_TS_CI:
-			if (c->delivery_system == SYS_DVBS)
-				target_mclk = 96000000;
-			else {
+			ts_clk = (c->delivery_system == SYS_DVBS2) ? 8471000 : 8000000;
+			fallthrough;
+		case M88DS3103_TS_PARALLEL:
+			if (c->delivery_system == SYS_DVBS2)
 				if (c->symbol_rate < 18000000)
 					target_mclk = 96000000;
 				else if (c->symbol_rate < 28000000)
@@ -1027,13 +1033,13 @@ static int m88ds3103_set_frontend(struct dvb_frontend *fe)
 		}
 		fallthrough;
 	default:
-		u16tmp = DIV_ROUND_UP(target_mclk, dev->cfg->ts_clk);
+		u16tmp = DIV_ROUND_UP(target_mclk, ts_clk);
 		u8tmp1 = u16tmp / 2 - 1;
 		u8tmp2 = DIV_ROUND_UP(u16tmp, 2) - 1;
 	}
 
 	dev_dbg(&client->dev, "target_mclk=%u ts_clk=%u ts_clk_divide_ratio=%u\n",
-		target_mclk, dev->cfg->ts_clk, u16tmp);
+		target_mclk, ts_clk, u16tmp);
 
 	/* u8tmp1[5:2] => fe[3:0], u8tmp1[1:0] => ea[7:6] */
 	/* u8tmp2[5:0] => ea[5:0] */
