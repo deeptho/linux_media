@@ -807,8 +807,8 @@ restart:
 					fepriv->state = FESTATE_IDLE;
 				} else {
 					dvb_frontend_swzigzag(fe);
+					fe->ops.read_status(fe, &s);
 				}
-				fe->ops.read_status(fe, &s);
 				if ((s != fepriv->status && !(fepriv->tune_mode_flags & FE_TUNE_MODE_ONESHOT))
 						|| (fepriv->heartbeat_interval>0)) {
 					//dprintk("Adding event val=0x%x\n", s);
