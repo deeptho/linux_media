@@ -808,6 +808,14 @@ restart:
 				} else {
 					dvb_frontend_swzigzag(fe);
 				}
+				fe->ops.read_status(fe, &s);
+				if ((s != fepriv->status && !(fepriv->tune_mode_flags & FE_TUNE_MODE_ONESHOT))
+						|| (fepriv->heartbeat_interval>0)) {
+					//dprintk("Adding event val=0x%x\n", s);
+					dev_dbg(fe->dvb->device, "%s: state changed, adding current state\n", __func__);
+					dvb_frontend_add_event(fe, s);
+					fepriv->status = s;
+				}
 				atomic_set(&fe->algo_state.task_should_stop, false);
 				break;
 			case DVBFE_ALGO_CUSTOM:
