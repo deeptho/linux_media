@@ -1033,6 +1033,7 @@ static u32 dvb_frontend_get_stepsize(struct dvb_frontend *fe)
 	u32 step = max(fe_step, tuner_step);
 
 	switch (c->delivery_system) {
+	case SYS_AUTO:
 	case SYS_DVBS:
 	case SYS_DVBS2:
 	case SYS_TURBO:
@@ -1071,6 +1072,7 @@ static int dvb_frontend_check_parameters(struct dvb_frontend *fe)
 
 		/* range check: symbol rate */
 		switch (c->delivery_system) {
+		case SYS_AUTO:
 		case SYS_DVBS:
 		case SYS_DVBS2:
 		case SYS_TURBO:
@@ -1144,6 +1146,7 @@ static int dvb_frontend_clear_cache(struct dvb_frontend *fe)
 	c->scrambling_sequence_index = 0;/* default sequence */
 
 	switch (c->delivery_system) {
+	case SYS_AUTO:
 	case SYS_DVBS:
 	case SYS_DVBS2:
 	case SYS_TURBO:
@@ -2649,6 +2652,7 @@ static int dtv_set_frontend(struct dvb_frontend *fe)
 	case SYS_ISDBS:
 		rolloff = 135;
 		break;
+	case SYS_AUTO:
 	case SYS_DVBS2:
 		switch (c->rolloff) {
 		case ROLLOFF_20:
@@ -2688,6 +2692,7 @@ static int dtv_set_frontend(struct dvb_frontend *fe)
 	} else {
 		/* default values */
 		switch (c->delivery_system) {
+		case SYS_AUTO:
 		case SYS_DVBS:
 		case SYS_DVBS2:
 		case SYS_ISDBS:
