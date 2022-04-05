@@ -27,6 +27,8 @@
 #define M88DS3103_CHIPTYPE_RS6000 1
 #define M88DS3103_CHIPTYPE_3103B  2
 
+#define M88DS3103_SNR_ITERATIONS 3
+
 struct m88ds3103_dev {
 	struct i2c_client *client;
 	struct i2c_client *dt_client;
