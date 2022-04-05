@@ -239,7 +239,7 @@ static int m88ds3103_read_status(struct dvb_frontend *fe,
 	struct i2c_client *client = dev->client;
 	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
 	int ret, i, itmp;
-	unsigned int utmp, utmp1;
+	u32 utmp, utmp1, cnr, noise, signal, noise_tot, signal_tot, post_bit_error, post_bit_count;
 	u8 buf[3];
 
 	*status = 0;
@@ -297,12 +297,7 @@ static int m88ds3103_read_status(struct dvb_frontend *fe,
 
 	/* CNR */
 	if (dev->fe_status & FE_HAS_LOCK) {
-		unsigned int cnr, noise, signal, noise_tot, signal_tot;
-
 		cnr = 0;
-		/* more iterations for more accurate estimation */
-		#define M88DS3103_SNR_ITERATIONS 3
-
 		switch (c->delivery_system) {
 		case SYS_DVBS:
 			itmp = 0;
@@ -366,9 +361,7 @@ static int m88ds3103_read_status(struct dvb_frontend *fe,
 	}
 
 	/* BER */
-	if (dev->fe_status & FE_HAS_LOCK) {
-		unsigned int utmp, post_bit_error, post_bit_count;
-
+	if (dev->fe_status & FE_HAS_VITERBI) {
 		switch (c->delivery_system) {
 		case SYS_DVBS:
 			ret = regmap_write(dev->regmap, 0xf9, 0x04);
@@ -379,60 +372,91 @@ static int m88ds3103_read_status(struct dvb_frontend *fe,
 			if (ret)
 				goto err;
 
-			/* measurement ready? */
 			if (!(utmp & 0x10)) {
 				ret = regmap_bulk_read(dev->regmap, 0xf6, buf, 2);
 				if (ret)
 					goto err;
 
 				post_bit_error = buf[1] << 8 | buf[0] << 0;
-				post_bit_count = 0x800000;
-				dev->post_bit_error += post_bit_error;
-				dev->post_bit_count += post_bit_count;
+				post_bit_count = (!(utmp & 0x08)) ? 0x800000 : 0x100000;
+				dev->post_bit_error = post_bit_error;
+				dev->post_bit_count = post_bit_count;
 				dev->dvbv3_ber = post_bit_error;
 
-				/* restart measurement */
-				utmp |= 0x10;
-				ret = regmap_write(dev->regmap, 0xf8, utmp);
+				ret = regmap_write(dev->regmap, 0xf8, utmp | 0x10);
 				if (ret)
 					goto err;
 			}
 			break;
 		case SYS_DVBS2:
+			switch (c->fec_inner) {
+			case FEC_1_4:
+				utmp1 = 15928;
+				break;
+			case FEC_1_3:
+				utmp1 = 21328;
+				break;
+			case FEC_2_5:
+				utmp1 = 25648;
+				break;
+			case FEC_1_2:
+				utmp1 = 32128;
+				break;
+			case FEC_3_5:
+				utmp1 = 38608;
+				break;
+			case FEC_2_3:
+				utmp1 = 42960;
+				break;
+			case FEC_3_4:
+				utmp1 = 48328;
+				break;
+			case FEC_4_5:
+				utmp1 = 51568;
+				break;
+			case FEC_5_6:
+				utmp1 = 53760;
+				break;
+			case FEC_8_9:
+				utmp1 = 57392;
+				break;
+			case FEC_9_10:
+				utmp1 = 58112;
+				break;
+			default:
+				break;
+			}
+
 			ret = regmap_bulk_read(dev->regmap, 0xd5, buf, 3);
 			if (ret)
 				goto err;
 
-			utmp = buf[2] << 16 | buf[1] << 8 | buf[0] << 0;
+			utmp = buf[2] << 16 | buf[1] << 8 | buf[0];
 
-			/* enough data? */
-			if (utmp > 4000) {
-				ret = regmap_bulk_read(dev->regmap, 0xf7, buf, 2);
-				if (ret)
-					goto err;
+			ret = regmap_bulk_read(dev->regmap, 0xf7, buf, 2);
+			if (ret)
+				goto err;
 
-				post_bit_error = buf[1] << 8 | buf[0] << 0;
-				post_bit_count = 32 * utmp; /* TODO: FEC */
-				dev->post_bit_error += post_bit_error;
-				dev->post_bit_count += post_bit_count;
-				dev->dvbv3_ber = post_bit_error;
+			post_bit_error = buf[1] << 8 | buf[0];
+			post_bit_count = utmp * utmp1 / 1504;
 
-				/* restart measurement */
+			if (utmp > 3000) {
 				ret = regmap_write(dev->regmap, 0xd1, 0x01);
 				if (ret)
 					goto err;
-
 				ret = regmap_write(dev->regmap, 0xf9, 0x01);
 				if (ret)
 					goto err;
-
 				ret = regmap_write(dev->regmap, 0xf9, 0x00);
 				if (ret)
 					goto err;
-
 				ret = regmap_write(dev->regmap, 0xd1, 0x00);
 				if (ret)
 					goto err;
+
+				dev->post_bit_error = post_bit_error;
+				dev->post_bit_count = post_bit_count;
+				dev->dvbv3_ber = post_bit_error;
 			}
 			break;
 		default:
