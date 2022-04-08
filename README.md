@@ -20,6 +20,9 @@ https://github.com/deeptho/blindscan
 
 
 # Installation
+
+First install the required compilers, git ...
+You may also need libproc-processtable-perl (e.g., on ubuntu)
 ```
 mkdir ~/blindscan_kernel
 cd  ~/blindscan_kernel
