@@ -394,9 +394,6 @@ static int mvpp2_prs_tcam_first_free(struct mvpp2 *priv, unsigned char start,
 	if (start > end)
 		swap(start, end);
 
-	if (end >= MVPP2_PRS_TCAM_SRAM_SIZE)
-		end = MVPP2_PRS_TCAM_SRAM_SIZE - 1;
-
 	for (tid = start; tid <= end; tid++) {
 		if (!priv->prs_shadow[tid].valid)
 			return tid;
@@ -2350,7 +2347,7 @@ int mvpp2_prs_update_mac_da(struct net_device *dev, const u8 *da)
 		return err;
 
 	/* Set addr in the device */
-	ether_addr_copy(dev->dev_addr, da);
+	eth_hw_addr_set(dev, da);
 
 	return 0;
 }

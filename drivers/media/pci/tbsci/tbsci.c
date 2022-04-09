@@ -933,13 +933,13 @@ static int tbs_adapters_init(struct tbs_pcie_dev *dev)
 		tbsca->w_dmavirt = pci_alloc_consistent(dev->pdev, DMASIZE, &tbsca->w_dmaphy);
 		if (!tbsca->w_dmavirt)
 		{
-			printk(" allocate write memory failed\n");
+			printk("allocate write DMA  memory failed, set coherent_pool=4M or higher\n");
 			goto fail;
 		}
 		tbsca->r_dmavirt = pci_alloc_consistent(dev->pdev, DMASIZE, &tbsca->r_dmaphy);
 		if (!tbsca->r_dmavirt)
 		{
-			printk(" allocate read memory failed\n");
+			printk("allocate read DMA memory failed, set coherent_pool=4M or higher\n");
 			goto fail;
 		}
 		tbsca->channel_index=i;

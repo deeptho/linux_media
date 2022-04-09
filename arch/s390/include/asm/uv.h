@@ -18,6 +18,11 @@
 #include <asm/page.h>
 #include <asm/gmap.h>
 
+#define UVC_CC_OK	0
+#define UVC_CC_ERROR	1
+#define UVC_CC_BUSY	2
+#define UVC_CC_PARTIAL	3
+
 #define UVC_RC_EXECUTED		0x0001
 #define UVC_RC_INV_CMD		0x0002
 #define UVC_RC_INV_STATE	0x0003
@@ -73,6 +78,10 @@ enum uv_cmds_inst {
 	BIT_UVC_CMD_UNPIN_PAGE_SHARED = 22,
 };
 
+enum uv_feat_ind {
+	BIT_UV_FEAT_MISC = 0,
+};
+
 struct uv_cb_header {
 	u16 len;
 	u16 cmd;	/* Command Code */
@@ -97,7 +106,8 @@ struct uv_cb_qui {
 	u64 max_guest_stor_addr;
 	u8  reserved88[158 - 136];
 	u16 max_guest_cpu_id;
-	u8  reserveda0[200 - 160];
+	u64 uv_feature_indications;
+	u8  reserveda0[200 - 168];
 } __packed __aligned(8);
 
 /* Initialize Ultravisor */
@@ -274,6 +284,7 @@ struct uv_info {
 	unsigned long max_sec_stor_addr;
 	unsigned int max_num_sec_conf;
 	unsigned short max_guest_cpu_id;
+	unsigned long uv_feature_indications;
 };
 
 extern struct uv_info uv_info;
@@ -345,18 +356,17 @@ static inline int is_prot_virt_host(void)
 }
 
 int gmap_make_secure(struct gmap *gmap, unsigned long gaddr, void *uvcb);
-int uv_destroy_page(unsigned long paddr);
+int uv_destroy_owned_page(unsigned long paddr);
 int uv_convert_from_secure(unsigned long paddr);
+int uv_convert_owned_from_secure(unsigned long paddr);
 int gmap_convert_to_secure(struct gmap *gmap, unsigned long gaddr);
 
 void setup_uv(void);
-void adjust_to_uv_max(unsigned long *vmax);
 #else
 #define is_prot_virt_host() 0
 static inline void setup_uv(void) {}
-static inline void adjust_to_uv_max(unsigned long *vmax) {}
 
-static inline int uv_destroy_page(unsigned long paddr)
+static inline int uv_destroy_owned_page(unsigned long paddr)
 {
 	return 0;
 }
@@ -365,12 +375,11 @@ static inline int uv_convert_from_secure(unsigned long paddr)
 {
 	return 0;
 }
-#endif
 
-#if defined(CONFIG_PROTECTED_VIRTUALIZATION_GUEST) || IS_ENABLED(CONFIG_KVM)
-void uv_query_info(void);
-#else
-static inline void uv_query_info(void) {}
+static inline int uv_convert_owned_from_secure(unsigned long paddr)
+{
+	return 0;
+}
 #endif
 
 #endif /* _ASM_S390_UV_H */

@@ -287,6 +287,7 @@ IIO
   devm_iio_device_register()
   devm_iio_dmaengine_buffer_setup()
   devm_iio_kfifo_buffer_setup()
+  devm_iio_map_array_register()
   devm_iio_triggered_buffer_setup()
   devm_iio_trigger_alloc()
   devm_iio_trigger_register()
@@ -314,7 +315,6 @@ IOMAP
   devm_ioremap_resource() : checks resource, requests memory region, ioremaps
   devm_ioremap_resource_wc()
   devm_platform_ioremap_resource() : calls devm_ioremap_resource() for platform device
-  devm_platform_ioremap_resource_wc()
   devm_platform_ioremap_resource_byname()
   devm_platform_get_and_ioremap_resource()
   devm_iounmap()
@@ -401,7 +401,8 @@ POWER
 
 PWM
   devm_pwm_get()
-  devm_pwm_put()
+  devm_of_pwm_get()
+  devm_fwnode_pwm_get()
 
 REGULATOR
   devm_regulator_bulk_get()

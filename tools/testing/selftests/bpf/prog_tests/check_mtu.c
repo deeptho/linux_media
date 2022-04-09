@@ -53,7 +53,7 @@ static void test_check_mtu_xdp_attach(void)
 	prog = skel->progs.xdp_use_helper_basic;
 
 	link = bpf_program__attach_xdp(prog, IFINDEX_LO);
-	if (CHECK(IS_ERR(link), "link_attach", "failed: %ld\n", PTR_ERR(link)))
+	if (!ASSERT_OK_PTR(link, "link_attach"))
 		goto out;
 	skel->links.xdp_use_helper_basic = link;
 
@@ -195,7 +195,7 @@ cleanup:
 	test_check_mtu__destroy(skel);
 }
 
-void test_check_mtu(void)
+void serial_test_check_mtu(void)
 {
 	__u32 mtu_lo;
 

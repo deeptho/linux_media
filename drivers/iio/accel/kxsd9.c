@@ -420,7 +420,7 @@ int kxsd9_common_probe(struct device *dev,
 	indio_dev->available_scan_masks = kxsd9_scan_masks;
 
 	/* Read the mounting matrix, if present */
-	ret = iio_read_mount_matrix(dev, "mount-matrix", &st->orientation);
+	ret = iio_read_mount_matrix(dev, &st->orientation);
 	if (ret)
 		return ret;
 
@@ -478,7 +478,7 @@ err_power_down:
 }
 EXPORT_SYMBOL(kxsd9_common_probe);
 
-int kxsd9_common_remove(struct device *dev)
+void kxsd9_common_remove(struct device *dev)
 {
 	struct iio_dev *indio_dev = dev_get_drvdata(dev);
 	struct kxsd9_state *st = iio_priv(indio_dev);
@@ -489,8 +489,6 @@ int kxsd9_common_remove(struct device *dev)
 	pm_runtime_put_noidle(dev);
 	pm_runtime_disable(dev);
 	kxsd9_power_down(st);
-
-	return 0;
 }
 EXPORT_SYMBOL(kxsd9_common_remove);
 

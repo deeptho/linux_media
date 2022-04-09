@@ -707,7 +707,15 @@ static size_t syscall_arg__scnprintf_char_array(char *bf, size_t size, struct sy
 
 static const char *bpf_cmd[] = {
 	"MAP_CREATE", "MAP_LOOKUP_ELEM", "MAP_UPDATE_ELEM", "MAP_DELETE_ELEM",
-	"MAP_GET_NEXT_KEY", "PROG_LOAD",
+	"MAP_GET_NEXT_KEY", "PROG_LOAD", "OBJ_PIN", "OBJ_GET", "PROG_ATTACH",
+	"PROG_DETACH", "PROG_TEST_RUN", "PROG_GET_NEXT_ID", "MAP_GET_NEXT_ID",
+	"PROG_GET_FD_BY_ID", "MAP_GET_FD_BY_ID", "OBJ_GET_INFO_BY_FD",
+	"PROG_QUERY", "RAW_TRACEPOINT_OPEN", "BTF_LOAD", "BTF_GET_FD_BY_ID",
+	"TASK_FD_QUERY", "MAP_LOOKUP_AND_DELETE_ELEM", "MAP_FREEZE",
+	"BTF_GET_NEXT_ID", "MAP_LOOKUP_BATCH", "MAP_LOOKUP_AND_DELETE_BATCH",
+	"MAP_UPDATE_BATCH", "MAP_DELETE_BATCH", "LINK_CREATE", "LINK_UPDATE",
+	"LINK_GET_FD_BY_ID", "LINK_GET_NEXT_ID", "ENABLE_STATS", "ITER_CREATE",
+	"LINK_DETACH", "PROG_BIND_MAP",
 };
 static DEFINE_STRARRAY(bpf_cmd, "BPF_");
 
@@ -971,6 +979,8 @@ static struct syscall_fmt syscall_fmts[] = {
 	  .arg = { [2] = { .scnprintf = SCA_GETRANDOM_FLAGS, /* flags */ }, }, },
 	{ .name	    = "getrlimit",
 	  .arg = { [0] = STRARRAY(resource, rlimit_resources), }, },
+	{ .name	    = "getsockopt",
+	  .arg = { [1] = STRARRAY(level, socket_level), }, },
 	{ .name	    = "gettid",	    .errpid = true, },
 	{ .name	    = "ioctl",
 	  .arg = {
@@ -1113,6 +1123,8 @@ static struct syscall_fmt syscall_fmts[] = {
 	  .arg = { [0] = STRARRAY(which, itimers), }, },
 	{ .name	    = "setrlimit",
 	  .arg = { [0] = STRARRAY(resource, rlimit_resources), }, },
+	{ .name	    = "setsockopt",
+	  .arg = { [1] = STRARRAY(level, socket_level), }, },
 	{ .name	    = "socket",
 	  .arg = { [0] = STRARRAY(family, socket_families),
 		   [1] = { .scnprintf = SCA_SK_TYPE, /* type */ },
@@ -1620,8 +1632,8 @@ static int trace__symbols_init(struct trace *trace, struct evlist *evlist)
 		goto out;
 
 	err = __machine__synthesize_threads(trace->host, &trace->tool, &trace->opts.target,
-					    evlist->core.threads, trace__tool_process, false,
-					    1);
+					    evlist->core.threads, trace__tool_process,
+					    true, false, 1);
 out:
 	if (err)
 		symbol__exit();
@@ -2264,6 +2276,14 @@ static void *syscall__augmented_args(struct syscall *sc, struct perf_sample *sam
 		augmented_args = sample->raw_data + args_size;
 
 	return augmented_args;
+}
+
+static void syscall__exit(struct syscall *sc)
+{
+	if (!sc)
+		return;
+
+	free(sc->arg_fmt);
 }
 
 static int trace__sys_enter(struct trace *trace, struct evsel *evsel,
@@ -3047,15 +3067,11 @@ static bool evlist__add_vfs_getname(struct evlist *evlist)
 	struct parse_events_error err;
 	int ret;
 
-	bzero(&err, sizeof(err));
+	parse_events_error__init(&err);
 	ret = parse_events(evlist, "probe:vfs_getname*", &err);
-	if (ret) {
-		free(err.str);
-		free(err.help);
-		free(err.first_str);
-		free(err.first_help);
+	parse_events_error__exit(&err);
+	if (ret)
 		return false;
-	}
 
 	evlist__for_each_entry_safe(evlist, evsel, tmp) {
 		if (!strstarts(evsel__name(evsel), "probe:vfs_getname"))
@@ -3093,6 +3109,21 @@ static struct evsel *evsel__new_pgfault(u64 config)
 		evsel->handler = trace__pgfault;
 
 	return evsel;
+}
+
+static void evlist__free_syscall_tp_fields(struct evlist *evlist)
+{
+	struct evsel *evsel;
+
+	evlist__for_each_entry(evlist, evsel) {
+		struct evsel_trace *et = evsel->priv;
+
+		if (!et || !evsel->tp_format || strcmp(evsel->tp_format->system, "syscalls"))
+			continue;
+
+		free(et->fmt);
+		free(et);
+	}
 }
 
 static void trace__handle_event(struct trace *trace, union perf_event *event, struct perf_sample *sample)
@@ -4130,7 +4161,7 @@ out_disable:
 
 out_delete_evlist:
 	trace__symbols__exit(trace);
-
+	evlist__free_syscall_tp_fields(evlist);
 	evlist__delete(evlist);
 	cgroup__put(trace->cgroup);
 	trace->evlist = NULL;
@@ -4205,7 +4236,7 @@ static int trace__replay(struct trace *trace)
 	/* add tid to output */
 	trace->multiple_threads = true;
 
-	session = perf_session__new(&data, false, &trace->tool);
+	session = perf_session__new(&data, &trace->tool);
 	if (IS_ERR(session))
 		return PTR_ERR(session);
 
@@ -4636,6 +4667,9 @@ do_concat:
 		err = parse_events_option(&o, lists[0], 0);
 	}
 out:
+	free(strace_groups_dir);
+	free(lists[0]);
+	free(lists[1]);
 	if (sep)
 		*sep = ',';
 
@@ -4699,6 +4733,21 @@ static int trace__config(const char *var, const char *value, void *arg)
 	}
 out:
 	return err;
+}
+
+static void trace__exit(struct trace *trace)
+{
+	int i;
+
+	strlist__delete(trace->ev_qualifier);
+	free(trace->ev_qualifier_ids.entries);
+	if (trace->syscalls.table) {
+		for (i = 0; i <= trace->sctbl->syscalls.max_id; i++)
+			syscall__exit(&trace->syscalls.table[i]);
+		free(trace->syscalls.table);
+	}
+	syscalltbl__delete(trace->sctbl);
+	zfree(&trace->perfconfig_events);
 }
 
 int cmd_trace(int argc, const char **argv)
@@ -4876,12 +4925,13 @@ int cmd_trace(int argc, const char **argv)
 	if (trace.perfconfig_events != NULL) {
 		struct parse_events_error parse_err;
 
-		bzero(&parse_err, sizeof(parse_err));
+		parse_events_error__init(&parse_err);
 		err = parse_events(trace.evlist, trace.perfconfig_events, &parse_err);
-		if (err) {
-			parse_events_print_error(&parse_err, trace.perfconfig_events);
+		if (err)
+			parse_events_error__print(&parse_err, trace.perfconfig_events);
+		parse_events_error__exit(&parse_err);
+		if (err)
 			goto out;
-		}
 	}
 
 	if ((nr_cgroups || trace.cgroup) && !trace.opts.target.system_wide) {
@@ -5135,6 +5185,6 @@ out_close:
 	if (output_name != NULL)
 		fclose(trace.output);
 out:
-	zfree(&trace.perfconfig_events);
+	trace__exit(&trace);
 	return err;
 }

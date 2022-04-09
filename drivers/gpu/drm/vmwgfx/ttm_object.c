@@ -48,7 +48,10 @@
 #include <linux/spinlock.h>
 #include <linux/slab.h>
 #include <linux/atomic.h>
+#include <linux/module.h>
 #include "ttm_object.h"
+
+MODULE_IMPORT_NS(DMA_BUF);
 
 /**
  * struct ttm_object_file
@@ -540,7 +543,7 @@ ttm_object_device_init(struct ttm_mem_global *mem_glob,
 	if (ret != 0)
 		goto out_no_object_hash;
 
-	idr_init(&tdev->idr);
+	idr_init_base(&tdev->idr, 1);
 	tdev->ops = *ops;
 	tdev->dmabuf_release = tdev->ops.release;
 	tdev->ops.release = ttm_prime_dmabuf_release;

@@ -73,8 +73,6 @@ struct evmcs_field {
 extern const struct evmcs_field vmcs_field_to_evmcs_1[];
 extern const unsigned int nr_evmcs_1_fields;
 
-#define ROL16(val, n) ((u16)(((u16)(val) << (n)) | ((u16)(val) >> (16 - (n)))))
-
 static __always_inline int get_evmcs_offset(unsigned long field,
 					    u16 *clean_field)
 {
@@ -95,9 +93,7 @@ static __always_inline int get_evmcs_offset(unsigned long field,
 	return evmcs_field->offset;
 }
 
-#undef ROL16
-
-static inline void evmcs_write64(unsigned long field, u64 value)
+static __always_inline void evmcs_write64(unsigned long field, u64 value)
 {
 	u16 clean_field;
 	int offset = get_evmcs_offset(field, &clean_field);
@@ -187,7 +183,7 @@ static inline void evmcs_load(u64 phys_addr)
 
 __init void evmcs_sanitize_exec_ctrls(struct vmcs_config *vmcs_conf);
 #else /* !IS_ENABLED(CONFIG_HYPERV) */
-static inline void evmcs_write64(unsigned long field, u64 value) {}
+static __always_inline void evmcs_write64(unsigned long field, u64 value) {}
 static inline void evmcs_write32(unsigned long field, u32 value) {}
 static inline void evmcs_write16(unsigned long field, u16 value) {}
 static inline u64 evmcs_read64(unsigned long field) { return 0; }
@@ -196,6 +192,14 @@ static inline u16 evmcs_read16(unsigned long field) { return 0; }
 static inline void evmcs_load(u64 phys_addr) {}
 static inline void evmcs_touch_msr_bitmap(void) {}
 #endif /* IS_ENABLED(CONFIG_HYPERV) */
+
+#define EVMPTR_INVALID (-1ULL)
+#define EVMPTR_MAP_PENDING (-2ULL)
+
+static inline bool evmptr_is_valid(u64 evmptr)
+{
+	return evmptr != EVMPTR_INVALID && evmptr != EVMPTR_MAP_PENDING;
+}
 
 enum nested_evmptrld_status {
 	EVMPTRLD_DISABLED,

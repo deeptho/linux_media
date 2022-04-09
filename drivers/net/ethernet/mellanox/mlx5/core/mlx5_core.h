@@ -97,6 +97,30 @@ do {								\
 			     __func__, __LINE__, current->pid,	\
 			     ##__VA_ARGS__)
 
+static inline void mlx5_printk(struct mlx5_core_dev *dev, int level, const char *format, ...)
+{
+	struct device *device = dev->device;
+	struct va_format vaf;
+	va_list args;
+
+	if (WARN_ONCE(level < LOGLEVEL_EMERG || level > LOGLEVEL_DEBUG,
+		      "Level %d is out of range, set to default level\n", level))
+		level = LOGLEVEL_DEFAULT;
+
+	va_start(args, format);
+	vaf.fmt = format;
+	vaf.va = &args;
+
+	dev_printk_emit(level, device, "%s %s: %pV", dev_driver_string(device), dev_name(device),
+			&vaf);
+	va_end(args);
+}
+
+#define mlx5_log(__dev, level, format, ...)			\
+	mlx5_printk(__dev, level, "%s:%d:(pid %d): " format,	\
+		    __func__, __LINE__, current->pid,		\
+		    ##__VA_ARGS__)
+
 static inline struct device *mlx5_core_dma_dev(struct mlx5_core_dev *dev)
 {
 	return &dev->pdev->dev;
@@ -164,27 +188,12 @@ int mlx5_query_mcam_reg(struct mlx5_core_dev *dev, u32 *mcap, u8 feature_group,
 int mlx5_query_qcam_reg(struct mlx5_core_dev *mdev, u32 *qcam,
 			u8 feature_group, u8 access_reg_group);
 
-void mlx5_lag_add(struct mlx5_core_dev *dev, struct net_device *netdev);
-void mlx5_lag_remove(struct mlx5_core_dev *dev);
-
-int mlx5_irq_table_init(struct mlx5_core_dev *dev);
-void mlx5_irq_table_cleanup(struct mlx5_core_dev *dev);
-int mlx5_irq_table_create(struct mlx5_core_dev *dev);
-void mlx5_irq_table_destroy(struct mlx5_core_dev *dev);
-int mlx5_irq_attach_nb(struct mlx5_irq_table *irq_table, int vecidx,
-		       struct notifier_block *nb);
-int mlx5_irq_detach_nb(struct mlx5_irq_table *irq_table, int vecidx,
-		       struct notifier_block *nb);
-
-int mlx5_set_msix_vec_count(struct mlx5_core_dev *dev, int devfn,
-			    int msix_vec_count);
-int mlx5_get_default_msix_vec_count(struct mlx5_core_dev *dev, int num_vfs);
-
-struct cpumask *
-mlx5_irq_get_affinity_mask(struct mlx5_irq_table *irq_table, int vecidx);
-struct cpu_rmap *mlx5_irq_get_rmap(struct mlx5_irq_table *table);
-int mlx5_irq_get_num_comp(struct mlx5_irq_table *table);
-struct mlx5_irq_table *mlx5_irq_table_get(struct mlx5_core_dev *dev);
+void mlx5_lag_add_netdev(struct mlx5_core_dev *dev, struct net_device *netdev);
+void mlx5_lag_remove_netdev(struct mlx5_core_dev *dev, struct net_device *netdev);
+void mlx5_lag_add_mdev(struct mlx5_core_dev *dev);
+void mlx5_lag_remove_mdev(struct mlx5_core_dev *dev);
+void mlx5_lag_disable_change(struct mlx5_core_dev *dev);
+void mlx5_lag_enable_change(struct mlx5_core_dev *dev);
 
 int mlx5_events_init(struct mlx5_core_dev *dev);
 void mlx5_events_cleanup(struct mlx5_core_dev *dev);
@@ -223,8 +232,13 @@ int mlx5_firmware_flash(struct mlx5_core_dev *dev, const struct firmware *fw,
 int mlx5_fw_version_query(struct mlx5_core_dev *dev,
 			  u32 *running_ver, u32 *stored_ver);
 
+#ifdef CONFIG_MLX5_CORE_EN
 int mlx5e_init(void);
 void mlx5e_cleanup(void);
+#else
+static inline int mlx5e_init(void){ return 0; }
+static inline void mlx5e_cleanup(void){}
+#endif
 
 static inline bool mlx5_sriov_is_enabled(struct mlx5_core_dev *dev)
 {
@@ -287,4 +301,9 @@ static inline u32 mlx5_sriov_get_vf_total_msix(struct pci_dev *pdev)
 
 	return MLX5_CAP_GEN_MAX(dev, num_total_dynamic_vf_msix);
 }
+
+bool mlx5_eth_supported(struct mlx5_core_dev *dev);
+bool mlx5_rdma_supported(struct mlx5_core_dev *dev);
+bool mlx5_vnet_supported(struct mlx5_core_dev *dev);
+
 #endif /* __MLX5_CORE_H__ */

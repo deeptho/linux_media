@@ -277,9 +277,17 @@ static int rpc_wait_bit_killable(struct wait_bit_key *key, int mode)
 #if IS_ENABLED(CONFIG_SUNRPC_DEBUG) || IS_ENABLED(CONFIG_TRACEPOINTS)
 static void rpc_task_set_debuginfo(struct rpc_task *task)
 {
-	static atomic_t rpc_pid;
+	struct rpc_clnt *clnt = task->tk_client;
 
-	task->tk_pid = atomic_inc_return(&rpc_pid);
+	/* Might be a task carrying a reverse-direction operation */
+	if (!clnt) {
+		static atomic_t rpc_pid;
+
+		task->tk_pid = atomic_inc_return(&rpc_pid);
+		return;
+	}
+
+	task->tk_pid = atomic_inc_return(&clnt->cl_pid);
 }
 #else
 static inline void rpc_task_set_debuginfo(struct rpc_task *task)
@@ -592,10 +600,20 @@ static struct rpc_task *__rpc_find_next_queued_priority(struct rpc_wait_queue *q
 	struct rpc_task *task;
 
 	/*
+	 * Service the privileged queue.
+	 */
+	q = &queue->tasks[RPC_NR_PRIORITY - 1];
+	if (queue->maxpriority > RPC_PRIORITY_PRIVILEGED && !list_empty(q)) {
+		task = list_first_entry(q, struct rpc_task, u.tk_wait.list);
+		goto out;
+	}
+
+	/*
 	 * Service a batch of tasks from a single owner.
 	 */
 	q = &queue->tasks[queue->priority];
-	if (!list_empty(q) && --queue->nr) {
+	if (!list_empty(q) && queue->nr) {
+		queue->nr--;
 		task = list_first_entry(q, struct rpc_task, u.tk_wait.list);
 		goto out;
 	}
@@ -819,6 +837,7 @@ void rpc_exit_task(struct rpc_task *task)
 	else if (task->tk_client)
 		rpc_count_iostats(task, task->tk_client->cl_metrics);
 	if (task->tk_ops->rpc_call_done != NULL) {
+		trace_rpc_task_call_done(task, task->tk_ops->rpc_call_done);
 		task->tk_ops->rpc_call_done(task, task->tk_calldata);
 		if (task->tk_action != NULL) {
 			/* Always release the RPC slot and buffer memory */
@@ -893,8 +912,10 @@ static void __rpc_execute(struct rpc_task *task)
 		/*
 		 * Lockless check for whether task is sleeping or not.
 		 */
-		if (!RPC_IS_QUEUED(task))
+		if (!RPC_IS_QUEUED(task)) {
+			cond_resched();
 			continue;
+		}
 
 		/*
 		 * Signalled tasks should exit rather than sleep.
@@ -1220,8 +1241,7 @@ static int rpciod_start(void)
 	if (!wq)
 		goto out_failed;
 	rpciod_workqueue = wq;
-	/* Note: highpri because network receive is latency sensitive */
-	wq = alloc_workqueue("xprtiod", WQ_UNBOUND|WQ_MEM_RECLAIM|WQ_HIGHPRI, 0);
+	wq = alloc_workqueue("xprtiod", WQ_UNBOUND | WQ_MEM_RECLAIM, 0);
 	if (!wq)
 		goto free_rpciod;
 	xprtiod_workqueue = wq;

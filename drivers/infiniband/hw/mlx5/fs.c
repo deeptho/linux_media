@@ -10,12 +10,14 @@
 #include <rdma/uverbs_std_types.h>
 #include <rdma/mlx5_user_ioctl_cmds.h>
 #include <rdma/mlx5_user_ioctl_verbs.h>
+#include <rdma/ib_hdrs.h>
 #include <rdma/ib_umem.h>
 #include <linux/mlx5/driver.h>
 #include <linux/mlx5/fs.h>
 #include <linux/mlx5/fs_helpers.h>
 #include <linux/mlx5/accel.h>
 #include <linux/mlx5/eswitch.h>
+#include <net/inet_ecn.h>
 #include "mlx5_ib.h"
 #include "counters.h"
 #include "devx.h"
@@ -847,6 +849,191 @@ static struct mlx5_ib_flow_prio *get_flow_table(struct mlx5_ib_dev *dev,
 	return prio;
 }
 
+enum {
+	RDMA_RX_ECN_OPCOUNTER_PRIO,
+	RDMA_RX_CNP_OPCOUNTER_PRIO,
+};
+
+enum {
+	RDMA_TX_CNP_OPCOUNTER_PRIO,
+};
+
+static int set_vhca_port_spec(struct mlx5_ib_dev *dev, u32 port_num,
+			      struct mlx5_flow_spec *spec)
+{
+	if (!MLX5_CAP_FLOWTABLE_RDMA_RX(dev->mdev,
+					ft_field_support.source_vhca_port) ||
+	    !MLX5_CAP_FLOWTABLE_RDMA_TX(dev->mdev,
+					ft_field_support.source_vhca_port))
+		return -EOPNOTSUPP;
+
+	MLX5_SET_TO_ONES(fte_match_param, &spec->match_criteria,
+			 misc_parameters.source_vhca_port);
+	MLX5_SET(fte_match_param, &spec->match_value,
+		 misc_parameters.source_vhca_port, port_num);
+
+	return 0;
+}
+
+static int set_ecn_ce_spec(struct mlx5_ib_dev *dev, u32 port_num,
+			   struct mlx5_flow_spec *spec, int ipv)
+{
+	if (!MLX5_CAP_FLOWTABLE_RDMA_RX(dev->mdev,
+					ft_field_support.outer_ip_version))
+		return -EOPNOTSUPP;
+
+	if (mlx5_core_mp_enabled(dev->mdev) &&
+	    set_vhca_port_spec(dev, port_num, spec))
+		return -EOPNOTSUPP;
+
+	MLX5_SET_TO_ONES(fte_match_param, spec->match_criteria,
+			 outer_headers.ip_ecn);
+	MLX5_SET(fte_match_param, spec->match_value, outer_headers.ip_ecn,
+		 INET_ECN_CE);
+	MLX5_SET_TO_ONES(fte_match_param, spec->match_criteria,
+			 outer_headers.ip_version);
+	MLX5_SET(fte_match_param, spec->match_value, outer_headers.ip_version,
+		 ipv);
+
+	spec->match_criteria_enable =
+		get_match_criteria_enable(spec->match_criteria);
+
+	return 0;
+}
+
+static int set_cnp_spec(struct mlx5_ib_dev *dev, u32 port_num,
+			struct mlx5_flow_spec *spec)
+{
+	if (mlx5_core_mp_enabled(dev->mdev) &&
+	    set_vhca_port_spec(dev, port_num, spec))
+		return -EOPNOTSUPP;
+
+	MLX5_SET_TO_ONES(fte_match_param, spec->match_criteria,
+			 misc_parameters.bth_opcode);
+	MLX5_SET(fte_match_param, spec->match_value, misc_parameters.bth_opcode,
+		 IB_BTH_OPCODE_CNP);
+
+	spec->match_criteria_enable =
+		get_match_criteria_enable(spec->match_criteria);
+
+	return 0;
+}
+
+int mlx5_ib_fs_add_op_fc(struct mlx5_ib_dev *dev, u32 port_num,
+			 struct mlx5_ib_op_fc *opfc,
+			 enum mlx5_ib_optional_counter_type type)
+{
+	enum mlx5_flow_namespace_type fn_type;
+	int priority, i, err, spec_num;
+	struct mlx5_flow_act flow_act = {};
+	struct mlx5_flow_destination dst;
+	struct mlx5_flow_namespace *ns;
+	struct mlx5_ib_flow_prio *prio;
+	struct mlx5_flow_spec *spec;
+
+	spec = kcalloc(MAX_OPFC_RULES, sizeof(*spec), GFP_KERNEL);
+	if (!spec)
+		return -ENOMEM;
+
+	switch (type) {
+	case MLX5_IB_OPCOUNTER_CC_RX_CE_PKTS:
+		if (set_ecn_ce_spec(dev, port_num, &spec[0],
+				    MLX5_FS_IPV4_VERSION) ||
+		    set_ecn_ce_spec(dev, port_num, &spec[1],
+				    MLX5_FS_IPV6_VERSION)) {
+			err = -EOPNOTSUPP;
+			goto free;
+		}
+		spec_num = 2;
+		fn_type = MLX5_FLOW_NAMESPACE_RDMA_RX_COUNTERS;
+		priority = RDMA_RX_ECN_OPCOUNTER_PRIO;
+		break;
+
+	case MLX5_IB_OPCOUNTER_CC_RX_CNP_PKTS:
+		if (!MLX5_CAP_FLOWTABLE(dev->mdev,
+					ft_field_support_2_nic_receive_rdma.bth_opcode) ||
+		    set_cnp_spec(dev, port_num, &spec[0])) {
+			err = -EOPNOTSUPP;
+			goto free;
+		}
+		spec_num = 1;
+		fn_type = MLX5_FLOW_NAMESPACE_RDMA_RX_COUNTERS;
+		priority = RDMA_RX_CNP_OPCOUNTER_PRIO;
+		break;
+
+	case MLX5_IB_OPCOUNTER_CC_TX_CNP_PKTS:
+		if (!MLX5_CAP_FLOWTABLE(dev->mdev,
+					ft_field_support_2_nic_transmit_rdma.bth_opcode) ||
+		    set_cnp_spec(dev, port_num, &spec[0])) {
+			err = -EOPNOTSUPP;
+			goto free;
+		}
+		spec_num = 1;
+		fn_type = MLX5_FLOW_NAMESPACE_RDMA_TX_COUNTERS;
+		priority = RDMA_TX_CNP_OPCOUNTER_PRIO;
+		break;
+
+	default:
+		err = -EOPNOTSUPP;
+		goto free;
+	}
+
+	ns = mlx5_get_flow_namespace(dev->mdev, fn_type);
+	if (!ns) {
+		err = -EOPNOTSUPP;
+		goto free;
+	}
+
+	prio = &dev->flow_db->opfcs[type];
+	if (!prio->flow_table) {
+		prio = _get_prio(ns, prio, priority,
+				 dev->num_ports * MAX_OPFC_RULES, 1, 0);
+		if (IS_ERR(prio)) {
+			err = PTR_ERR(prio);
+			goto free;
+		}
+	}
+
+	dst.type = MLX5_FLOW_DESTINATION_TYPE_COUNTER;
+	dst.counter_id = mlx5_fc_id(opfc->fc);
+
+	flow_act.action =
+		MLX5_FLOW_CONTEXT_ACTION_COUNT | MLX5_FLOW_CONTEXT_ACTION_ALLOW;
+
+	for (i = 0; i < spec_num; i++) {
+		opfc->rule[i] = mlx5_add_flow_rules(prio->flow_table, &spec[i],
+						    &flow_act, &dst, 1);
+		if (IS_ERR(opfc->rule[i])) {
+			err = PTR_ERR(opfc->rule[i]);
+			goto del_rules;
+		}
+	}
+	prio->refcount += spec_num;
+	kfree(spec);
+
+	return 0;
+
+del_rules:
+	for (i -= 1; i >= 0; i--)
+		mlx5_del_flow_rules(opfc->rule[i]);
+	put_flow_table(dev, prio, false);
+free:
+	kfree(spec);
+	return err;
+}
+
+void mlx5_ib_fs_remove_op_fc(struct mlx5_ib_dev *dev,
+			     struct mlx5_ib_op_fc *opfc,
+			     enum mlx5_ib_optional_counter_type type)
+{
+	int i;
+
+	for (i = 0; i < MAX_OPFC_RULES && opfc->rule[i]; i++) {
+		mlx5_del_flow_rules(opfc->rule[i]);
+		put_flow_table(dev, &dev->flow_db->opfcs[type], true);
+	}
+}
+
 static void set_underlay_qp(struct mlx5_ib_dev *dev,
 			    struct mlx5_flow_spec *spec,
 			    u32 underlay_qpn)
@@ -1194,9 +1381,8 @@ static struct ib_flow *mlx5_ib_create_flow(struct ib_qp *qp,
 		goto free_ucmd;
 	}
 
-	if (flow_attr->port > dev->num_ports ||
-	    (flow_attr->flags &
-	     ~(IB_FLOW_ATTR_FLAGS_DONT_TRAP | IB_FLOW_ATTR_FLAGS_EGRESS))) {
+	if (flow_attr->flags &
+	    ~(IB_FLOW_ATTR_FLAGS_DONT_TRAP | IB_FLOW_ATTR_FLAGS_EGRESS)) {
 		err = -EINVAL;
 		goto free_ucmd;
 	}
@@ -2134,6 +2320,12 @@ static int UVERBS_HANDLER(MLX5_IB_METHOD_FLOW_MATCHER_CREATE)(
 	if (err)
 		goto end;
 
+	if (obj->ns_type == MLX5_FLOW_NAMESPACE_FDB &&
+	    mlx5_eswitch_mode(dev->mdev) != MLX5_ESWITCH_OFFLOADS) {
+		err = -EINVAL;
+		goto end;
+	}
+
 	uobj->object = obj;
 	obj->mdev = dev->mdev;
 	atomic_set(&obj->usecnt, 0);
@@ -2280,6 +2472,7 @@ static int mlx5_ib_flow_action_create_packet_reformat_ctx(
 	u8 ft_type, u8 dv_prt,
 	void *in, size_t len)
 {
+	struct mlx5_pkt_reformat_params reformat_params;
 	enum mlx5_flow_namespace_type namespace;
 	u8 prm_prt;
 	int ret;
@@ -2292,9 +2485,13 @@ static int mlx5_ib_flow_action_create_packet_reformat_ctx(
 	if (ret)
 		return ret;
 
+	memset(&reformat_params, 0, sizeof(reformat_params));
+	reformat_params.type = prm_prt;
+	reformat_params.size = len;
+	reformat_params.data = in;
 	maction->flow_action_raw.pkt_reformat =
-		mlx5_packet_reformat_alloc(dev->mdev, prm_prt, len,
-					   in, namespace);
+		mlx5_packet_reformat_alloc(dev->mdev, &reformat_params,
+					   namespace);
 	if (IS_ERR(maction->flow_action_raw.pkt_reformat)) {
 		ret = PTR_ERR(maction->flow_action_raw.pkt_reformat);
 		return ret;

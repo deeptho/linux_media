@@ -61,10 +61,10 @@
 #include <linux/hdreg.h>
 #include <linux/delay.h>
 #include <linux/init.h>
+#include <linux/major.h>
 #include <linux/mutex.h>
 #include <linux/fs.h>
 #include <linux/blk-mq.h>
-#include <linux/elevator.h>
 #include <linux/interrupt.h>
 #include <linux/platform_device.h>
 
@@ -1780,16 +1780,15 @@ static const struct blk_mq_ops amiflop_mq_ops = {
 static int fd_alloc_disk(int drive, int system)
 {
 	struct gendisk *disk;
+	int err;
 
-	disk = alloc_disk(1);
-	if (!disk)
-		goto out;
-	disk->queue = blk_mq_init_queue(&unit[drive].tag_set);
-	if (IS_ERR(disk->queue))
-		goto out_put_disk;
+	disk = blk_mq_alloc_disk(&unit[drive].tag_set, NULL);
+	if (IS_ERR(disk))
+		return PTR_ERR(disk);
 
 	disk->major = FLOPPY_MAJOR;
 	disk->first_minor = drive + system;
+	disk->minors = 1;
 	disk->fops = &floppy_fops;
 	disk->events = DISK_EVENT_MEDIA_CHANGE;
 	if (system)
@@ -1800,14 +1799,10 @@ static int fd_alloc_disk(int drive, int system)
 	set_capacity(disk, 880 * 2);
 
 	unit[drive].gendisk[system] = disk;
-	add_disk(disk);
-	return 0;
-
-out_put_disk:
-	disk->queue = NULL;
-	put_disk(disk);
-out:
-	return -ENOMEM;
+	err = add_disk(disk);
+	if (err)
+		blk_cleanup_disk(disk);
+	return err;
 }
 
 static int fd_alloc_drive(int drive)

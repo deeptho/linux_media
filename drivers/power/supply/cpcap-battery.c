@@ -667,10 +667,23 @@ static int cpcap_battery_get_property(struct power_supply *psy,
 		if (!empty->voltage)
 			return -ENODATA;
 		val->intval = empty->counter_uah - latest->counter_uah;
-		if (val->intval < 0)
+		if (val->intval < 0) {
+			/* Assume invalid config if CHARGE_NOW is -20% */
+			if (ddata->charge_full && abs(val->intval) > ddata->charge_full/5) {
+				empty->voltage = 0;
+				ddata->charge_full = 0;
+				return -ENODATA;
+			}
 			val->intval = 0;
-		else if (ddata->charge_full && ddata->charge_full < val->intval)
+		} else if (ddata->charge_full && ddata->charge_full < val->intval) {
+			/* Assume invalid config if CHARGE_NOW exceeds CHARGE_FULL by 20% */
+			if (val->intval > (6*ddata->charge_full)/5) {
+				empty->voltage = 0;
+				ddata->charge_full = 0;
+				return -ENODATA;
+			}
 			val->intval = ddata->charge_full;
+		}
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_FULL:
 		if (!ddata->charge_full)
@@ -747,7 +760,7 @@ static int cpcap_battery_set_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CHARGE_FULL:
 		if (val->intval < 0)
 			return -EINVAL;
-		if (val->intval > ddata->config.info.charge_full_design)
+		if (val->intval > (6*ddata->config.info.charge_full_design)/5)
 			return -EINVAL;
 
 		ddata->charge_full = val->intval;
@@ -1013,20 +1026,13 @@ static const struct power_supply_desc cpcap_charger_battery_desc = {
 static int cpcap_battery_probe(struct platform_device *pdev)
 {
 	struct cpcap_battery_ddata *ddata;
-	const struct of_device_id *match;
 	struct power_supply_config psy_cfg = {};
 	int error;
+	const struct cpcap_battery_config *cfg;
 
-	match = of_match_device(of_match_ptr(cpcap_battery_id_table),
-				&pdev->dev);
-	if (!match)
-		return -EINVAL;
-
-	if (!match->data) {
-		dev_err(&pdev->dev, "no configuration data found\n");
-
+	cfg = device_get_match_data(&pdev->dev);
+	if (!cfg)
 		return -ENODEV;
-	}
 
 	ddata = devm_kzalloc(&pdev->dev, sizeof(*ddata), GFP_KERNEL);
 	if (!ddata)
@@ -1034,7 +1040,7 @@ static int cpcap_battery_probe(struct platform_device *pdev)
 
 	INIT_LIST_HEAD(&ddata->irq_list);
 	ddata->dev = &pdev->dev;
-	memcpy(&ddata->config, match->data, sizeof(ddata->config));
+	memcpy(&ddata->config, cfg, sizeof(ddata->config));
 
 	ddata->reg = dev_get_regmap(ddata->dev->parent, NULL);
 	if (!ddata->reg)

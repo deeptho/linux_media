@@ -36,10 +36,12 @@
 
 #define QCA6390_DEVICE_ID		0x1101
 #define QCN9074_DEVICE_ID		0x1104
+#define WCN6855_DEVICE_ID		0x1103
 
 static const struct pci_device_id ath11k_pci_id_table[] = {
 	{ PCI_VDEVICE(QCOM, QCA6390_DEVICE_ID) },
-	/* TODO: add QCN9074_DEVICE_ID) once firmware issues are resolved */
+	{ PCI_VDEVICE(QCOM, WCN6855_DEVICE_ID) },
+	{ PCI_VDEVICE(QCOM, QCN9074_DEVICE_ID) },
 	{0}
 };
 
@@ -428,17 +430,20 @@ static void ath11k_pci_force_wake(struct ath11k_base *ab)
 
 static void ath11k_pci_sw_reset(struct ath11k_base *ab, bool power_on)
 {
+	mdelay(100);
+
 	if (power_on) {
 		ath11k_pci_enable_ltssm(ab);
 		ath11k_pci_clear_all_intrs(ab);
 		ath11k_pci_set_wlaon_pwr_ctrl(ab);
-		ath11k_pci_fix_l1ss(ab);
+		if (ab->hw_params.fix_l1ss)
+			ath11k_pci_fix_l1ss(ab);
 	}
 
 	ath11k_mhi_clear_vector(ab);
+	ath11k_pci_clear_dbg_registers(ab);
 	ath11k_pci_soc_global_reset(ab);
 	ath11k_mhi_set_mhictrl_reset(ab);
-	ath11k_pci_clear_dbg_registers(ab);
 }
 
 int ath11k_pci_get_msi_irq(struct device *dev, unsigned int vector)
@@ -850,7 +855,32 @@ static void ath11k_pci_ce_irqs_enable(struct ath11k_base *ab)
 	}
 }
 
-static int ath11k_pci_enable_msi(struct ath11k_pci *ab_pci)
+static void ath11k_pci_msi_config(struct ath11k_pci *ab_pci, bool enable)
+{
+	struct pci_dev *dev = ab_pci->pdev;
+	u16 control;
+
+	pci_read_config_word(dev, dev->msi_cap + PCI_MSI_FLAGS, &control);
+
+	if (enable)
+		control |= PCI_MSI_FLAGS_ENABLE;
+	else
+		control &= ~PCI_MSI_FLAGS_ENABLE;
+
+	pci_write_config_word(dev, dev->msi_cap + PCI_MSI_FLAGS, control);
+}
+
+static void ath11k_pci_msi_enable(struct ath11k_pci *ab_pci)
+{
+	ath11k_pci_msi_config(ab_pci, true);
+}
+
+static void ath11k_pci_msi_disable(struct ath11k_pci *ab_pci)
+{
+	ath11k_pci_msi_config(ab_pci, false);
+}
+
+static int ath11k_pci_alloc_msi(struct ath11k_pci *ab_pci)
 {
 	struct ath11k_base *ab = ab_pci->ab;
 	const struct ath11k_msi_config *msi_config = ab_pci->msi_config;
@@ -871,6 +901,7 @@ static int ath11k_pci_enable_msi(struct ath11k_pci *ab_pci)
 		else
 			return num_vectors;
 	}
+	ath11k_pci_msi_disable(ab_pci);
 
 	msi_desc = irq_get_msi_desc(ab_pci->pdev->irq);
 	if (!msi_desc) {
@@ -893,7 +924,7 @@ free_msi_vector:
 	return ret;
 }
 
-static void ath11k_pci_disable_msi(struct ath11k_pci *ab_pci)
+static void ath11k_pci_free_msi(struct ath11k_pci *ab_pci)
 {
 	pci_free_irq_vectors(ab_pci->pdev);
 }
@@ -930,16 +961,10 @@ static int ath11k_pci_claim(struct ath11k_pci *ab_pci, struct pci_dev *pdev)
 		goto disable_device;
 	}
 
-	ret = pci_set_dma_mask(pdev, DMA_BIT_MASK(ATH11K_PCI_DMA_MASK));
+	ret = dma_set_mask_and_coherent(&pdev->dev,
+					DMA_BIT_MASK(ATH11K_PCI_DMA_MASK));
 	if (ret) {
 		ath11k_err(ab, "failed to set pci dma mask to %d: %d\n",
-			   ATH11K_PCI_DMA_MASK, ret);
-		goto release_region;
-	}
-
-	ret = pci_set_consistent_dma_mask(pdev, DMA_BIT_MASK(ATH11K_PCI_DMA_MASK));
-	if (ret) {
-		ath11k_err(ab, "failed to set pci consistent dma mask to %d: %d\n",
 			   ATH11K_PCI_DMA_MASK, ret);
 		goto release_region;
 	}
@@ -1020,6 +1045,8 @@ static int ath11k_pci_power_up(struct ath11k_base *ab)
 	 */
 	ath11k_pci_aspm_disable(ab_pci);
 
+	ath11k_pci_msi_enable(ab_pci);
+
 	ret = ath11k_mhi_start(ab_pci);
 	if (ret) {
 		ath11k_err(ab, "failed to start mhi: %d\n", ret);
@@ -1040,6 +1067,9 @@ static void ath11k_pci_power_down(struct ath11k_base *ab)
 	ath11k_pci_aspm_restore(ab_pci);
 
 	ath11k_pci_force_wake(ab_pci->ab);
+
+	ath11k_pci_msi_disable(ab_pci);
+
 	ath11k_mhi_stop(ab_pci);
 	clear_bit(ATH11K_PCI_FLAG_INIT_DONE, &ab_pci->flags);
 	ath11k_pci_sw_reset(ab_pci->ab, false);
@@ -1176,12 +1206,26 @@ static const struct ath11k_hif_ops ath11k_pci_hif_ops = {
 	.get_ce_msi_idx = ath11k_pci_get_ce_msi_idx,
 };
 
+static void ath11k_pci_read_hw_version(struct ath11k_base *ab, u32 *major, u32 *minor)
+{
+	u32 soc_hw_version;
+
+	soc_hw_version = ath11k_pci_read32(ab, TCSR_SOC_HW_VERSION);
+	*major = FIELD_GET(TCSR_SOC_HW_VERSION_MAJOR_MASK,
+			   soc_hw_version);
+	*minor = FIELD_GET(TCSR_SOC_HW_VERSION_MINOR_MASK,
+			   soc_hw_version);
+
+	ath11k_dbg(ab, ATH11K_DBG_PCI, "pci tcsr_soc_hw_version major %d minor %d\n",
+		   *major, *minor);
+}
+
 static int ath11k_pci_probe(struct pci_dev *pdev,
 			    const struct pci_device_id *pci_dev)
 {
 	struct ath11k_base *ab;
 	struct ath11k_pci *ab_pci;
-	u32 soc_hw_version, soc_hw_version_major, soc_hw_version_minor;
+	u32 soc_hw_version_major, soc_hw_version_minor;
 	int ret;
 
 	ab = ath11k_core_alloc(&pdev->dev, sizeof(*ab_pci), ATH11K_BUS_PCI,
@@ -1209,15 +1253,8 @@ static int ath11k_pci_probe(struct pci_dev *pdev,
 
 	switch (pci_dev->device) {
 	case QCA6390_DEVICE_ID:
-		soc_hw_version = ath11k_pci_read32(ab, TCSR_SOC_HW_VERSION);
-		soc_hw_version_major = FIELD_GET(TCSR_SOC_HW_VERSION_MAJOR_MASK,
-						 soc_hw_version);
-		soc_hw_version_minor = FIELD_GET(TCSR_SOC_HW_VERSION_MINOR_MASK,
-						 soc_hw_version);
-
-		ath11k_dbg(ab, ATH11K_DBG_PCI, "pci tcsr_soc_hw_version major %d minor %d\n",
-			   soc_hw_version_major, soc_hw_version_minor);
-
+		ath11k_pci_read_hw_version(ab, &soc_hw_version_major,
+					   &soc_hw_version_minor);
 		switch (soc_hw_version_major) {
 		case 2:
 			ab->hw_rev = ATH11K_HW_QCA6390_HW20;
@@ -1235,6 +1272,21 @@ static int ath11k_pci_probe(struct pci_dev *pdev,
 		ab->bus_params.static_window_map = true;
 		ab->hw_rev = ATH11K_HW_QCN9074_HW10;
 		break;
+	case WCN6855_DEVICE_ID:
+		ath11k_pci_read_hw_version(ab, &soc_hw_version_major,
+					   &soc_hw_version_minor);
+		switch (soc_hw_version_major) {
+		case 2:
+			ab->hw_rev = ATH11K_HW_WCN6855_HW20;
+			break;
+		default:
+			dev_err(&pdev->dev, "Unsupported WCN6855 SOC hardware version: %d %d\n",
+				soc_hw_version_major, soc_hw_version_minor);
+			ret = -EOPNOTSUPP;
+			goto err_pci_free_region;
+		}
+		ab_pci->msi_config = &ath11k_msi_config[0];
+		break;
 	default:
 		dev_err(&pdev->dev, "Unknown PCI device found: 0x%x\n",
 			pci_dev->device);
@@ -1242,7 +1294,7 @@ static int ath11k_pci_probe(struct pci_dev *pdev,
 		goto err_pci_free_region;
 	}
 
-	ret = ath11k_pci_enable_msi(ab_pci);
+	ret = ath11k_pci_alloc_msi(ab_pci);
 	if (ret) {
 		ath11k_err(ab, "failed to enable msi: %d\n", ret);
 		goto err_pci_free_region;
@@ -1296,7 +1348,7 @@ err_mhi_unregister:
 	ath11k_mhi_unregister(ab_pci);
 
 err_pci_disable_msi:
-	ath11k_pci_disable_msi(ab_pci);
+	ath11k_pci_free_msi(ab_pci);
 
 err_pci_free_region:
 	ath11k_pci_free_region(ab_pci);
@@ -1327,7 +1379,7 @@ qmi_fail:
 	ath11k_mhi_unregister(ab_pci);
 
 	ath11k_pci_free_irq(ab);
-	ath11k_pci_disable_msi(ab_pci);
+	ath11k_pci_free_msi(ab_pci);
 	ath11k_pci_free_region(ab_pci);
 
 	ath11k_hal_srng_deinit(ab);

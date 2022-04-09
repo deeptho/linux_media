@@ -123,11 +123,9 @@ static int isc_clk_prepare(struct clk_hw *hw)
 	struct isc_clk *isc_clk = to_isc_clk(hw);
 	int ret;
 
-	if (isc_clk->id == ISC_ISPCK) {
-		ret = pm_runtime_resume_and_get(isc_clk->dev);
-		if (ret < 0)
-			return ret;
-	}
+	ret = pm_runtime_resume_and_get(isc_clk->dev);
+	if (ret < 0)
+		return ret;
 
 	return isc_wait_clk_stable(hw);
 }
@@ -138,8 +136,7 @@ static void isc_clk_unprepare(struct clk_hw *hw)
 
 	isc_wait_clk_stable(hw);
 
-	if (isc_clk->id == ISC_ISPCK)
-		pm_runtime_put_sync(isc_clk->dev);
+	pm_runtime_put_sync(isc_clk->dev);
 }
 
 static int isc_clk_enable(struct clk_hw *hw)
@@ -186,16 +183,13 @@ static int isc_clk_is_enabled(struct clk_hw *hw)
 	u32 status;
 	int ret;
 
-	if (isc_clk->id == ISC_ISPCK) {
-		ret = pm_runtime_resume_and_get(isc_clk->dev);
-		if (ret < 0)
-			return 0;
-	}
+	ret = pm_runtime_resume_and_get(isc_clk->dev);
+	if (ret < 0)
+		return 0;
 
 	regmap_read(isc_clk->regmap, ISC_CLKSR, &status);
 
-	if (isc_clk->id == ISC_ISPCK)
-		pm_runtime_put_sync(isc_clk->dev);
+	pm_runtime_put_sync(isc_clk->dev);
 
 	return status & ISC_CLK(isc_clk->id) ? 1 : 0;
 }
@@ -325,6 +319,9 @@ static int isc_clk_register(struct isc_device *isc, unsigned int id)
 	const char *parent_names[3];
 	int num_parents;
 
+	if (id == ISC_ISPCK && !isc->ispck_required)
+		return 0;
+
 	num_parents = of_clk_get_parent_count(np);
 	if (num_parents < 1 || num_parents > 3)
 		return -EINVAL;
@@ -378,6 +375,7 @@ int isc_clk_init(struct isc_device *isc)
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(isc_clk_init);
 
 void isc_clk_cleanup(struct isc_device *isc)
 {
@@ -392,6 +390,7 @@ void isc_clk_cleanup(struct isc_device *isc)
 			clk_unregister(isc_clk->clk);
 	}
 }
+EXPORT_SYMBOL_GPL(isc_clk_cleanup);
 
 static int isc_queue_setup(struct vb2_queue *vq,
 			    unsigned int *nbuffers, unsigned int *nplanes,
@@ -1578,6 +1577,7 @@ irqreturn_t isc_interrupt(int irq, void *dev_id)
 
 	return ret;
 }
+EXPORT_SYMBOL_GPL(isc_interrupt);
 
 static void isc_hist_count(struct isc_device *isc, u32 *min, u32 *max)
 {
@@ -2212,18 +2212,20 @@ const struct v4l2_async_notifier_operations isc_async_ops = {
 	.unbind = isc_async_unbind,
 	.complete = isc_async_complete,
 };
+EXPORT_SYMBOL_GPL(isc_async_ops);
 
 void isc_subdev_cleanup(struct isc_device *isc)
 {
 	struct isc_subdev_entity *subdev_entity;
 
 	list_for_each_entry(subdev_entity, &isc->subdev_entities, list) {
-		v4l2_async_notifier_unregister(&subdev_entity->notifier);
-		v4l2_async_notifier_cleanup(&subdev_entity->notifier);
+		v4l2_async_nf_unregister(&subdev_entity->notifier);
+		v4l2_async_nf_cleanup(&subdev_entity->notifier);
 	}
 
 	INIT_LIST_HEAD(&isc->subdev_entities);
 }
+EXPORT_SYMBOL_GPL(isc_subdev_cleanup);
 
 int isc_pipeline_init(struct isc_device *isc)
 {
@@ -2264,6 +2266,7 @@ int isc_pipeline_init(struct isc_device *isc)
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(isc_pipeline_init);
 
 /* regmap configuration */
 #define ATMEL_ISC_REG_MAX    0xd5c
@@ -2273,4 +2276,9 @@ const struct regmap_config isc_regmap_config = {
 	.val_bits       = 32,
 	.max_register	= ATMEL_ISC_REG_MAX,
 };
+EXPORT_SYMBOL_GPL(isc_regmap_config);
 
+MODULE_AUTHOR("Songjun Wu");
+MODULE_AUTHOR("Eugen Hristev");
+MODULE_DESCRIPTION("Atmel ISC common code base");
+MODULE_LICENSE("GPL v2");

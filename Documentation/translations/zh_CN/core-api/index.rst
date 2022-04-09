@@ -1,10 +1,12 @@
 .. include:: ../disclaimer-zh_CN.rst
 
-:Original: :doc:`../../../core-api/irq/index`
-:Translator: Yanteng Si <siyanteng@loongson.cn>
+:Original: Documentation/core-api/index.rst
+
+:翻译:
+
+ 司延腾 Yanteng Si <siyanteng@loongson.cn>
 
 .. _cn_core-api_index.rst:
-
 
 ===========
 核心API文档
@@ -19,12 +21,13 @@
 来的大量 kerneldoc 信息；有朝一日，若有人有动力的话，应当把它们拆分
 出来。
 
-Todolist:
+.. toctree::
+   :maxdepth: 1
 
    kernel-api
-   workqueue
    printk-basics
    printk-formats
+   workqueue
    symbol-namespaces
 
 数据结构和低级实用程序
@@ -32,12 +35,18 @@ Todolist:
 
 在整个内核中使用的函数库。
 
-Todolist:
+.. toctree::
+   :maxdepth: 1
 
    kobject
    kref
    assoc_array
    xarray
+
+Todolist:
+
+
+
    idr
    circular-buffers
    rbtree
@@ -58,12 +67,12 @@ Linux如何让一切同时发生。 详情请参阅
    :maxdepth: 1
 
    irq/index
-
-Todolist:
-
    refcount-vs-atomic
    local_ops
    padata
+
+Todolist:
+
    ../RCU/index
 
 低级硬件管理
@@ -71,13 +80,21 @@ Todolist:
 
 缓存管理，CPU热插拔管理等。
 
-Todolist:
+.. toctree::
+   :maxdepth: 1
 
    cachetlb
    cpu_hotplug
-   memory-hotplug
    genericirq
+   memory-hotplug
    protection-keys
+
+Todolist:
+
+
+   memory-hotplug
+   cpu_hotplug
+   genericirq
 
 
 内存管理
@@ -86,19 +103,23 @@ Todolist:
 如何在内核中分配和使用内存。请注意，在
 :doc:`/vm/index` 中有更多的内存管理文档。
 
-Todolist:
+.. toctree::
+   :maxdepth: 1
 
    memory-allocation
    unaligned-memory-access
+   mm-api
+   genalloc
+   boot-time-mm
+   gfp_mask-from-fs-io
+
+Todolist:
+
    dma-api
    dma-api-howto
    dma-attributes
    dma-isa-lpc
-   mm-api
-   genalloc
    pin_user_pages
-   boot-time-mm
-   gfp_mask-from-fs-io
 
 内核调试的接口
 ==============

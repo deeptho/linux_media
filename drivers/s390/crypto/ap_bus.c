@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0+
 /*
- * Copyright IBM Corp. 2006, 2020
+ * Copyright IBM Corp. 2006, 2021
  * Author(s): Cornelia Huck <cornelia.huck@de.ibm.com>
  *	      Martin Schwidefsky <schwidefsky@de.ibm.com>
  *	      Ralph Wuerthner <rwuerthn@de.ibm.com>
@@ -61,6 +61,13 @@ static char *aqm_str;
 module_param_named(aqmask, aqm_str, charp, 0440);
 MODULE_PARM_DESC(aqmask, "AP bus domain mask.");
 
+static int ap_useirq = 1;
+module_param_named(useirq, ap_useirq, int, 0440);
+MODULE_PARM_DESC(useirq, "Use interrupt if available, default is 1 (on).");
+
+atomic_t ap_max_msg_size = ATOMIC_INIT(AP_DEFAULT_MAX_MSG_SIZE);
+EXPORT_SYMBOL(ap_max_msg_size);
+
 static struct device *ap_root_device;
 
 /* Hashtable of all queue devices on the AP bus */
@@ -76,6 +83,9 @@ EXPORT_SYMBOL(ap_perms_mutex);
 
 /* # of bus scans since init */
 static atomic64_t ap_scan_bus_count;
+
+/* # of bindings complete since init */
+static atomic64_t ap_bindings_complete_count = ATOMIC64_INIT(0);
 
 /* completion for initial APQN bindings complete */
 static DECLARE_COMPLETION(ap_init_apqn_bindings_complete);
@@ -121,21 +131,12 @@ static struct bus_type ap_bus_type;
 /* Adapter interrupt definitions */
 static void ap_interrupt_handler(struct airq_struct *airq, bool floating);
 
-static int ap_airq_flag;
+static bool ap_irq_flag;
 
 static struct airq_struct ap_airq = {
 	.handler = ap_interrupt_handler,
 	.isc = AP_ISC,
 };
-
-/**
- * ap_using_interrupts() - Returns non-zero if interrupt support is
- * available.
- */
-static inline int ap_using_interrupts(void)
-{
-	return ap_airq_flag;
-}
 
 /**
  * ap_airq_ptr() - Get the address of the adapter interrupt indicator
@@ -146,7 +147,7 @@ static inline int ap_using_interrupts(void)
  */
 void *ap_airq_ptr(void)
 {
-	if (ap_using_interrupts())
+	if (ap_irq_flag)
 		return ap_airq.lsi_ptr;
 	return NULL;
 }
@@ -216,7 +217,6 @@ static inline int ap_fetch_qci_info(struct ap_config_info *info)
  * ap_init_qci_info(): Allocate and query qci config info.
  * Does also update the static variables ap_max_domain_id
  * and ap_max_adapter_id if this info is available.
-
  */
 static void __init ap_init_qci_info(void)
 {
@@ -313,11 +313,24 @@ EXPORT_SYMBOL(ap_test_config_ctrl_domain);
  * Returns true if TAPQ succeeded and the info is filled or
  * false otherwise.
  */
-static bool ap_queue_info(ap_qid_t qid, int *q_type,
-			  unsigned int *q_fac, int *q_depth, bool *q_decfg)
+static bool ap_queue_info(ap_qid_t qid, int *q_type, unsigned int *q_fac,
+			  int *q_depth, int *q_ml, bool *q_decfg)
 {
 	struct ap_queue_status status;
-	unsigned long info = 0;
+	union {
+		unsigned long value;
+		struct {
+			unsigned int fac   : 32; /* facility bits */
+			unsigned int at	   :  8; /* ap type */
+			unsigned int _res1 :  8;
+			unsigned int _res2 :  4;
+			unsigned int ml	   :  4; /* apxl ml */
+			unsigned int _res3 :  4;
+			unsigned int qd	   :  4; /* queue depth */
+		} tapq_gr2;
+	} tapq_info;
+
+	tapq_info.value = 0;
 
 	/* make sure we don't run into a specifiation exception */
 	if (AP_QID_CARD(qid) > ap_max_adapter_id ||
@@ -325,7 +338,7 @@ static bool ap_queue_info(ap_qid_t qid, int *q_type,
 		return false;
 
 	/* call TAPQ on this APQN */
-	status = ap_test_queue(qid, ap_apft_available(), &info);
+	status = ap_test_queue(qid, ap_apft_available(), &tapq_info.value);
 	switch (status.response_code) {
 	case AP_RESPONSE_NORMAL:
 	case AP_RESPONSE_RESET_IN_PROGRESS:
@@ -337,11 +350,12 @@ static bool ap_queue_info(ap_qid_t qid, int *q_type,
 		 * info should be filled. All bits 0 is not possible as
 		 * there is at least one of the mode bits set.
 		 */
-		if (WARN_ON_ONCE(!info))
+		if (WARN_ON_ONCE(!tapq_info.value))
 			return false;
-		*q_type = (int)((info >> 24) & 0xff);
-		*q_fac = (unsigned int)(info >> 32);
-		*q_depth = (int)(info & 0xff);
+		*q_type = tapq_info.tapq_gr2.at;
+		*q_fac = tapq_info.tapq_gr2.fac;
+		*q_depth = tapq_info.tapq_gr2.qd;
+		*q_ml = tapq_info.tapq_gr2.ml;
 		*q_decfg = status.response_code == AP_RESPONSE_DECONFIGURED;
 		switch (*q_type) {
 			/* For CEX2 and CEX3 the available functions
@@ -376,7 +390,7 @@ void ap_wait(enum ap_sm_wait wait)
 	switch (wait) {
 	case AP_SM_WAIT_AGAIN:
 	case AP_SM_WAIT_INTERRUPT:
-		if (ap_using_interrupts())
+		if (ap_irq_flag)
 			break;
 		if (ap_poll_kthread) {
 			wake_up(&ap_poll_wait);
@@ -428,6 +442,7 @@ static enum hrtimer_restart ap_poll_timeout(struct hrtimer *unused)
 /**
  * ap_interrupt_handler() - Schedule ap_tasklet on interrupt
  * @airq: pointer to adapter interrupt descriptor
+ * @floating: ignored
  */
 static void ap_interrupt_handler(struct airq_struct *airq, bool floating)
 {
@@ -451,7 +466,7 @@ static void ap_tasklet_fn(unsigned long dummy)
 	 * be received. Doing it in the beginning of the tasklet is therefor
 	 * important that no requests on any AP get lost.
 	 */
-	if (ap_using_interrupts())
+	if (ap_irq_flag)
 		xchg(ap_airq.lsi_ptr, 0);
 
 	spin_lock_bh(&ap_queues_lock);
@@ -521,7 +536,7 @@ static int ap_poll_thread_start(void)
 {
 	int rc;
 
-	if (ap_using_interrupts() || ap_poll_kthread)
+	if (ap_irq_flag || ap_poll_kthread)
 		return 0;
 	mutex_lock(&ap_poll_thread_mutex);
 	ap_poll_kthread = kthread_run(ap_poll_thread, NULL, "appoll");
@@ -584,22 +599,47 @@ static int ap_bus_match(struct device *dev, struct device_driver *drv)
  */
 static int ap_uevent(struct device *dev, struct kobj_uevent_env *env)
 {
-	int rc;
+	int rc = 0;
 	struct ap_device *ap_dev = to_ap_dev(dev);
 
 	/* Uevents from ap bus core don't need extensions to the env */
 	if (dev == ap_root_device)
 		return 0;
 
-	/* Set up DEV_TYPE environment variable. */
-	rc = add_uevent_var(env, "DEV_TYPE=%04X", ap_dev->device_type);
-	if (rc)
-		return rc;
+	if (is_card_dev(dev)) {
+		struct ap_card *ac = to_ap_card(&ap_dev->device);
 
-	/* Add MODALIAS= */
-	rc = add_uevent_var(env, "MODALIAS=ap:t%02X", ap_dev->device_type);
-	if (rc)
-		return rc;
+		/* Set up DEV_TYPE environment variable. */
+		rc = add_uevent_var(env, "DEV_TYPE=%04X", ap_dev->device_type);
+		if (rc)
+			return rc;
+		/* Add MODALIAS= */
+		rc = add_uevent_var(env, "MODALIAS=ap:t%02X", ap_dev->device_type);
+		if (rc)
+			return rc;
+
+		/* Add MODE=<accel|cca|ep11> */
+		if (ap_test_bit(&ac->functions, AP_FUNC_ACCEL))
+			rc = add_uevent_var(env, "MODE=accel");
+		else if (ap_test_bit(&ac->functions, AP_FUNC_COPRO))
+			rc = add_uevent_var(env, "MODE=cca");
+		else if (ap_test_bit(&ac->functions, AP_FUNC_EP11))
+			rc = add_uevent_var(env, "MODE=ep11");
+		if (rc)
+			return rc;
+	} else {
+		struct ap_queue *aq = to_ap_queue(&ap_dev->device);
+
+		/* Add MODE=<accel|cca|ep11> */
+		if (ap_test_bit(&aq->card->functions, AP_FUNC_ACCEL))
+			rc = add_uevent_var(env, "MODE=accel");
+		else if (ap_test_bit(&aq->card->functions, AP_FUNC_COPRO))
+			rc = add_uevent_var(env, "MODE=cca");
+		else if (ap_test_bit(&aq->card->functions, AP_FUNC_EP11))
+			rc = add_uevent_var(env, "MODE=ep11");
+		if (rc)
+			return rc;
+	}
 
 	return 0;
 }
@@ -613,10 +653,35 @@ static void ap_send_init_scan_done_uevent(void)
 
 static void ap_send_bindings_complete_uevent(void)
 {
-	char *envp[] = { "BINDINGS=complete", NULL };
+	char buf[32];
+	char *envp[] = { "BINDINGS=complete", buf, NULL };
 
+	snprintf(buf, sizeof(buf), "COMPLETECOUNT=%llu",
+		 atomic64_inc_return(&ap_bindings_complete_count));
 	kobject_uevent_env(&ap_root_device->kobj, KOBJ_CHANGE, envp);
 }
+
+void ap_send_config_uevent(struct ap_device *ap_dev, bool cfg)
+{
+	char buf[16];
+	char *envp[] = { buf, NULL };
+
+	snprintf(buf, sizeof(buf), "CONFIG=%d", cfg ? 1 : 0);
+
+	kobject_uevent_env(&ap_dev->device.kobj, KOBJ_CHANGE, envp);
+}
+EXPORT_SYMBOL(ap_send_config_uevent);
+
+void ap_send_online_uevent(struct ap_device *ap_dev, int online)
+{
+	char buf[16];
+	char *envp[] = { buf, NULL };
+
+	snprintf(buf, sizeof(buf), "ONLINE=%d", online ? 1 : 0);
+
+	kobject_uevent_env(&ap_dev->device.kobj, KOBJ_CHANGE, envp);
+}
+EXPORT_SYMBOL(ap_send_online_uevent);
 
 /*
  * calc # of bound APQNs
@@ -633,7 +698,7 @@ static int __ap_calc_helper(struct device *dev, void *arg)
 
 	if (is_queue_dev(dev)) {
 		pctrs->apqns++;
-		if ((to_ap_dev(dev))->drv)
+		if (dev->driver)
 			pctrs->bound++;
 	}
 
@@ -664,7 +729,7 @@ static void ap_check_bindings_complete(void)
 		if (bound == apqns) {
 			if (!completion_done(&ap_init_apqn_bindings_complete)) {
 				complete_all(&ap_init_apqn_bindings_complete);
-				AP_DBF(DBF_INFO, "%s complete\n", __func__);
+				AP_DBF_INFO("%s complete\n", __func__);
 			}
 			ap_send_bindings_complete_uevent();
 		}
@@ -725,9 +790,12 @@ static int __ap_revise_reserved(struct device *dev, void *dummy)
 		drvres = to_ap_drv(dev->driver)->flags
 			& AP_DRIVER_FLAG_DEFAULT;
 		if (!!devres != !!drvres) {
-			AP_DBF_DBG("reprobing queue=%02x.%04x\n",
-				   card, queue);
+			AP_DBF_DBG("%s reprobing queue=%02x.%04x\n",
+				   __func__, card, queue);
 			rc = device_reprobe(dev);
+			if (rc)
+				AP_DBF_WARN("%s reprobing queue=%02x.%04x failed\n",
+					    __func__, card, queue);
 		}
 	}
 
@@ -813,7 +881,6 @@ static int ap_device_probe(struct device *dev)
 			 to_ap_queue(dev)->qid);
 	spin_unlock_bh(&ap_queues_lock);
 
-	ap_dev->drv = ap_drv;
 	rc = ap_drv->probe ? ap_drv->probe(ap_dev) : -ENODEV;
 
 	if (rc) {
@@ -821,7 +888,6 @@ static int ap_device_probe(struct device *dev)
 		if (is_queue_dev(dev))
 			hash_del(&to_ap_queue(dev)->hnode);
 		spin_unlock_bh(&ap_queues_lock);
-		ap_dev->drv = NULL;
 	} else
 		ap_check_bindings_complete();
 
@@ -831,10 +897,10 @@ out:
 	return rc;
 }
 
-static int ap_device_remove(struct device *dev)
+static void ap_device_remove(struct device *dev)
 {
 	struct ap_device *ap_dev = to_ap_dev(dev);
-	struct ap_driver *ap_drv = ap_dev->drv;
+	struct ap_driver *ap_drv = to_ap_drv(dev->driver);
 
 	/* prepare ap queue device removal */
 	if (is_queue_dev(dev))
@@ -853,11 +919,8 @@ static int ap_device_remove(struct device *dev)
 	if (is_queue_dev(dev))
 		hash_del(&to_ap_queue(dev)->hnode);
 	spin_unlock_bh(&ap_queues_lock);
-	ap_dev->drv = NULL;
 
 	put_device(dev);
-
-	return 0;
 }
 
 struct ap_queue *ap_get_qdev(ap_qid_t qid)
@@ -885,8 +948,6 @@ int ap_driver_register(struct ap_driver *ap_drv, struct module *owner,
 	struct device_driver *drv = &ap_drv->driver;
 
 	drv->bus = &ap_bus_type;
-	drv->probe = ap_device_probe;
-	drv->remove = ap_device_remove;
 	drv->owner = owner;
 	drv->name = name;
 	return driver_register(drv);
@@ -1064,7 +1125,8 @@ static ssize_t ap_domain_store(struct bus_type *bus,
 	ap_domain_index = domain;
 	spin_unlock_bh(&ap_domain_lock);
 
-	AP_DBF_INFO("stored new default domain=%d\n", domain);
+	AP_DBF_INFO("%s stored new default domain=%d\n",
+		    __func__, domain);
 
 	return count;
 }
@@ -1119,7 +1181,7 @@ static BUS_ATTR_RO(ap_adapter_mask);
 static ssize_t ap_interrupts_show(struct bus_type *bus, char *buf)
 {
 	return scnprintf(buf, PAGE_SIZE, "%d\n",
-			 ap_using_interrupts() ? 1 : 0);
+			 ap_irq_flag ? 1 : 0);
 }
 
 static BUS_ATTR_RO(ap_interrupts);
@@ -1319,6 +1381,8 @@ static struct bus_type ap_bus_type = {
 	.bus_groups = ap_bus_groups,
 	.match = &ap_bus_match,
 	.uevent = &ap_uevent,
+	.probe = ap_device_probe,
+	.remove = ap_device_remove,
 };
 
 /**
@@ -1377,8 +1441,9 @@ static int ap_get_compatible_type(ap_qid_t qid, int rawtype, unsigned int func)
 
 	/* < CEX2A is not supported */
 	if (rawtype < AP_DEVICE_TYPE_CEX2A) {
-		AP_DBF_WARN("get_comp_type queue=%02x.%04x unsupported type %d\n",
-			    AP_QID_CARD(qid), AP_QID_QUEUE(qid), rawtype);
+		AP_DBF_WARN("%s queue=%02x.%04x unsupported type %d\n",
+			    __func__, AP_QID_CARD(qid),
+			    AP_QID_QUEUE(qid), rawtype);
 		return 0;
 	}
 	/* up to CEX7 known and fully supported */
@@ -1402,11 +1467,12 @@ static int ap_get_compatible_type(ap_qid_t qid, int rawtype, unsigned int func)
 			comp_type = apinfo.cat;
 	}
 	if (!comp_type)
-		AP_DBF_WARN("get_comp_type queue=%02x.%04x unable to map type %d\n",
-			    AP_QID_CARD(qid), AP_QID_QUEUE(qid), rawtype);
+		AP_DBF_WARN("%s queue=%02x.%04x unable to map type %d\n",
+			    __func__, AP_QID_CARD(qid),
+			    AP_QID_QUEUE(qid), rawtype);
 	else if (comp_type != rawtype)
-		AP_DBF_INFO("get_comp_type queue=%02x.%04x map type %d to %d\n",
-			    AP_QID_CARD(qid), AP_QID_QUEUE(qid),
+		AP_DBF_INFO("%s queue=%02x.%04x map type %d to %d\n",
+			    __func__, AP_QID_CARD(qid), AP_QID_QUEUE(qid),
 			    rawtype, comp_type);
 	return comp_type;
 }
@@ -1463,7 +1529,7 @@ static inline void ap_scan_domains(struct ap_card *ac)
 	unsigned int func;
 	struct device *dev;
 	struct ap_queue *aq;
-	int rc, dom, depth, type;
+	int rc, dom, depth, type, ml;
 
 	/*
 	 * Go through the configuration for the domains and compare them
@@ -1479,7 +1545,7 @@ static inline void ap_scan_domains(struct ap_card *ac)
 		aq = dev ? to_ap_queue(dev) : NULL;
 		if (!ap_test_config_usage_domain(dom)) {
 			if (dev) {
-				AP_DBF_INFO("%s(%d,%d) not in config any more, rm queue device\n",
+				AP_DBF_INFO("%s(%d,%d) not in config anymore, rm queue dev\n",
 					    __func__, ac->id, dom);
 				device_unregister(dev);
 				put_device(dev);
@@ -1487,11 +1553,10 @@ static inline void ap_scan_domains(struct ap_card *ac)
 			continue;
 		}
 		/* domain is valid, get info from this APQN */
-		if (!ap_queue_info(qid, &type, &func, &depth, &decfg)) {
+		if (!ap_queue_info(qid, &type, &func, &depth, &ml, &decfg)) {
 			if (aq) {
-				AP_DBF_INFO(
-					"%s(%d,%d) ap_queue_info() not successful, rm queue device\n",
-					__func__, ac->id, dom);
+				AP_DBF_INFO("%s(%d,%d) queue_info() failed, rm queue dev\n",
+					    __func__, ac->id, dom);
 				device_unregister(dev);
 				put_device(dev);
 			}
@@ -1521,10 +1586,10 @@ static inline void ap_scan_domains(struct ap_card *ac)
 			/* get it and thus adjust reference counter */
 			get_device(dev);
 			if (decfg)
-				AP_DBF_INFO("%s(%d,%d) new (decfg) queue device created\n",
+				AP_DBF_INFO("%s(%d,%d) new (decfg) queue dev created\n",
 					    __func__, ac->id, dom);
 			else
-				AP_DBF_INFO("%s(%d,%d) new queue device created\n",
+				AP_DBF_INFO("%s(%d,%d) new queue dev created\n",
 					    __func__, ac->id, dom);
 			goto put_dev_and_continue;
 		}
@@ -1538,8 +1603,9 @@ static inline void ap_scan_domains(struct ap_card *ac)
 				aq->last_err_rc = AP_RESPONSE_DECONFIGURED;
 			}
 			spin_unlock_bh(&aq->lock);
-			AP_DBF_INFO("%s(%d,%d) queue device config off\n",
+			AP_DBF_INFO("%s(%d,%d) queue dev config off\n",
 				    __func__, ac->id, dom);
+			ap_send_config_uevent(&aq->ap_dev, aq->config);
 			/* 'receive' pending messages with -EAGAIN */
 			ap_flush_queue(aq);
 			goto put_dev_and_continue;
@@ -1552,8 +1618,9 @@ static inline void ap_scan_domains(struct ap_card *ac)
 				aq->sm_state = AP_SM_STATE_RESET_START;
 			}
 			spin_unlock_bh(&aq->lock);
-			AP_DBF_INFO("%s(%d,%d) queue device config on\n",
+			AP_DBF_INFO("%s(%d,%d) queue dev config on\n",
 				    __func__, ac->id, dom);
+			ap_send_config_uevent(&aq->ap_dev, aq->config);
 			goto put_dev_and_continue;
 		}
 		/* handle other error states */
@@ -1563,7 +1630,7 @@ static inline void ap_scan_domains(struct ap_card *ac)
 			ap_flush_queue(aq);
 			/* re-init (with reset) the queue device */
 			ap_queue_init_state(aq);
-			AP_DBF_INFO("%s(%d,%d) queue device reinit enforced\n",
+			AP_DBF_INFO("%s(%d,%d) queue dev reinit enforced\n",
 				    __func__, ac->id, dom);
 			goto put_dev_and_continue;
 		}
@@ -1584,7 +1651,7 @@ static inline void ap_scan_adapter(int ap)
 	unsigned int func;
 	struct device *dev;
 	struct ap_card *ac;
-	int rc, dom, depth, type, comp_type;
+	int rc, dom, depth, type, comp_type, ml;
 
 	/* Is there currently a card device for this adapter ? */
 	dev = bus_find_device(&ap_bus_type, NULL,
@@ -1595,7 +1662,7 @@ static inline void ap_scan_adapter(int ap)
 	/* Adapter not in configuration ? */
 	if (!ap_test_config_card_id(ap)) {
 		if (ac) {
-			AP_DBF_INFO("%s(%d) ap not in config any more, rm card and queue devices\n",
+			AP_DBF_INFO("%s(%d) ap not in config any more, rm card and queue devs\n",
 				    __func__, ap);
 			ap_scan_rm_card_dev_and_queue_devs(ac);
 			put_device(dev);
@@ -1613,15 +1680,15 @@ static inline void ap_scan_adapter(int ap)
 	for (dom = 0; dom <= ap_max_domain_id; dom++)
 		if (ap_test_config_usage_domain(dom)) {
 			qid = AP_MKQID(ap, dom);
-			if (ap_queue_info(qid, &type, &func, &depth, &decfg))
+			if (ap_queue_info(qid, &type, &func,
+					  &depth, &ml, &decfg))
 				break;
 		}
 	if (dom > ap_max_domain_id) {
 		/* Could not find a valid APQN for this adapter */
 		if (ac) {
-			AP_DBF_INFO(
-				"%s(%d) no type info (no APQN found), rm card and queue devices\n",
-				__func__, ap);
+			AP_DBF_INFO("%s(%d) no type info (no APQN found), rm card and queue devs\n",
+				    __func__, ap);
 			ap_scan_rm_card_dev_and_queue_devs(ac);
 			put_device(dev);
 		} else {
@@ -1633,7 +1700,7 @@ static inline void ap_scan_adapter(int ap)
 	if (!type) {
 		/* No apdater type info available, an unusable adapter */
 		if (ac) {
-			AP_DBF_INFO("%s(%d) no valid type (0) info, rm card and queue devices\n",
+			AP_DBF_INFO("%s(%d) no valid type (0) info, rm card and queue devs\n",
 				    __func__, ap);
 			ap_scan_rm_card_dev_and_queue_devs(ac);
 			put_device(dev);
@@ -1647,13 +1714,13 @@ static inline void ap_scan_adapter(int ap)
 	if (ac) {
 		/* Check APQN against existing card device for changes */
 		if (ac->raw_hwtype != type) {
-			AP_DBF_INFO("%s(%d) hwtype %d changed, rm card and queue devices\n",
+			AP_DBF_INFO("%s(%d) hwtype %d changed, rm card and queue devs\n",
 				    __func__, ap, type);
 			ap_scan_rm_card_dev_and_queue_devs(ac);
 			put_device(dev);
 			ac = NULL;
 		} else if (ac->functions != func) {
-			AP_DBF_INFO("%s(%d) functions 0x%08x changed, rm card and queue devices\n",
+			AP_DBF_INFO("%s(%d) functions 0x%08x changed, rm card and queue devs\n",
 				    __func__, ap, type);
 			ap_scan_rm_card_dev_and_queue_devs(ac);
 			put_device(dev);
@@ -1661,14 +1728,15 @@ static inline void ap_scan_adapter(int ap)
 		} else {
 			if (decfg && ac->config) {
 				ac->config = false;
-				AP_DBF_INFO("%s(%d) card device config off\n",
+				AP_DBF_INFO("%s(%d) card dev config off\n",
 					    __func__, ap);
-
+				ap_send_config_uevent(&ac->ap_dev, ac->config);
 			}
 			if (!decfg && !ac->config) {
 				ac->config = true;
-				AP_DBF_INFO("%s(%d) card device config on\n",
+				AP_DBF_INFO("%s(%d) card dev config on\n",
 					    __func__, ap);
+				ap_send_config_uevent(&ac->ap_dev, ac->config);
 			}
 		}
 	}
@@ -1681,7 +1749,7 @@ static inline void ap_scan_adapter(int ap)
 				    __func__, ap, type);
 			return;
 		}
-		ac = ap_card_create(ap, depth, type, comp_type, func);
+		ac = ap_card_create(ap, depth, type, comp_type, func, ml);
 		if (!ac) {
 			AP_DBF_WARN("%s(%d) ap_card_create() failed\n",
 				    __func__, ap);
@@ -1692,6 +1760,13 @@ static inline void ap_scan_adapter(int ap)
 		dev->bus = &ap_bus_type;
 		dev->parent = ap_root_device;
 		dev_set_name(dev, "card%02x", ap);
+		/* maybe enlarge ap_max_msg_size to support this card */
+		if (ac->maxmsgsize > atomic_read(&ap_max_msg_size)) {
+			atomic_set(&ap_max_msg_size, ac->maxmsgsize);
+			AP_DBF_INFO("%s(%d) ap_max_msg_size update to %d byte\n",
+				    __func__, ap,
+				    atomic_read(&ap_max_msg_size));
+		}
 		/* Register the new card device with AP bus */
 		rc = device_register(dev);
 		if (rc) {
@@ -1703,10 +1778,10 @@ static inline void ap_scan_adapter(int ap)
 		/* get it and thus adjust reference counter */
 		get_device(dev);
 		if (decfg)
-			AP_DBF_INFO("%s(%d) new (decfg) card device type=%d func=0x%08x created\n",
+			AP_DBF_INFO("%s(%d) new (decfg) card dev type=%d func=0x%08x created\n",
 				    __func__, ap, type, func);
 		else
-			AP_DBF_INFO("%s(%d) new card device type=%d func=0x%08x created\n",
+			AP_DBF_INFO("%s(%d) new card dev type=%d func=0x%08x created\n",
 				    __func__, ap, type, func);
 	}
 
@@ -1720,6 +1795,7 @@ static inline void ap_scan_adapter(int ap)
 /**
  * ap_scan_bus(): Scan the AP bus for new devices
  * Runs periodically, workqueue timer (ap_config_time)
+ * @unused: Unused pointer.
  */
 static void ap_scan_bus(struct work_struct *unused)
 {
@@ -1743,12 +1819,12 @@ static void ap_scan_bus(struct work_struct *unused)
 		if (dev)
 			put_device(dev);
 		else
-			AP_DBF_INFO("no queue device with default domain %d available\n",
-				    ap_domain_index);
+			AP_DBF_INFO("%s no queue device with default domain %d available\n",
+				    __func__, ap_domain_index);
 	}
 
 	if (atomic64_inc_return(&ap_scan_bus_count) == 1) {
-		AP_DBF(DBF_DEBUG, "%s init scan complete\n", __func__);
+		AP_DBF_DBG("%s init scan complete\n", __func__);
 		ap_send_init_scan_done_uevent();
 		ap_check_bindings_complete();
 	}
@@ -1763,7 +1839,7 @@ static void ap_config_timeout(struct timer_list *unused)
 
 static int __init ap_debug_init(void)
 {
-	ap_dbf_info = debug_register("ap", 1, 1,
+	ap_dbf_info = debug_register("ap", 2, 1,
 				     DBF_MAX_SPRINTF_ARGS * sizeof(long));
 	debug_register_view(ap_dbf_info, &debug_sprintf_view);
 	debug_set_level(ap_dbf_info, DBF_ERR);
@@ -1830,9 +1906,9 @@ static int __init ap_module_init(void)
 	}
 
 	/* enable interrupts if available */
-	if (ap_interrupts_available()) {
+	if (ap_interrupts_available() && ap_useirq) {
 		rc = register_adapter_interrupt(&ap_airq);
-		ap_airq_flag = (rc == 0);
+		ap_irq_flag = (rc == 0);
 	}
 
 	/* Create /sys/bus/ap. */
@@ -1876,7 +1952,7 @@ out_work:
 out_bus:
 	bus_unregister(&ap_bus_type);
 out:
-	if (ap_using_interrupts())
+	if (ap_irq_flag)
 		unregister_adapter_interrupt(&ap_airq);
 	kfree(ap_qci_info);
 	return rc;

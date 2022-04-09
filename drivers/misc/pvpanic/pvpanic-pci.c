@@ -19,16 +19,10 @@
 #define PCI_DEVICE_ID_REDHAT_PVPANIC     0x0011
 
 MODULE_AUTHOR("Mihai Carabas <mihai.carabas@oracle.com>");
-MODULE_DESCRIPTION("pvpanic device driver ");
+MODULE_DESCRIPTION("pvpanic device driver");
 MODULE_LICENSE("GPL");
 
-static const struct pci_device_id pvpanic_pci_id_tbl[]  = {
-	{ PCI_DEVICE(PCI_VENDOR_ID_REDHAT, PCI_DEVICE_ID_REDHAT_PVPANIC)},
-	{}
-};
-
-static ssize_t capability_show(struct device *dev,
-			       struct device_attribute *attr, char *buf)
+static ssize_t capability_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	struct pvpanic_instance *pi = dev_get_drvdata(dev);
 
@@ -36,14 +30,14 @@ static ssize_t capability_show(struct device *dev,
 }
 static DEVICE_ATTR_RO(capability);
 
-static ssize_t events_show(struct device *dev,  struct device_attribute *attr, char *buf)
+static ssize_t events_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	struct pvpanic_instance *pi = dev_get_drvdata(dev);
 
 	return sysfs_emit(buf, "%x\n", pi->events);
 }
 
-static ssize_t events_store(struct device *dev,  struct device_attribute *attr,
+static ssize_t events_store(struct device *dev, struct device_attribute *attr,
 			    const char *buf, size_t count)
 {
 	struct pvpanic_instance *pi = dev_get_drvdata(dev);
@@ -70,23 +64,21 @@ static struct attribute *pvpanic_pci_dev_attrs[] = {
 };
 ATTRIBUTE_GROUPS(pvpanic_pci_dev);
 
-static int pvpanic_pci_probe(struct pci_dev *pdev,
-			     const struct pci_device_id *ent)
+static int pvpanic_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 {
-	struct device *dev = &pdev->dev;
 	struct pvpanic_instance *pi;
 	void __iomem *base;
 	int ret;
 
-	ret = pci_enable_device(pdev);
+	ret = pcim_enable_device(pdev);
 	if (ret < 0)
 		return ret;
 
-	base = pci_iomap(pdev, 0, 0);
+	base = pcim_iomap(pdev, 0, 0);
 	if (!base)
 		return -ENOMEM;
 
-	pi = kmalloc(sizeof(*pi), GFP_ATOMIC);
+	pi = devm_kmalloc(&pdev->dev, sizeof(*pi), GFP_KERNEL);
 	if (!pi)
 		return -ENOMEM;
 
@@ -97,29 +89,21 @@ static int pvpanic_pci_probe(struct pci_dev *pdev,
 	pi->capability &= ioread8(base);
 	pi->events = pi->capability;
 
-	dev_set_drvdata(dev, pi);
-
-	return pvpanic_probe(pi);
+	return devm_pvpanic_probe(&pdev->dev, pi);
 }
 
-static void pvpanic_pci_remove(struct pci_dev *pdev)
-{
-	struct pvpanic_instance *pi = dev_get_drvdata(&pdev->dev);
-
-	pvpanic_remove(pi);
-	iounmap(pi->base);
-	kfree(pi);
-	pci_disable_device(pdev);
-}
+static const struct pci_device_id pvpanic_pci_id_tbl[]  = {
+	{ PCI_DEVICE(PCI_VENDOR_ID_REDHAT, PCI_DEVICE_ID_REDHAT_PVPANIC)},
+	{}
+};
+MODULE_DEVICE_TABLE(pci, pvpanic_pci_id_tbl);
 
 static struct pci_driver pvpanic_pci_driver = {
 	.name =         "pvpanic-pci",
 	.id_table =     pvpanic_pci_id_tbl,
 	.probe =        pvpanic_pci_probe,
-	.remove =       pvpanic_pci_remove,
 	.driver = {
 		.dev_groups = pvpanic_pci_dev_groups,
 	},
 };
-
 module_pci_driver(pvpanic_pci_driver);

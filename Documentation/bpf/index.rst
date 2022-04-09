@@ -12,6 +12,11 @@ BPF instruction-set.
 The Cilium project also maintains a `BPF and XDP Reference Guide`_
 that goes into great technical depth about the BPF Architecture.
 
+libbpf
+======
+
+Documentation/bpf/libbpf/index.rst is a userspace library for loading and interacting with bpf programs.
+
 BPF Type Format (BTF)
 =====================
 
@@ -77,6 +82,15 @@ Testing and debugging BPF
    s390
 
 
+Licensing
+=========
+
+.. toctree::
+   :maxdepth: 1
+
+   bpf_licensing
+
+
 Other
 =====
 
@@ -84,6 +98,7 @@ Other
    :maxdepth: 1
 
    ringbuf
+   llvm_reloc
 
 .. Links:
 .. _networking-filter: ../networking/filter.rst

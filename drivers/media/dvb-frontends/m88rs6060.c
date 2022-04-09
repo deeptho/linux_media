@@ -457,7 +457,7 @@ static u32 pll_calc(u32 freq, struct Si5351RegSet *reg, int correction)
 	denom = 1000L * 1000L;
 	lltmp = freq % ref_freq;
 	lltmp *= denom;
-	do_div1(lltmp, ref_freq);
+	do_div(lltmp, ref_freq);
 	rfrac = (u32)lltmp;
 
 	b = 0;
@@ -476,7 +476,7 @@ static u32 pll_calc(u32 freq, struct Si5351RegSet *reg, int correction)
 	/* recalculate rate by fIN * (a + b/c) */
 	lltmp  = ref_freq;
 	lltmp *= b;
-	do_div1(lltmp, c);
+	do_div(lltmp, c);
 
 	freq  = (u32)lltmp;
 	freq += ref_freq * a;
@@ -651,7 +651,7 @@ static u32 multisynth_calc(u32 freq, struct Si5351RegSet *reg)
 	if (divby4 == 0)
 	{
 		lltmp = SI5351_PLL_VCO_MAX;
-		do_div1(lltmp, freq);
+		do_div(lltmp, freq);
 		a = (u32)lltmp;
 	}
 	else
@@ -664,7 +664,7 @@ static u32 multisynth_calc(u32 freq, struct Si5351RegSet *reg)
 	/* Recalculate output frequency by fOUT = fIN / (a + b/c) */
 	lltmp  = pll_freq;
 	lltmp *= c;
-	do_div1(lltmp, a * c + b);
+	do_div(lltmp, a * c + b);
 	freq  = (unsigned long)lltmp;
 
 	/* Calculate parameters */
@@ -721,7 +721,7 @@ static u32 multisynth_recalc(u32 freq, u32 pll_freq, struct Si5351RegSet *reg)
 	denom = 1000L * 1000L;
 	lltmp = pll_freq % freq;
 	lltmp *= denom;
-	do_div1(lltmp, freq);
+	do_div(lltmp, freq);
 	rfrac = (u32)lltmp;
 
 	b = 0;
@@ -733,7 +733,7 @@ static u32 multisynth_recalc(u32 freq, u32 pll_freq, struct Si5351RegSet *reg)
 	/* Recalculate output frequency by fOUT = fIN / (a + b/c) */
 	lltmp  = pll_freq;
 	lltmp *= c;
-	do_div1(lltmp, a * c + b);
+	do_div(lltmp, a * c + b);
 	freq  = (unsigned long)lltmp;
 
 	/* Calculate parameters */
@@ -2084,13 +2084,13 @@ static int m88rs6060_set_frontend(struct dvb_frontend *fe)
 	rs6060_set_reg(dev, 0x5c, 0xf4);
 	rs6060_set_reg(dev, 0x60, 0xcb);
 
-	for (i = 0; i < 50; i++) {
+	for (i = 0; i < 150; i++) {
 		regmap_read(dev->regmap, 0x8, &tmp);
 		regmap_read(dev->regmap, 0xd, &tmp1);
 
 		if ((tmp1 == 0x8f) || (tmp1 == 0xf7))
 			break;
-		msleep(2);
+		msleep(20);
 	}
 
 	if (tmp1 == 0x8f) {

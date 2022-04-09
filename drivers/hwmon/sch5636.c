@@ -54,10 +54,9 @@ static const u16 SCH5636_REG_FAN_VAL[SCH5636_NO_FANS] = {
 struct sch5636_data {
 	unsigned short addr;
 	struct device *hwmon_dev;
-	struct sch56xx_watchdog_data *watchdog;
 
 	struct mutex update_lock;
-	char valid;			/* !=0 if following fields are valid */
+	bool valid;			/* true if following fields are valid */
 	unsigned long last_updated;	/* In jiffies */
 	u8 in[SCH5636_NO_INS];
 	u8 temp_val[SCH5636_NO_TEMPS];
@@ -141,7 +140,7 @@ static struct sch5636_data *sch5636_update_device(struct device *dev)
 	}
 
 	data->last_updated = jiffies;
-	data->valid = 1;
+	data->valid = true;
 abort:
 	mutex_unlock(&data->update_lock);
 	return ret;
@@ -372,9 +371,6 @@ static int sch5636_remove(struct platform_device *pdev)
 	struct sch5636_data *data = platform_get_drvdata(pdev);
 	int i;
 
-	if (data->watchdog)
-		sch56xx_watchdog_unregister(data->watchdog);
-
 	if (data->hwmon_dev)
 		hwmon_device_unregister(data->hwmon_dev);
 
@@ -495,9 +491,8 @@ static int sch5636_probe(struct platform_device *pdev)
 	}
 
 	/* Note failing to register the watchdog is not a fatal error */
-	data->watchdog = sch56xx_watchdog_register(&pdev->dev, data->addr,
-					(revision[0] << 8) | revision[1],
-					&data->update_lock, 0);
+	sch56xx_watchdog_register(&pdev->dev, data->addr, (revision[0] << 8) | revision[1],
+				  &data->update_lock, 0);
 
 	return 0;
 

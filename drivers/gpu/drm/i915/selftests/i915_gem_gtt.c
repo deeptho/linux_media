@@ -155,7 +155,7 @@ static int igt_ppgtt_alloc(void *arg)
 	if (!HAS_PPGTT(dev_priv))
 		return 0;
 
-	ppgtt = i915_ppgtt_create(&dev_priv->gt);
+	ppgtt = i915_ppgtt_create(&dev_priv->gt, 0);
 	if (IS_ERR(ppgtt))
 		return PTR_ERR(ppgtt);
 
@@ -186,7 +186,7 @@ retry:
 		if (err)
 			goto err_ppgtt_cleanup;
 
-		err = i915_vm_pin_pt_stash(&ppgtt->vm, &stash);
+		err = i915_vm_map_pt_stash(&ppgtt->vm, &stash);
 		if (err) {
 			i915_vm_free_pt_stash(&ppgtt->vm, &stash);
 			goto err_ppgtt_cleanup;
@@ -208,7 +208,7 @@ retry:
 		if (err)
 			goto err_ppgtt_cleanup;
 
-		err = i915_vm_pin_pt_stash(&ppgtt->vm, &stash);
+		err = i915_vm_map_pt_stash(&ppgtt->vm, &stash);
 		if (err) {
 			i915_vm_free_pt_stash(&ppgtt->vm, &stash);
 			goto err_ppgtt_cleanup;
@@ -325,11 +325,10 @@ retry:
 							   BIT_ULL(size)))
 					goto alloc_vm_end;
 
-				err = i915_vm_pin_pt_stash(vm, &stash);
+				err = i915_vm_map_pt_stash(vm, &stash);
 				if (!err)
 					vm->allocate_va_range(vm, &stash,
 							      addr, BIT_ULL(size));
-
 				i915_vm_free_pt_stash(vm, &stash);
 alloc_vm_end:
 				if (err == -EDEADLK) {
@@ -1054,7 +1053,7 @@ static int exercise_ppgtt(struct drm_i915_private *dev_priv,
 	if (IS_ERR(file))
 		return PTR_ERR(file);
 
-	ppgtt = i915_ppgtt_create(&dev_priv->gt);
+	ppgtt = i915_ppgtt_create(&dev_priv->gt, 0);
 	if (IS_ERR(ppgtt)) {
 		err = PTR_ERR(ppgtt);
 		goto out_free;
@@ -1301,7 +1300,7 @@ static int exercise_mock(struct drm_i915_private *i915,
 	if (!ctx)
 		return -ENOMEM;
 
-	vm = i915_gem_context_get_vm_rcu(ctx);
+	vm = i915_gem_context_get_eb_vm(ctx);
 	err = func(vm, 0, min(vm->total, limit), end_time);
 	i915_vm_put(vm);
 
@@ -1849,7 +1848,7 @@ static int igt_cs_tlb(void *arg)
 		goto out_unlock;
 	}
 
-	vm = i915_gem_context_get_vm_rcu(ctx);
+	vm = i915_gem_context_get_eb_vm(ctx);
 	if (i915_is_ggtt(vm))
 		goto out_vm;
 
@@ -1885,9 +1884,9 @@ static int igt_cs_tlb(void *arg)
 		u32 *cs = batch + i * 64 / sizeof(*cs);
 		u64 addr = (vm->total - PAGE_SIZE) + i * sizeof(u32);
 
-		GEM_BUG_ON(INTEL_GEN(i915) < 6);
+		GEM_BUG_ON(GRAPHICS_VER(i915) < 6);
 		cs[0] = MI_STORE_DWORD_IMM_GEN4;
-		if (INTEL_GEN(i915) >= 8) {
+		if (GRAPHICS_VER(i915) >= 8) {
 			cs[1] = lower_32_bits(addr);
 			cs[2] = upper_32_bits(addr);
 			cs[3] = i;
@@ -1968,10 +1967,9 @@ retry:
 			if (err)
 				goto end_ww;
 
-			err = i915_vm_pin_pt_stash(vm, &stash);
+			err = i915_vm_map_pt_stash(vm, &stash);
 			if (!err)
 				vm->allocate_va_range(vm, &stash, offset, chunk_size);
-
 			i915_vm_free_pt_stash(vm, &stash);
 end_ww:
 			if (err == -EDEADLK) {

@@ -7,21 +7,19 @@
 #include <unistd.h>
 #include <sys/file.h>
 #include <sys/time.h>
-#include <sys/resource.h>
 #include <linux/err.h>
 #include <linux/zalloc.h>
-#include <bpf/bpf.h>
-#include <bpf/btf.h>
-#include <bpf/libbpf.h>
 #include <api/fs/fs.h>
 #include <perf/bpf_perf.h>
 
 #include "bpf_counter.h"
+#include "bpf-utils.h"
 #include "counts.h"
 #include "debug.h"
 #include "evsel.h"
 #include "evlist.h"
 #include "target.h"
+#include "cgroup.h"
 #include "cpumap.h"
 #include "thread_map.h"
 
@@ -35,13 +33,6 @@
 static inline void *u64_to_ptr(__u64 ptr)
 {
 	return (void *)(unsigned long)ptr;
-}
-
-static void set_max_rlimit(void)
-{
-	struct rlimit rinf = { RLIM_INFINITY, RLIM_INFINITY };
-
-	setrlimit(RLIMIT_MEMLOCK, &rinf);
 }
 
 static struct bpf_counter *bpf_counter_alloc(void)
@@ -71,22 +62,26 @@ static int bpf_program_profiler__destroy(struct evsel *evsel)
 
 static char *bpf_target_prog_name(int tgt_fd)
 {
-	struct bpf_prog_info_linear *info_linear;
 	struct bpf_func_info *func_info;
+	struct perf_bpil *info_linear;
 	const struct btf_type *t;
+	struct btf *btf = NULL;
 	char *name = NULL;
-	struct btf *btf;
 
-	info_linear = bpf_program__get_prog_info_linear(
-		tgt_fd, 1UL << BPF_PROG_INFO_FUNC_INFO);
+	info_linear = get_bpf_prog_info_linear(tgt_fd, 1UL << PERF_BPIL_FUNC_INFO);
 	if (IS_ERR_OR_NULL(info_linear)) {
 		pr_debug("failed to get info_linear for prog FD %d\n", tgt_fd);
 		return NULL;
 	}
 
-	if (info_linear->info.btf_id == 0 ||
-	    btf__get_from_id(info_linear->info.btf_id, &btf)) {
+	if (info_linear->info.btf_id == 0) {
 		pr_debug("prog FD %d doesn't have valid btf\n", tgt_fd);
+		goto out;
+	}
+
+	btf = btf__load_from_kernel_by_id(info_linear->info.btf_id);
+	if (libbpf_get_error(btf)) {
+		pr_debug("failed to load btf for prog FD %d\n", tgt_fd);
 		goto out;
 	}
 
@@ -99,6 +94,7 @@ static char *bpf_target_prog_name(int tgt_fd)
 	}
 	name = strdup(btf__name_by_offset(btf, t->name_off));
 out:
+	btf__free(btf);
 	free(info_linear);
 	return name;
 }
@@ -131,9 +127,9 @@ static int bpf_program_profiler_load_one(struct evsel *evsel, u32 prog_id)
 
 	skel->rodata->num_cpu = evsel__nr_cpus(evsel);
 
-	bpf_map__resize(skel->maps.events, evsel__nr_cpus(evsel));
-	bpf_map__resize(skel->maps.fentry_readings, 1);
-	bpf_map__resize(skel->maps.accum_readings, 1);
+	bpf_map__set_max_entries(skel->maps.events, evsel__nr_cpus(evsel));
+	bpf_map__set_max_entries(skel->maps.fentry_readings, 1);
+	bpf_map__set_max_entries(skel->maps.accum_readings, 1);
 
 	prog_name = bpf_target_prog_name(prog_fd);
 	if (!prog_name) {
@@ -297,33 +293,6 @@ struct bpf_counter_ops bpf_program_profiler_ops = {
 	.install_pe = bpf_program_profiler__install_pe,
 };
 
-static __u32 bpf_link_get_id(int fd)
-{
-	struct bpf_link_info link_info = {0};
-	__u32 link_info_len = sizeof(link_info);
-
-	bpf_obj_get_info_by_fd(fd, &link_info, &link_info_len);
-	return link_info.id;
-}
-
-static __u32 bpf_link_get_prog_id(int fd)
-{
-	struct bpf_link_info link_info = {0};
-	__u32 link_info_len = sizeof(link_info);
-
-	bpf_obj_get_info_by_fd(fd, &link_info, &link_info_len);
-	return link_info.prog_id;
-}
-
-static __u32 bpf_map_get_id(int fd)
-{
-	struct bpf_map_info map_info = {0};
-	__u32 map_info_len = sizeof(map_info);
-
-	bpf_obj_get_info_by_fd(fd, &map_info, &map_info_len);
-	return map_info.id;
-}
-
 static bool bperf_attr_map_compatible(int attr_map_fd)
 {
 	struct bpf_map_info map_info = {0};
@@ -385,26 +354,12 @@ static int bperf_lock_attr_map(struct target *target)
 	return map_fd;
 }
 
-/* trigger the leader program on a cpu */
-static int bperf_trigger_reading(int prog_fd, int cpu)
-{
-	DECLARE_LIBBPF_OPTS(bpf_test_run_opts, opts,
-			    .ctx_in = NULL,
-			    .ctx_size_in = 0,
-			    .flags = BPF_F_TEST_RUN_ON_CPU,
-			    .cpu = cpu,
-			    .retval = 0,
-		);
-
-	return bpf_prog_test_run_opts(prog_fd, &opts);
-}
-
 static int bperf_check_target(struct evsel *evsel,
 			      struct target *target,
 			      enum bperf_filter_type *filter_type,
 			      __u32 *filter_entry_cnt)
 {
-	if (evsel->leader->core.nr_members > 1) {
+	if (evsel->core.leader->nr_members > 1) {
 		pr_err("bpf managed perf events do not yet support groups.\n");
 		return -1;
 	}
@@ -444,7 +399,7 @@ static int bperf_reload_leader_program(struct evsel *evsel, int attr_map_fd,
 		return -1;
 	}
 
-	bpf_map__resize(skel->maps.events, libbpf_num_possible_cpus());
+	bpf_map__set_max_entries(skel->maps.events, libbpf_num_possible_cpus());
 	err = bperf_leader_bpf__load(skel);
 	if (err) {
 		pr_err("Failed to load leader skeleton\n");
@@ -521,9 +476,10 @@ static int bperf__load(struct evsel *evsel, struct target *target)
 
 	evsel->bperf_leader_link_fd = bpf_link_get_fd_by_id(entry.link_id);
 	if (evsel->bperf_leader_link_fd < 0 &&
-	    bperf_reload_leader_program(evsel, attr_map_fd, &entry))
+	    bperf_reload_leader_program(evsel, attr_map_fd, &entry)) {
+		err = -1;
 		goto out;
-
+	}
 	/*
 	 * The bpf_link holds reference to the leader program, and the
 	 * leader program holds reference to the maps. Therefore, if
@@ -550,6 +506,7 @@ static int bperf__load(struct evsel *evsel, struct target *target)
 	/* Step 2: load the follower skeleton */
 	evsel->follower_skel = bperf_follower_bpf__open();
 	if (!evsel->follower_skel) {
+		err = -1;
 		pr_err("Failed to open follower skeleton\n");
 		goto out;
 	}
@@ -792,6 +749,8 @@ struct bpf_counter_ops bperf_ops = {
 	.destroy    = bperf__destroy,
 };
 
+extern struct bpf_counter_ops bperf_cgrp_ops;
+
 static inline bool bpf_counter_skip(struct evsel *evsel)
 {
 	return list_empty(&evsel->bpf_counter_list) &&
@@ -809,6 +768,8 @@ int bpf_counter__load(struct evsel *evsel, struct target *target)
 {
 	if (target->bpf_str)
 		evsel->bpf_counter_ops = &bpf_program_profiler_ops;
+	else if (cgrp_event_expanded && target->use_bpf)
+		evsel->bpf_counter_ops = &bperf_cgrp_ops;
 	else if (target->use_bpf || evsel->bpf_counter ||
 		 evsel__match_bpf_counter_events(evsel->name))
 		evsel->bpf_counter_ops = &bperf_ops;

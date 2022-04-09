@@ -22,8 +22,6 @@
 #include <linux/of_irq.h>
 #include <linux/of_pci.h>
 #include <linux/pci.h>
-#include <linux/pci-acpi.h>
-#include <linux/pci-ecam.h>
 #include <linux/phy/phy.h>
 #include <linux/pinctrl/consumer.h>
 #include <linux/platform_device.h>
@@ -247,24 +245,6 @@ static const unsigned int pcie_gen_freq[] = {
 	GEN4_CORE_CLK_FREQ
 };
 
-static const u32 event_cntr_ctrl_offset[] = {
-	0x1d8,
-	0x1a8,
-	0x1a8,
-	0x1a8,
-	0x1c4,
-	0x1d8
-};
-
-static const u32 event_cntr_data_offset[] = {
-	0x1dc,
-	0x1ac,
-	0x1ac,
-	0x1ac,
-	0x1c8,
-	0x1dc
-};
-
 struct tegra_pcie_dw {
 	struct device *dev;
 	struct resource *appl_res;
@@ -312,104 +292,6 @@ struct tegra_pcie_dw {
 struct tegra_pcie_dw_of_data {
 	enum dw_pcie_device_mode mode;
 };
-
-#if defined(CONFIG_ACPI) && defined(CONFIG_PCI_QUIRKS)
-struct tegra194_pcie_ecam  {
-	void __iomem *config_base;
-	void __iomem *iatu_base;
-	void __iomem *dbi_base;
-};
-
-static int tegra194_acpi_init(struct pci_config_window *cfg)
-{
-	struct device *dev = cfg->parent;
-	struct tegra194_pcie_ecam *pcie_ecam;
-
-	pcie_ecam = devm_kzalloc(dev, sizeof(*pcie_ecam), GFP_KERNEL);
-	if (!pcie_ecam)
-		return -ENOMEM;
-
-	pcie_ecam->config_base = cfg->win;
-	pcie_ecam->iatu_base = cfg->win + SZ_256K;
-	pcie_ecam->dbi_base = cfg->win + SZ_512K;
-	cfg->priv = pcie_ecam;
-
-	return 0;
-}
-
-static void atu_reg_write(struct tegra194_pcie_ecam *pcie_ecam, int index,
-			  u32 val, u32 reg)
-{
-	u32 offset = PCIE_GET_ATU_OUTB_UNR_REG_OFFSET(index);
-
-	writel(val, pcie_ecam->iatu_base + offset + reg);
-}
-
-static void program_outbound_atu(struct tegra194_pcie_ecam *pcie_ecam,
-				 int index, int type, u64 cpu_addr,
-				 u64 pci_addr, u64 size)
-{
-	atu_reg_write(pcie_ecam, index, lower_32_bits(cpu_addr),
-		      PCIE_ATU_LOWER_BASE);
-	atu_reg_write(pcie_ecam, index, upper_32_bits(cpu_addr),
-		      PCIE_ATU_UPPER_BASE);
-	atu_reg_write(pcie_ecam, index, lower_32_bits(pci_addr),
-		      PCIE_ATU_LOWER_TARGET);
-	atu_reg_write(pcie_ecam, index, lower_32_bits(cpu_addr + size - 1),
-		      PCIE_ATU_LIMIT);
-	atu_reg_write(pcie_ecam, index, upper_32_bits(pci_addr),
-		      PCIE_ATU_UPPER_TARGET);
-	atu_reg_write(pcie_ecam, index, type, PCIE_ATU_CR1);
-	atu_reg_write(pcie_ecam, index, PCIE_ATU_ENABLE, PCIE_ATU_CR2);
-}
-
-static void __iomem *tegra194_map_bus(struct pci_bus *bus,
-				      unsigned int devfn, int where)
-{
-	struct pci_config_window *cfg = bus->sysdata;
-	struct tegra194_pcie_ecam *pcie_ecam = cfg->priv;
-	u32 busdev;
-	int type;
-
-	if (bus->number < cfg->busr.start || bus->number > cfg->busr.end)
-		return NULL;
-
-	if (bus->number == cfg->busr.start) {
-		if (PCI_SLOT(devfn) == 0)
-			return pcie_ecam->dbi_base + where;
-		else
-			return NULL;
-	}
-
-	busdev = PCIE_ATU_BUS(bus->number) | PCIE_ATU_DEV(PCI_SLOT(devfn)) |
-		 PCIE_ATU_FUNC(PCI_FUNC(devfn));
-
-	if (bus->parent->number == cfg->busr.start) {
-		if (PCI_SLOT(devfn) == 0)
-			type = PCIE_ATU_TYPE_CFG0;
-		else
-			return NULL;
-	} else {
-		type = PCIE_ATU_TYPE_CFG1;
-	}
-
-	program_outbound_atu(pcie_ecam, 0, type, cfg->res.start, busdev,
-			     SZ_256K);
-
-	return pcie_ecam->config_base + where;
-}
-
-const struct pci_ecam_ops tegra194_pcie_ops = {
-	.init		= tegra194_acpi_init,
-	.pci_ops	= {
-		.map_bus	= tegra194_map_bus,
-		.read		= pci_generic_config_read,
-		.write		= pci_generic_config_write,
-	}
-};
-#endif /* defined(CONFIG_ACPI) && defined(CONFIG_PCI_QUIRKS) */
-
-#ifdef CONFIG_PCIE_TEGRA194
 
 static inline struct tegra_pcie_dw *to_tegra_pcie(struct dw_pcie *pci)
 {
@@ -615,19 +497,19 @@ static irqreturn_t tegra_pcie_ep_hard_irq(int irq, void *arg)
 	struct tegra_pcie_dw *pcie = arg;
 	struct dw_pcie_ep *ep = &pcie->pci.ep;
 	int spurious = 1;
-	u32 val, tmp;
+	u32 status_l0, status_l1, link_status;
 
-	val = appl_readl(pcie, APPL_INTR_STATUS_L0);
-	if (val & APPL_INTR_STATUS_L0_LINK_STATE_INT) {
-		val = appl_readl(pcie, APPL_INTR_STATUS_L1_0_0);
-		appl_writel(pcie, val, APPL_INTR_STATUS_L1_0_0);
+	status_l0 = appl_readl(pcie, APPL_INTR_STATUS_L0);
+	if (status_l0 & APPL_INTR_STATUS_L0_LINK_STATE_INT) {
+		status_l1 = appl_readl(pcie, APPL_INTR_STATUS_L1_0_0);
+		appl_writel(pcie, status_l1, APPL_INTR_STATUS_L1_0_0);
 
-		if (val & APPL_INTR_STATUS_L1_0_0_HOT_RESET_DONE)
+		if (status_l1 & APPL_INTR_STATUS_L1_0_0_HOT_RESET_DONE)
 			pex_ep_event_hot_rst_done(pcie);
 
-		if (val & APPL_INTR_STATUS_L1_0_0_RDLH_LINK_UP_CHGED) {
-			tmp = appl_readl(pcie, APPL_LINK_STATUS);
-			if (tmp & APPL_LINK_STATUS_RDLH_LINK_UP) {
+		if (status_l1 & APPL_INTR_STATUS_L1_0_0_RDLH_LINK_UP_CHGED) {
+			link_status = appl_readl(pcie, APPL_LINK_STATUS);
+			if (link_status & APPL_LINK_STATUS_RDLH_LINK_UP) {
 				dev_dbg(pcie->dev, "Link is up with Host\n");
 				dw_pcie_ep_linkup(ep);
 			}
@@ -636,11 +518,11 @@ static irqreturn_t tegra_pcie_ep_hard_irq(int irq, void *arg)
 		spurious = 0;
 	}
 
-	if (val & APPL_INTR_STATUS_L0_PCI_CMD_EN_INT) {
-		val = appl_readl(pcie, APPL_INTR_STATUS_L1_15);
-		appl_writel(pcie, val, APPL_INTR_STATUS_L1_15);
+	if (status_l0 & APPL_INTR_STATUS_L0_PCI_CMD_EN_INT) {
+		status_l1 = appl_readl(pcie, APPL_INTR_STATUS_L1_15);
+		appl_writel(pcie, status_l1, APPL_INTR_STATUS_L1_15);
 
-		if (val & APPL_INTR_STATUS_L1_15_CFG_BME_CHGED)
+		if (status_l1 & APPL_INTR_STATUS_L1_15_CFG_BME_CHGED)
 			return IRQ_WAKE_THREAD;
 
 		spurious = 0;
@@ -648,8 +530,8 @@ static irqreturn_t tegra_pcie_ep_hard_irq(int irq, void *arg)
 
 	if (spurious) {
 		dev_warn(pcie->dev, "Random interrupt (STATUS = 0x%08X)\n",
-			 val);
-		appl_writel(pcie, val, APPL_INTR_STATUS_L0);
+			 status_l0);
+		appl_writel(pcie, status_l0, APPL_INTR_STATUS_L0);
 	}
 
 	return IRQ_HANDLED;
@@ -694,6 +576,24 @@ static struct pci_ops tegra_pci_ops = {
 };
 
 #if defined(CONFIG_PCIEASPM)
+static const u32 event_cntr_ctrl_offset[] = {
+	0x1d8,
+	0x1a8,
+	0x1a8,
+	0x1a8,
+	0x1c4,
+	0x1d8
+};
+
+static const u32 event_cntr_data_offset[] = {
+	0x1dc,
+	0x1ac,
+	0x1ac,
+	0x1ac,
+	0x1c8,
+	0x1dc
+};
+
 static void disable_aspm_l11(struct tegra_pcie_dw *pcie)
 {
 	u32 val;
@@ -1593,6 +1493,16 @@ static void tegra_pcie_dw_pme_turnoff(struct tegra_pcie_dw *pcie)
 		return;
 	}
 
+	/*
+	 * PCIe controller exits from L2 only if reset is applied, so
+	 * controller doesn't handle interrupts. But in cases where
+	 * L2 entry fails, PERST# is asserted which can trigger surprise
+	 * link down AER. However this function call happens in
+	 * suspend_noirq(), so AER interrupt will not be processed.
+	 * Disable all interrupts to avoid such a scenario.
+	 */
+	appl_writel(pcie, 0x0, APPL_INTR_EN_L0_0);
+
 	if (tegra_pcie_try_link_l2(pcie)) {
 		dev_info(pcie->dev, "Link didn't transition to L2 state\n");
 		/*
@@ -1863,7 +1773,7 @@ static void pex_ep_event_pex_rst_deassert(struct tegra_pcie_dw *pcie)
 	val = (ep->msi_mem_phys & MSIX_ADDR_MATCH_LOW_OFF_MASK);
 	val |= MSIX_ADDR_MATCH_LOW_OFF_EN;
 	dw_pcie_writel_dbi(pci, MSIX_ADDR_MATCH_LOW_OFF, val);
-	val = (lower_32_bits(ep->msi_mem_phys) & MSIX_ADDR_MATCH_HIGH_OFF_MASK);
+	val = (upper_32_bits(ep->msi_mem_phys) & MSIX_ADDR_MATCH_HIGH_OFF_MASK);
 	dw_pcie_writel_dbi(pci, MSIX_ADDR_MATCH_HIGH_OFF, val);
 
 	ret = dw_pcie_ep_init_complete(ep);
@@ -1926,7 +1836,7 @@ static int tegra_pcie_ep_raise_msi_irq(struct tegra_pcie_dw *pcie, u16 irq)
 	if (unlikely(irq > 31))
 		return -EINVAL;
 
-	appl_writel(pcie, (1 << irq), APPL_MSI_CTRL_1);
+	appl_writel(pcie, BIT(irq), APPL_MSI_CTRL_1);
 
 	return 0;
 }
@@ -2033,13 +1943,6 @@ static int tegra_pcie_config_ep(struct tegra_pcie_dw *pcie,
 	if (ret < 0) {
 		dev_err(dev, "Failed to request IRQ for PERST: %d\n", ret);
 		return ret;
-	}
-
-	name = devm_kasprintf(dev, GFP_KERNEL, "tegra_pcie_%u_ep_work",
-			      pcie->cid);
-	if (!name) {
-		dev_err(dev, "Failed to create PCIe EP work thread string\n");
-		return -ENOMEM;
 	}
 
 	pm_runtime_enable(dev);
@@ -2314,6 +2217,8 @@ static int tegra_pcie_dw_resume_noirq(struct device *dev)
 		goto fail_host_init;
 	}
 
+	dw_pcie_setup_rc(&pcie->pci.pp);
+
 	ret = tegra_pcie_dw_start_link(&pcie->pci);
 	if (ret < 0)
 		goto fail_host_init;
@@ -2333,6 +2238,11 @@ static int tegra_pcie_dw_resume_early(struct device *dev)
 {
 	struct tegra_pcie_dw *pcie = dev_get_drvdata(dev);
 	u32 val;
+
+	if (pcie->mode == DW_PCIE_EP_TYPE) {
+		dev_err(dev, "Suspend is not supported in EP mode");
+		return -ENOTSUPP;
+	}
 
 	if (!pcie->link_state)
 		return 0;
@@ -2411,5 +2321,3 @@ MODULE_DEVICE_TABLE(of, tegra_pcie_dw_of_match);
 MODULE_AUTHOR("Vidya Sagar <vidyas@nvidia.com>");
 MODULE_DESCRIPTION("NVIDIA PCIe host controller driver");
 MODULE_LICENSE("GPL v2");
-
-#endif /* CONFIG_PCIE_TEGRA194 */

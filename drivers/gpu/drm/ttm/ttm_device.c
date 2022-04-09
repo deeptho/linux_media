@@ -36,13 +36,15 @@
 
 #include "ttm_module.h"
 
-/**
+/*
  * ttm_global_mutex - protecting the global state
  */
-DEFINE_MUTEX(ttm_global_mutex);
-unsigned ttm_glob_use_count;
+static DEFINE_MUTEX(ttm_global_mutex);
+static unsigned ttm_glob_use_count;
 struct ttm_global ttm_glob;
 EXPORT_SYMBOL(ttm_glob);
+
+struct dentry *ttm_debugfs_root;
 
 static void ttm_global_release(void)
 {
@@ -53,6 +55,7 @@ static void ttm_global_release(void)
 		goto out;
 
 	ttm_pool_mgr_fini();
+	debugfs_remove(ttm_debugfs_root);
 
 	__free_page(glob->dummy_read_page);
 	memset(glob, 0, sizeof(*glob));
@@ -72,6 +75,11 @@ static int ttm_global_init(void)
 		goto out;
 
 	si_meminfo(&si);
+
+	ttm_debugfs_root = debugfs_create_dir("ttm", NULL);
+	if (IS_ERR(ttm_debugfs_root)) {
+		ttm_debugfs_root = NULL;
+	}
 
 	/* Limit the number of pages in the pool to about 50% of the total
 	 * system memory.
@@ -100,11 +108,15 @@ static int ttm_global_init(void)
 	debugfs_create_atomic_t("buffer_objects", 0444, ttm_debugfs_root,
 				&glob->bo_count);
 out:
+	if (ret && ttm_debugfs_root)
+		debugfs_remove(ttm_debugfs_root);
+	if (ret)
+		--ttm_glob_use_count;
 	mutex_unlock(&ttm_global_mutex);
 	return ret;
 }
 
-/**
+/*
  * A buffer object shrink method that tries to swap out the first
  * buffer object on the global::swap_lru list.
  */
@@ -143,14 +155,8 @@ int ttm_device_swapout(struct ttm_device *bdev, struct ttm_operation_ctx *ctx,
 
 		for (j = 0; j < TTM_MAX_BO_PRIORITY; ++j) {
 			list_for_each_entry(bo, &man->lru[j], lru) {
-				uint32_t num_pages;
+				uint32_t num_pages = PFN_UP(bo->base.size);
 
-				if (!bo->ttm || !ttm_tt_is_populated(bo->ttm) ||
-				    bo->ttm->page_flags & TTM_PAGE_FLAG_SG ||
-				    bo->ttm->page_flags & TTM_PAGE_FLAG_SWAPPED)
-					continue;
-
-				num_pages = bo->ttm->num_pages;
 				ret = ttm_bo_swapout(bo, ctx, gfp_flags);
 				/* ttm_bo_swapout has dropped the lru_lock */
 				if (!ret)
@@ -164,21 +170,6 @@ int ttm_device_swapout(struct ttm_device *bdev, struct ttm_operation_ctx *ctx,
 	return 0;
 }
 EXPORT_SYMBOL(ttm_device_swapout);
-
-static void ttm_init_sysman(struct ttm_device *bdev)
-{
-	struct ttm_resource_manager *man = &bdev->sysman;
-
-	/*
-	 * Initialize the system memory buffer type.
-	 * Other types need to be driver / IOCTL initialized.
-	 */
-	man->use_tt = true;
-
-	ttm_resource_manager_init(man, 0);
-	ttm_set_driver_manager(bdev, TTM_PL_SYSTEM, man);
-	ttm_resource_manager_set_used(man, true);
-}
 
 static void ttm_device_delayed_workqueue(struct work_struct *work)
 {
@@ -222,13 +213,14 @@ int ttm_device_init(struct ttm_device *bdev, struct ttm_device_funcs *funcs,
 
 	bdev->funcs = funcs;
 
-	ttm_init_sysman(bdev);
+	ttm_sys_man_init(bdev);
 	ttm_pool_init(&bdev->pool, dev, use_dma_alloc, use_dma32);
 
 	bdev->vma_manager = vma_manager;
 	INIT_DELAYED_WORK(&bdev->wq, ttm_device_delayed_workqueue);
 	spin_lock_init(&bdev->lru_lock);
 	INIT_LIST_HEAD(&bdev->ddestroy);
+	INIT_LIST_HEAD(&bdev->pinned);
 	bdev->dev_mapping = mapping;
 	mutex_lock(&ttm_global_mutex);
 	list_add_tail(&bdev->device_list, &glob->device_list);
@@ -266,3 +258,50 @@ void ttm_device_fini(struct ttm_device *bdev)
 	ttm_global_release();
 }
 EXPORT_SYMBOL(ttm_device_fini);
+
+void ttm_device_clear_dma_mappings(struct ttm_device *bdev)
+{
+	struct ttm_resource_manager *man;
+	struct ttm_buffer_object *bo;
+	unsigned int i, j;
+
+	spin_lock(&bdev->lru_lock);
+	while (!list_empty(&bdev->pinned)) {
+		bo = list_first_entry(&bdev->pinned, struct ttm_buffer_object, lru);
+		/* Take ref against racing releases once lru_lock is unlocked */
+		if (ttm_bo_get_unless_zero(bo)) {
+			list_del_init(&bo->lru);
+			spin_unlock(&bdev->lru_lock);
+
+			if (bo->ttm)
+				ttm_tt_unpopulate(bo->bdev, bo->ttm);
+
+			ttm_bo_put(bo);
+			spin_lock(&bdev->lru_lock);
+		}
+	}
+
+	for (i = TTM_PL_SYSTEM; i < TTM_NUM_MEM_TYPES; ++i) {
+		man = ttm_manager_type(bdev, i);
+		if (!man || !man->use_tt)
+			continue;
+
+		for (j = 0; j < TTM_MAX_BO_PRIORITY; ++j) {
+			while (!list_empty(&man->lru[j])) {
+				bo = list_first_entry(&man->lru[j], struct ttm_buffer_object, lru);
+				if (ttm_bo_get_unless_zero(bo)) {
+					list_del_init(&bo->lru);
+					spin_unlock(&bdev->lru_lock);
+
+					if (bo->ttm)
+						ttm_tt_unpopulate(bo->bdev, bo->ttm);
+
+					ttm_bo_put(bo);
+					spin_lock(&bdev->lru_lock);
+				}
+			}
+		}
+	}
+	spin_unlock(&bdev->lru_lock);
+}
+EXPORT_SYMBOL(ttm_device_clear_dma_mappings);

@@ -925,6 +925,7 @@ mt76u_tx_queue_skb(struct mt76_dev *dev, struct mt76_queue *q,
 
 	q->head = (q->head + 1) % q->ndesc;
 	q->entry[idx].skb = tx_info.skb;
+	q->entry[idx].wcid = 0xffff;
 	q->queued++;
 
 	return idx;
@@ -1080,7 +1081,7 @@ void mt76u_stop_tx(struct mt76_dev *dev)
 
 	mt76_worker_enable(&dev->usb.status_worker);
 
-	mt76_tx_status_check(dev, NULL, true);
+	mt76_tx_status_check(dev, true);
 }
 EXPORT_SYMBOL_GPL(mt76u_stop_tx);
 

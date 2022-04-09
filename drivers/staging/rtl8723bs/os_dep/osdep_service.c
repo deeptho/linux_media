@@ -4,10 +4,6 @@
  * Copyright(c) 2007 - 2012 Realtek Corporation. All rights reserved.
  *
  ******************************************************************************/
-
-
-#define _OSDEP_SERVICE_C_
-
 #include <drv_types.h>
 #include <rtw_debug.h>
 
@@ -51,13 +47,6 @@ inline int _rtw_netif_rx(struct net_device *ndev, struct sk_buff *skb)
 {
 	skb->dev = ndev;
 	return netif_rx(skb);
-}
-
-void _rtw_init_queue(struct __queue *pqueue)
-{
-	INIT_LIST_HEAD(&(pqueue->queue));
-
-	spin_lock_init(&(pqueue->lock));
 }
 
 struct net_device *rtw_alloc_etherdev_with_old_priv(int sizeof_priv, void *old_priv)
@@ -153,7 +142,7 @@ int rtw_change_ifname(struct adapter *padapter, const char *ifname)
 
 	rtw_init_netdev_name(pnetdev, ifname);
 
-	memcpy(pnetdev->dev_addr, padapter->eeprompriv.mac_addr, ETH_ALEN);
+	eth_hw_addr_set(pnetdev, padapter->eeprompriv.mac_addr);
 
 	if (!rtnl_is_locked())
 		ret = register_netdev(pnetdev);
@@ -285,7 +274,7 @@ struct rtw_cbuf *rtw_cbuf_alloc(u32 size)
 {
 	struct rtw_cbuf *cbuf;
 
-	cbuf = rtw_malloc(sizeof(*cbuf) + sizeof(void *) * size);
+	cbuf = rtw_malloc(struct_size(cbuf, bufs, size));
 
 	if (cbuf) {
 		cbuf->write = cbuf->read = 0;

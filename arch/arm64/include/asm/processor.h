@@ -16,6 +16,12 @@
  */
 #define NET_IP_ALIGN	0
 
+#define MTE_CTRL_GCR_USER_EXCL_SHIFT	0
+#define MTE_CTRL_GCR_USER_EXCL_MASK	0xffff
+
+#define MTE_CTRL_TCF_SYNC		(1UL << 16)
+#define MTE_CTRL_TCF_ASYNC		(1UL << 17)
+
 #ifndef __ASSEMBLY__
 
 #include <linux/build_bug.h>
@@ -109,6 +115,11 @@ struct debug_info {
 #endif
 };
 
+enum vec_type {
+	ARM64_VEC_SVE = 0,
+	ARM64_VEC_MAX,
+};
+
 struct cpu_context {
 	unsigned long x19;
 	unsigned long x20;
@@ -141,20 +152,62 @@ struct thread_struct {
 
 	unsigned int		fpsimd_cpu;
 	void			*sve_state;	/* SVE registers, if any */
-	unsigned int		sve_vl;		/* SVE vector length */
-	unsigned int		sve_vl_onexec;	/* SVE vl after next exec */
+	unsigned int		vl[ARM64_VEC_MAX];	/* vector length */
+	unsigned int		vl_onexec[ARM64_VEC_MAX]; /* vl after next exec */
 	unsigned long		fault_address;	/* fault info */
 	unsigned long		fault_code;	/* ESR_EL1 value */
 	struct debug_info	debug;		/* debugging */
 #ifdef CONFIG_ARM64_PTR_AUTH
 	struct ptrauth_keys_user	keys_user;
+#ifdef CONFIG_ARM64_PTR_AUTH_KERNEL
 	struct ptrauth_keys_kernel	keys_kernel;
 #endif
+#endif
 #ifdef CONFIG_ARM64_MTE
-	u64			gcr_user_excl;
+	u64			mte_ctrl;
 #endif
 	u64			sctlr_user;
 };
+
+static inline unsigned int thread_get_vl(struct thread_struct *thread,
+					 enum vec_type type)
+{
+	return thread->vl[type];
+}
+
+static inline unsigned int thread_get_sve_vl(struct thread_struct *thread)
+{
+	return thread_get_vl(thread, ARM64_VEC_SVE);
+}
+
+unsigned int task_get_vl(const struct task_struct *task, enum vec_type type);
+void task_set_vl(struct task_struct *task, enum vec_type type,
+		 unsigned long vl);
+void task_set_vl_onexec(struct task_struct *task, enum vec_type type,
+			unsigned long vl);
+unsigned int task_get_vl_onexec(const struct task_struct *task,
+				enum vec_type type);
+
+static inline unsigned int task_get_sve_vl(const struct task_struct *task)
+{
+	return task_get_vl(task, ARM64_VEC_SVE);
+}
+
+static inline void task_set_sve_vl(struct task_struct *task, unsigned long vl)
+{
+	task_set_vl(task, ARM64_VEC_SVE, vl);
+}
+
+static inline unsigned int task_get_sve_vl_onexec(const struct task_struct *task)
+{
+	return task_get_vl_onexec(task, ARM64_VEC_SVE);
+}
+
+static inline void task_set_sve_vl_onexec(struct task_struct *task,
+					  unsigned long vl)
+{
+	task_set_vl_onexec(task, ARM64_VEC_SVE, vl);
+}
 
 #define SCTLR_USER_MASK                                                        \
 	(SCTLR_ELx_ENIA | SCTLR_ELx_ENIB | SCTLR_ELx_ENDA | SCTLR_ELx_ENDB |   \
@@ -249,15 +302,13 @@ struct task_struct;
 /* Free all resources held by a thread. */
 extern void release_thread(struct task_struct *);
 
-unsigned long get_wchan(struct task_struct *p);
+unsigned long __get_wchan(struct task_struct *p);
 
-void set_task_sctlr_el1(u64 sctlr);
+void update_sctlr_el1(u64 sctlr);
 
 /* Thread switching */
 extern struct task_struct *cpu_switch_to(struct task_struct *prev,
 					 struct task_struct *next);
-
-asmlinkage void arm64_preempt_schedule_irq(void);
 
 #define task_pt_regs(p) \
 	((struct pt_regs *)(THREAD_SIZE + task_stack_page(p)) - 1)
@@ -329,13 +380,13 @@ long get_tagged_addr_ctrl(struct task_struct *task);
  * of header definitions for the use of task_stack_page.
  */
 
-#define current_top_of_stack()							\
-({										\
-	struct stack_info _info;						\
-	BUG_ON(!on_accessible_stack(current, current_stack_pointer, &_info));	\
-	_info.high;								\
+#define current_top_of_stack()								\
+({											\
+	struct stack_info _info;							\
+	BUG_ON(!on_accessible_stack(current, current_stack_pointer, 1, &_info));	\
+	_info.high;									\
 })
-#define on_thread_stack()	(on_task_stack(current, current_stack_pointer, NULL))
+#define on_thread_stack()	(on_task_stack(current, current_stack_pointer, 1, NULL))
 
 #endif /* __ASSEMBLY__ */
 #endif /* __ASM_PROCESSOR_H */

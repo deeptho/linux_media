@@ -267,8 +267,11 @@ static irqreturn_t aha1740_intr_handle(int irq, void *dev_id)
 			   guarantee that we will still have it in the
 			   cdb when we come back */
 			if ( (adapstat & G2INTST_MASK) == G2INTST_CCBERROR ) {
-				memcpy(SCtmp->sense_buffer, ecbptr->sense, 
-				       SCSI_SENSE_BUFFERSIZE);
+				memcpy_and_pad(SCtmp->sense_buffer,
+					       SCSI_SENSE_BUFFERSIZE,
+					       ecbptr->sense,
+					       sizeof(ecbptr->sense),
+					       0);
 				errstatus = aha1740_makecode(ecbptr->sense,ecbptr->status);
 			} else
 				errstatus = 0;
@@ -312,9 +315,9 @@ static irqreturn_t aha1740_intr_handle(int irq, void *dev_id)
 	return IRQ_RETVAL(handled);
 }
 
-static int aha1740_queuecommand_lck(struct scsi_cmnd * SCpnt,
-				    void (*done)(struct scsi_cmnd *))
+static int aha1740_queuecommand_lck(struct scsi_cmnd *SCpnt)
 {
+	void (*done)(struct scsi_cmnd *) = scsi_done;
 	unchar direction;
 	unchar *cmd = (unchar *) SCpnt->cmnd;
 	unchar target = scmd_id(SCpnt);

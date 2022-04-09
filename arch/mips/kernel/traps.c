@@ -103,12 +103,18 @@ extern asmlinkage void handle_reserved(void);
 extern void tlb_do_page_fault_0(void);
 
 void (*board_be_init)(void);
-int (*board_be_handler)(struct pt_regs *regs, int is_fixup);
+static int (*board_be_handler)(struct pt_regs *regs, int is_fixup);
 void (*board_nmi_handler_setup)(void);
 void (*board_ejtag_handler_setup)(void);
 void (*board_bind_eic_interrupt)(int irq, int regset);
 void (*board_ebase_setup)(void);
 void(*board_cache_error_setup)(void);
+
+void mips_set_be_handler(int (*handler)(struct pt_regs *regs, int is_fixup))
+{
+	board_be_handler = handler;
+}
+EXPORT_SYMBOL_GPL(mips_set_be_handler);
 
 static void show_raw_backtrace(unsigned long reg29, const char *loglvl,
 			       bool user)
@@ -784,7 +790,6 @@ void force_fcr31_sig(unsigned long fcr31, void __user *fault_addr,
 int process_fpemu_return(int sig, void __user *fault_addr, unsigned long fcr31)
 {
 	int si_code;
-	struct vm_area_struct *vma;
 
 	switch (sig) {
 	case 0:
@@ -800,8 +805,7 @@ int process_fpemu_return(int sig, void __user *fault_addr, unsigned long fcr31)
 
 	case SIGSEGV:
 		mmap_read_lock(current->mm);
-		vma = find_vma(current->mm, (unsigned long)fault_addr);
-		if (vma && (vma->vm_start <= (unsigned long)fault_addr))
+		if (vma_lookup(current->mm, (unsigned long)fault_addr))
 			si_code = SEGV_ACCERR;
 		else
 			si_code = SEGV_MAPERR;

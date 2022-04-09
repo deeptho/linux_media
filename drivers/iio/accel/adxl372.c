@@ -1214,6 +1214,7 @@ int adxl372_probe(struct device *dev, struct regmap *regmap,
 	ret = devm_iio_triggered_buffer_setup_ext(dev,
 						  indio_dev, NULL,
 						  adxl372_trigger_handler,
+						  IIO_BUFFER_DIRECTION_IN,
 						  &adxl372_buffer_ops,
 						  adxl372_fifo_attributes);
 	if (ret < 0)
@@ -1223,14 +1224,14 @@ int adxl372_probe(struct device *dev, struct regmap *regmap,
 		st->dready_trig = devm_iio_trigger_alloc(dev,
 							 "%s-dev%d",
 							 indio_dev->name,
-							 indio_dev->id);
+							 iio_device_id(indio_dev));
 		if (st->dready_trig == NULL)
 			return -ENOMEM;
 
 		st->peak_datardy_trig = devm_iio_trigger_alloc(dev,
 							       "%s-dev%d-peak",
 							       indio_dev->name,
-							       indio_dev->id);
+							       iio_device_id(indio_dev));
 		if (!st->peak_datardy_trig)
 			return -ENOMEM;
 

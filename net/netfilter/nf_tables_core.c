@@ -79,9 +79,9 @@ static bool nft_payload_fast_eval(const struct nft_expr *expr,
 	if (priv->base == NFT_PAYLOAD_NETWORK_HEADER)
 		ptr = skb_network_header(skb);
 	else {
-		if (!pkt->tprot_set)
+		if (!(pkt->flags & NFT_PKTINFO_L4PROTO))
 			return false;
-		ptr = skb_network_header(skb) + pkt->xt.thoff;
+		ptr = skb_network_header(skb) + nft_thoff(pkt);
 	}
 
 	ptr += priv->offset;
@@ -268,6 +268,7 @@ static struct nft_expr_type *nft_basic_types[] = {
 	&nft_meta_type,
 	&nft_rt_type,
 	&nft_exthdr_type,
+	&nft_last_type,
 };
 
 static struct nft_object_type *nft_basic_objects[] = {

@@ -103,7 +103,8 @@ static void usage(const char *prog)
 	fprintf(stderr,
 		"%s: %s [OPTS] <ifname|ifindex>\n\n"
 		"OPTS:\n"
-		"    -F    force loading prog\n",
+		"    -F    force loading prog\n"
+		"    -S    use skb-mode\n",
 		__func__, prog);
 }
 
@@ -153,7 +154,7 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
-	map = bpf_map__next(NULL, obj);
+	map = bpf_object__next_map(obj, NULL);
 	if (!map) {
 		printf("finding a map in obj file failed\n");
 		return 1;

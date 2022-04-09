@@ -501,15 +501,25 @@ static void hl_mmu_pa_page_with_offset(struct hl_ctx *ctx, u64 virt_addr,
 
 	if ((hops->range_type == HL_VA_RANGE_TYPE_DRAM) &&
 			!is_power_of_2(prop->dram_page_size)) {
-		u32 bit;
-		u64 page_offset_mask;
-		u64 phys_addr_mask;
+		u64 dram_page_size, dram_base, abs_phys_addr, abs_virt_addr,
+			page_id, page_start;
+		u32 page_off;
 
-		bit = __ffs64((u64)prop->dram_page_size);
-		page_offset_mask = ((1ull << bit) - 1);
-		phys_addr_mask = ~page_offset_mask;
-		*phys_addr = (tmp_phys_addr & phys_addr_mask) |
-				(virt_addr & page_offset_mask);
+		/*
+		 * Bit arithmetics cannot be used for non power of two page
+		 * sizes. In addition, since bit arithmetics is not used,
+		 * we cannot ignore dram base. All that shall be considerd.
+		 */
+
+		dram_page_size = prop->dram_page_size;
+		dram_base = prop->dram_base_address;
+		abs_phys_addr = tmp_phys_addr - dram_base;
+		abs_virt_addr = virt_addr - dram_base;
+		page_id = DIV_ROUND_DOWN_ULL(abs_phys_addr, dram_page_size);
+		page_start = page_id * dram_page_size;
+		div_u64_rem(abs_virt_addr, dram_page_size, &page_off);
+
+		*phys_addr = page_start + page_off + dram_base;
 	} else {
 		/*
 		 * find the correct hop shift field in hl_mmu_properties

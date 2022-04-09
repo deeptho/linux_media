@@ -2,19 +2,19 @@
 
 #include <test_progs.h>
 
-#include "atomics.skel.h"
+#include "atomics.lskel.h"
 
-static void test_add(struct atomics *skel)
+static void test_add(struct atomics_lskel *skel)
 {
 	int err, prog_fd;
 	__u32 duration = 0, retval;
-	struct bpf_link *link;
+	int link_fd;
 
-	link = bpf_program__attach(skel->progs.add);
-	if (CHECK(IS_ERR(link), "attach(add)", "err: %ld\n", PTR_ERR(link)))
+	link_fd = atomics_lskel__add__attach(skel);
+	if (!ASSERT_GT(link_fd, 0, "attach(add)"))
 		return;
 
-	prog_fd = bpf_program__fd(skel->progs.add);
+	prog_fd = skel->progs.add.prog_fd;
 	err = bpf_prog_test_run(prog_fd, 1, NULL, 0,
 				NULL, NULL, &retval, &duration);
 	if (CHECK(err || retval, "test_run add",
@@ -33,20 +33,20 @@ static void test_add(struct atomics *skel)
 	ASSERT_EQ(skel->data->add_noreturn_value, 3, "add_noreturn_value");
 
 cleanup:
-	bpf_link__destroy(link);
+	close(link_fd);
 }
 
-static void test_sub(struct atomics *skel)
+static void test_sub(struct atomics_lskel *skel)
 {
 	int err, prog_fd;
 	__u32 duration = 0, retval;
-	struct bpf_link *link;
+	int link_fd;
 
-	link = bpf_program__attach(skel->progs.sub);
-	if (CHECK(IS_ERR(link), "attach(sub)", "err: %ld\n", PTR_ERR(link)))
+	link_fd = atomics_lskel__sub__attach(skel);
+	if (!ASSERT_GT(link_fd, 0, "attach(sub)"))
 		return;
 
-	prog_fd = bpf_program__fd(skel->progs.sub);
+	prog_fd = skel->progs.sub.prog_fd;
 	err = bpf_prog_test_run(prog_fd, 1, NULL, 0,
 				NULL, NULL, &retval, &duration);
 	if (CHECK(err || retval, "test_run sub",
@@ -66,20 +66,20 @@ static void test_sub(struct atomics *skel)
 	ASSERT_EQ(skel->data->sub_noreturn_value, -1, "sub_noreturn_value");
 
 cleanup:
-	bpf_link__destroy(link);
+	close(link_fd);
 }
 
-static void test_and(struct atomics *skel)
+static void test_and(struct atomics_lskel *skel)
 {
 	int err, prog_fd;
 	__u32 duration = 0, retval;
-	struct bpf_link *link;
+	int link_fd;
 
-	link = bpf_program__attach(skel->progs.and);
-	if (CHECK(IS_ERR(link), "attach(and)", "err: %ld\n", PTR_ERR(link)))
+	link_fd = atomics_lskel__and__attach(skel);
+	if (!ASSERT_GT(link_fd, 0, "attach(and)"))
 		return;
 
-	prog_fd = bpf_program__fd(skel->progs.and);
+	prog_fd = skel->progs.and.prog_fd;
 	err = bpf_prog_test_run(prog_fd, 1, NULL, 0,
 				NULL, NULL, &retval, &duration);
 	if (CHECK(err || retval, "test_run and",
@@ -94,20 +94,20 @@ static void test_and(struct atomics *skel)
 
 	ASSERT_EQ(skel->data->and_noreturn_value, 0x010ull << 32, "and_noreturn_value");
 cleanup:
-	bpf_link__destroy(link);
+	close(link_fd);
 }
 
-static void test_or(struct atomics *skel)
+static void test_or(struct atomics_lskel *skel)
 {
 	int err, prog_fd;
 	__u32 duration = 0, retval;
-	struct bpf_link *link;
+	int link_fd;
 
-	link = bpf_program__attach(skel->progs.or);
-	if (CHECK(IS_ERR(link), "attach(or)", "err: %ld\n", PTR_ERR(link)))
+	link_fd = atomics_lskel__or__attach(skel);
+	if (!ASSERT_GT(link_fd, 0, "attach(or)"))
 		return;
 
-	prog_fd = bpf_program__fd(skel->progs.or);
+	prog_fd = skel->progs.or.prog_fd;
 	err = bpf_prog_test_run(prog_fd, 1, NULL, 0,
 				NULL, NULL, &retval, &duration);
 	if (CHECK(err || retval, "test_run or",
@@ -123,20 +123,20 @@ static void test_or(struct atomics *skel)
 
 	ASSERT_EQ(skel->data->or_noreturn_value, 0x111ull << 32, "or_noreturn_value");
 cleanup:
-	bpf_link__destroy(link);
+	close(link_fd);
 }
 
-static void test_xor(struct atomics *skel)
+static void test_xor(struct atomics_lskel *skel)
 {
 	int err, prog_fd;
 	__u32 duration = 0, retval;
-	struct bpf_link *link;
+	int link_fd;
 
-	link = bpf_program__attach(skel->progs.xor);
-	if (CHECK(IS_ERR(link), "attach(xor)", "err: %ld\n", PTR_ERR(link)))
+	link_fd = atomics_lskel__xor__attach(skel);
+	if (!ASSERT_GT(link_fd, 0, "attach(xor)"))
 		return;
 
-	prog_fd = bpf_program__fd(skel->progs.xor);
+	prog_fd = skel->progs.xor.prog_fd;
 	err = bpf_prog_test_run(prog_fd, 1, NULL, 0,
 				NULL, NULL, &retval, &duration);
 	if (CHECK(err || retval, "test_run xor",
@@ -151,20 +151,20 @@ static void test_xor(struct atomics *skel)
 
 	ASSERT_EQ(skel->data->xor_noreturn_value, 0x101ull << 32, "xor_nxoreturn_value");
 cleanup:
-	bpf_link__destroy(link);
+	close(link_fd);
 }
 
-static void test_cmpxchg(struct atomics *skel)
+static void test_cmpxchg(struct atomics_lskel *skel)
 {
 	int err, prog_fd;
 	__u32 duration = 0, retval;
-	struct bpf_link *link;
+	int link_fd;
 
-	link = bpf_program__attach(skel->progs.cmpxchg);
-	if (CHECK(IS_ERR(link), "attach(cmpxchg)", "err: %ld\n", PTR_ERR(link)))
+	link_fd = atomics_lskel__cmpxchg__attach(skel);
+	if (!ASSERT_GT(link_fd, 0, "attach(cmpxchg)"))
 		return;
 
-	prog_fd = bpf_program__fd(skel->progs.cmpxchg);
+	prog_fd = skel->progs.cmpxchg.prog_fd;
 	err = bpf_prog_test_run(prog_fd, 1, NULL, 0,
 				NULL, NULL, &retval, &duration);
 	if (CHECK(err || retval, "test_run add",
@@ -180,20 +180,20 @@ static void test_cmpxchg(struct atomics *skel)
 	ASSERT_EQ(skel->bss->cmpxchg32_result_succeed, 1, "cmpxchg_result_succeed");
 
 cleanup:
-	bpf_link__destroy(link);
+	close(link_fd);
 }
 
-static void test_xchg(struct atomics *skel)
+static void test_xchg(struct atomics_lskel *skel)
 {
 	int err, prog_fd;
 	__u32 duration = 0, retval;
-	struct bpf_link *link;
+	int link_fd;
 
-	link = bpf_program__attach(skel->progs.xchg);
-	if (CHECK(IS_ERR(link), "attach(xchg)", "err: %ld\n", PTR_ERR(link)))
+	link_fd = atomics_lskel__xchg__attach(skel);
+	if (!ASSERT_GT(link_fd, 0, "attach(xchg)"))
 		return;
 
-	prog_fd = bpf_program__fd(skel->progs.xchg);
+	prog_fd = skel->progs.xchg.prog_fd;
 	err = bpf_prog_test_run(prog_fd, 1, NULL, 0,
 				NULL, NULL, &retval, &duration);
 	if (CHECK(err || retval, "test_run add",
@@ -207,15 +207,15 @@ static void test_xchg(struct atomics *skel)
 	ASSERT_EQ(skel->bss->xchg32_result, 1, "xchg32_result");
 
 cleanup:
-	bpf_link__destroy(link);
+	close(link_fd);
 }
 
 void test_atomics(void)
 {
-	struct atomics *skel;
+	struct atomics_lskel *skel;
 	__u32 duration = 0;
 
-	skel = atomics__open_and_load();
+	skel = atomics_lskel__open_and_load();
 	if (CHECK(!skel, "skel_load", "atomics skeleton failed\n"))
 		return;
 
@@ -225,6 +225,7 @@ void test_atomics(void)
 		test__skip();
 		goto cleanup;
 	}
+	skel->bss->pid = getpid();
 
 	if (test__start_subtest("add"))
 		test_add(skel);
@@ -242,5 +243,5 @@ void test_atomics(void)
 		test_xchg(skel);
 
 cleanup:
-	atomics__destroy(skel);
+	atomics_lskel__destroy(skel);
 }

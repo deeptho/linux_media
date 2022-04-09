@@ -154,6 +154,8 @@ static const char *topdown_metric_L2_attrs[] = {
 	NULL,
 };
 
+#define TOPDOWN_MAX_LEVEL			2
+
 static const char *smi_cost_attrs = {
 	"{"
 	"msr/aperf/,"
@@ -248,7 +250,7 @@ static void evlist__check_cpu_maps(struct evlist *evlist)
 		evlist__warn_hybrid_group(evlist);
 
 	evlist__for_each_entry(evlist, evsel) {
-		leader = evsel->leader;
+		leader = evsel__leader(evsel);
 
 		/* Check that leader matches cpus with each member. */
 		if (leader == evsel)
@@ -269,10 +271,10 @@ static void evlist__check_cpu_maps(struct evlist *evlist)
 		}
 
 		for_each_group_evsel(pos, leader) {
-			pos->leader = pos;
+			evsel__set_leader(pos, pos);
 			pos->core.nr_members = 0;
 		}
-		evsel->leader->core.nr_members = 0;
+		evsel->core.leader->nr_members = 0;
 	}
 }
 
@@ -745,8 +747,8 @@ static enum counter_recovery stat_handle_error(struct evsel *counter)
 		 */
 		counter->errored = true;
 
-		if ((counter->leader != counter) ||
-		    !(counter->leader->core.nr_members > 1))
+		if ((evsel__leader(counter) != counter) ||
+		    !(counter->core.leader->nr_members > 1))
 			return COUNTER_SKIP;
 	} else if (evsel__fallback(counter, errno, msg, sizeof(msg))) {
 		if (verbose > 0)
@@ -839,7 +841,7 @@ try_again:
 				 * Don't close here because we're in the wrong affinity.
 				 */
 				if ((errno == EINVAL || errno == EBADF) &&
-				    counter->leader != counter &&
+				    evsel__leader(counter) != counter &&
 				    counter->weak_group) {
 					evlist__reset_weak_group(evsel_list, counter, false);
 					assert(counter->reset_group);
@@ -1748,14 +1750,12 @@ static int add_default_attributes(void)
 	(PERF_COUNT_HW_CACHE_OP_PREFETCH	<<  8) |
 	(PERF_COUNT_HW_CACHE_RESULT_MISS	<< 16)				},
 };
-	struct parse_events_error errinfo;
-
 	/* Set attrs if no event is selected and !null_run: */
 	if (stat_config.null_run)
 		return 0;
 
-	bzero(&errinfo, sizeof(errinfo));
 	if (transaction_run) {
+		struct parse_events_error errinfo;
 		/* Handle -T as -M transaction. Once platform specific metrics
 		 * support has been added to the json files, all architectures
 		 * will use this approach. To determine transaction support
@@ -1770,6 +1770,7 @@ static int add_default_attributes(void)
 							 &stat_config.metric_events);
 		}
 
+		parse_events_error__init(&errinfo);
 		if (pmu_have_event("cpu", "cycles-ct") &&
 		    pmu_have_event("cpu", "el-start"))
 			err = parse_events(evsel_list, transaction_attrs,
@@ -1780,13 +1781,14 @@ static int add_default_attributes(void)
 					   &errinfo);
 		if (err) {
 			fprintf(stderr, "Cannot set up transaction events\n");
-			parse_events_print_error(&errinfo, transaction_attrs);
-			return -1;
+			parse_events_error__print(&errinfo, transaction_attrs);
 		}
-		return 0;
+		parse_events_error__exit(&errinfo);
+		return err ? -1 : 0;
 	}
 
 	if (smi_cost) {
+		struct parse_events_error errinfo;
 		int smi;
 
 		if (sysfs__read_int(FREEZE_ON_SMI_PATH, &smi) < 0) {
@@ -1802,23 +1804,23 @@ static int add_default_attributes(void)
 			smi_reset = true;
 		}
 
-		if (pmu_have_event("msr", "aperf") &&
-		    pmu_have_event("msr", "smi")) {
-			if (!force_metric_only)
-				stat_config.metric_only = true;
-			err = parse_events(evsel_list, smi_cost_attrs, &errinfo);
-		} else {
+		if (!pmu_have_event("msr", "aperf") ||
+		    !pmu_have_event("msr", "smi")) {
 			fprintf(stderr, "To measure SMI cost, it needs "
 				"msr/aperf/, msr/smi/ and cpu/cycles/ support\n");
-			parse_events_print_error(&errinfo, smi_cost_attrs);
 			return -1;
 		}
+		if (!force_metric_only)
+			stat_config.metric_only = true;
+
+		parse_events_error__init(&errinfo);
+		err = parse_events(evsel_list, smi_cost_attrs, &errinfo);
 		if (err) {
-			parse_events_print_error(&errinfo, smi_cost_attrs);
+			parse_events_error__print(&errinfo, smi_cost_attrs);
 			fprintf(stderr, "Cannot set up SMI cost events\n");
-			return -1;
 		}
-		return 0;
+		parse_events_error__exit(&errinfo);
+		return err ? -1 : 0;
 	}
 
 	if (topdown_run) {
@@ -1873,18 +1875,22 @@ static int add_default_attributes(void)
 			return -1;
 		}
 		if (topdown_attrs[0] && str) {
+			struct parse_events_error errinfo;
 			if (warn)
 				arch_topdown_group_warn();
 setup_metrics:
+			parse_events_error__init(&errinfo);
 			err = parse_events(evsel_list, str, &errinfo);
 			if (err) {
 				fprintf(stderr,
 					"Cannot set up top down events %s: %d\n",
 					str, err);
-				parse_events_print_error(&errinfo, str);
+				parse_events_error__print(&errinfo, str);
+				parse_events_error__exit(&errinfo);
 				free(str);
 				return -1;
 			}
+			parse_events_error__exit(&errinfo);
 		} else {
 			fprintf(stderr, "System does not support topdown\n");
 			return -1;
@@ -1894,6 +1900,7 @@ setup_metrics:
 
 	if (!evsel_list->core.nr_entries) {
 		if (perf_pmu__has_hybrid()) {
+			struct parse_events_error errinfo;
 			const char *hybrid_str = "cycles,instructions,branches,branch-misses";
 
 			if (target__has_cpu(&target))
@@ -1904,15 +1911,16 @@ setup_metrics:
 				return -1;
 			}
 
+			parse_events_error__init(&errinfo);
 			err = parse_events(evsel_list, hybrid_str, &errinfo);
 			if (err) {
 				fprintf(stderr,
 					"Cannot set up hybrid events %s: %d\n",
 					hybrid_str, err);
-				parse_events_print_error(&errinfo, hybrid_str);
-				return -1;
+				parse_events_error__print(&errinfo, hybrid_str);
 			}
-			return err;
+			parse_events_error__exit(&errinfo);
+			return err ? -1 : 0;
 		}
 
 		if (target__has_cpu(&target))
@@ -1931,6 +1939,7 @@ setup_metrics:
 		if (evlist__add_default_attrs(evsel_list, default_attrs1) < 0)
 			return -1;
 
+		stat_config.topdown_level = TOPDOWN_MAX_LEVEL;
 		if (arch_evlist__add_default_attrs(evsel_list) < 0)
 			return -1;
 	}
@@ -1993,7 +2002,7 @@ static int __cmd_record(int argc, const char **argv)
 		return -1;
 	}
 
-	session = perf_session__new(data, false, NULL);
+	session = perf_session__new(data, NULL);
 	if (IS_ERR(session)) {
 		pr_err("Perf session creation failed\n");
 		return PTR_ERR(session);
@@ -2165,7 +2174,7 @@ static int __cmd_report(int argc, const char **argv)
 	perf_stat.data.path = input_name;
 	perf_stat.data.mode = PERF_DATA_MODE_READ;
 
-	session = perf_session__new(&perf_stat.data, false, &perf_stat.tool);
+	session = perf_session__new(&perf_stat.data, &perf_stat.tool);
 	if (IS_ERR(session))
 		return PTR_ERR(session);
 
@@ -2383,7 +2392,8 @@ int cmd_stat(int argc, const char **argv)
 	 * --per-thread is aggregated per thread, we dont mix it with cpu mode
 	 */
 	if (((stat_config.aggr_mode != AGGR_GLOBAL &&
-	      stat_config.aggr_mode != AGGR_THREAD) || nr_cgroups) &&
+	      stat_config.aggr_mode != AGGR_THREAD) ||
+	     (nr_cgroups || stat_config.cgroup_list)) &&
 	    !target__has_cpu(&target)) {
 		fprintf(stderr, "both cgroup and no-aggregation "
 			"modes only available in system-wide mode\n");
@@ -2391,6 +2401,7 @@ int cmd_stat(int argc, const char **argv)
 		parse_options_usage(stat_usage, stat_options, "G", 1);
 		parse_options_usage(NULL, stat_options, "A", 1);
 		parse_options_usage(NULL, stat_options, "a", 1);
+		parse_options_usage(NULL, stat_options, "for-each-cgroup", 0);
 		goto out;
 	}
 
@@ -2403,6 +2414,8 @@ int cmd_stat(int argc, const char **argv)
 			goto out;
 		} else if (verbose)
 			iostat_list(evsel_list, &stat_config);
+		if (iostat_mode == IOSTAT_RUN && !target__has_cpu(&target))
+			target.system_wide = true;
 	}
 
 	if (add_default_attributes())
@@ -2427,6 +2440,12 @@ int cmd_stat(int argc, const char **argv)
 	if ((stat_config.aggr_mode == AGGR_THREAD) && (target.system_wide))
 		target.per_thread = true;
 
+	if (evlist__fix_hybrid_cpus(evsel_list, target.cpu_list)) {
+		pr_err("failed to use cpu list %s\n", target.cpu_list);
+		goto out;
+	}
+
+	target.hybrid = perf_pmu__has_hybrid();
 	if (evlist__create_maps(evsel_list, &target) < 0) {
 		if (target__has_task(&target)) {
 			pr_err("Problems finding threads of monitor\n");
@@ -2441,9 +2460,6 @@ int cmd_stat(int argc, const char **argv)
 	}
 
 	evlist__check_cpu_maps(evsel_list);
-
-	if (perf_pmu__has_hybrid())
-		stat_config.no_merge = true;
 
 	/*
 	 * Initialize thread_map with comm names,

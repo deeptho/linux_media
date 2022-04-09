@@ -1028,7 +1028,7 @@ static int tegra_qspi_transfer_one_message(struct spi_master *master, struct spi
 		ret = wait_for_completion_timeout(&tqspi->xfer_completion,
 						  QSPI_DMA_TIMEOUT);
 		if (WARN_ON(ret == 0)) {
-			dev_err(tqspi->dev, "transfer timeout: %d\n", ret);
+			dev_err(tqspi->dev, "transfer timeout\n");
 			if (tqspi->is_curr_dma_xfer && (tqspi->cur_direction & DATA_DIR_TX))
 				dmaengine_terminate_all(tqspi->tx_dma_chan);
 			if (tqspi->is_curr_dma_xfer && (tqspi->cur_direction & DATA_DIR_RX))
@@ -1318,7 +1318,7 @@ static int tegra_qspi_probe(struct platform_device *pdev)
 exit_free_irq:
 	free_irq(qspi_irq, tqspi);
 exit_pm_disable:
-	pm_runtime_disable(&pdev->dev);
+	pm_runtime_force_suspend(&pdev->dev);
 	tegra_qspi_deinit_dma(tqspi);
 	return ret;
 }
@@ -1330,7 +1330,7 @@ static int tegra_qspi_remove(struct platform_device *pdev)
 
 	spi_unregister_master(master);
 	free_irq(tqspi->irq, tqspi);
-	pm_runtime_disable(&pdev->dev);
+	pm_runtime_force_suspend(&pdev->dev);
 	tegra_qspi_deinit_dma(tqspi);
 
 	return 0;

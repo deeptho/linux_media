@@ -147,8 +147,6 @@ static int cifs_swn_send_register_message(struct cifs_swn_reg *swnreg)
 			goto nlmsg_fail;
 		}
 		break;
-	case LANMAN:
-	case NTLM:
 	case NTLMv2:
 	case RawNTLMSSP:
 		ret = cifs_swn_auth_info_ntlm(swnreg->tcon, skb);
@@ -395,26 +393,14 @@ static void cifs_put_swn_reg(struct cifs_swn_reg *swnreg)
 
 static int cifs_swn_resource_state_changed(struct cifs_swn_reg *swnreg, const char *name, int state)
 {
-	int i;
-
 	switch (state) {
 	case CIFS_SWN_RESOURCE_STATE_UNAVAILABLE:
 		cifs_dbg(FYI, "%s: resource name '%s' become unavailable\n", __func__, name);
-		for (i = 0; i < swnreg->tcon->ses->chan_count; i++) {
-			spin_lock(&GlobalMid_Lock);
-			if (swnreg->tcon->ses->chans[i].server->tcpStatus != CifsExiting)
-				swnreg->tcon->ses->chans[i].server->tcpStatus = CifsNeedReconnect;
-			spin_unlock(&GlobalMid_Lock);
-		}
+		cifs_ses_mark_for_reconnect(swnreg->tcon->ses);
 		break;
 	case CIFS_SWN_RESOURCE_STATE_AVAILABLE:
 		cifs_dbg(FYI, "%s: resource name '%s' become available\n", __func__, name);
-		for (i = 0; i < swnreg->tcon->ses->chan_count; i++) {
-			spin_lock(&GlobalMid_Lock);
-			if (swnreg->tcon->ses->chans[i].server->tcpStatus != CifsExiting)
-				swnreg->tcon->ses->chans[i].server->tcpStatus = CifsNeedReconnect;
-			spin_unlock(&GlobalMid_Lock);
-		}
+		cifs_ses_mark_for_reconnect(swnreg->tcon->ses);
 		break;
 	case CIFS_SWN_RESOURCE_STATE_UNKNOWN:
 		cifs_dbg(FYI, "%s: resource name '%s' changed to unknown state\n", __func__, name);
@@ -447,15 +433,13 @@ static int cifs_swn_store_swn_addr(const struct sockaddr_storage *new,
 				   const struct sockaddr_storage *old,
 				   struct sockaddr_storage *dst)
 {
-	__be16 port;
+	__be16 port = cpu_to_be16(CIFS_PORT);
 
 	if (old->ss_family == AF_INET) {
 		struct sockaddr_in *ipv4 = (struct sockaddr_in *)old;
 
 		port = ipv4->sin_port;
-	}
-
-	if (old->ss_family == AF_INET6) {
+	} else if (old->ss_family == AF_INET6) {
 		struct sockaddr_in6 *ipv6 = (struct sockaddr_in6 *)old;
 
 		port = ipv6->sin6_port;
@@ -465,9 +449,7 @@ static int cifs_swn_store_swn_addr(const struct sockaddr_storage *new,
 		struct sockaddr_in *ipv4 = (struct sockaddr_in *)new;
 
 		ipv4->sin_port = port;
-	}
-
-	if (new->ss_family == AF_INET6) {
+	} else if (new->ss_family == AF_INET6) {
 		struct sockaddr_in6 *ipv6 = (struct sockaddr_in6 *)new;
 
 		ipv6->sin6_port = port;

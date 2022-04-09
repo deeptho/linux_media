@@ -19,6 +19,13 @@ the CI. It builds the kernel (without overwriting your existing Kconfig), recomp
 bpf selftests, runs them (by default ``tools/testing/selftests/bpf/test_progs``) and
 saves the resulting output (by default in ``~/.bpf_selftests``).
 
+Script dependencies:
+- clang (preferably built from sources, https://github.com/llvm/llvm-project);
+- pahole (preferably built from sources, https://git.kernel.org/pub/scm/devel/pahole/pahole.git/);
+- qemu;
+- docutils (for ``rst2man``);
+- libcap-devel.
+
 For more information on about using the script, run:
 
 .. code-block:: console
@@ -194,6 +201,20 @@ Without it, the error from compiling bpf selftests looks like:
 
 __ https://reviews.llvm.org/D93563
 
+btf_tag test and Clang version
+==============================
+
+The btf_tag selftest require LLVM support to recognize the btf_decl_tag attribute.
+It was introduced in `Clang 14`__.
+
+Without it, the btf_tag selftest will be skipped and you will observe:
+
+.. code-block:: console
+
+  #<test_num> btf_tag:SKIP
+
+__ https://reviews.llvm.org/D111588
+
 Clang dependencies for static linking tests
 ===========================================
 
@@ -202,3 +223,35 @@ generate valid BTF information for weak variables. Please make sure you use
 Clang that contains the fix.
 
 __ https://reviews.llvm.org/D100362
+
+Clang relocation changes
+========================
+
+Clang 13 patch `clang reloc patch`_  made some changes on relocations such
+that existing relocation types are broken into more types and
+each new type corresponds to only one way to resolve relocation.
+See `kernel llvm reloc`_ for more explanation and some examples.
+Using clang 13 to compile old libbpf which has static linker support,
+there will be a compilation failure::
+
+  libbpf: ELF relo #0 in section #6 has unexpected type 2 in .../bpf_tcp_nogpl.o
+
+Here, ``type 2`` refers to new relocation type ``R_BPF_64_ABS64``.
+To fix this issue, user newer libbpf.
+
+.. Links
+.. _clang reloc patch: https://reviews.llvm.org/D102712
+.. _kernel llvm reloc: /Documentation/bpf/llvm_reloc.rst
+
+Clang dependencies for the u32 spill test (xdpwall)
+===================================================
+The xdpwall selftest requires a change in `Clang 14`__.
+
+Without it, the xdpwall selftest will fail and the error message
+from running test_progs will look like:
+
+.. code-block:: console
+
+  test_xdpwall:FAIL:Does LLVM have https://reviews.llvm.org/D109073? unexpected error: -4007
+
+__ https://reviews.llvm.org/D109073

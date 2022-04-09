@@ -65,7 +65,9 @@ Todolist:
 
    clearing-warn-once
    cpu-load
+   lockup-watchdogs
    unicode
+   sysrq
 
 Todolist:
 
@@ -100,7 +102,6 @@ Todolist:
    laptops/index
    lcd-panel-cgram
    ldm
-   lockup-watchdogs
    LSM/index
    md
    media/index
@@ -118,7 +119,6 @@ Todolist:
    rtc
    serial-console
    svga
-   sysrq
    thunderbolt
    ufs
    vga-softcursor

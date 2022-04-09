@@ -104,7 +104,7 @@ static void hns_xgmac_rx_enable(struct mac_driver *drv, u32 value)
 }
 
 /**
- * hns_xgmac_tx_lf_rf_insert - insert lf rf control about xgmac
+ * hns_xgmac_lf_rf_insert - insert lf rf control about xgmac
  * @mac_drv: mac driver
  * @mode: inserf rf or lf
  */
@@ -115,7 +115,7 @@ static void hns_xgmac_lf_rf_insert(struct mac_driver *mac_drv, u32 mode)
 }
 
 /**
- * hns_xgmac__lf_rf_control_init - initial the lf rf control register
+ * hns_xgmac_lf_rf_control_init - initial the lf rf control register
  * @mac_drv: mac driver
  */
 static void hns_xgmac_lf_rf_control_init(struct mac_driver *mac_drv)
@@ -255,7 +255,7 @@ static void hns_xgmac_pausefrm_cfg(void *mac_drv, u32 rx_en, u32 tx_en)
 	dsaf_write_dev(drv, XGMAC_MAC_PAUSE_CTRL_REG, origin);
 }
 
-static void hns_xgmac_set_pausefrm_mac_addr(void *mac_drv, char *mac_addr)
+static void hns_xgmac_set_pausefrm_mac_addr(void *mac_drv, const char *mac_addr)
 {
 	struct mac_driver *drv = (struct mac_driver *)mac_drv;
 

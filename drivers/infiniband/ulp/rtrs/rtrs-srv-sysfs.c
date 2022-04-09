@@ -102,7 +102,7 @@ static ssize_t rtrs_srv_src_addr_show(struct kobject *kobj,
 	sess = container_of(kobj, struct rtrs_srv_sess, kobj);
 	cnt = sockaddr_to_str((struct sockaddr *)&sess->s.dst_addr,
 			      page, PAGE_SIZE);
-	return cnt + scnprintf(page + cnt, PAGE_SIZE - cnt, "\n");
+	return cnt + sysfs_emit_at(page, cnt, "\n");
 }
 
 static struct kobj_attribute rtrs_srv_src_addr_attr =
@@ -208,6 +208,7 @@ rtrs_srv_destroy_once_sysfs_root_folders(struct rtrs_srv_sess *sess)
 		device_del(&srv->dev);
 		put_device(&srv->dev);
 	} else {
+		put_device(&srv->dev);
 		mutex_unlock(&srv->paths_mutex);
 	}
 }

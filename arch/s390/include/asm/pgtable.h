@@ -17,6 +17,7 @@
 #include <linux/page-flags.h>
 #include <linux/radix-tree.h>
 #include <linux/atomic.h>
+#include <asm/sections.h>
 #include <asm/bug.h>
 #include <asm/page.h>
 #include <asm/uv.h>
@@ -65,18 +66,16 @@ extern unsigned long zero_page_mask;
 
 /* TODO: s390 cannot support io_remap_pfn_range... */
 
-#define FIRST_USER_ADDRESS  0UL
-
 #define pte_ERROR(e) \
-	printk("%s:%d: bad pte %p.\n", __FILE__, __LINE__, (void *) pte_val(e))
+	pr_err("%s:%d: bad pte %016lx.\n", __FILE__, __LINE__, pte_val(e))
 #define pmd_ERROR(e) \
-	printk("%s:%d: bad pmd %p.\n", __FILE__, __LINE__, (void *) pmd_val(e))
+	pr_err("%s:%d: bad pmd %016lx.\n", __FILE__, __LINE__, pmd_val(e))
 #define pud_ERROR(e) \
-	printk("%s:%d: bad pud %p.\n", __FILE__, __LINE__, (void *) pud_val(e))
+	pr_err("%s:%d: bad pud %016lx.\n", __FILE__, __LINE__, pud_val(e))
 #define p4d_ERROR(e) \
-	printk("%s:%d: bad p4d %p.\n", __FILE__, __LINE__, (void *) p4d_val(e))
+	pr_err("%s:%d: bad p4d %016lx.\n", __FILE__, __LINE__, p4d_val(e))
 #define pgd_ERROR(e) \
-	printk("%s:%d: bad pgd %p.\n", __FILE__, __LINE__, (void *) pgd_val(e))
+	pr_err("%s:%d: bad pgd %016lx.\n", __FILE__, __LINE__, pgd_val(e))
 
 /*
  * The vmalloc and module area will always be on the topmost area of the
@@ -86,16 +85,16 @@ extern unsigned long zero_page_mask;
  * happen without trampolines and in addition the placement within a
  * 2GB frame is branch prediction unit friendly.
  */
-extern unsigned long VMALLOC_START;
-extern unsigned long VMALLOC_END;
+extern unsigned long __bootdata_preserved(VMALLOC_START);
+extern unsigned long __bootdata_preserved(VMALLOC_END);
 #define VMALLOC_DEFAULT_SIZE	((512UL << 30) - MODULES_LEN)
-extern struct page *vmemmap;
-extern unsigned long vmemmap_size;
+extern struct page *__bootdata_preserved(vmemmap);
+extern unsigned long __bootdata_preserved(vmemmap_size);
 
 #define VMEM_MAX_PHYS ((unsigned long) vmemmap)
 
-extern unsigned long MODULES_VADDR;
-extern unsigned long MODULES_END;
+extern unsigned long __bootdata_preserved(MODULES_VADDR);
+extern unsigned long __bootdata_preserved(MODULES_END);
 #define MODULES_VADDR	MODULES_VADDR
 #define MODULES_END	MODULES_END
 #define MODULES_LEN	(1UL << 31)
@@ -344,8 +343,6 @@ static inline int is_module_addr(void *addr)
 #define PTRS_PER_P4D	_CRST_ENTRIES
 #define PTRS_PER_PGD	_CRST_ENTRIES
 
-#define MAX_PTRS_PER_P4D	PTRS_PER_P4D
-
 /*
  * Segment table and region3 table entry encoding
  * (R = read-only, I = invalid, y = young bit):
@@ -557,27 +554,25 @@ static inline int mm_uses_skeys(struct mm_struct *mm)
 
 static inline void csp(unsigned int *ptr, unsigned int old, unsigned int new)
 {
-	register unsigned long reg2 asm("2") = old;
-	register unsigned long reg3 asm("3") = new;
+	union register_pair r1 = { .even = old, .odd = new, };
 	unsigned long address = (unsigned long)ptr | 1;
 
 	asm volatile(
-		"	csp	%0,%3"
-		: "+d" (reg2), "+m" (*ptr)
-		: "d" (reg3), "d" (address)
+		"	csp	%[r1],%[address]"
+		: [r1] "+&d" (r1.pair), "+m" (*ptr)
+		: [address] "d" (address)
 		: "cc");
 }
 
 static inline void cspg(unsigned long *ptr, unsigned long old, unsigned long new)
 {
-	register unsigned long reg2 asm("2") = old;
-	register unsigned long reg3 asm("3") = new;
+	union register_pair r1 = { .even = old, .odd = new, };
 	unsigned long address = (unsigned long)ptr | 1;
 
 	asm volatile(
-		"	.insn	rre,0xb98a0000,%0,%3"
-		: "+d" (reg2), "+m" (*ptr)
-		: "d" (reg3), "d" (address)
+		"	.insn	rre,0xb98a0000,%[r1],%[address]"
+		: [r1] "+&d" (r1.pair), "+m" (*ptr)
+		: [address] "d" (address)
 		: "cc");
 }
 
@@ -588,17 +583,15 @@ static inline void cspg(unsigned long *ptr, unsigned long old, unsigned long new
 #define CRDTE_DTT_REGION1	0x1cUL
 
 static inline void crdte(unsigned long old, unsigned long new,
-			 unsigned long table, unsigned long dtt,
+			 unsigned long *table, unsigned long dtt,
 			 unsigned long address, unsigned long asce)
 {
-	register unsigned long reg2 asm("2") = old;
-	register unsigned long reg3 asm("3") = new;
-	register unsigned long reg4 asm("4") = table | dtt;
-	register unsigned long reg5 asm("5") = address;
+	union register_pair r1 = { .even = old, .odd = new, };
+	union register_pair r2 = { .even = __pa(table) | dtt, .odd = address, };
 
-	asm volatile(".insn rrf,0xb98f0000,%0,%2,%4,0"
-		     : "+d" (reg2)
-		     : "d" (reg3), "d" (reg4), "d" (reg5), "a" (asce)
+	asm volatile(".insn rrf,0xb98f0000,%[r1],%[r2],%[asce],0"
+		     : [r1] "+&d" (r1.pair)
+		     : [r2] "d" (r2.pair), [asce] "a" (asce)
 		     : "memory", "cc");
 }
 
@@ -866,6 +859,25 @@ static inline int pte_unused(pte_t pte)
 }
 
 /*
+ * Extract the pgprot value from the given pte while at the same time making it
+ * usable for kernel address space mappings where fault driven dirty and
+ * young/old accounting is not supported, i.e _PAGE_PROTECT and _PAGE_INVALID
+ * must not be set.
+ */
+static inline pgprot_t pte_pgprot(pte_t pte)
+{
+	unsigned long pte_flags = pte_val(pte) & _PAGE_CHG_MASK;
+
+	if (pte_write(pte))
+		pte_flags |= pgprot_val(PAGE_KERNEL);
+	else
+		pte_flags |= pgprot_val(PAGE_KERNEL_RO);
+	pte_flags |= pte_val(pte) & mio_wb_bit_mask;
+
+	return __pgprot(pte_flags);
+}
+
+/*
  * pgd/pmd/pte modification functions
  */
 
@@ -989,7 +1001,7 @@ static __always_inline void __ptep_ipte(unsigned long address, pte_t *ptep,
 					unsigned long opt, unsigned long asce,
 					int local)
 {
-	unsigned long pto = (unsigned long) ptep;
+	unsigned long pto = __pa(ptep);
 
 	if (__builtin_constant_p(opt) && opt == 0) {
 		/* Invalidation + TLB flush for the pte */
@@ -1011,7 +1023,7 @@ static __always_inline void __ptep_ipte(unsigned long address, pte_t *ptep,
 static __always_inline void __ptep_ipte_range(unsigned long address, int nr,
 					      pte_t *ptep, int local)
 {
-	unsigned long pto = (unsigned long) ptep;
+	unsigned long pto = __pa(ptep);
 
 	/* Invalidate a range of ptes + TLB flush of the ptes */
 	do {
@@ -1062,8 +1074,9 @@ static inline pte_t ptep_get_and_clear(struct mm_struct *mm,
 	pte_t res;
 
 	res = ptep_xchg_lazy(mm, addr, ptep, __pte(_PAGE_INVALID));
+	/* At this point the reference through the mapping is still present */
 	if (mm_is_protected(mm) && pte_present(res))
-		uv_convert_from_secure(pte_val(res) & PAGE_MASK);
+		uv_convert_owned_from_secure(pte_val(res) & PAGE_MASK);
 	return res;
 }
 
@@ -1079,8 +1092,9 @@ static inline pte_t ptep_clear_flush(struct vm_area_struct *vma,
 	pte_t res;
 
 	res = ptep_xchg_direct(vma->vm_mm, addr, ptep, __pte(_PAGE_INVALID));
+	/* At this point the reference through the mapping is still present */
 	if (mm_is_protected(vma->vm_mm) && pte_present(res))
-		uv_convert_from_secure(pte_val(res) & PAGE_MASK);
+		uv_convert_owned_from_secure(pte_val(res) & PAGE_MASK);
 	return res;
 }
 
@@ -1104,8 +1118,9 @@ static inline pte_t ptep_get_and_clear_full(struct mm_struct *mm,
 	} else {
 		res = ptep_xchg_lazy(mm, addr, ptep, __pte(_PAGE_INVALID));
 	}
+	/* At this point the reference through the mapping is still present */
 	if (mm_is_protected(mm) && pte_present(res))
-		uv_convert_from_secure(pte_val(res) & PAGE_MASK);
+		uv_convert_owned_from_secure(pte_val(res) & PAGE_MASK);
 	return res;
 }
 
@@ -1472,7 +1487,7 @@ static __always_inline void __pmdp_idte(unsigned long addr, pmd_t *pmdp,
 {
 	unsigned long sto;
 
-	sto = (unsigned long) pmdp - pmd_index(addr) * sizeof(pmd_t);
+	sto = __pa(pmdp) - pmd_index(addr) * sizeof(pmd_t);
 	if (__builtin_constant_p(opt) && opt == 0) {
 		/* flush without guest asce */
 		asm volatile(
@@ -1498,7 +1513,7 @@ static __always_inline void __pudp_idte(unsigned long addr, pud_t *pudp,
 {
 	unsigned long r3o;
 
-	r3o = (unsigned long) pudp - pud_index(addr) * sizeof(pud_t);
+	r3o = __pa(pudp) - pud_index(addr) * sizeof(pud_t);
 	r3o |= _ASCE_TYPE_REGION3;
 	if (__builtin_constant_p(opt) && opt == 0) {
 		/* flush without guest asce */
@@ -1712,5 +1727,8 @@ extern void s390_reset_cmma(struct mm_struct *mm);
 /* s390 has a private copy of get unmapped area to deal with cache synonyms */
 #define HAVE_ARCH_UNMAPPED_AREA
 #define HAVE_ARCH_UNMAPPED_AREA_TOPDOWN
+
+#define pmd_pgtable(pmd) \
+	((pgtable_t)__va(pmd_val(pmd) & -sizeof(pte_t)*PTRS_PER_PTE))
 
 #endif /* _S390_PAGE_H */

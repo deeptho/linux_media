@@ -38,8 +38,8 @@ void start_backtrace(struct stackframe *frame, unsigned long fp,
 {
 	frame->fp = fp;
 	frame->pc = pc;
-#ifdef CONFIG_FUNCTION_GRAPH_TRACER
-	frame->graph = 0;
+#ifdef CONFIG_KRETPROBES
+	frame->kr_cur = NULL;
 #endif
 
 	/*
@@ -68,13 +68,17 @@ int notrace unwind_frame(struct task_struct *tsk, struct stackframe *frame)
 	unsigned long fp = frame->fp;
 	struct stack_info info;
 
-	if (fp & 0xf)
-		return -EINVAL;
-
 	if (!tsk)
 		tsk = current;
 
-	if (!on_accessible_stack(tsk, fp, &info))
+	/* Final frame; nothing to unwind */
+	if (fp == (unsigned long)task_pt_regs(tsk)->stackframe)
+		return -ENOENT;
+
+	if (fp & 0x7)
+		return -EINVAL;
+
+	if (!on_accessible_stack(tsk, fp, 16, &info))
 		return -EINVAL;
 
 	if (test_bit(info.type, frame->stacks_done))
@@ -109,30 +113,29 @@ int notrace unwind_frame(struct task_struct *tsk, struct stackframe *frame)
 	frame->prev_fp = fp;
 	frame->prev_type = info.type;
 
+	frame->pc = ptrauth_strip_insn_pac(frame->pc);
+
 #ifdef CONFIG_FUNCTION_GRAPH_TRACER
 	if (tsk->ret_stack &&
-		(ptrauth_strip_insn_pac(frame->pc) == (unsigned long)return_to_handler)) {
-		struct ftrace_ret_stack *ret_stack;
+		(frame->pc == (unsigned long)return_to_handler)) {
+		unsigned long orig_pc;
 		/*
 		 * This is a case where function graph tracer has
 		 * modified a return address (LR) in a stack frame
 		 * to hook a function return.
 		 * So replace it to an original value.
 		 */
-		ret_stack = ftrace_graph_get_ret_stack(tsk, frame->graph++);
-		if (WARN_ON_ONCE(!ret_stack))
+		orig_pc = ftrace_graph_ret_addr(tsk, NULL, frame->pc,
+						(void *)frame->fp);
+		if (WARN_ON_ONCE(frame->pc == orig_pc))
 			return -EINVAL;
-		frame->pc = ret_stack->ret;
+		frame->pc = orig_pc;
 	}
 #endif /* CONFIG_FUNCTION_GRAPH_TRACER */
-
-	frame->pc = ptrauth_strip_insn_pac(frame->pc);
-
-	/*
-	 * This is a terminal record, so we have finished unwinding.
-	 */
-	if (!frame->fp && !frame->pc)
-		return -ENOENT;
+#ifdef CONFIG_KRETPROBES
+	if (is_kretprobe_trampoline(frame->pc))
+		frame->pc = kretprobe_find_ret_addr(tsk, (void *)frame->fp, &frame->kr_cur);
+#endif
 
 	return 0;
 }
@@ -155,7 +158,7 @@ NOKPROBE_SYMBOL(walk_stackframe);
 
 static void dump_backtrace_entry(unsigned long where, const char *loglvl)
 {
-	printk("%s %pS\n", loglvl, (void *)where);
+	printk("%s %pSb\n", loglvl, (void *)where);
 }
 
 void dump_backtrace(struct pt_regs *regs, struct task_struct *tsk,
@@ -220,7 +223,7 @@ void show_stack(struct task_struct *tsk, unsigned long *sp, const char *loglvl)
 
 #ifdef CONFIG_STACKTRACE
 
-noinline void arch_stack_walk(stack_trace_consume_fn consume_entry,
+noinline notrace void arch_stack_walk(stack_trace_consume_fn consume_entry,
 			      void *cookie, struct task_struct *task,
 			      struct pt_regs *regs)
 {

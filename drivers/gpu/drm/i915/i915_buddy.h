@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: MIT */
 /*
- * Copyright © 2019 Intel Corporation
+ * Copyright © 2021 Intel Corporation
  */
 
 #ifndef __I915_BUDDY_H__
@@ -8,6 +8,9 @@
 
 #include <linux/bitops.h>
 #include <linux/list.h>
+#include <linux/slab.h>
+
+#include <drm/drm_print.h>
 
 struct i915_buddy_block {
 #define I915_BUDDY_HEADER_OFFSET GENMASK_ULL(63, 12)
@@ -68,6 +71,7 @@ struct i915_buddy_mm {
 	/* Must be at least PAGE_SIZE */
 	u64 chunk_size;
 	u64 size;
+	u64 avail;
 };
 
 static inline u64
@@ -127,5 +131,13 @@ int i915_buddy_alloc_range(struct i915_buddy_mm *mm,
 void i915_buddy_free(struct i915_buddy_mm *mm, struct i915_buddy_block *block);
 
 void i915_buddy_free_list(struct i915_buddy_mm *mm, struct list_head *objects);
+
+void i915_buddy_print(struct i915_buddy_mm *mm, struct drm_printer *p);
+void i915_buddy_block_print(struct i915_buddy_mm *mm,
+			    struct i915_buddy_block *block,
+			    struct drm_printer *p);
+
+void i915_buddy_module_exit(void);
+int i915_buddy_module_init(void);
 
 #endif

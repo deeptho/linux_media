@@ -332,8 +332,10 @@ struct dasd_ned {
 	__u8 dev_type[6];
 	__u8 dev_model[3];
 	__u8 HDA_manufacturer[3];
-	__u8 HDA_location[2];
-	__u8 HDA_seqno[12];
+	struct {
+		__u8 HDA_location[2];
+		__u8 HDA_seqno[12];
+	} serial;
 	__u8 ID;
 	__u8 unit_addr;
 } __attribute__ ((packed));
@@ -656,16 +658,19 @@ struct dasd_conf_data {
 	struct dasd_gneq gneq;
 } __packed;
 
-struct dasd_eckd_private {
-	struct dasd_eckd_characteristics rdc_data;
-	u8 *conf_data;
-	int conf_len;
-
+struct dasd_conf {
+	u8 *data;
+	int len;
 	/* pointers to specific parts in the conf_data */
 	struct dasd_ned *ned;
 	struct dasd_sneq *sneq;
 	struct vd_sneq *vdsneq;
 	struct dasd_gneq *gneq;
+};
+
+struct dasd_eckd_private {
+	struct dasd_eckd_characteristics rdc_data;
+	struct dasd_conf conf;
 
 	struct eckd_count count_area[5];
 	int init_cqr_status;

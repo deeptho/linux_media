@@ -21,7 +21,7 @@ static void test_tailcall_1(void)
 	if (CHECK_FAIL(err))
 		return;
 
-	prog = bpf_object__find_program_by_title(obj, "classifier");
+	prog = bpf_object__find_program_by_name(obj, "entry");
 	if (CHECK_FAIL(!prog))
 		goto out;
 
@@ -38,9 +38,9 @@ static void test_tailcall_1(void)
 		goto out;
 
 	for (i = 0; i < bpf_map__def(prog_array)->max_entries; i++) {
-		snprintf(prog_name, sizeof(prog_name), "classifier/%i", i);
+		snprintf(prog_name, sizeof(prog_name), "classifier_%d", i);
 
-		prog = bpf_object__find_program_by_title(obj, prog_name);
+		prog = bpf_object__find_program_by_name(obj, prog_name);
 		if (CHECK_FAIL(!prog))
 			goto out;
 
@@ -70,9 +70,9 @@ static void test_tailcall_1(void)
 	      err, errno, retval);
 
 	for (i = 0; i < bpf_map__def(prog_array)->max_entries; i++) {
-		snprintf(prog_name, sizeof(prog_name), "classifier/%i", i);
+		snprintf(prog_name, sizeof(prog_name), "classifier_%d", i);
 
-		prog = bpf_object__find_program_by_title(obj, prog_name);
+		prog = bpf_object__find_program_by_name(obj, prog_name);
 		if (CHECK_FAIL(!prog))
 			goto out;
 
@@ -92,9 +92,9 @@ static void test_tailcall_1(void)
 
 	for (i = 0; i < bpf_map__def(prog_array)->max_entries; i++) {
 		j = bpf_map__def(prog_array)->max_entries - 1 - i;
-		snprintf(prog_name, sizeof(prog_name), "classifier/%i", j);
+		snprintf(prog_name, sizeof(prog_name), "classifier_%d", j);
 
-		prog = bpf_object__find_program_by_title(obj, prog_name);
+		prog = bpf_object__find_program_by_name(obj, prog_name);
 		if (CHECK_FAIL(!prog))
 			goto out;
 
@@ -159,7 +159,7 @@ static void test_tailcall_2(void)
 	if (CHECK_FAIL(err))
 		return;
 
-	prog = bpf_object__find_program_by_title(obj, "classifier");
+	prog = bpf_object__find_program_by_name(obj, "entry");
 	if (CHECK_FAIL(!prog))
 		goto out;
 
@@ -176,9 +176,9 @@ static void test_tailcall_2(void)
 		goto out;
 
 	for (i = 0; i < bpf_map__def(prog_array)->max_entries; i++) {
-		snprintf(prog_name, sizeof(prog_name), "classifier/%i", i);
+		snprintf(prog_name, sizeof(prog_name), "classifier_%d", i);
 
-		prog = bpf_object__find_program_by_title(obj, prog_name);
+		prog = bpf_object__find_program_by_name(obj, prog_name);
 		if (CHECK_FAIL(!prog))
 			goto out;
 
@@ -219,10 +219,7 @@ out:
 	bpf_object__close(obj);
 }
 
-/* test_tailcall_3 checks that the count value of the tail call limit
- * enforcement matches with expectations.
- */
-static void test_tailcall_3(void)
+static void test_tailcall_count(const char *which)
 {
 	int err, map_fd, prog_fd, main_fd, data_fd, i, val;
 	struct bpf_map *prog_array, *data_map;
@@ -231,12 +228,12 @@ static void test_tailcall_3(void)
 	__u32 retval, duration;
 	char buff[128] = {};
 
-	err = bpf_prog_load("tailcall3.o", BPF_PROG_TYPE_SCHED_CLS, &obj,
+	err = bpf_prog_load(which, BPF_PROG_TYPE_SCHED_CLS, &obj,
 			    &prog_fd);
 	if (CHECK_FAIL(err))
 		return;
 
-	prog = bpf_object__find_program_by_title(obj, "classifier");
+	prog = bpf_object__find_program_by_name(obj, "entry");
 	if (CHECK_FAIL(!prog))
 		goto out;
 
@@ -252,7 +249,7 @@ static void test_tailcall_3(void)
 	if (CHECK_FAIL(map_fd < 0))
 		goto out;
 
-	prog = bpf_object__find_program_by_title(obj, "classifier/0");
+	prog = bpf_object__find_program_by_name(obj, "classifier_0");
 	if (CHECK_FAIL(!prog))
 		goto out;
 
@@ -296,6 +293,22 @@ out:
 	bpf_object__close(obj);
 }
 
+/* test_tailcall_3 checks that the count value of the tail call limit
+ * enforcement matches with expectations. JIT uses direct jump.
+ */
+static void test_tailcall_3(void)
+{
+	test_tailcall_count("tailcall3.o");
+}
+
+/* test_tailcall_6 checks that the count value of the tail call limit
+ * enforcement matches with expectations. JIT uses indirect jump.
+ */
+static void test_tailcall_6(void)
+{
+	test_tailcall_count("tailcall6.o");
+}
+
 /* test_tailcall_4 checks that the kernel properly selects indirect jump
  * for the case where the key is not known. Latter is passed via global
  * data to select different targets we can compare return value of.
@@ -316,7 +329,7 @@ static void test_tailcall_4(void)
 	if (CHECK_FAIL(err))
 		return;
 
-	prog = bpf_object__find_program_by_title(obj, "classifier");
+	prog = bpf_object__find_program_by_name(obj, "entry");
 	if (CHECK_FAIL(!prog))
 		goto out;
 
@@ -341,9 +354,9 @@ static void test_tailcall_4(void)
 		return;
 
 	for (i = 0; i < bpf_map__def(prog_array)->max_entries; i++) {
-		snprintf(prog_name, sizeof(prog_name), "classifier/%i", i);
+		snprintf(prog_name, sizeof(prog_name), "classifier_%d", i);
 
-		prog = bpf_object__find_program_by_title(obj, prog_name);
+		prog = bpf_object__find_program_by_name(obj, prog_name);
 		if (CHECK_FAIL(!prog))
 			goto out;
 
@@ -404,7 +417,7 @@ static void test_tailcall_5(void)
 	if (CHECK_FAIL(err))
 		return;
 
-	prog = bpf_object__find_program_by_title(obj, "classifier");
+	prog = bpf_object__find_program_by_name(obj, "entry");
 	if (CHECK_FAIL(!prog))
 		goto out;
 
@@ -429,9 +442,9 @@ static void test_tailcall_5(void)
 		return;
 
 	for (i = 0; i < bpf_map__def(prog_array)->max_entries; i++) {
-		snprintf(prog_name, sizeof(prog_name), "classifier/%i", i);
+		snprintf(prog_name, sizeof(prog_name), "classifier_%d", i);
 
-		prog = bpf_object__find_program_by_title(obj, prog_name);
+		prog = bpf_object__find_program_by_name(obj, prog_name);
 		if (CHECK_FAIL(!prog))
 			goto out;
 
@@ -490,7 +503,7 @@ static void test_tailcall_bpf2bpf_1(void)
 	if (CHECK_FAIL(err))
 		return;
 
-	prog = bpf_object__find_program_by_title(obj, "classifier");
+	prog = bpf_object__find_program_by_name(obj, "entry");
 	if (CHECK_FAIL(!prog))
 		goto out;
 
@@ -508,9 +521,9 @@ static void test_tailcall_bpf2bpf_1(void)
 
 	/* nop -> jmp */
 	for (i = 0; i < bpf_map__def(prog_array)->max_entries; i++) {
-		snprintf(prog_name, sizeof(prog_name), "classifier/%i", i);
+		snprintf(prog_name, sizeof(prog_name), "classifier_%d", i);
 
-		prog = bpf_object__find_program_by_title(obj, prog_name);
+		prog = bpf_object__find_program_by_name(obj, prog_name);
 		if (CHECK_FAIL(!prog))
 			goto out;
 
@@ -574,7 +587,7 @@ static void test_tailcall_bpf2bpf_2(void)
 	if (CHECK_FAIL(err))
 		return;
 
-	prog = bpf_object__find_program_by_title(obj, "classifier");
+	prog = bpf_object__find_program_by_name(obj, "entry");
 	if (CHECK_FAIL(!prog))
 		goto out;
 
@@ -590,7 +603,7 @@ static void test_tailcall_bpf2bpf_2(void)
 	if (CHECK_FAIL(map_fd < 0))
 		goto out;
 
-	prog = bpf_object__find_program_by_title(obj, "classifier/0");
+	prog = bpf_object__find_program_by_name(obj, "classifier_0");
 	if (CHECK_FAIL(!prog))
 		goto out;
 
@@ -652,7 +665,7 @@ static void test_tailcall_bpf2bpf_3(void)
 	if (CHECK_FAIL(err))
 		return;
 
-	prog = bpf_object__find_program_by_title(obj, "classifier");
+	prog = bpf_object__find_program_by_name(obj, "entry");
 	if (CHECK_FAIL(!prog))
 		goto out;
 
@@ -669,9 +682,9 @@ static void test_tailcall_bpf2bpf_3(void)
 		goto out;
 
 	for (i = 0; i < bpf_map__def(prog_array)->max_entries; i++) {
-		snprintf(prog_name, sizeof(prog_name), "classifier/%i", i);
+		snprintf(prog_name, sizeof(prog_name), "classifier_%d", i);
 
-		prog = bpf_object__find_program_by_title(obj, prog_name);
+		prog = bpf_object__find_program_by_name(obj, prog_name);
 		if (CHECK_FAIL(!prog))
 			goto out;
 
@@ -715,6 +728,8 @@ out:
 	bpf_object__close(obj);
 }
 
+#include "tailcall_bpf2bpf4.skel.h"
+
 /* test_tailcall_bpf2bpf_4 checks that tailcall counter is correctly preserved
  * across tailcalls combined with bpf2bpf calls. for making sure that tailcall
  * counter behaves correctly, bpf program will go through following flow:
@@ -727,10 +742,15 @@ out:
  * the loop begins. At the end of the test make sure that the global counter is
  * equal to 31, because tailcall counter includes the first two tailcalls
  * whereas global counter is incremented only on loop presented on flow above.
+ *
+ * The noise parameter is used to insert bpf_map_update calls into the logic
+ * to force verifier to patch instructions. This allows us to ensure jump
+ * logic remains correct with instruction movement.
  */
-static void test_tailcall_bpf2bpf_4(void)
+static void test_tailcall_bpf2bpf_4(bool noise)
 {
-	int err, map_fd, prog_fd, main_fd, data_fd, i, val;
+	int err, map_fd, prog_fd, main_fd, data_fd, i;
+	struct tailcall_bpf2bpf4__bss val;
 	struct bpf_map *prog_array, *data_map;
 	struct bpf_program *prog;
 	struct bpf_object *obj;
@@ -742,7 +762,7 @@ static void test_tailcall_bpf2bpf_4(void)
 	if (CHECK_FAIL(err))
 		return;
 
-	prog = bpf_object__find_program_by_title(obj, "classifier");
+	prog = bpf_object__find_program_by_name(obj, "entry");
 	if (CHECK_FAIL(!prog))
 		goto out;
 
@@ -759,9 +779,9 @@ static void test_tailcall_bpf2bpf_4(void)
 		goto out;
 
 	for (i = 0; i < bpf_map__def(prog_array)->max_entries; i++) {
-		snprintf(prog_name, sizeof(prog_name), "classifier/%i", i);
+		snprintf(prog_name, sizeof(prog_name), "classifier_%d", i);
 
-		prog = bpf_object__find_program_by_title(obj, prog_name);
+		prog = bpf_object__find_program_by_name(obj, prog_name);
 		if (CHECK_FAIL(!prog))
 			goto out;
 
@@ -774,11 +794,6 @@ static void test_tailcall_bpf2bpf_4(void)
 			goto out;
 	}
 
-	err = bpf_prog_test_run(main_fd, 1, &pkt_v4, sizeof(pkt_v4), 0,
-				&duration, &retval, NULL);
-	CHECK(err || retval != sizeof(pkt_v4) * 3, "tailcall", "err %d errno %d retval %d\n",
-	      err, errno, retval);
-
 	data_map = bpf_object__find_map_by_name(obj, "tailcall.bss");
 	if (CHECK_FAIL(!data_map || !bpf_map__is_internal(data_map)))
 		return;
@@ -788,9 +803,21 @@ static void test_tailcall_bpf2bpf_4(void)
 		return;
 
 	i = 0;
+	val.noise = noise;
+	val.count = 0;
+	err = bpf_map_update_elem(data_fd, &i, &val, BPF_ANY);
+	if (CHECK_FAIL(err))
+		goto out;
+
+	err = bpf_prog_test_run(main_fd, 1, &pkt_v4, sizeof(pkt_v4), 0,
+				&duration, &retval, NULL);
+	CHECK(err || retval != sizeof(pkt_v4) * 3, "tailcall", "err %d errno %d retval %d\n",
+	      err, errno, retval);
+
+	i = 0;
 	err = bpf_map_lookup_elem(data_fd, &i, &val);
-	CHECK(err || val != 31, "tailcall count", "err %d errno %d count %d\n",
-	      err, errno, val);
+	CHECK(err || val.count != 31, "tailcall count", "err %d errno %d count %d\n",
+	      err, errno, val.count);
 
 out:
 	bpf_object__close(obj);
@@ -808,6 +835,8 @@ void test_tailcalls(void)
 		test_tailcall_4();
 	if (test__start_subtest("tailcall_5"))
 		test_tailcall_5();
+	if (test__start_subtest("tailcall_6"))
+		test_tailcall_6();
 	if (test__start_subtest("tailcall_bpf2bpf_1"))
 		test_tailcall_bpf2bpf_1();
 	if (test__start_subtest("tailcall_bpf2bpf_2"))
@@ -815,5 +844,7 @@ void test_tailcalls(void)
 	if (test__start_subtest("tailcall_bpf2bpf_3"))
 		test_tailcall_bpf2bpf_3();
 	if (test__start_subtest("tailcall_bpf2bpf_4"))
-		test_tailcall_bpf2bpf_4();
+		test_tailcall_bpf2bpf_4(false);
+	if (test__start_subtest("tailcall_bpf2bpf_5"))
+		test_tailcall_bpf2bpf_4(true);
 }

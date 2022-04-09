@@ -9,11 +9,10 @@
 
 #include <linux/kernel.h>
 #include <linux/module.h>
-#include <linux/slab.h>
+#include <linux/mod_devicetable.h>
 #include <linux/acpi.h>
 #include <linux/i2c.h>
 #include <linux/iio/iio.h>
-#include <linux/property.h>
 
 #include <linux/iio/common/st_sensors_i2c.h>
 #include "st_accel.h"
@@ -174,18 +173,11 @@ static int st_accel_i2c_probe(struct i2c_client *client)
 	if (ret < 0)
 		return ret;
 
-	ret = st_accel_common_probe(indio_dev);
-	if (ret < 0)
+	ret = st_sensors_power_enable(indio_dev);
+	if (ret)
 		return ret;
 
-	return 0;
-}
-
-static int st_accel_i2c_remove(struct i2c_client *client)
-{
-	st_accel_common_remove(i2c_get_clientdata(client));
-
-	return 0;
+	return st_accel_common_probe(indio_dev);
 }
 
 static struct i2c_driver st_accel_driver = {
@@ -195,7 +187,6 @@ static struct i2c_driver st_accel_driver = {
 		.acpi_match_table = ACPI_PTR(st_accel_acpi_match),
 	},
 	.probe_new = st_accel_i2c_probe,
-	.remove = st_accel_i2c_remove,
 	.id_table = st_accel_id_table,
 };
 module_i2c_driver(st_accel_driver);

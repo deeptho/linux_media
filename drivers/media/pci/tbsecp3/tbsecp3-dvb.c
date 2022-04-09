@@ -41,12 +41,18 @@
 #include "rda5816.h"
 #include "m88rs6060.h"
 #include "gx1133.h"
+#include "cxd2878.h"
 
 #define dprintk(fmt, arg...)																					\
 	printk(KERN_DEBUG pr_fmt("%s:%d " fmt), __func__, __LINE__, ##arg)
 
 
 DVB_DEFINE_MOD_OPT_ADAPTER_NR(adapter_nr);
+
+static bool swapfe = false;
+module_param(swapfe, bool, 0444);
+MODULE_PARM_DESC(swapfe, "swap combo frontends order");
+
 
 struct sec_priv {
 	struct tbsecp3_adapter *adap;
@@ -1162,6 +1168,94 @@ static int GetTSSpeed(struct i2c_adapter *i2c,int tuner)
 
 	return bit_rate;
 }
+static struct cxd2878_config tbs6209se_cfg[] = {
+	{
+		.addr_slvt = 0x64,
+		.xtal      = SONY_DEMOD_XTAL_24000KHz,
+		.tuner_addr = 0x60,
+		.tuner_xtal = SONY_ASCOT3_XTAL_24000KHz,
+		.ts_mode	= 0,
+		.ts_ser_data = 0,
+		.ts_clk = 1,
+		.ts_valid = 0,
+		.atscCoreDisable = 0,
+		.write_properties = ecp3_spi_write,
+		.read_properties = ecp3_spi_read,
+	},
+	{
+		.addr_slvt = 0x6c,
+		.xtal      = SONY_DEMOD_XTAL_24000KHz,
+		.tuner_addr = 0x60,
+		.tuner_xtal = SONY_ASCOT3_XTAL_24000KHz,
+		.ts_mode	= 0,
+		.ts_ser_data = 0,
+		.ts_clk = 1,
+		.ts_valid = 0,
+		.atscCoreDisable = 0,
+		.write_properties = ecp3_spi_write,
+		.read_properties = ecp3_spi_read,
+	},
+
+	{
+		.addr_slvt = 0x65,
+		.xtal      = SONY_DEMOD_XTAL_24000KHz,
+		.tuner_addr = 0x60,
+		.tuner_xtal = SONY_ASCOT3_XTAL_24000KHz,
+		.ts_mode	= 0,
+		.ts_ser_data = 0,
+		.ts_clk = 1,
+		.ts_valid = 0,
+		.atscCoreDisable = 0,
+		.write_properties = ecp3_spi_write,
+		.read_properties = ecp3_spi_read,
+	},
+	{
+		.addr_slvt = 0x6D,
+		.xtal      = SONY_DEMOD_XTAL_24000KHz,
+		.tuner_addr = 0x60,
+		.tuner_xtal = SONY_ASCOT3_XTAL_24000KHz,
+		.ts_mode	= 0,
+		.ts_ser_data = 0,
+		.ts_clk = 1,
+		.ts_valid = 0,
+		.atscCoreDisable = 0,
+		.write_properties = ecp3_spi_write,
+		.read_properties = ecp3_spi_read,
+	}
+};
+
+static struct cxd2878_config tbs7230_cfg = {
+
+		.addr_slvt = 0x64,
+		.xtal      = SONY_DEMOD_XTAL_24000KHz,
+		.tuner_addr = 0x60,
+		.tuner_xtal = SONY_ASCOT3_XTAL_24000KHz,
+		.ts_mode	= 0,
+		.ts_ser_data = 0,
+		.ts_clk = 1,
+		.ts_valid = 0,
+		.atscCoreDisable = 0,
+		.write_properties = ecp3_spi_write,
+		.read_properties = ecp3_spi_read,
+	};
+static void tbs6209SE_reset_demod(struct tbsecp3_adapter *adapter)
+{
+	struct tbsecp3_dev *dev = adapter->dev;
+	u32 tmp;
+	u32 gpio;
+	if(adapter->nr<4)
+		gpio= 0x4*(adapter->nr);
+	if(adapter->nr>3)
+		gpio = 0x2c+0x4*(adapter->nr-4);
+
+	tmp = tbs_read(TBSECP3_GPIO_BASE, gpio);
+	tmp = tmp &0xfffffffe;
+	tbs_write(TBSECP3_GPIO_BASE, gpio, tmp);
+	msleep(50);
+	tmp = tmp|0x01;
+	tbs_write(TBSECP3_GPIO_BASE, gpio, tmp);
+	msleep(50);
+}
 static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 {
 	struct tbsecp3_dev *dev = adapter->dev;
@@ -1184,12 +1278,25 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 	adapter->i2c_client_demod = NULL;
 	adapter->i2c_client_tuner = NULL;
 
-	if((TBSECP3_BOARD_TBS6304 != dev->info->board_id) && (TBSECP3_BOARD_TBS6308 != dev->info->board_id) && (TBSECP3_BOARD_TBS6302SE != dev->info->board_id)&& (TBSECP3_BOARD_TBS6301SE != dev->info->board_id)){
+	if((TBSECP3_BOARD_TBS6304 != dev->info->board_id) && (TBSECP3_BOARD_TBS6308 != dev->info->board_id) && (TBSECP3_BOARD_TBS6302SE != dev->info->board_id)&&(TBSECP3_BOARD_TBS6209SE != dev->info->board_id)){
 		reset_demod(adapter);
 		set_mac_address(adapter);
 	}
 
 	switch (dev->info->board_id) {
+	   case TBSECP3_BOARD_TBS6209SE:
+	   		tbs6209SE_reset_demod(adapter);
+	   		set_mac_address(adapter);
+	   		adapter->fe = dvb_attach(cxd2878_attach, &tbs6209se_cfg[(adapter->nr)%4], i2c);
+
+		if (adapter->fe == NULL)
+		    goto frontend_atach_fail;
+	   		break;
+	   case TBSECP3_BOARD_TBS7230:
+	   	   adapter->fe = dvb_attach(cxd2878_attach, &tbs7230_cfg, i2c);
+		if (adapter->fe == NULL)
+		    goto frontend_atach_fail;
+	   break;
 	   case TBSECP3_BOARD_TBS6910SE:
 	   case TBSECP3_BOARD_TBS6904SE:
 	   case TBSECP3_BOARD_TBS6902SE:
@@ -1426,6 +1533,13 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 		if (adapter->fe == NULL)
 			goto frontend_atach_fail;
 
+		break;
+	case TBSECP3_BOARD_TBS6302T:
+		adapter->fe = dvb_attach(tas2971_attach, &tbs6302se_demod_cfg[adapter->nr], i2c);
+		if (adapter->fe == NULL)
+		    goto frontend_atach_fail;
+
+		break;
 	case TBSECP3_BOARD_TBS690a: {
 		int regdata;
 		u8 mpbuf[4];
@@ -1455,6 +1569,7 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 		// ~~init asi
 		}
 		break;
+
 
 	case TBSECP3_BOARD_TBS6514:
 		memset(&gx1503_config,0,sizeof(gx1503_config));
@@ -1703,7 +1818,7 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 		si2183_config.agc_mode = (adapter->nr %2)? 0x4 : 0x5;
 		info.platform_data = &si2183_config;
 		request_module(info.type);
-		client_demod = i2c_new_client_device(i2c, &info); // fe->demodulator_priv= i2c_client
+		client_demod = i2c_new_client_device(i2c, &info);
 		if (client_demod == NULL ||
 			client_demod->dev.driver == NULL)
 				goto frontend_atach_fail;
@@ -2040,19 +2155,7 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 		if (adapter->fe == NULL)
 			goto frontend_atach_fail;
 		break;
-	case TBSECP3_BOARD_TBS6916:
-		if(adapter->nr<8){
-		  adapter->fe = dvb_attach(stid135_attach, i2c,
-					&tbs6916_stid135_cfg, adapter->nr, adapter->nr/2);
-		  }
-		else{
-			adapter->fe = dvb_attach(stid135_attach, i2c,
-					  &tbs6916_stid135_cfg, (adapter->nr - 8), (adapter->nr - 8)/2);
-		}
 
-		if (adapter->fe == NULL)
-			goto frontend_atach_fail;
-		break;
 	case TBSECP3_BOARD_TBS6903X:
 	case TBSECP3_BOARD_TBS6912:
 		if(pci->subsystem_vendor==0x6912)
@@ -2190,6 +2293,12 @@ int tbsecp3_dvb_init(struct tbsecp3_adapter *adapter)
 				goto err6;
 		}
 
+    if (adapter->fe && adapter->fe2 && swapfe) {
+        struct dvb_frontend* fe = adapter->fe;
+        adapter->fe = adapter->fe2;
+        adapter->fe2 = fe;
+    }
+
 		ret = dvb_register_frontend(adap, adapter->fe);
 		if (ret < 0) {
 				dev_err(&dev->pci_dev->dev, "frontend register failed\n");
@@ -2227,7 +2336,6 @@ err0:
 		dvb_unregister_adapter(adap);
 		return ret;
 }
-
 
 void tbsecp3_dvb_exit(struct tbsecp3_adapter *adapter)
 {

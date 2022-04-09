@@ -155,9 +155,18 @@ static unsigned int calc_v_total_from_duration(
 	if (duration_in_us > vrr->max_duration_in_us)
 		duration_in_us = vrr->max_duration_in_us;
 
-	v_total = div64_u64(div64_u64(((unsigned long long)(
-				duration_in_us) * (stream->timing.pix_clk_100hz / 10)),
-				stream->timing.h_total), 1000);
+	if (dc_is_hdmi_signal(stream->signal)) {
+		uint32_t h_total_up_scaled;
+
+		h_total_up_scaled = stream->timing.h_total * 10000;
+		v_total = div_u64((unsigned long long)duration_in_us
+					* stream->timing.pix_clk_100hz + (h_total_up_scaled - 1),
+					h_total_up_scaled);
+	} else {
+		v_total = div64_u64(div64_u64(((unsigned long long)(
+					duration_in_us) * (stream->timing.pix_clk_100hz / 10)),
+					stream->timing.h_total), 1000);
+	}
 
 	/* v_total cannot be less than nominal */
 	if (v_total < stream->timing.v_total) {
@@ -516,7 +525,8 @@ bool mod_freesync_get_v_position(struct mod_freesync *mod_freesync,
 }
 
 static void build_vrr_infopacket_data_v1(const struct mod_vrr_params *vrr,
-		struct dc_info_packet *infopacket)
+		struct dc_info_packet *infopacket,
+		bool freesync_on_desktop)
 {
 	/* PB1 = 0x1A (24bit AMD IEEE OUI (0x00001A) - Byte 0) */
 	infopacket->sb[1] = 0x1A;
@@ -542,10 +552,16 @@ static void build_vrr_infopacket_data_v1(const struct mod_vrr_params *vrr,
 			vrr->state != VRR_STATE_UNSUPPORTED)
 		infopacket->sb[6] |= 0x02;
 
-	/* PB6 = [Bit 2 = FreeSync Active] */
-	if (vrr->state != VRR_STATE_DISABLED &&
+	if (freesync_on_desktop) {
+		/* PB6 = [Bit 2 = FreeSync Active] */
+		if (vrr->state != VRR_STATE_DISABLED &&
 			vrr->state != VRR_STATE_UNSUPPORTED)
-		infopacket->sb[6] |= 0x04;
+			infopacket->sb[6] |= 0x04;
+	} else {
+		if (vrr->state == VRR_STATE_ACTIVE_VARIABLE ||
+			vrr->state == VRR_STATE_ACTIVE_FIXED)
+			infopacket->sb[6] |= 0x04;
+	}
 
 	// For v1 & 2 infoframes program nominal if non-fs mode, otherwise full range
 	/* PB7 = FreeSync Minimum refresh rate (Hz) */
@@ -824,13 +840,14 @@ static void build_vrr_infopacket_checksum(unsigned int *payload_size,
 
 static void build_vrr_infopacket_v1(enum signal_type signal,
 		const struct mod_vrr_params *vrr,
-		struct dc_info_packet *infopacket)
+		struct dc_info_packet *infopacket,
+		bool freesync_on_desktop)
 {
 	/* SPD info packet for FreeSync */
 	unsigned int payload_size = 0;
 
 	build_vrr_infopacket_header_v1(signal, infopacket, &payload_size);
-	build_vrr_infopacket_data_v1(vrr, infopacket);
+	build_vrr_infopacket_data_v1(vrr, infopacket, freesync_on_desktop);
 	build_vrr_infopacket_checksum(&payload_size, infopacket);
 
 	infopacket->valid = true;
@@ -839,12 +856,13 @@ static void build_vrr_infopacket_v1(enum signal_type signal,
 static void build_vrr_infopacket_v2(enum signal_type signal,
 		const struct mod_vrr_params *vrr,
 		enum color_transfer_func app_tf,
-		struct dc_info_packet *infopacket)
+		struct dc_info_packet *infopacket,
+		bool freesync_on_desktop)
 {
 	unsigned int payload_size = 0;
 
 	build_vrr_infopacket_header_v2(signal, infopacket, &payload_size);
-	build_vrr_infopacket_data_v1(vrr, infopacket);
+	build_vrr_infopacket_data_v1(vrr, infopacket, freesync_on_desktop);
 
 	build_vrr_infopacket_fs2_data(app_tf, infopacket);
 
@@ -953,12 +971,12 @@ void mod_freesync_build_vrr_infopacket(struct mod_freesync *mod_freesync,
 #endif
 		break;
 	case PACKET_TYPE_FS_V2:
-		build_vrr_infopacket_v2(stream->signal, vrr, app_tf, infopacket);
+		build_vrr_infopacket_v2(stream->signal, vrr, app_tf, infopacket, stream->freesync_on_desktop);
 		break;
 	case PACKET_TYPE_VRR:
 	case PACKET_TYPE_FS_V1:
 	default:
-		build_vrr_infopacket_v1(stream->signal, vrr, infopacket);
+		build_vrr_infopacket_v1(stream->signal, vrr, infopacket, stream->freesync_on_desktop);
 	}
 
 	if (true == pack_sdp_v1_3 &&

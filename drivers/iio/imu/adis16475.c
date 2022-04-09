@@ -14,7 +14,6 @@
 #include <linux/iio/buffer.h>
 #include <linux/iio/iio.h>
 #include <linux/iio/imu/adis.h>
-#include <linux/iio/sysfs.h>
 #include <linux/iio/trigger_consumer.h>
 #include <linux/irq.h>
 #include <linux/lcm.h>
@@ -354,10 +353,11 @@ static int adis16475_set_freq(struct adis16475 *st, const u32 freq)
 	if (dec > st->info->max_dec)
 		dec = st->info->max_dec;
 
-	ret = adis_write_reg_16(&st->adis, ADIS16475_REG_DEC_RATE, dec);
+	ret = __adis_write_reg_16(&st->adis, ADIS16475_REG_DEC_RATE, dec);
 	if (ret)
 		goto error;
 
+	adis_dev_unlock(&st->adis);
 	/*
 	 * If decimation is used, then gyro and accel data will have meaningful
 	 * bits on the LSB registers. This info is used on the trigger handler.
@@ -607,20 +607,6 @@ static const char * const adis16475_status_error_msgs[] = {
 	[ADIS16475_DIAG_STAT_CLK] = "Clock error",
 };
 
-static int adis16475_enable_irq(struct adis *adis, bool enable)
-{
-	/*
-	 * There is no way to gate the data-ready signal internally inside the
-	 * ADIS16475. We can only control it's polarity...
-	 */
-	if (enable)
-		enable_irq(adis->spi->irq);
-	else
-		disable_irq(adis->spi->irq);
-
-	return 0;
-}
-
 #define ADIS16475_DATA(_prod_id, _timeouts)				\
 {									\
 	.msc_ctrl_reg = ADIS16475_REG_MSG_CTRL,				\
@@ -641,11 +627,12 @@ static int adis16475_enable_irq(struct adis *adis, bool enable)
 		BIT(ADIS16475_DIAG_STAT_SENSOR) |			\
 		BIT(ADIS16475_DIAG_STAT_MEMORY) |			\
 		BIT(ADIS16475_DIAG_STAT_CLK),				\
-	.enable_irq = adis16475_enable_irq,				\
+	.unmasked_drdy = true,						\
 	.timeouts = (_timeouts),					\
 	.burst_reg_cmd = ADIS16475_REG_GLOB_CMD,			\
 	.burst_len = ADIS16475_BURST_MAX_DATA,				\
-	.burst_max_len = ADIS16475_BURST32_MAX_DATA			\
+	.burst_max_len = ADIS16475_BURST32_MAX_DATA,			\
+	.burst_max_speed_hz = ADIS16475_BURST_MAX_SPEED			\
 }
 
 static const struct adis16475_sync adis16475_sync_mode[] = {
@@ -1062,15 +1049,11 @@ static irqreturn_t adis16475_trigger_handler(int irq, void *p)
 	bool valid;
 	/* offset until the first element after gyro and accel */
 	const u8 offset = st->burst32 ? 13 : 7;
-	const u32 cached_spi_speed_hz = adis->spi->max_speed_hz;
-
-	adis->spi->max_speed_hz = ADIS16475_BURST_MAX_SPEED;
 
 	ret = spi_sync(adis->spi, &adis->msg);
 	if (ret)
-		return ret;
+		goto check_burst32;
 
-	adis->spi->max_speed_hz = cached_spi_speed_hz;
 	buffer = adis->buffer;
 
 	crc = be16_to_cpu(buffer[offset + 2]);
@@ -1258,9 +1241,6 @@ static int adis16475_config_irq_pin(struct adis16475 *st)
 		return -EINVAL;
 	}
 
-	/* We cannot mask the interrupt so ensure it's not enabled at request */
-	st->adis.irq_flag |= IRQF_NO_AUTOEN;
-
 	val = ADIS16475_MSG_CTRL_DR_POL(polarity);
 	ret = __adis_update_bits(&st->adis, ADIS16475_REG_MSG_CTRL,
 				 ADIS16475_MSG_CTRL_DR_POL_MASK, val);
@@ -1332,7 +1312,6 @@ static int adis16475_probe(struct spi_device *spi)
 		return -ENOMEM;
 
 	st = iio_priv(indio_dev);
-	spi_set_drvdata(spi, indio_dev);
 
 	st->info = device_get_match_data(&spi->dev);
 	if (!st->info)

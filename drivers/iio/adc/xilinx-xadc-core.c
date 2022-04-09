@@ -743,7 +743,7 @@ static struct iio_trigger *xadc_alloc_trigger(struct iio_dev *indio_dev,
 	int ret;
 
 	trig = devm_iio_trigger_alloc(dev, "%s%d-%s", indio_dev->name,
-				      indio_dev->id, name);
+				      iio_device_id(indio_dev), name);
 	if (trig == NULL)
 		return ERR_PTR(-ENOMEM);
 
@@ -1332,7 +1332,6 @@ static int xadc_probe(struct platform_device *pdev)
 
 	xadc = iio_priv(indio_dev);
 	xadc->ops = id->data;
-	xadc->irq = irq;
 	init_completion(&xadc->completion);
 	mutex_init(&xadc->mutex);
 	spin_lock_init(&xadc->lock);
@@ -1397,7 +1396,7 @@ static int xadc_probe(struct platform_device *pdev)
 		}
 	}
 
-	ret = devm_request_irq(dev, xadc->irq, xadc->ops->interrupt_handler, 0,
+	ret = devm_request_irq(dev, irq, xadc->ops->interrupt_handler, 0,
 			       dev_name(dev), indio_dev);
 	if (ret)
 		return ret;
@@ -1407,7 +1406,7 @@ static int xadc_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
-	ret = xadc->ops->setup(pdev, indio_dev, xadc->irq);
+	ret = xadc->ops->setup(pdev, indio_dev, irq);
 	if (ret)
 		return ret;
 

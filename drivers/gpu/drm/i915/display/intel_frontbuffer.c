@@ -58,9 +58,11 @@
 #include "display/intel_dp.h"
 
 #include "i915_drv.h"
+#include "i915_trace.h"
 #include "intel_display_types.h"
 #include "intel_fbc.h"
 #include "intel_frontbuffer.h"
+#include "intel_drrs.h"
 #include "intel_psr.h"
 
 /**
@@ -87,8 +89,10 @@ static void frontbuffer_flush(struct drm_i915_private *i915,
 	if (!frontbuffer_bits)
 		return;
 
+	trace_intel_frontbuffer_flush(frontbuffer_bits, origin);
+
 	might_sleep();
-	intel_edp_drrs_flush(i915, frontbuffer_bits);
+	intel_drrs_flush(i915, frontbuffer_bits);
 	intel_psr_flush(i915, frontbuffer_bits, origin);
 	intel_fbc_flush(i915, frontbuffer_bits, origin);
 }
@@ -173,9 +177,11 @@ void __intel_fb_invalidate(struct intel_frontbuffer *front,
 		spin_unlock(&i915->fb_tracking.lock);
 	}
 
+	trace_intel_frontbuffer_invalidate(frontbuffer_bits, origin);
+
 	might_sleep();
 	intel_psr_invalidate(i915, frontbuffer_bits, origin);
-	intel_edp_drrs_invalidate(i915, frontbuffer_bits);
+	intel_drrs_invalidate(i915, frontbuffer_bits);
 	intel_fbc_invalidate(i915, frontbuffer_bits, origin);
 }
 
@@ -206,7 +212,6 @@ static int frontbuffer_active(struct i915_active *ref)
 	return 0;
 }
 
-__i915_active_call
 static void frontbuffer_retire(struct i915_active *ref)
 {
 	struct intel_frontbuffer *front =
@@ -261,7 +266,8 @@ intel_frontbuffer_get(struct drm_i915_gem_object *obj)
 	atomic_set(&front->bits, 0);
 	i915_active_init(&front->write,
 			 frontbuffer_active,
-			 i915_active_may_sleep(frontbuffer_retire));
+			 frontbuffer_retire,
+			 I915_ACTIVE_RETIRE_SLEEPS);
 
 	spin_lock(&i915->fb_tracking.lock);
 	if (rcu_access_pointer(obj->frontbuffer)) {

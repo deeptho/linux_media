@@ -27,7 +27,7 @@
 #define PA_INT_CLEAR			0x1c7c
 #define PA_EVENT_TYPE0			0x1c80
 #define PA_PMU_VERSION			0x1cf0
-#define PA_EVENT_CNT0_L			0x1f00
+#define PA_EVENT_CNT0_L			0x1d00
 
 #define PA_EVTYPE_MASK			0xff
 #define PA_NR_COUNTERS			0x8
@@ -333,7 +333,7 @@ static struct attribute *hisi_pa_pmu_identifier_attrs[] = {
 	NULL
 };
 
-static struct attribute_group hisi_pa_pmu_identifier_group = {
+static const struct attribute_group hisi_pa_pmu_identifier_group = {
 	.attrs = hisi_pa_pmu_identifier_attrs,
 };
 
@@ -436,7 +436,6 @@ static int hisi_pa_pmu_probe(struct platform_device *pdev)
 		dev_err(pa_pmu->dev, "PMU register failed, ret = %d\n", ret);
 		cpuhp_state_remove_instance(CPUHP_AP_PERF_ARM_HISI_PA_ONLINE,
 					    &pa_pmu->node);
-		irq_set_affinity_hint(pa_pmu->irq, NULL);
 		return ret;
 	}
 
@@ -451,8 +450,6 @@ static int hisi_pa_pmu_remove(struct platform_device *pdev)
 	perf_pmu_unregister(&pa_pmu->pmu);
 	cpuhp_state_remove_instance_nocalls(CPUHP_AP_PERF_ARM_HISI_PA_ONLINE,
 					    &pa_pmu->node);
-	irq_set_affinity_hint(pa_pmu->irq, NULL);
-
 	return 0;
 }
 

@@ -12,7 +12,7 @@
 #include <sys/sysinfo.h>
 #include <linux/perf_event.h>
 #include <linux/ring_buffer.h>
-#include "test_ringbuf.skel.h"
+#include "test_ringbuf.lskel.h"
 
 #define EDONE 7777
 
@@ -58,7 +58,7 @@ static int process_sample(void *ctx, void *data, size_t len)
 	}
 }
 
-static struct test_ringbuf *skel;
+static struct test_ringbuf_lskel *skel;
 static struct ring_buffer *ringbuf;
 
 static void trigger_samples()
@@ -90,19 +90,17 @@ void test_ringbuf(void)
 	int page_size = getpagesize();
 	void *mmap_ptr, *tmp_ptr;
 
-	skel = test_ringbuf__open();
+	skel = test_ringbuf_lskel__open();
 	if (CHECK(!skel, "skel_open", "skeleton open failed\n"))
 		return;
 
-	err = bpf_map__set_max_entries(skel->maps.ringbuf, page_size);
-	if (CHECK(err != 0, "bpf_map__set_max_entries", "bpf_map__set_max_entries failed\n"))
-		goto cleanup;
+	skel->maps.ringbuf.max_entries = page_size;
 
-	err = test_ringbuf__load(skel);
+	err = test_ringbuf_lskel__load(skel);
 	if (CHECK(err != 0, "skel_load", "skeleton load failed\n"))
 		goto cleanup;
 
-	rb_fd = bpf_map__fd(skel->maps.ringbuf);
+	rb_fd = skel->maps.ringbuf.map_fd;
 	/* good read/write cons_pos */
 	mmap_ptr = mmap(NULL, page_size, PROT_READ | PROT_WRITE, MAP_SHARED, rb_fd, 0);
 	ASSERT_OK_PTR(mmap_ptr, "rw_cons_pos");
@@ -151,12 +149,12 @@ void test_ringbuf(void)
 	/* only trigger BPF program for current process */
 	skel->bss->pid = getpid();
 
-	ringbuf = ring_buffer__new(bpf_map__fd(skel->maps.ringbuf),
+	ringbuf = ring_buffer__new(skel->maps.ringbuf.map_fd,
 				   process_sample, NULL, NULL);
 	if (CHECK(!ringbuf, "ringbuf_create", "failed to create ringbuf\n"))
 		goto cleanup;
 
-	err = test_ringbuf__attach(skel);
+	err = test_ringbuf_lskel__attach(skel);
 	if (CHECK(err, "skel_attach", "skeleton attachment failed: %d\n", err))
 		goto cleanup;
 
@@ -294,8 +292,8 @@ void test_ringbuf(void)
 	CHECK(skel->bss->discarded != 1, "err_discarded", "exp %ld, got %ld\n",
 	      1L, skel->bss->discarded);
 
-	test_ringbuf__detach(skel);
+	test_ringbuf_lskel__detach(skel);
 cleanup:
 	ring_buffer__free(ringbuf);
-	test_ringbuf__destroy(skel);
+	test_ringbuf_lskel__destroy(skel);
 }

@@ -143,7 +143,7 @@ static int ssam_hid_get_raw_report(struct surface_hid_device *shid, u8 rprt_id, 
 	rqst.target_id = shid->uid.target;
 	rqst.instance_id = shid->uid.instance;
 	rqst.command_id = SURFACE_HID_CID_GET_FEATURE_REPORT;
-	rqst.flags = 0;
+	rqst.flags = SSAM_REQUEST_HAS_RESPONSE;
 	rqst.length = sizeof(rprt_id);
 	rqst.payload = &rprt_id;
 
@@ -209,7 +209,7 @@ static int surface_hid_probe(struct ssam_device *sdev)
 
 	shid->notif.base.priority = 1;
 	shid->notif.base.fn = ssam_hid_event_fn;
-	shid->notif.event.reg = SSAM_EVENT_REGISTRY_REG;
+	shid->notif.event.reg = SSAM_EVENT_REGISTRY_REG(sdev->uid.target);
 	shid->notif.event.id.target_category = sdev->uid.category;
 	shid->notif.event.id.instance = sdev->uid.instance;
 	shid->notif.event.mask = SSAM_EVENT_MASK_STRICT;
@@ -230,7 +230,7 @@ static void surface_hid_remove(struct ssam_device *sdev)
 }
 
 static const struct ssam_device_id surface_hid_match[] = {
-	{ SSAM_SDEV(HID, 0x02, SSAM_ANY_IID, 0x00) },
+	{ SSAM_SDEV(HID, SSAM_ANY_TID, SSAM_ANY_IID, 0x00) },
 	{ },
 };
 MODULE_DEVICE_TABLE(ssam, surface_hid_match);

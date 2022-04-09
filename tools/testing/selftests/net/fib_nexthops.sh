@@ -629,6 +629,66 @@ ipv6_fcnal()
 	log_test $? 0 "Nexthops removed on admin down"
 }
 
+ipv6_grp_refs()
+{
+	if [ ! -x "$(command -v mausezahn)" ]; then
+		echo "SKIP: Could not run test; need mausezahn tool"
+		return
+	fi
+
+	run_cmd "$IP link set dev veth1 up"
+	run_cmd "$IP link add veth1.10 link veth1 up type vlan id 10"
+	run_cmd "$IP link add veth1.20 link veth1 up type vlan id 20"
+	run_cmd "$IP -6 addr add 2001:db8:91::1/64 dev veth1.10"
+	run_cmd "$IP -6 addr add 2001:db8:92::1/64 dev veth1.20"
+	run_cmd "$IP -6 neigh add 2001:db8:91::2 lladdr 00:11:22:33:44:55 dev veth1.10"
+	run_cmd "$IP -6 neigh add 2001:db8:92::2 lladdr 00:11:22:33:44:55 dev veth1.20"
+	run_cmd "$IP nexthop add id 100 via 2001:db8:91::2 dev veth1.10"
+	run_cmd "$IP nexthop add id 101 via 2001:db8:92::2 dev veth1.20"
+	run_cmd "$IP nexthop add id 102 group 100"
+	run_cmd "$IP route add 2001:db8:101::1/128 nhid 102"
+
+	# create per-cpu dsts through nh 100
+	run_cmd "ip netns exec me mausezahn -6 veth1.10 -B 2001:db8:101::1 -A 2001:db8:91::1 -c 5 -t tcp "dp=1-1023, flags=syn" >/dev/null 2>&1"
+
+	# remove nh 100 from the group to delete the route potentially leaving
+	# a stale per-cpu dst which holds a reference to the nexthop's net
+	# device and to the IPv6 route
+	run_cmd "$IP nexthop replace id 102 group 101"
+	run_cmd "$IP route del 2001:db8:101::1/128"
+
+	# add both nexthops to the group so a reference is taken on them
+	run_cmd "$IP nexthop replace id 102 group 100/101"
+
+	# if the bug described in commit "net: nexthop: release IPv6 per-cpu
+	# dsts when replacing a nexthop group" exists at this point we have
+	# an unlinked IPv6 route (but not freed due to stale dst) with a
+	# reference over the group so we delete the group which will again
+	# only unlink it due to the route reference
+	run_cmd "$IP nexthop del id 102"
+
+	# delete the nexthop with stale dst, since we have an unlinked
+	# group with a ref to it and an unlinked IPv6 route with ref to the
+	# group, the nh will only be unlinked and not freed so the stale dst
+	# remains forever and we get a net device refcount imbalance
+	run_cmd "$IP nexthop del id 100"
+
+	# if a reference was lost this command will hang because the net device
+	# cannot be removed
+	timeout -s KILL 5 ip netns exec me ip link del veth1.10 >/dev/null 2>&1
+
+	# we can't cleanup if the command is hung trying to delete the netdev
+	if [ $? -eq 137 ]; then
+		return 1
+	fi
+
+	# cleanup
+	run_cmd "$IP link del veth1.20"
+	run_cmd "$IP nexthop flush"
+
+	return 0
+}
+
 ipv6_grp_fcnal()
 {
 	local rc
@@ -734,6 +794,9 @@ ipv6_grp_fcnal()
 
 	run_cmd "$IP nexthop add id 108 group 31/24"
 	log_test $? 2 "Nexthop group can not have a blackhole and another nexthop"
+
+	ipv6_grp_refs
+	log_test $? 0 "Nexthop group replace refcounts"
 }
 
 ipv6_res_grp_fcnal()
@@ -924,6 +987,14 @@ ipv6_fcnal_runtime()
 	#
 	run_cmd "$IP nexthop add id 86 via 2001:db8:91::2 dev veth1"
 	run_cmd "$IP ro add 2001:db8:101::1/128 nhid 81"
+
+	# route can not use prefsrc with nexthops
+	run_cmd "$IP ro add 2001:db8:101::2/128 nhid 86 from 2001:db8:91::1"
+	log_test $? 2 "IPv6 route can not use src routing with external nexthop"
+
+	# check cleanup path on invalid metric
+	run_cmd "$IP ro add 2001:db8:101::2/128 nhid 86 congctl lock foo"
+	log_test $? 2 "IPv6 route with invalid metric"
 
 	# rpfilter and default route
 	$IP nexthop flush >/dev/null 2>&1
@@ -1365,6 +1436,10 @@ ipv4_fcnal_runtime()
 	run_cmd "$IP ro add 172.16.101.1/32 nhid 22 scope host"
 	run_cmd "$IP nexthop replace id 22 via 172.16.2.2 dev veth3"
 	log_test $? 2 "Nexthop replace with invalid scope for existing route"
+
+	# check cleanup path on invalid metric
+	run_cmd "$IP ro add 172.16.101.2/32 nhid 22 congctl lock foo"
+	log_test $? 2 "IPv4 route with invalid metric"
 
 	#
 	# add route with nexthop and check traffic
@@ -2066,6 +2141,7 @@ basic_res()
 		"id 101 index 0 nhid 2 id 101 index 1 nhid 2 id 101 index 2 nhid 1 id 101 index 3 nhid 1"
 	log_test $? 0 "Dump all nexthop buckets in a group"
 
+	sleep 0.1
 	(( $($IP -j nexthop bucket list id 101 |
 	     jq '[.[] | select(.bucket.idle_time > 0 and
 	                       .bucket.idle_time < 2)] | length') == 4 ))
