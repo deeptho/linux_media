@@ -2033,10 +2033,10 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 	case TBSECP3_BOARD_TBS6909X:
 		if(pci->subsystem_device==0x0010)
 			adapter->fe = dvb_attach(stid135_attach, i2c,
-				&tbs6909x_stid135_cfg, adapter->nr, adapter->nr/2);
+				&tbs6909x_stid135_cfg, adapter->nr, adapter->nr%4);
 		else
 			adapter->fe = dvb_attach(stid135_attach, i2c,
-															 &tbs6909x_V2_stid135_cfg, adapter->nr, adapter->nr/2);
+															 &tbs6909x_V2_stid135_cfg, adapter->nr, adapter->nr%4);
 		if (adapter->fe == NULL)
 			goto frontend_atach_fail;
 		break;

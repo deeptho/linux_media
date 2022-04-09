@@ -535,7 +535,7 @@ int stid135_scan_spectrum(struct spectrum_scan_state_t* ss)
 		return ret;
 	}
 	while(ret>=0) {
-		ret=stid135_spectral_scan_next(ss, &si, &frequency, &snr);
+		ret = stid135_spectral_scan_next (ss, &si, &frequency, &snr);
 		dprintk("FREQ=%d BW=%d SNR=%ddB\n", frequency, si.last_peak.bw, snr);
 		if(ret>=0) {
 			si.peaks[si.num_peaks++] = si.last_peak;

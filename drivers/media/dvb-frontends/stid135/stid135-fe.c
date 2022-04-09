@@ -301,6 +301,7 @@ static int stid135_init(struct dvb_frontend* fe)
 	err |= fe_stid135_tuner_enable(p_params->handle_demod, state->rf_in + 1);
 	err |= fe_stid135_diseqc_init(&state->base->ip, state->rf_in + 1, FE_SAT_DISEQC_2_3_PWM);
 	}
+	dprintk("Setting rf_mux_path demod=%d rf_in=%d\n", state->nr, state->rf_in);
 	err |= fe_stid135_set_rfmux_path(state, state->rf_in + 1);
 	mutex_unlock(&state->base->status_lock);
 
@@ -1791,7 +1792,7 @@ static struct dvb_frontend_ops stid135_ops = {
 		.name			= "STiD135 Multistandard",
 		.frequency_min_hz	 = 950 * MHz,
 		.frequency_max_hz		= 2150 * MHz,
-		.symbol_rate_min	= 100000,
+		.symbol_rate_min	= 10000,
 		.symbol_rate_max	= 520000000,
 		.caps			= FE_CAN_INVERSION_AUTO |
 						FE_CAN_FEC_AUTO       |
