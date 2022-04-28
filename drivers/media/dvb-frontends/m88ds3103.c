@@ -1523,9 +1523,9 @@ static int m88ds3103_read_snr(struct dvb_frontend *fe, u16 *snr)
 	tmp = div_s64(c->cnr.stat[0].svalue, 100);
 
 	if (c->delivery_system == SYS_DVBS)
-		*snr = (tmp > 0x7d) 0xffff : tmp * 524;
+		*snr = (tmp > 0x7d) ? 0xffff : tmp * 524;
 	else
-		*snr = (tmp > 0xc8) 0xffff : tmp * 327;
+		*snr = (tmp > 0xc8) ? 0xffff : tmp * 327;
 
 	return 0;
 }
