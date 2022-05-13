@@ -1122,7 +1122,7 @@ static int stv091x_set_search_range(struct stv *state, struct dtv_frontend_prope
 		//default search_range=16 000 000; make it less for lower symbol rate
 		range = (state->search_range_hz / 2000);
 	}
-	dprintk("RANGE= set to %dkHz state->search_range=%dkHz\n", range, state->search_range_hz);
+	dprintk("RANGE= set to %dkHz state->search_range=%dkHz\n", range, state->search_range_hz/1000);
 	range = (range<<16)/(state->base->mclk/1000); //1Mhz
 	write_reg(state, RSTV0910_P2_CFRUP1 + state->regoff,
 						(range >> 8) & 0xff);
@@ -2717,10 +2717,8 @@ static int stv091x_spectrum_start(struct dvb_frontend *fe,
 		val3 = val2;
 		val2 = val1;
 		val1 = stv091x_narrow_band_signal_power_dbm(fe);
-		if(i>=2)
+		if(i>=1)
 			ss->spectrum[i-1]  = (val1 + val2 + val3)/3;
-		else if (i>=1)
-			ss->spectrum[i-1]  = (val1 + 2*val2)/2;
 	}
 	if(num_freq>0)
 		ss->spectrum[num_freq-1]  = (2*val1 + val2)/3;
