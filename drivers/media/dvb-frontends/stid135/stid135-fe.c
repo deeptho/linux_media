@@ -494,7 +494,7 @@ static int stid135_set_parameters(struct dvb_frontend* fe)
 	case ALGORITHM_COLD:
 	case ALGORITHM_COLD_BEST_GUESS:
 		search_params.search_algo		= FE_SAT_COLD_START;
-		search_params.symbol_rate = p->symbol_rate == 0;
+		search_params.symbol_rate = p->symbol_rate ;
 		break;
 
 	case ALGORITHM_BLIND:
