@@ -36,8 +36,8 @@ git clone https://github.com/tbsdtv/media_build.git
 cd media_build
 
 #it is important to use a media_build version compatible with media
-#The following version works on 28.9.2021
-git checkout ffcdfed96c45c8e80ffd6a154c16d64c81416010
+#The following version works on 14.5.2022
+git checkout master
 
 make dir DIR=../media
 make distclean
