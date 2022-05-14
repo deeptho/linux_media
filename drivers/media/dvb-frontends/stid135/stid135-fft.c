@@ -780,7 +780,7 @@ int get_spectrum_scan_fft(struct dvb_frontend *fe)
 	ss->start_frequency = start_frequency;
 	ss->end_frequency = end_frequency;
 
-	ss->frequency_step = p->scan_resolution==0 ? 100 : p->scan_resolution; //in kHz
+	ss->frequency_step = p->scan_resolution==0 ? 50 : p->scan_resolution; //in kHz
 
 	ss->fft_size =  (p->scan_fft_size>0) ? p->scan_fft_size : 512;
 	if(ss->fft_size >= 4096)
