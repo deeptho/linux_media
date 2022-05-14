@@ -1088,24 +1088,15 @@ fe_lla_error_t fe_stid135_set_carrier_frequency_init_(struct fe_stid135_internal
 	FVCO/4/12=6.2GHz/4/12=130MHz */
 
 		si_register = ((frequency_hz/PLL_FVCO_FREQUENCY)*cfr_factor)/100;
-#if 0
-		error |= ChipSetOneRegister(hChip, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRINIT2(Demod),
-																((u8)(si_register >> 16)));
-		error |= ChipSetOneRegister(hChip, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRINIT1(Demod),
-																((u8)(si_register >> 8)));
-		error |= ChipSetOneRegister(hChip, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRINIT0(Demod),
-																((u8)(si_register)));
-#else
+		dprintk("XXX CFR_INIT set to %d\n", si_register );
+		error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_CFRINIT2_CFR_INIT(Demod),
+															 ((u8)(si_register >> 16)));
+		error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_CFRINIT1_CFR_INIT(Demod),
+															 ((u8)(si_register >> 8)));
+		error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_CFRINIT0_CFR_INIT(Demod),
+															 ((u8)si_register));
+		error |= ChipSetRegisters(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRINIT2(Demod),3);
 
-	 error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_CFRINIT2_CFR_INIT(Demod),
-	((u8)(si_register >> 16)));
-	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_CFRINIT1_CFR_INIT(Demod),
-	((u8)(si_register >> 8)));
-	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_CFRINIT0_CFR_INIT(Demod),
-	((u8)si_register));
-	error |= ChipSetRegisters(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRINIT2(Demod),3);
-
-#endif
 		//	s32 freq;
 		//	FE_STiD135_GetCarrierFrequency(hChip,master_clock,state->nr+1,&freq);
 	return error;
@@ -1204,7 +1195,7 @@ fe_lla_error_t fe_stid135_set_carrier_frequency_init(struct stv* state, s32 freq
 		 FVCO/4/12=6.2GHz/4/12=130MHz */
 	vprintk("[%d] setting frequency=%dkHz\n", state->nr+1, frequency_hz/1000);
 	si_register = ((frequency_hz/PLL_FVCO_FREQUENCY)*cfr_factor)/100;
-
+	dprintk("XXX CFR_INIT set to %d\n", si_register );
 	error |= ChipSetOneRegister(hChip, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRINIT2(state->nr+1),
 															((u8)(si_register >> 16)));
 	error |= ChipSetOneRegister(hChip, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRINIT1(state->nr+1),
@@ -1732,7 +1723,7 @@ fe_lla_error_t fe_stid135_get_lock_status(struct stv* state, bool*carrier_lock, 
 																		FLD_FC8CODEW_DVBSX_PKTDELIN_PDELSTATUS1_PKTDELIN_LOCK(state->nr+1), &(fld_value[1])));
 
 			//TODO: stv091x does not check TSFIFO_LINEOK
-			//fld_value[2]==0 means that packets with errros have been received
+			//fld_value[2]==0 means that packets with errors have been received
 			error |= (error1=ChipGetField(state->base->ip.handle_demod,
 																		FLD_FC8CODEW_DVBSX_HWARE_TSSTATUS_TSFIFO_LINEOK(state->nr+1), &(fld_value[2])));
 			error |= ChipGetField(state->base->ip.handle_demod,
@@ -2838,7 +2829,7 @@ fe_lla_error_t	fe_stid135_search(struct stv* state,
 		return FE_LLA_BAD_PARAMETER;
 	}
 
-	if ((!(INRANGE(500000, pSearch->search_range_hz, 70000000)))) {
+	if ((!(INRANGE(100000, pSearch->search_range_hz, 70000000)))) {
 		dprintk("[%d] error=FE_LLA_BAD_PARAMETER: search_range=%d\n", state->nr+1,  pSearch->search_range_hz);
 		return FE_LLA_BAD_PARAMETER;
 	}
@@ -3116,6 +3107,10 @@ static void FE_STiD135_GetLockTimeout(u32 *DemodTimeout, u32 *FecTimeout,
 	case FE_SAT_BLIND_SEARCH:
 			(*DemodTimeout) = 3000;
 			(*FecTimeout) = 3000;
+			if (SymbolRate <= 1000000) {       /*SR <=1Msps*/
+				(*DemodTimeout) *= 4;
+				(*FecTimeout) *= 4;
+			}
 	break;
 	case FE_SAT_NEXT:
 		dprintk("Setting long timeouts\n");
@@ -4792,8 +4787,11 @@ static fe_lla_error_t FE_STiD135_StartSearch(struct stv* state)
 		vprintk("[%d] XXX set to 0x0\n", state->nr+1);
 		/*Trigger an acquisition (start the search)*/
 		error |= ChipSetOneRegister(state->base->ip.handle_demod,
-																(u16)REG_RC8CODEW_DVBSX_DEMOD_DMDISTATE(Demod), 0x1); //WAS 0x1
-
+																(u16)REG_RC8CODEW_DVBSX_DEMOD_DMDISTATE(Demod), 0x0); //WAS 0x1
+		/*
+			1: use frequency found by last blindscan as a start
+			0: use 0 frequency as a start
+		 */
 		break;
 	case FE_SAT_NEXT:
 		/*Trig an acquisition (start the search)*/
