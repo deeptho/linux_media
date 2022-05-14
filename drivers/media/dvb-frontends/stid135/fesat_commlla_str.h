@@ -311,20 +311,6 @@ struct fe_sat_search_params {
 #endif
 	};
 
-struct fe_sat_search_result {
-//	  BOOL 				locked;		/* Transponder found 			*/
-//	  BOOL        has_carrier;  /*Some signal was found*/
-		u32				frequency;	/* Found frequency	 		*/
-		u32 				symbol_rate;	/* Found Symbol rate			*/
-		enum fe_sat_tracking_standard	standard;	/* Found Standard DVBS1,DVBS2 or DSS	*/
-		enum fe_sat_rate 		puncture_rate;	/* Found Puncture rate  For DVBS1 	*/
-		enum fe_sat_modcode 		modcode;	/* Found Modcode only for DVBS2		*/
-		enum fe_sat_modulation		modulation;	/* Found modulation type		*/
-		enum fe_sat_pilots		pilots;		/* pilots Found for DVBS2		*/
-		enum fe_sat_frame		frame_length;	/* Found frame length for DVBS2		*/
-		enum fe_sat_iq_inversion	spectrum;	/* IQ specrum swap setting		*/
-		enum fe_sat_rolloff		roll_off;	/* Rolloff factor (0.2, 0.25 or 0.35)	*/
-	};
 
 	/************************
 		INFO STRUCTURE
@@ -366,7 +352,7 @@ struct fe_sat_signal_info {
 		s32 				power;		/* Power of the RF signal (dBm x1000)			*/
 		s32 				powerdBmx10;	/* Power of the RF signal (dBm x10000)			*/
 		s32				band_power;	/* Power of the whole freq range signal (dBm x1000)	*/
-		s32				C_N;		/* Carrier to noise ratio (dB x10)			*/
+		s32				C_N;		/* Carrier to noise ratio (dB x10) 	*/
 		u32				ber;		/* Bit error rate	(x10^7)				*/
 		enum fe_sat_iq_inversion	spectrum;	/* IQ specrum swap setting				*/
 		u8				matype;
@@ -375,23 +361,6 @@ struct fe_sat_signal_info {
  		u32       pls_code;
 		fe_sat_isi_struct isi_list;
 	} ;
-
-struct fe_sat_tracking_info {
-		BOOL 			locked;		/* Transponder locked			*/
-		enum fe_sat_tracking_standard	standard;	/* Found Standard DVBS1,DVBS2 or DSS or Turbo */
-		s32 			power;		/* Power of the RF signal (dBm)		*/
-		s32 			powerdBmx10;	/* Power of the RF signal (dBm x10)	*/
-		s32				band_power;	/* Power of the whole freq range signal (dBm)	*/
-		s32			C_N;		/* Carrier to noise ratio (dB x10)	*/
-		u32			ber;		/* Bit error rate	(x10^7)		*/
- 		s32			frequency_if;
-		/* Addition for ACM/VCM */
-		enum fe_sat_modcode	modcode;	/* MODCODE Only for DVBS2		*/
-		enum fe_sat_pilots	pilots;		/* pilots on,off only for DVB-S2	*/
-		enum fe_sat_frame	frame_length;	/* Found frame length only for DVB-S2	*/
-		u8			matype;
-		u8 			isi; 	/*Current value of ISI */
-	};
 
 
 

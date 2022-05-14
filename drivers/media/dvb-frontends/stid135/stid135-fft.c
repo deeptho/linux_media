@@ -502,6 +502,7 @@ fe_lla_error_t fe_stid135_fft(struct stv* state, u32 mode, u32 nb_acquisition, s
 {
 	struct fe_stid135_internal_param *pParams = &state->base->ip;
 	enum fe_stid135_demod path = state->nr+1;
+
 	u32 nb_words =0;
 	s32 val[4]= { 0 }, val_max;
 	u32 guard=12345;
@@ -515,7 +516,7 @@ fe_lla_error_t fe_stid135_fft(struct stv* state, u32 mode, u32 nb_acquisition, s
 	u8 timeout = 0;
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	const u16 cfr_factor = 6711; // 6711 = 2^20/(10^6/2^6)*100
-	//dprintk("FFT start\n");
+	dprintk("FFT start path=%d\n", path);
 	if(path > FE_SAT_DEMOD_4)
 		return(FE_LLA_BAD_PARAMETER);
 	//pParams = (struct fe_stid135_internal_param *) handle;
@@ -590,6 +591,7 @@ fe_lla_error_t fe_stid135_fft(struct stv* state, u32 mode, u32 nb_acquisition, s
 	//nb_words = ((u32)1<<(10-mode));     // memory size N/8 for memory readout
 	//dprintk("mode=%d buffer_size=%d nbr_pts=%d nb_words=%d 32bit=%d\n", mode, buffer_size, nbr_pts, nb_words, fld_value == 1);
 	error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_EXPMAX_EXP_MAX(path), &fld_value);
+	dprintk("error=%d\n", error);
 	exp = (u32)fld_value;
 	switch(path) {
 	case FE_SAT_DEMOD_1:

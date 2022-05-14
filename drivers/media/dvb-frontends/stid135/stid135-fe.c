@@ -475,7 +475,6 @@ static int stid135_set_parameters(struct dvb_frontend* fe)
 	fe_lla_error_t err = FE_LLA_NO_ERROR;
 	fe_lla_error_t error1 = FE_LLA_NO_ERROR;
 	struct fe_sat_search_params search_params;
-	struct fe_sat_search_result search_results;
 	s32 rf_power;
 	//BOOL lock_stat=0;
 	struct fe_sat_signal_info* signal_info = &state->signal_info;
@@ -610,10 +609,7 @@ static int stid135_set_parameters(struct dvb_frontend* fe)
 	}
 #endif
 
-	err |= (error1=fe_stid135_search(state, &search_params, &search_results, 0));
-#if 0  //XXX official driver calls this
-	err |= fe_stid135_get_lock_status(state, 0, 0, 0 );
-#endif
+	err |= (error1=fe_stid135_search(state, &search_params, 0));
 	if(error1!=0)
 		dprintk("[%d] fe_stid135_search returned error=%d\n", state->nr+1, error1);
 	if (err != FE_LLA_NO_ERROR) {
@@ -632,11 +628,6 @@ static int stid135_set_parameters(struct dvb_frontend* fe)
 			state->signal_info.has_lock=true;
 			dprintk("PLS locked=%d\n", locked);
 			print_signal_info("(PLS)", &state->signal_info);
-		}
-		if(locked) {
-			/*The following can cause delock*/
-			//set_stream_index(state, p->stream_id);
-			//print_signal_info("(PLS2)", &state->signal_info);
 		}
 	} else {
 		state->signal_info.has_lock=true;

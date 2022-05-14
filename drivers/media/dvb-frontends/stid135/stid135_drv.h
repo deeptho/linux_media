@@ -381,7 +381,7 @@ struct stv {
 	enum fe_sat_rate		demod_puncture_rate;
 	enum fe_sat_modcode		demod_modcode;
 	enum fe_sat_modulation		demod_modulation;
-	struct fe_sat_search_result	demod_results; /* Results of the search */
+
 	fe_lla_error_t			demod_error; /* Last error encountered */
 	u32	 demod_symbol_rate; /* Symbol rate (Bds) */
 	u32	demod_search_range_hz; /* Search range (Hz) */
@@ -528,14 +528,10 @@ fe_lla_error_t fe_stid135_get_signal_info(struct stv* state,
 																					struct fe_sat_signal_info *pInfo,
 	u32 satellite_scan);
 
-fe_lla_error_t fe_stid135_tracking(struct stv* state,
-							 struct fe_sat_tracking_info *pTrackingInfo)  ;
-
 fe_lla_error_t FE_STiD135_Term(struct fe_stid135_internal_param* pParams);
 
 fe_lla_error_t	fe_stid135_search  (struct stv* state,
-	struct fe_sat_search_params *pSearch, struct fe_sat_search_result *pResult,
-	BOOL satellite_scan);
+	struct fe_sat_search_params *pSearch, BOOL satellite_scan);
 
 fe_lla_error_t  fe_stid135_init(struct fe_sat_init_params *pInit,
 																struct fe_stid135_internal_param*pParams);
