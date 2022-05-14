@@ -318,8 +318,7 @@ static void stid135_release(struct dvb_frontend* fe)
 
 	state->base->count--;
 	if (state->base->count == 0) {
-		if (&state->base->ip)
-			FE_STiD135_Term (&state->base->ip);
+		FE_STiD135_Term (&state->base->ip);
 		list_del(&state->base->stvlist);
 		kfree(state->base);
 	}
@@ -344,8 +343,15 @@ static bool pls_search_list(struct dvb_frontend* fe)
 		s32 pktdelin;
 		u8 timeout = pls_code & 0xff;
 		BUG_ON(i <0 || i>= sizeof(p->pls_search_codes)/sizeof(p->pls_search_codes[0]));
-		vprintk("Trying scrambling mode=%d code %d timeout=%d\n", (pls_code>>26) & 0x3, (pls_code>>8) & 0x3FFFF, timeout);
+		vprintk("Trying scrambling mode=%d code %d stream_id=%d timeout=%d\n", (pls_code>>26) & 0x3,
+						(pls_code>>8) & 0x3FFFF, p->stream_id, timeout);
 		set_pls_mode_code(state, (pls_code>>26) & 0x3, (pls_code>>8) & 0x3FFFF);
+#if 0
+		if(p->stream_id !=  NO_STREAM_ID_FILTER)
+			fe_stid135_set_mis_filtering(state,  TRUE, p->stream_id & 0xFF, 0xFF);
+		else
+			fe_stid135_set_mis_filtering(state,  FALSE, 0, 0xFF);
+#endif
 		//write_reg(state, RSTV0910_P2_DMDISTATE + state->regoff, 0x15);
 		//write_reg(state, RSTV0910_P2_DMDISTATE + state->regoff, 0x18);
 		msleep(timeout? timeout: 100); //0 means: use default
@@ -370,6 +376,8 @@ static bool pls_search_list(struct dvb_frontend* fe)
 				signal_info->isi = isi;
 				//p->matype = matype_info;
 				p->stream_id = 	(state->mis_mode? (isi&0xff):0xff) | (pls_code & ~0xff);
+				dprintk("XXXX mis_mode=%d isi=0x%x pls_code=0x%x stream_id=0x%x",
+								state->mis_mode, isi, pls_code, p->stream_id);
 				dprintk("SET stream_id=0x%x isi=0x%x\n",p->stream_id, isi);
 				break;
 			}
@@ -400,6 +408,8 @@ static bool pls_search_range(struct dvb_frontend* fe)
 	int count=0;
 	u8 matype_info;
 	u8 isi;
+	if(p->pls_search_range_end == 0)
+		return false;
 	if(p->pls_search_range_start >= p->pls_search_range_end) {
 		dprintk("Invalid PLS range: %d - %d", p->pls_search_range_start, p->pls_search_range_end);
 		return false;
@@ -445,6 +455,9 @@ static bool pls_search_range(struct dvb_frontend* fe)
 			dprintk("selecting stream_id=%d\n", isi);
 			signal_info->isi = isi;
 			p->stream_id = 	(state->mis_mode? (isi&0xff):0xff) | (pls_code & ~0xff);
+			dprintk("XXXX mis_mode=%d isi=0x%x pls_code=0x%x stream_id=0x%x",
+								state->mis_mode, isi, pls_code, p->stream_id);
+
 		  //p->matype = matype_info;
 			dprintk("PLS SET stream_id=0x%x isi=0x%x\n",p->stream_id, isi);
 				break;
@@ -477,6 +490,8 @@ static int stid135_set_parameters(struct dvb_frontend* fe)
 			"delivery_system=%u modulation=%u frequency=%u symbol_rate=%u inversion=%u stream_id=%d\n",
 			p->delivery_system, p->modulation, p->frequency,
 					p->symbol_rate, p->inversion, p->stream_id);
+	dprintk("XXXX user set stream_id=0x%x", p->stream_id);
+
 	if(blindscan_always) {
 		p->algorithm = ALGORITHM_WARM;
 		p->delivery_system = SYS_AUTO;
@@ -718,6 +733,9 @@ static int stid135_set_parameters(struct dvb_frontend* fe)
 		state->signal_info.pls_code = ((p->stream_id >> 8)  & 0x3FFFF);
 	}
 
+	dprintk("XXXX set state->signal_info pls_mode=0x%x pls_code=0x%x stream_id=0%x",
+					state->signal_info.pls_mode, state->signal_info.pls_code, p->stream_id);
+
 	if(	state->signal_info.pls_code ==0)
 			state->signal_info.pls_code = 1;
 	if (err != FE_LLA_NO_ERROR)
@@ -894,6 +912,11 @@ static int stid135_get_frontend(struct dvb_frontend* fe, struct dtv_frontend_pro
 									(state->signal_info.pls_mode << 26) |
 									((state->signal_info.pls_code &0x3FFFF)<<8)
 									);
+	dprintk("XXXX set stream_id mis=%d pls_mode=0x%x pls_code=0x%x stream_id=0%x",
+					state->mis_mode,
+					state->signal_info.pls_mode, state->signal_info.pls_code, p->stream_id);
+
+
 	dprintk("SET stream_id=0x%x isi=0x%x\n",p->stream_id, state->signal_info.isi);
 	return 0;
 }
@@ -1041,7 +1064,6 @@ static int stid135_tune_(struct dvb_frontend* fe, bool re_tune,
 	if(re_tune) {
 		vprintk("[%d] RETUNE: GET SIGNAL\n", state->nr+1);
 		fe_stid135_get_signal_info(state,  &state->signal_info, 0);
-		//dprintk("MIS2: num=%d\n", state->signal_info.isi_list.nb_isi);
 	}
 
 	r = stid135_read_status_(fe, status);
@@ -1782,10 +1804,6 @@ static int stid135_constellation_get(struct dvb_frontend* fe, struct dtv_fe_cons
 }
 
 
-
-
-
-
 static struct dvb_frontend_ops stid135_ops = {
 	.delsys = { SYS_DVBS, SYS_DVBS2, SYS_DVBS2X, SYS_DSS, SYS_AUTO },
 	.info = {
@@ -1926,6 +1944,7 @@ struct dvb_frontend* stid135_attach(struct i2c_adapter *i2c,
 	state->fe.ops               = stid135_ops;
 	state->fe.demodulator_priv  = state;
 	state->nr = nr;
+	//state->nr = nr < 4 ? 2*nr  : 2*(nr-4)+1;
 	state->newTP = false;
 	state->bit_rate  = 0;
 	state->loops = 15;
