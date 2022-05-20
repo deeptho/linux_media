@@ -259,10 +259,11 @@ static int m88ds3103_read_status(struct dvb_frontend *fe,
 			*status = FE_HAS_SIGNAL;
 		if ((utmp & 0x02) == 0x02)
 			*status |= FE_HAS_LOCK;
-		if ((utmp & 0x04) == 0x04)
+		if ((utmp & 0x04) == 0x04) {
 			*status |= FE_HAS_CARRIER;
 			*status |= FE_HAS_SYNC;
 			*status |= FE_HAS_VITERBI;
+		}
 		break;
 	case SYS_DVBS2:
 		ret = regmap_read(dev->regmap, 0x0d, &utmp);
@@ -876,7 +877,7 @@ static int m88ds3103_set_frontend(struct dvb_frontend *fe)
 			ts_clk = (c->delivery_system == SYS_DVBS2) ? 8471000 : 8000000;
 			fallthrough;
 		case M88DS3103_TS_PARALLEL:
-			if (c->delivery_system == SYS_DVBS2)
+			if (c->delivery_system == SYS_DVBS2) {
 				if (c->symbol_rate < 18000000)
 					target_mclk = 96000000;
 				else if (c->symbol_rate < 28000000)
