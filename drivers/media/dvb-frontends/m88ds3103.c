@@ -5,6 +5,7 @@
  * Copyright (C) 2013 Antti Palosaari <crope@iki.fi>
  */
 
+#include <linux/kthread.h>
 #include "m88ds3103_priv.h"
 
 static const struct dvb_frontend_ops m88ds3103_ops;
@@ -2573,6 +2574,8 @@ static const struct dvb_frontend_ops m88ds3103_ops = {
 
 	.set_frontend = m88ds3103_set_frontend,
 	.get_frontend = m88ds3103_get_frontend,
+
+	.scan = m88ds3103_blindscan,
 
 	.read_status = m88ds3103_read_status,
 	.read_snr = m88ds3103_read_snr,
