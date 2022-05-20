@@ -1449,6 +1449,174 @@ err:
 	return ret;
 }
 
+static int m88ds3103_blindscan(struct dvb_frontend *fe, bool init, unsigned int *delay, enum fe_status *status)
+{
+	struct m88ds3103_dev *dev = fe->demodulator_priv;
+	struct i2c_client *client = dev->client;
+	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
+	enum fe_status tmpstatus;
+	u8 lockwait, locksleep, i, j, buf[2];
+	u32 tmpfreq;
+	s32 carrieroffset;
+	u16 index;
+	int ret;
+	static const struct reg_sequence reset_buf[] = {
+		{0x07, 0x80}, {0x07, 0x00}
+	};
+
+	if (init) {
+		struct fe_tp_info *blindscaninfo = kmalloc(sizeof(*blindscaninfo) * 1000, GFP_KERNEL);
+		dev->msd = blindscaninfo;
+		scandone = 0;
+		tpcnt = 0;
+		tpnum = 0;
+
+		ret = m88ds3103_bs_set_frontend(fe);
+		if (ret)
+			goto err;
+
+		ret = regmap_multi_reg_write(dev->regmap, reset_buf, 2);
+		if (ret)
+			goto err;
+
+		c->frequency = c->scan_start_frequency;
+		c->symbol_rate = 40000000;
+		c->bandwidth_hz = c->symbol_rate / 100 * 135;
+		ret = m88ds3103_bs_set_reg(fe);
+		if (ret)
+			goto err;
+
+		while (c->frequency < c->scan_end_frequency) {
+			if (kthread_should_stop() || dvb_frontend_task_should_stop(fe))
+				break;
+			if (fe->ops.tuner_ops.set_params) {
+				ret = fe->ops.tuner_ops.set_params(fe);
+				if (ret)
+					goto err;
+			}
+
+			ret = m88ds3103_set_carrier_offset(fe, 0);
+			if (ret)
+				goto err;
+
+			ret = m88ds3103_fft_scan(fe);
+			if (ret)
+				goto err;
+
+			ret = regmap_bulk_read(dev->regmap, 0x95, buf, 2);
+			if (ret)
+				goto err;
+
+			tmpfreq = 0;
+			tmpfreq = (((((buf[0] & 0xc0) >> 6) << 8) | buf[1]) * 96000) / 512;
+			if (tmpfreq > 96000)
+				tmpfreq = 10000;
+
+			c->frequency += tmpfreq;
+
+			if (tmpfreq == 0)
+				c->frequency += 36000;
+		
+			if (c->frequency >= 2150000)
+				c->frequency = 2150000;
+		}
+	}
+
+next:
+	for (index = tpnum; index < tpcnt; index++) {
+		if (kthread_should_stop() || dvb_frontend_task_should_stop(fe))
+			break;
+		if (index == tpcnt - 1)
+			scandone = 1;
+		c->frequency = dev->msd[index].frequency;
+		c->symbol_rate = dev->msd[index].symbol_rate;
+		c->bandwidth_hz = c->symbol_rate / 100 * 135;
+
+		for (i = 0; i < 2; i++) {
+			ret = regmap_multi_reg_write(dev->regmap, reset_buf, 2);
+			if (ret)
+				goto err;
+
+			c->delivery_system = (i == 0) ? SYS_DVBS2 : SYS_DVBS;
+
+			if (fe->ops.tuner_ops.set_params) {
+				ret = fe->ops.tuner_ops.set_params(fe);
+				if (ret)
+					goto err;
+			}
+
+			ret = m88ds3103_bs_set_frontend(fe);
+			if (ret)
+				goto err;
+
+			ret = m88ds3103_set_carrier_offset(fe, 0);
+			if (ret)
+				goto err;
+
+			if (c->symbol_rate < 1000000) {
+				lockwait = 80;
+				locksleep = 10;
+			} else if (c->symbol_rate < 1500000) {
+				lockwait = 40;
+				locksleep = 10;
+			} else if (c->symbol_rate > 7000000 && c->symbol_rate < 20000000) {
+				lockwait = 15;
+				locksleep = 5;
+			} else if (c->symbol_rate > 20000000) {
+				lockwait = 20;
+				locksleep = 0;
+			} else {
+				lockwait = 30;
+				locksleep = 10;
+			}
+
+			for (j = 0; j < lockwait ; j++) {
+				ret = m88ds3103_read_status(fe, &tmpstatus);
+				if (ret)
+					goto err;
+				msleep(locksleep);
+
+				if (tmpstatus & FE_HAS_CARRIER)
+					break;
+			}
+
+			if (dev->fe_status & FE_HAS_CARRIER) {
+				ret = m88ds3103_get_total_carrier_offset(fe, &carrieroffset);
+				if (ret)
+					goto err;
+
+				c->frequency -= carrieroffset;
+
+				ret = m88ds3103_get_frontend(fe, c);
+				if (ret)
+					goto err;
+
+				*status = FE_HAS_SIGNAL|FE_HAS_CARRIER|FE_HAS_VITERBI|FE_HAS_SYNC|FE_HAS_LOCK;
+				goto locked;
+			} else {
+				if (i == 1)
+					goto nolock;
+			}
+		}
+nolock:
+		if (scandone)
+			goto end;
+		tpnum++;
+		goto next;
+locked:
+		tpnum++;
+		return 0;
+	}
+	if (scandone)
+end:
+		*status = FE_TIMEDOUT;
+
+	return 0;
+err:
+	dev_dbg(&client->dev, "failed=%d\n", ret);
+	return ret;
+}
+
 static int m88ds3103_set_frontend(struct dvb_frontend *fe)
 {
 	struct m88ds3103_dev *dev = fe->demodulator_priv;
