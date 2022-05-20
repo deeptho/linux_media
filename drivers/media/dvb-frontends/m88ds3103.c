@@ -952,6 +952,56 @@ err:
 	return ret;
 }
 
+static int m88ds3103_get_total_carrier_offset(struct dvb_frontend *fe, s32 *tcoff)
+{
+	struct m88ds3103_dev *dev = fe->demodulator_priv;
+	struct i2c_client *client = dev->client;
+	s32 tmp3, tmp4, nval1, nval2;
+	unsigned tmp, tmp1, tmp2;
+	int ret;
+
+	ret = regmap_read(dev->regmap, 0x5d, &tmp);
+	if (ret)
+		goto err;
+	tmp &= 0xf8;
+	ret = regmap_write(dev->regmap, 0x5d, tmp);
+	if (ret)
+		goto err;
+	ret = regmap_read(dev->regmap, 0x5e, &tmp1);
+	if (ret)
+		goto err;
+	ret = regmap_read(dev->regmap, 0x5f, &tmp2);
+	if (ret)
+		goto err;
+	tmp3 = (tmp2 << 8) | tmp1;
+	tmp |= 0x06;
+	ret = regmap_write(dev->regmap, 0x5d, tmp);
+	if (ret)
+		goto err;
+	ret = regmap_read(dev->regmap, 0x5e, &tmp1);
+	if (ret)
+		goto err;
+	ret = regmap_read(dev->regmap, 0x5f, &tmp2);
+	if (ret)
+		goto err;
+	tmp4 = (tmp2 << 8) | tmp1;
+	if (((tmp3 >> 15) & 0x01) == 0x01)
+		nval1 = tmp3 - (1 << 16);
+	else
+		nval1 = tmp3;
+	if (((tmp4 >> 15) & 0x01) == 0x01)
+		nval2 = tmp4 - (1 << 16);
+	else
+		nval2 = tmp4;
+
+	*tcoff = (nval1 - nval2) * 96000 / (1 << 16);
+
+	return 0;
+err:
+	dev_dbg(&client->dev, "failed=%d\n", ret);
+	return ret;
+}
+
 static int m88ds3103_bs_set_reg(struct dvb_frontend *fe)
 {
 	struct m88ds3103_dev *dev = fe->demodulator_priv;
