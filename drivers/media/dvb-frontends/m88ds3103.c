@@ -1302,6 +1302,103 @@ err:
 	return ret;
 }
 
+static int m88ds3103_fft_scan(struct dvb_frontend *fe)
+{
+	struct m88ds3103_dev *dev = fe->demodulator_priv;
+	struct i2c_client *client = dev->client;
+	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
+	struct fe_tp_info *tmp = NULL;
+	unsigned tmp0, tmp1, tmp2, tmp3, tmp4;
+	bool fftdone;
+	int ret;
+	u8 cnt, buf[2];
+	u16 i, totaltpnum;
+	u32 freq = 0, sym = 0;
+	s32 s_value = 0;
+
+	tmp = dev->msd;
+	if (tpcnt > 1000)
+		return -ENOMEM;
+
+	for (i = 0; i < 2; i++) {
+		buf[0] = 0x70;
+		buf[1] = 0x00;
+		fftdone = 0;
+		cnt = 50;
+		ret = regmap_write(dev->regmap, 0x9a, 0x80);
+		if (ret)
+			goto err;
+		do {
+			ret = regmap_read(dev->regmap, 0x9a, &tmp0);
+			if (ret)
+				goto err;
+			fftdone = ((tmp0 & 0x80) == 0x00) ? 1 : 0;
+			msleep(10);
+			cnt--;
+		} while ((fftdone == 0) && (cnt > 0));
+		if (fftdone || (1 == i)) {
+			break;
+		} else {
+			ret = regmap_bulk_write(dev->regmap, 0x5e, buf, 2);
+			if (ret)
+				goto err;
+		}
+	}
+	ret = regmap_read(dev->regmap, 0x9a, &tmp0);
+	if (ret)
+		goto err;
+	totaltpnum = tmp0 & 0x1f;
+
+	while (totaltpnum > 0) {
+		totaltpnum--;
+
+		ret = regmap_write(dev->regmap, 0x9a, 0x20);
+		if (ret)
+			goto err;
+		ret = regmap_read(dev->regmap, 0x9b, &tmp1);
+		if (ret)
+			goto err;
+		ret = regmap_read(dev->regmap, 0x9b, &tmp2);
+		if (ret)
+			goto err;
+		ret = regmap_read(dev->regmap, 0x9b, &tmp3);
+		if (ret)
+			goto err;
+		ret = regmap_read(dev->regmap, 0x9b, &tmp4);
+		if (ret)
+			goto err;
+
+		sym = (((tmp4 & 0x03) << 8) | tmp3) * 187500;
+		s_value = (((tmp2 & 0x03) << 8) | tmp1);
+		if (s_value >= 512)
+			s_value -= 1024;
+
+		freq = c->frequency + s_value * (96000 / 512);
+
+		if (freq < 700000)
+			return 0;
+
+		if ((sym > 50000000) || (sym < 800000))
+			return 0;
+
+		if (sym > 45000000)
+			sym = 45000000;
+		else if (sym > 2000000)
+			sym -= 400000;
+		else
+			sym -= 500000;
+
+		tpcnt++;
+		tmp[tpcnt-1].frequency = freq;
+		tmp[tpcnt-1].symbol_rate = sym;
+	}
+
+	return 0;
+err:
+	dev_dbg(&client->dev, "failed=%d\n", ret);
+	return ret;
+}
+
 static int m88ds3103_set_frontend(struct dvb_frontend *fe)
 {
 	struct m88ds3103_dev *dev = fe->demodulator_priv;
