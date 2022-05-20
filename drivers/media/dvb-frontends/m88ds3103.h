@@ -10,6 +10,10 @@
 
 #include <linux/dvb/frontend.h>
 
+bool scandone;
+u16 tpcnt;
+u16 tpnum;
+
 /*
  * I2C address
  * 0x68,
