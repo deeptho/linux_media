@@ -777,6 +777,356 @@ static int m88ds3103b_set_mclk(struct m88ds3103_dev *dev, u32 mclk_khz)
 	return 0;
 }
 
+static int m88ds3103_bs_set_reg(struct dvb_frontend *fe)
+{
+	struct m88ds3103_dev *dev = fe->demodulator_priv;
+	struct i2c_client *client = dev->client;
+	unsigned tmp;
+	int ret;
+
+	ret = regmap_write(dev->regmap, 0xb2, 0x01);
+	if (ret)
+		goto err;
+	ret = regmap_write(dev->regmap, 0x00, 0x01);
+	if (ret)
+		goto err;
+	ret = regmap_write(dev->regmap, 0x4a, 0x00);
+	if (ret)
+		goto err;
+	ret = regmap_read(dev->regmap, 0x4d, &tmp);
+	if (ret)
+		goto err;
+	ret = regmap_write(dev->regmap, 0x4d, tmp | 0x91);
+	if (ret)
+		goto err;
+	ret = regmap_read(dev->regmap, 0x90, &tmp);
+	if (ret)
+		goto err;
+	ret = regmap_write(dev->regmap, 0x90, tmp | 0x73);
+	if (ret)
+		goto err;
+	ret = regmap_write(dev->regmap, 0x91, 0x46);
+	if (ret)
+		goto err;
+	ret = regmap_write(dev->regmap, 0x92, 0x03);
+	if (ret)
+		goto err;
+	ret = regmap_read(dev->regmap, 0x93, &tmp);
+	if (ret)
+		goto err;
+	tmp &= 0x0f;
+	ret = regmap_write(dev->regmap, 0x93, tmp | 0x8f);
+	if (ret)
+		goto err;
+	ret = regmap_read(dev->regmap, 0x94, &tmp);
+	if (ret)
+		goto err;
+	ret = regmap_write(dev->regmap, 0x94, tmp | 0x15);
+	if (ret)
+		goto err;
+	ret = regmap_write(dev->regmap, 0x95, 0x64);
+	if (ret)
+		goto err;
+	ret = regmap_write(dev->regmap, 0x97, 0xb3);
+	if (ret)
+		goto err;
+	ret = regmap_write(dev->regmap, 0x99, 0x1c);
+	if (ret)
+		goto err;
+	ret = regmap_write(dev->regmap, 0x30, dev->cfg->agc_inv ? 0x18 : 0x08);
+	if (ret)
+		goto err;
+	ret = regmap_write(dev->regmap, 0x32, 0x44);
+	if (ret)
+		goto err;
+	ret = regmap_write(dev->regmap, 0x33, dev->cfg->agc);
+	if (ret)
+		goto err;
+	ret = regmap_write(dev->regmap, 0x35, 0x7f);
+	if (ret)
+		goto err;
+	ret = regmap_write(dev->regmap, 0x4b, 0x04);
+	if (ret)
+		goto err;
+	ret = regmap_write(dev->regmap, 0x56, 0x01);
+	if (ret)
+		goto err;
+	ret = regmap_write(dev->regmap, 0xa0, 0x44);
+	if (ret)
+		goto err;
+	ret = regmap_write(dev->regmap, 0x08, 0x83);
+	if (ret)
+		goto err;
+	ret = regmap_read(dev->regmap, 0x25, &tmp);
+	if (ret)
+		goto err;
+	ret = regmap_write(dev->regmap, 0x25, tmp | 0x08);
+	if (ret)
+		goto err;
+	ret = regmap_write(dev->regmap, 0x70, 0x00);
+	if (ret)
+		goto err;
+	ret = m88ds3103_update_bits(dev, 0x4d, 0x02, dev->cfg->spec_inv << 1);
+	if (ret)
+		goto err;
+	ret = regmap_write(dev->regmap, 0x00, 0x00);
+	if (ret)
+		goto err;
+	ret = regmap_write(dev->regmap, 0xb2, 0x00);
+	if (ret)
+		goto err;
+	return 0;
+err:
+	dev_dbg(&client->dev, "failed=%d\n", ret);
+	return ret;
+}
+
+static int m88ds3103_bs_set_frontend(struct dvb_frontend *fe)
+{
+	struct m88ds3103_dev *dev = fe->demodulator_priv;
+	struct i2c_client *client = dev->client;
+	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
+	const struct m88ds3103_reg_val *init;
+	u8 u8tmp, u8tmp1, u8tmp2, buf[3];
+	unsigned int target_mclk = 96000000, ts_clk = 20000000;
+	unsigned val;
+	u16 u16tmp;
+	int ret, len;
+
+	dev->mclk = 96000000;
+
+	ret = regmap_write(dev->regmap, 0xb2, 0x01);
+	if (ret)
+		goto err;
+
+	switch (c->delivery_system) {
+	case SYS_DVBS:
+		len = ARRAY_SIZE(m88ds3103_dvbs_bs_init_reg_vals);
+		init = m88ds3103_dvbs_bs_init_reg_vals;
+		break;
+	case SYS_DVBS2:
+		len = ARRAY_SIZE(m88ds3103_dvbs2_bs_init_reg_vals);
+		init = m88ds3103_dvbs2_bs_init_reg_vals;
+		break;
+	default:
+		dev_dbg(&client->dev, "invalid delivery_system\n");
+		ret = -EINVAL;
+		goto err;
+	}
+
+	ret = m88ds3103_wr_reg_val_tab(dev, init, len);
+	if (ret)
+		goto err;
+
+	if (c->symbol_rate <= 5000000 && c->delivery_system == SYS_DVBS2) {
+		ret = m88ds3103_low_sr_regwrite(fe);
+		if (ret)
+			goto err;
+	}
+
+	if (dev->cfg->ts_mode == M88DS3103_TS_CI)
+		ts_clk = (c->delivery_system == SYS_DVBS2) ? 8471000 : 8000000;
+	else if (dev->cfg->ts_mode == M88DS3103_TS_PARALLEL)
+		ts_clk = 20000000;
+	else
+		ts_clk = 0;
+
+	ret = m88ds3103_update_bits(dev, 0x4d, 0x02, dev->cfg->spec_inv << 1);
+	if (ret)
+		goto err;
+
+	ret = m88ds3103_update_bits(dev, 0x30, 0x10, dev->cfg->agc_inv << 4);
+	if (ret)
+		goto err;
+
+	if (c->delivery_system == SYS_DVBS2) {
+		if (dev->cfg->ts_mode == M88DS3103_TS_PARALLEL || M88DS3103_TS_CI) {
+			if (c->symbol_rate > 28000000)
+				target_mclk = 192000000;
+			else if (c->symbol_rate > 18000000)
+				target_mclk = 144000000;
+			else
+				target_mclk = 96000000;
+		} else {
+			if (c->symbol_rate > 18000000)
+				target_mclk = 144000000;
+			else
+				target_mclk = 96000000;
+		}
+	}
+
+	switch (target_mclk) {
+	case 72000000:
+		u8tmp1 = 0x00;
+		u8tmp2 = 0x03;
+		break;
+	case 96000000:
+		u8tmp1 = 0x02;
+		u8tmp2 = 0x01;
+		break;
+	case 115200000:
+		u8tmp1 = 0x01;
+		u8tmp2 = 0x01;
+		break;
+	case 144000000:
+		u8tmp1 = 0x00;
+		u8tmp2 = 0x01;
+		break;
+	case 192000000:
+		u8tmp1 = 0x03;
+		u8tmp2 = 0x00;
+		break;
+	}
+
+	ret = m88ds3103_update_bits(dev, 0x22, 0xc0, u8tmp1 << 6);
+	if (ret)
+		goto err;
+	ret = m88ds3103_update_bits(dev, 0x24, 0xc0, u8tmp2 << 6);
+	if (ret)
+		goto err;
+
+	switch (dev->cfg->ts_mode) {
+	case M88DS3103_TS_SERIAL:
+		u8tmp1 = 0x00;
+		u8tmp = 0x06;
+		break;
+	case M88DS3103_TS_SERIAL_D7:
+		u8tmp1 = 0x20;
+		u8tmp = 0x06;
+		break;
+	case M88DS3103_TS_PARALLEL:
+		u8tmp = 0x02;
+		break;
+	case M88DS3103_TS_CI:
+		u8tmp = 0x03;
+		break;
+	}
+
+	if (dev->cfg->ts_clk_pol)
+		u8tmp |= 0x40;
+
+	ret = regmap_write(dev->regmap, 0xfd, u8tmp);
+	if (ret)
+		goto err;
+
+	switch (dev->cfg->ts_mode) {
+	case M88DS3103_TS_SERIAL:
+	case M88DS3103_TS_SERIAL_D7:
+		ret = m88ds3103_update_bits(dev, 0x29, 0x20, u8tmp1);
+		if (ret)
+			goto err;
+		u16tmp = 0;
+		u8tmp1 = 0x3f;
+		u8tmp2 = 0x3f;
+		break;
+	case M88DS3103_TS_PARALLEL:
+		fallthrough;
+	default:
+		u16tmp = DIV_ROUND_UP(target_mclk, ts_clk);
+		u8tmp1 = u16tmp / 2 - 1;
+		u8tmp2 = DIV_ROUND_UP(u16tmp, 2) - 1;
+	}
+
+	u8tmp = (u8tmp1 >> 2) & 0x0f;
+	ret = regmap_update_bits(dev->regmap, 0xfe, 0x0f, u8tmp);
+	if (ret)
+		goto err;
+	u8tmp = ((u8tmp1 & 0x03) << 6) | u8tmp2 >> 0;
+	ret = regmap_write(dev->regmap, 0xea, u8tmp);
+	if (ret)
+		goto err;
+
+	ret = regmap_read(dev->regmap, 0x25, &val);
+	if (ret)
+		goto err;
+	val |= 0x08;
+	ret = regmap_write(dev->regmap, 0x25, val);
+	if (ret)
+		goto err;
+
+	ret = regmap_write(dev->regmap, 0x33, dev->cfg->agc);
+	if (ret)
+		goto err;
+
+	ret = regmap_write(dev->regmap, 0xc3, 0x08);
+	if (ret)
+		goto err;
+
+	if (c->symbol_rate <= 2500000) {
+		ret = regmap_write(dev->regmap, 0xc8, 0x0a);
+		if (ret)
+			goto err;
+		ret = regmap_write(dev->regmap, 0xc4, 0x07);
+		if (ret)
+			goto err;
+		ret = regmap_write(dev->regmap, 0xc7, 0x28);
+		if (ret)
+			goto err;
+	} else if (c->symbol_rate <= 5000000) {
+		ret = regmap_write(dev->regmap, 0xc8, 0x0a);
+		if (ret)
+			goto err;
+		ret = regmap_write(dev->regmap, 0xc4, 0x08);
+		if (ret)
+			goto err;
+		ret = regmap_write(dev->regmap, 0xc7, 0x10);
+		if (ret)
+			goto err;
+	} else if (c->symbol_rate <= 20000000) {
+		ret = regmap_write(dev->regmap, 0xc8, 0x0a);
+		if (ret)
+			goto err;
+		ret = regmap_write(dev->regmap, 0xc4, 0x08);
+		if (ret)
+			goto err;
+		ret = regmap_write(dev->regmap, 0xc7, 0x20);
+		if (ret)
+			goto err;
+	} else {
+		ret = regmap_write(dev->regmap, 0xc8, 0x08);
+		if (ret)
+			goto err;
+		ret = regmap_write(dev->regmap, 0xc4, 0x08);
+		if (ret)
+			goto err;
+		ret = regmap_write(dev->regmap, 0xc7, 0x20);
+		if (ret)
+			goto err;
+	}
+
+	u16tmp = DIV_ROUND_CLOSEST_ULL((u64)c->symbol_rate * 0x10000, dev->mclk);
+	buf[0] = (u16tmp >> 0) & 0xff;
+	buf[1] = (u16tmp >> 8) & 0xff;
+	ret = regmap_bulk_write(dev->regmap, 0x61, buf, 2);
+	if (ret)
+		goto err;
+
+	ret = regmap_read(dev->regmap, 0x56, &val);
+	if (ret)
+		goto err;
+	val &= ~0x01;
+	ret = regmap_write(dev->regmap, 0x56, val);
+	if (ret)
+		goto err;
+
+	ret = regmap_read(dev->regmap, 0x76, &val);
+	if (ret)
+		goto err;
+	val &= ~0x80;
+	ret = regmap_write(dev->regmap, 0x76, val);
+	if (ret)
+		goto err;
+
+	ret = regmap_write(dev->regmap, 0xb2, 0x00);
+	if (ret)
+		goto err;
+
+	return 0;
+err:
+	dev_dbg(&client->dev, "failed=%d\n", ret);
+	return ret;
+}
+
 static int m88ds3103_set_frontend(struct dvb_frontend *fe)
 {
 	struct m88ds3103_dev *dev = fe->demodulator_priv;
