@@ -125,7 +125,7 @@ static void owl_pin_dbg_show(struct pinctrl_dev *pctrldev,
 	seq_printf(s, "%s", dev_name(pctrl->dev));
 }
 
-static struct pinctrl_ops owl_pinctrl_ops = {
+static const struct pinctrl_ops owl_pinctrl_ops = {
 	.get_groups_count = owl_get_groups_count,
 	.get_group_name = owl_get_group_name,
 	.get_group_pins = owl_get_group_pins,
@@ -212,7 +212,7 @@ static int owl_set_mux(struct pinctrl_dev *pctrldev,
 	return 0;
 }
 
-static struct pinmux_ops owl_pinmux_ops = {
+static const struct pinmux_ops owl_pinmux_ops = {
 	.get_functions_count = owl_get_funcs_count,
 	.get_function_name = owl_get_func_name,
 	.get_function_groups = owl_get_func_groups,
@@ -444,7 +444,6 @@ static int owl_group_config_get(struct pinctrl_dev *pctrldev,
 	*config = pinconf_to_config_packed(param, arg);
 
 	return ret;
-
 }
 
 static int owl_group_config_set(struct pinctrl_dev *pctrldev,
@@ -834,7 +833,7 @@ static void owl_gpio_irq_handler(struct irq_desc *desc)
 	unsigned int parent = irq_desc_get_irq(desc);
 	const struct owl_gpio_port *port;
 	void __iomem *base;
-	unsigned int pin, irq, offset = 0, i;
+	unsigned int pin, offset = 0, i;
 	unsigned long pending_irq;
 
 	chained_irq_enter(chip, desc);
@@ -850,8 +849,7 @@ static void owl_gpio_irq_handler(struct irq_desc *desc)
 		pending_irq = readl_relaxed(base + port->intc_pd);
 
 		for_each_set_bit(pin, &pending_irq, port->pins) {
-			irq = irq_find_mapping(domain, offset + pin);
-			generic_handle_irq(irq);
+			generic_handle_domain_irq(domain, offset + pin);
 
 			/* clear pending interrupt */
 			owl_gpio_update_reg(base + port->intc_pd, pin, true);

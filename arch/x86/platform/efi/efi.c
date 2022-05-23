@@ -90,6 +90,9 @@ static const unsigned long * const efi_tables[] = {
 	&efi.tpm_log,
 	&efi.tpm_final_log,
 	&efi_rng_seed,
+#ifdef CONFIG_LOAD_UEFI_KEYS
+	&efi.mokvar_table,
+#endif
 };
 
 u64 efi_setup;		/* efi setup_data physical address */
@@ -465,7 +468,7 @@ void __init efi_init(void)
 	 */
 
 	if (!efi_runtime_supported())
-		pr_info("No EFI runtime due to 32/64-bit mismatch with kernel\n");
+		pr_err("No EFI runtime due to 32/64-bit mismatch with kernel\n");
 
 	if (!efi_runtime_supported() || efi_runtime_disabled()) {
 		efi_memmap_unmap();

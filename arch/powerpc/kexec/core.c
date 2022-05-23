@@ -48,19 +48,6 @@ void machine_crash_shutdown(struct pt_regs *regs)
 	default_machine_crash_shutdown(regs);
 }
 
-/*
- * Do what every setup is needed on image and the
- * reboot code buffer to allow us to avoid allocations
- * later.
- */
-int machine_kexec_prepare(struct kimage *image)
-{
-	if (ppc_md.machine_kexec_prepare)
-		return ppc_md.machine_kexec_prepare(image);
-	else
-		return default_machine_kexec_prepare(image);
-}
-
 void machine_kexec_cleanup(struct kimage *image)
 {
 }
@@ -68,11 +55,11 @@ void machine_kexec_cleanup(struct kimage *image)
 void arch_crash_save_vmcoreinfo(void)
 {
 
-#ifdef CONFIG_NEED_MULTIPLE_NODES
+#ifdef CONFIG_NUMA
 	VMCOREINFO_SYMBOL(node_data);
 	VMCOREINFO_LENGTH(node_data, MAX_NUMNODES);
 #endif
-#ifndef CONFIG_NEED_MULTIPLE_NODES
+#ifndef CONFIG_NUMA
 	VMCOREINFO_SYMBOL(contig_page_data);
 #endif
 #if defined(CONFIG_PPC64) && defined(CONFIG_SPARSEMEM_VMEMMAP)

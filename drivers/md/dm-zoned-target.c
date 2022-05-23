@@ -733,7 +733,7 @@ static int dmz_get_zoned_device(struct dm_target *ti, char *path,
 	dev->dev_idx = idx;
 	(void)bdevname(dev->bdev, dev->name);
 
-	dev->capacity = i_size_read(bdev->bd_inode) >> SECTOR_SHIFT;
+	dev->capacity = bdev_nr_sectors(bdev);
 	if (ti->begin) {
 		ti->error = "Partial mapping is not supported";
 		goto err;
@@ -967,7 +967,6 @@ static void dmz_dtr(struct dm_target *ti)
 	struct dmz_target *dmz = ti->private;
 	int i;
 
-	flush_workqueue(dmz->chunk_wq);
 	destroy_workqueue(dmz->chunk_wq);
 
 	for (i = 0; i < dmz->nr_ddevs; i++)
@@ -1119,6 +1118,9 @@ static void dmz_status(struct dm_target *ti, status_type_t type,
 			DMEMIT(" %s", buf);
 		}
 		break;
+	case STATUSTYPE_IMA:
+		*result = '\0';
+		break;
 	}
 	return;
 }
@@ -1143,7 +1145,7 @@ static int dmz_message(struct dm_target *ti, unsigned int argc, char **argv,
 static struct target_type dmz_type = {
 	.name		 = "zoned",
 	.version	 = {2, 0, 0},
-	.features	 = DM_TARGET_SINGLETON | DM_TARGET_ZONED_HM,
+	.features	 = DM_TARGET_SINGLETON | DM_TARGET_MIXED_ZONED_MODEL,
 	.module		 = THIS_MODULE,
 	.ctr		 = dmz_ctr,
 	.dtr		 = dmz_dtr,

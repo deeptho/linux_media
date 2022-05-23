@@ -482,13 +482,13 @@ static int adau1701_set_dai_fmt(struct snd_soc_dai *codec_dai,
 	unsigned int serictl = 0x00, seroctl = 0x00;
 	bool invert_lrclk;
 
-	switch (fmt & SND_SOC_DAIFMT_MASTER_MASK) {
-	case SND_SOC_DAIFMT_CBM_CFM:
+	switch (fmt & SND_SOC_DAIFMT_CLOCK_PROVIDER_MASK) {
+	case SND_SOC_DAIFMT_CBP_CFP:
 		/* master, 64-bits per sample, 1 frame per sample */
 		seroctl |= ADAU1701_SEROCTL_MASTER | ADAU1701_SEROCTL_OBF16
 				| ADAU1701_SEROCTL_OLF1024;
 		break;
-	case SND_SOC_DAIFMT_CBS_CFS:
+	case SND_SOC_DAIFMT_CBC_CFC:
 		break;
 	default:
 		return -EINVAL;
@@ -653,7 +653,7 @@ static struct snd_soc_dai_driver adau1701_dai = {
 		.formats = ADAU1701_FORMATS,
 	},
 	.ops = &adau1701_dai_ops,
-	.symmetric_rates = 1,
+	.symmetric_rate = 1,
 };
 
 #ifdef CONFIG_OF

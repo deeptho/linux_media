@@ -80,6 +80,8 @@ struct aq_hw_link_status_s {
 };
 
 struct aq_stats_s {
+	u64 brc;
+	u64 btc;
 	u64 uprc;
 	u64 mprc;
 	u64 bprc;
@@ -142,6 +144,8 @@ struct aq_stats_s {
 
 #define AQ_HW_LED_BLINK    0x2U
 #define AQ_HW_LED_DEFAULT  0x0U
+
+#define AQ_HW_MEDIA_DETECT_CNT 6000
 
 enum aq_priv_flags {
 	AQ_HW_LOOPBACK_DMA_SYS,
@@ -215,7 +219,7 @@ struct aq_hw_ops {
 	int (*hw_ring_tx_head_update)(struct aq_hw_s *self,
 				      struct aq_ring_s *aq_ring);
 
-	int (*hw_set_mac_address)(struct aq_hw_s *self, u8 *mac_addr);
+	int (*hw_set_mac_address)(struct aq_hw_s *self, const u8 *mac_addr);
 
 	int (*hw_soft_reset)(struct aq_hw_s *self);
 
@@ -224,7 +228,7 @@ struct aq_hw_ops {
 
 	int (*hw_reset)(struct aq_hw_s *self);
 
-	int (*hw_init)(struct aq_hw_s *self, u8 *mac_addr);
+	int (*hw_init)(struct aq_hw_s *self, const u8 *mac_addr);
 
 	int (*hw_start)(struct aq_hw_s *self);
 
@@ -371,7 +375,7 @@ struct aq_fw_ops {
 	int (*set_phyloopback)(struct aq_hw_s *self, u32 mode, bool enable);
 
 	int (*set_power)(struct aq_hw_s *self, unsigned int power_state,
-			 u8 *mac);
+			 const u8 *mac);
 
 	int (*send_fw_request)(struct aq_hw_s *self,
 			       const struct hw_fw_request_iface *fw_req,
@@ -385,6 +389,10 @@ struct aq_fw_ops {
 
 	int (*get_eee_rate)(struct aq_hw_s *self, u32 *rate,
 			    u32 *supported_rates);
+
+	int (*set_downshift)(struct aq_hw_s *self, u32 counter);
+
+	int (*set_media_detect)(struct aq_hw_s *self, bool enable);
 
 	u32 (*get_link_capabilities)(struct aq_hw_s *self);
 

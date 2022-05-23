@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: GPL-2.0-only
+ipsec
 msg_zerocopy
 socket
 psock_fanout
@@ -29,3 +30,9 @@ hwtstamp_config
 rxtimestamp
 timestamping
 txtimestamp
+so_netns_cookie
+test_unix_oob
+gro
+ioam6_parser
+toeplitz
+cmsg_so_mark

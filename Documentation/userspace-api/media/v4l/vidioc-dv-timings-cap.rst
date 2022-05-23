@@ -1,4 +1,5 @@
 .. SPDX-License-Identifier: GFDL-1.1-no-invariants-or-later
+.. c:namespace:: V4L
 
 .. _VIDIOC_DV_TIMINGS_CAP:
 
@@ -11,26 +12,25 @@ Name
 
 VIDIOC_DV_TIMINGS_CAP - VIDIOC_SUBDEV_DV_TIMINGS_CAP - The capabilities of the Digital Video receiver/transmitter
 
-
 Synopsis
 ========
 
-.. c:function:: int ioctl( int fd, VIDIOC_DV_TIMINGS_CAP, struct v4l2_dv_timings_cap *argp )
-    :name: VIDIOC_DV_TIMINGS_CAP
+.. c:macro:: VIDIOC_DV_TIMINGS_CAP
 
-.. c:function:: int ioctl( int fd, VIDIOC_SUBDEV_DV_TIMINGS_CAP, struct v4l2_dv_timings_cap *argp )
-    :name: VIDIOC_SUBDEV_DV_TIMINGS_CAP
+``int ioctl(int fd, VIDIOC_DV_TIMINGS_CAP, struct v4l2_dv_timings_cap *argp)``
 
+.. c:macro:: VIDIOC_SUBDEV_DV_TIMINGS_CAP
+
+``int ioctl(int fd, VIDIOC_SUBDEV_DV_TIMINGS_CAP, struct v4l2_dv_timings_cap *argp)``
 
 Arguments
 =========
 
 ``fd``
-    File descriptor returned by :ref:`open() <func-open>`.
+    File descriptor returned by :c:func:`open()`.
 
 ``argp``
     Pointer to struct :c:type:`v4l2_dv_timings_cap`.
-
 
 Description
 ===========
@@ -55,8 +55,7 @@ the desired pad number in the struct
 zero the ``reserved`` array. Attempts to query capabilities on a pad
 that doesn't support them will return an ``EINVAL`` error code.
 
-
-.. tabularcolumns:: |p{1.2cm}|p{3.0cm}|p{13.3cm}|
+.. tabularcolumns:: |p{1.2cm}|p{3.2cm}|p{12.9cm}|
 
 .. c:type:: v4l2_bt_timings_cap
 
@@ -97,8 +96,7 @@ that doesn't support them will return an ``EINVAL`` error code.
 	Drivers must set the array to zero.
 
 
-
-.. tabularcolumns:: |p{1.0cm}|p{4.0cm}|p{3.5cm}|p{9.2cm}|
+.. tabularcolumns:: |p{4.4cm}|p{3.6cm}|p{9.3cm}|
 
 .. c:type:: v4l2_dv_timings_cap
 
@@ -130,7 +128,7 @@ that doesn't support them will return an ``EINVAL`` error code.
     * - }
       -
 
-.. tabularcolumns:: |p{7.0cm}|p{10.5cm}|
+.. tabularcolumns:: |p{7.2cm}|p{10.3cm}|
 
 .. _dv-bt-cap-capabilities:
 
@@ -152,7 +150,6 @@ that doesn't support them will return an ``EINVAL`` error code.
     * - ``V4L2_DV_BT_CAP_CUSTOM``
       - Can support non-standard timings, i.e. timings not belonging to
 	the standards set in the ``standards`` field.
-
 
 Return Value
 ============

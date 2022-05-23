@@ -76,8 +76,8 @@ static struct hsr_node *find_node_by_addr_A(struct list_head *node_db,
  * frames from self that's been looped over the HSR ring.
  */
 int hsr_create_self_node(struct hsr_priv *hsr,
-			 unsigned char addr_a[ETH_ALEN],
-			 unsigned char addr_b[ETH_ALEN])
+			 const unsigned char addr_a[ETH_ALEN],
+			 const unsigned char addr_b[ETH_ALEN])
 {
 	struct list_head *self_node_db = &hsr->self_node_db;
 	struct hsr_node *node, *oldnode;
@@ -164,8 +164,10 @@ static struct hsr_node *hsr_add_node(struct hsr_priv *hsr,
 	 * as initialization. (0 could trigger an spurious ring error warning).
 	 */
 	now = jiffies;
-	for (i = 0; i < HSR_PT_PORTS; i++)
+	for (i = 0; i < HSR_PT_PORTS; i++) {
 		new_node->time_in[i] = now;
+		new_node->time_out[i] = now;
+	}
 	for (i = 0; i < HSR_PT_PORTS; i++)
 		new_node->seq_out[i] = seq_out;
 
@@ -263,11 +265,14 @@ void hsr_handle_sup_frame(struct hsr_frame_info *frame)
 	struct hsr_port *port_rcv = frame->port_rcv;
 	struct hsr_priv *hsr = port_rcv->hsr;
 	struct hsr_sup_payload *hsr_sp;
+	struct hsr_sup_tlv *hsr_sup_tlv;
 	struct hsr_node *node_real;
 	struct sk_buff *skb = NULL;
 	struct list_head *node_db;
 	struct ethhdr *ethhdr;
 	int i;
+	unsigned int pull_size = 0;
+	unsigned int total_pull_size = 0;
 
 	/* Here either frame->skb_hsr or frame->skb_prp should be
 	 * valid as supervision frame always will have protocol
@@ -277,21 +282,31 @@ void hsr_handle_sup_frame(struct hsr_frame_info *frame)
 		skb = frame->skb_hsr;
 	else if (frame->skb_prp)
 		skb = frame->skb_prp;
+	else if (frame->skb_std)
+		skb = frame->skb_std;
 	if (!skb)
 		return;
 
+	/* Leave the ethernet header. */
+	pull_size = sizeof(struct ethhdr);
+	skb_pull(skb, pull_size);
+	total_pull_size += pull_size;
+
 	ethhdr = (struct ethhdr *)skb_mac_header(skb);
 
-	/* Leave the ethernet header. */
-	skb_pull(skb, sizeof(struct ethhdr));
-
 	/* And leave the HSR tag. */
-	if (ethhdr->h_proto == htons(ETH_P_HSR))
-		skb_pull(skb, sizeof(struct hsr_tag));
+	if (ethhdr->h_proto == htons(ETH_P_HSR)) {
+		pull_size = sizeof(struct ethhdr);
+		skb_pull(skb, pull_size);
+		total_pull_size += pull_size;
+	}
 
 	/* And leave the HSR sup tag. */
-	skb_pull(skb, sizeof(struct hsr_sup_tag));
+	pull_size = sizeof(struct hsr_tag);
+	skb_pull(skb, pull_size);
+	total_pull_size += pull_size;
 
+	/* get HSR sup payload */
 	hsr_sp = (struct hsr_sup_payload *)skb->data;
 
 	/* Merge node_curr (registered on macaddress_B) into node_real */
@@ -307,6 +322,37 @@ void hsr_handle_sup_frame(struct hsr_frame_info *frame)
 	if (node_real == node_curr)
 		/* Node has already been merged */
 		goto done;
+
+	/* Leave the first HSR sup payload. */
+	pull_size = sizeof(struct hsr_sup_payload);
+	skb_pull(skb, pull_size);
+	total_pull_size += pull_size;
+
+	/* Get second supervision tlv */
+	hsr_sup_tlv = (struct hsr_sup_tlv *)skb->data;
+	/* And check if it is a redbox mac TLV */
+	if (hsr_sup_tlv->HSR_TLV_type == PRP_TLV_REDBOX_MAC) {
+		/* We could stop here after pushing hsr_sup_payload,
+		 * or proceed and allow macaddress_B and for redboxes.
+		 */
+		/* Sanity check length */
+		if (hsr_sup_tlv->HSR_TLV_length != 6)
+			goto done;
+
+		/* Leave the second HSR sup tlv. */
+		pull_size = sizeof(struct hsr_sup_tlv);
+		skb_pull(skb, pull_size);
+		total_pull_size += pull_size;
+
+		/* Get redbox mac address. */
+		hsr_sp = (struct hsr_sup_payload *)skb->data;
+
+		/* Check if redbox mac and node mac are equal. */
+		if (!ether_addr_equal(node_real->macaddress_A, hsr_sp->macaddress_A)) {
+			/* This is a redbox supervision frame for a VDAN! */
+			goto done;
+		}
+	}
 
 	ether_addr_copy(node_real->macaddress_B, ethhdr->h_source);
 	for (i = 0; i < HSR_PT_PORTS; i++) {
@@ -327,11 +373,8 @@ void hsr_handle_sup_frame(struct hsr_frame_info *frame)
 	kfree_rcu(node_curr, rcu_head);
 
 done:
-	/* PRP uses v0 header */
-	if (ethhdr->h_proto == htons(ETH_P_HSR))
-		skb_push(skb, sizeof(struct hsrv1_ethhdr_sp));
-	else
-		skb_push(skb, sizeof(struct hsrv0_ethhdr_sp));
+	/* Push back here */
+	skb_push(skb, total_pull_size);
 }
 
 /* 'skb' is a frame meant for this host, that is to be passed to upper layers.
@@ -393,7 +436,8 @@ void hsr_register_frame_in(struct hsr_node *node, struct hsr_port *port,
 	 * ensures entries of restarted nodes gets pruned so that they can
 	 * re-register and resume communications.
 	 */
-	if (seq_nr_before(sequence_nr, node->seq_out[port->type]))
+	if (!(port->dev->features & NETIF_F_HW_HSR_TAG_RM) &&
+	    seq_nr_before(sequence_nr, node->seq_out[port->type]))
 		return;
 
 	node->time_in[port->type] = jiffies;
@@ -411,9 +455,12 @@ void hsr_register_frame_in(struct hsr_node *node, struct hsr_port *port,
 int hsr_register_frame_out(struct hsr_port *port, struct hsr_node *node,
 			   u16 sequence_nr)
 {
-	if (seq_nr_before_or_eq(sequence_nr, node->seq_out[port->type]))
+	if (seq_nr_before_or_eq(sequence_nr, node->seq_out[port->type]) &&
+	    time_is_after_jiffies(node->time_out[port->type] +
+	    msecs_to_jiffies(HSR_ENTRY_FORGET_TIME)))
 		return 1;
 
+	node->time_out[port->type] = jiffies;
 	node->seq_out[port->type] = sequence_nr;
 	return 0;
 }

@@ -9,7 +9,7 @@ config VGA_CONSOLE
 	bool "VGA text console" if EXPERT || !X86
 	depends on !4xx && !PPC_8xx && !SPARC && !M68K && !PARISC &&  !SUPERH && \
 		(!ARM || ARCH_FOOTBRIDGE || ARCH_INTEGRATOR || ARCH_NETWINDER) && \
-		!ARM64 && !ARC && !MICROBLAZE && !OPENRISC && !NDS32 && !S390
+		!ARM64 && !ARC && !MICROBLAZE && !OPENRISC && !NDS32 && !S390 && !UML
 	default y
 	help
 	  Saying Y here will allow you to use Linux in text mode through a
@@ -119,6 +119,7 @@ config STI_CONSOLE
 	bool "STI text console"
 	depends on PARISC && HAS_IOMEM
 	select FONT_SUPPORT
+	select CRC32
 	default y
 	help
 	  The STI console is the builtin display/keyboard on HP-PARISC

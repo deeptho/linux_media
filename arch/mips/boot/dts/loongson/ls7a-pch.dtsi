@@ -19,6 +19,45 @@
 			#interrupt-cells = <2>;
 		};
 
+		ls7a_uart0: serial@10080000 {
+			compatible = "ns16550a";
+			reg = <0 0x10080000 0 0x100>;
+			clock-frequency = <50000000>;
+			interrupt-parent = <&pic>;
+			interrupts = <8 IRQ_TYPE_LEVEL_HIGH>;
+			no-loopback-test;
+		};
+
+		ls7a_uart1: serial@10080100 {
+			status = "disabled";
+			compatible = "ns16550a";
+			reg = <0 0x10080100 0 0x100>;
+			clock-frequency = <50000000>;
+			interrupt-parent = <&pic>;
+			interrupts = <8 IRQ_TYPE_LEVEL_HIGH>;
+			no-loopback-test;
+		};
+
+		ls7a_uart2: serial@10080200 {
+			status = "disabled";
+			compatible = "ns16550a";
+			reg = <0 0x10080200 0 0x100>;
+			clock-frequency = <50000000>;
+			interrupt-parent = <&pic>;
+			interrupts = <8 IRQ_TYPE_LEVEL_HIGH>;
+			no-loopback-test;
+		};
+
+		ls7a_uart3: serial@10080300 {
+			status = "disabled";
+			compatible = "ns16550a";
+			reg = <0 0x10080300 0 0x100>;
+			clock-frequency = <50000000>;
+			interrupt-parent = <&pic>;
+			interrupts = <8 IRQ_TYPE_LEVEL_HIGH>;
+			no-loopback-test;
+		};
+
 		pci@1a000000 {
 			compatible = "loongson,ls7a-pci";
 			device_type = "pci";
@@ -147,7 +186,8 @@
 				compatible = "pci0014,7a03.0",
 						   "pci0014,7a03",
 						   "pciclass020000",
-						   "pciclass0200";
+						   "pciclass0200",
+						   "loongson, pci-gmac";
 
 				reg = <0x1800 0x0 0x0 0x0 0x0>;
 				interrupts = <12 IRQ_TYPE_LEVEL_HIGH>,
@@ -169,7 +209,8 @@
 				compatible = "pci0014,7a03.0",
 						   "pci0014,7a03",
 						   "pciclass020000",
-						   "pciclass0200";
+						   "pciclass0200",
+						   "loongson, pci-gmac";
 
 				reg = <0x1900 0x0 0x0 0x0 0x0>;
 				interrupts = <14 IRQ_TYPE_LEVEL_HIGH>,
@@ -368,7 +409,7 @@
 			};
 		};
 
-		isa {
+		isa@18000000 {
 			compatible = "isa";
 			#address-cells = <2>;
 			#size-cells = <1>;

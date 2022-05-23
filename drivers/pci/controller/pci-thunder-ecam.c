@@ -17,7 +17,7 @@ static void set_val(u32 v, int where, int size, u32 *val)
 {
 	int shift = (where & 3) * 8;
 
-	pr_debug("set_val %04x: %08x\n", (unsigned)(where & ~3), v);
+	pr_debug("set_val %04x: %08x\n", (unsigned int)(where & ~3), v);
 	v >>= shift;
 	if (size == 1)
 		v &= 0xff;
@@ -116,7 +116,7 @@ static int thunder_ecam_p2_config_read(struct pci_bus *bus, unsigned int devfn,
 	 * the config space access window.  Since we are working with
 	 * the high-order 32 bits, shift everything down by 32 bits.
 	 */
-	node_bits = (cfg->res.start >> 32) & (1 << 12);
+	node_bits = upper_32_bits(cfg->res.start) & (1 << 12);
 
 	v |= node_bits;
 	set_val(v, where, size, val);
@@ -187,7 +187,7 @@ static int thunder_ecam_config_read(struct pci_bus *bus, unsigned int devfn,
 
 	pr_debug("%04x:%04x - Fix pass#: %08x, where: %03x, devfn: %03x\n",
 		 vendor_device & 0xffff, vendor_device >> 16, class_rev,
-		 (unsigned) where, devfn);
+		 (unsigned int)where, devfn);
 
 	/* Check for non type-00 header */
 	if (cfg_type == 0) {
@@ -346,7 +346,6 @@ static int thunder_ecam_config_write(struct pci_bus *bus, unsigned int devfn,
 }
 
 const struct pci_ecam_ops pci_thunder_ecam_ops = {
-	.bus_shift	= 20,
 	.pci_ops	= {
 		.map_bus        = pci_ecam_map_bus,
 		.read           = thunder_ecam_config_read,

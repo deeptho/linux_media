@@ -24,6 +24,7 @@ properties:
       - socionext,uniphier-ld11-ave4
       - socionext,uniphier-ld20-ave4
       - socionext,uniphier-pxs3-ave4
+      - socionext,uniphier-nx1-ave4
 
   reg:
     maxItems: 1
@@ -64,7 +65,7 @@ properties:
       - const: ether    # for others
 
   socionext,syscon-phy-mode:
-    $ref: /schemas/types.yaml#definitions/phandle-array
+    $ref: /schemas/types.yaml#/definitions/phandle-array
     description:
       A phandle to syscon with one argument that configures phy mode.
       The argument is the ID of MAC instance.

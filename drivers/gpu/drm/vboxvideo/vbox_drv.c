@@ -12,6 +12,7 @@
 #include <linux/pci.h>
 #include <linux/vt_kern.h>
 
+#include <drm/drm_aperture.h>
 #include <drm/drm_crtc_helper.h>
 #include <drm/drm_drv.h>
 #include <drm/drm_fb_helper.h>
@@ -26,7 +27,7 @@ static int vbox_modeset = -1;
 MODULE_PARM_DESC(modeset, "Disable/Enable modesetting");
 module_param_named(modeset, vbox_modeset, int, 0400);
 
-static struct drm_driver driver;
+static const struct drm_driver driver;
 
 static const struct pci_device_id pciidlist[] = {
 	{ PCI_DEVICE(0x80ee, 0xbeef) },
@@ -42,7 +43,7 @@ static int vbox_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	if (!vbox_check_supported(VBE_DISPI_ID_HGSMI))
 		return -ENODEV;
 
-	ret = drm_fb_helper_remove_conflicting_pci_framebuffers(pdev, "vboxvideodrmfb");
+	ret = drm_aperture_remove_conflicting_pci_framebuffers(pdev, &driver);
 	if (ret)
 		return ret;
 
@@ -51,7 +52,6 @@ static int vbox_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	if (IS_ERR(vbox))
 		return PTR_ERR(vbox);
 
-	vbox->ddev.pdev = pdev;
 	pci_set_drvdata(pdev, vbox);
 	mutex_init(&vbox->hw_mutex);
 
@@ -69,7 +69,7 @@ static int vbox_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	ret = vbox_mode_init(vbox);
 	if (ret)
-		goto err_mm_fini;
+		goto err_hw_fini;
 
 	ret = vbox_irq_init(vbox);
 	if (ret)
@@ -87,8 +87,6 @@ err_irq_fini:
 	vbox_irq_fini(vbox);
 err_mode_fini:
 	vbox_mode_fini(vbox);
-err_mm_fini:
-	vbox_mm_fini(vbox);
 err_hw_fini:
 	vbox_hw_fini(vbox);
 	return ret;
@@ -101,7 +99,6 @@ static void vbox_pci_remove(struct pci_dev *pdev)
 	drm_dev_unregister(&vbox->ddev);
 	vbox_irq_fini(vbox);
 	vbox_mode_fini(vbox);
-	vbox_mm_fini(vbox);
 	vbox_hw_fini(vbox);
 }
 
@@ -109,15 +106,16 @@ static void vbox_pci_remove(struct pci_dev *pdev)
 static int vbox_pm_suspend(struct device *dev)
 {
 	struct vbox_private *vbox = dev_get_drvdata(dev);
+	struct pci_dev *pdev = to_pci_dev(dev);
 	int error;
 
 	error = drm_mode_config_helper_suspend(&vbox->ddev);
 	if (error)
 		return error;
 
-	pci_save_state(vbox->ddev.pdev);
-	pci_disable_device(vbox->ddev.pdev);
-	pci_set_power_state(vbox->ddev.pdev, PCI_D3hot);
+	pci_save_state(pdev);
+	pci_disable_device(pdev);
+	pci_set_power_state(pdev, PCI_D3hot);
 
 	return 0;
 }
@@ -125,8 +123,9 @@ static int vbox_pm_suspend(struct device *dev)
 static int vbox_pm_resume(struct device *dev)
 {
 	struct vbox_private *vbox = dev_get_drvdata(dev);
+	struct pci_dev *pdev = to_pci_dev(dev);
 
-	if (pci_enable_device(vbox->ddev.pdev))
+	if (pci_enable_device(pdev))
 		return -EIO;
 
 	return drm_mode_config_helper_resume(&vbox->ddev);
@@ -175,14 +174,13 @@ static struct pci_driver vbox_pci_driver = {
 
 DEFINE_DRM_GEM_FOPS(vbox_fops);
 
-static struct drm_driver driver = {
+static const struct drm_driver driver = {
 	.driver_features =
 	    DRIVER_MODESET | DRIVER_GEM | DRIVER_ATOMIC,
 
 	.lastclose = drm_fb_helper_lastclose,
 
 	.fops = &vbox_fops,
-	.irq_handler = vbox_irq_handler,
 	.name = DRIVER_NAME,
 	.desc = DRIVER_DESC,
 	.date = DRIVER_DATE,

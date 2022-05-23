@@ -9,6 +9,9 @@ title: DesignWare HS OTG USB 2.0 controller Bindings
 maintainers:
   - Rob Herring <robh@kernel.org>
 
+allOf:
+  - $ref: usb-drd.yaml#
+
 properties:
   compatible:
     oneOf:
@@ -24,6 +27,7 @@ properties:
               - rockchip,rk3188-usb
               - rockchip,rk3228-usb
               - rockchip,rk3288-usb
+              - rockchip,rk3308-usb
               - rockchip,rk3328-usb
               - rockchip,rk3368-usb
               - rockchip,rv1108-usb
@@ -39,6 +43,7 @@ properties:
               - amlogic,meson-g12a-usb
           - const: snps,dwc2
       - const: amcc,dwc-otg
+      - const: apm,apm82181-dwc-otg
       - const: snps,dwc2
       - const: st,stm32f4x9-fsotg
       - const: st,stm32f4x9-hsotg
@@ -99,8 +104,15 @@ properties:
     description: reference to the VBUS and ID sensing comparators supply, in
       order to perform OTG operation, used on STM32MP15 SoCs.
 
-  dr_mode:
-    enum: [host, peripheral, otg]
+  dr_mode: true
+
+  otg-rev: true
+
+  hnp-disable: true
+
+  srp-disable: true
+
+  usb-role-switch: true
 
   g-rx-fifo-size:
     $ref: /schemas/types.yaml#/definitions/uint32

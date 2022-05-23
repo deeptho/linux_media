@@ -1,4 +1,5 @@
 .. SPDX-License-Identifier: GFDL-1.1-no-invariants-or-later
+.. c:namespace:: V4L
 
 .. _VIDIOC_ENUM_FRAMEINTERVALS:
 
@@ -11,24 +12,22 @@ Name
 
 VIDIOC_ENUM_FRAMEINTERVALS - Enumerate frame intervals
 
-
 Synopsis
 ========
 
-.. c:function:: int ioctl( int fd, VIDIOC_ENUM_FRAMEINTERVALS, struct v4l2_frmivalenum *argp )
-    :name: VIDIOC_ENUM_FRAMEINTERVALS
+.. c:macro:: VIDIOC_ENUM_FRAMEINTERVALS
 
+``int ioctl(int fd, VIDIOC_ENUM_FRAMEINTERVALS, struct v4l2_frmivalenum *argp)``
 
 Arguments
 =========
 
 ``fd``
-    File descriptor returned by :ref:`open() <func-open>`.
+    File descriptor returned by :c:func:`open()`.
 
 ``argp``
     Pointer to struct :c:type:`v4l2_frmivalenum`
     that contains a pixel format and size and receives a frame interval.
-
 
 Description
 ===========
@@ -91,7 +90,6 @@ other ioctl calls while it runs the frame interval enumeration.
 
        frame_rate = 1 / frame_interval
 
-
 Structs
 =======
 
@@ -99,10 +97,7 @@ In the structs below, *IN* denotes a value that has to be filled in by
 the application, *OUT* denotes values that the driver fills in. The
 application should zero out all members except for the *IN* fields.
 
-
 .. c:type:: v4l2_frmival_stepwise
-
-.. tabularcolumns:: |p{4.4cm}|p{4.4cm}|p{8.7cm}|
 
 .. flat-table:: struct v4l2_frmival_stepwise
     :header-rows:  0
@@ -120,10 +115,9 @@ application should zero out all members except for the *IN* fields.
       - Frame interval step size [s].
 
 
-
 .. c:type:: v4l2_frmivalenum
 
-.. tabularcolumns:: |p{1.8cm}|p{4.4cm}|p{2.4cm}|p{8.9cm}|
+.. tabularcolumns:: |p{4.9cm}|p{3.3cm}|p{9.1cm}|
 
 .. flat-table:: struct v4l2_frmivalenum
     :header-rows:  0
@@ -158,19 +152,16 @@ application should zero out all members except for the *IN* fields.
       -
     * - __u32
       - ``reserved[2]``
-      -
       - Reserved space for future use. Must be zeroed by drivers and
 	applications.
-
 
 
 Enums
 =====
 
-
 .. c:type:: v4l2_frmivaltypes
 
-.. tabularcolumns:: |p{6.6cm}|p{2.2cm}|p{8.7cm}|
+.. tabularcolumns:: |p{6.6cm}|p{2.2cm}|p{8.5cm}|
 
 .. flat-table:: enum v4l2_frmivaltypes
     :header-rows:  0
@@ -186,7 +177,6 @@ Enums
     * - ``V4L2_FRMIVAL_TYPE_STEPWISE``
       - 3
       - Step-wise defined frame interval.
-
 
 Return Value
 ============

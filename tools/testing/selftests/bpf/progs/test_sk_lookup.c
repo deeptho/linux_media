@@ -19,6 +19,17 @@
 #define IP6(aaaa, bbbb, cccc, dddd)			\
 	{ bpf_htonl(aaaa), bpf_htonl(bbbb), bpf_htonl(cccc), bpf_htonl(dddd) }
 
+/* Macros for least-significant byte and word accesses. */
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+#define LSE_INDEX(index, size) (index)
+#else
+#define LSE_INDEX(index, size) ((size) - (index) - 1)
+#endif
+#define LSB(value, index)				\
+	(((__u8 *)&(value))[LSE_INDEX((index), sizeof(value))])
+#define LSW(value, index)				\
+	(((__u16 *)&(value))[LSE_INDEX((index), sizeof(value) / 2)])
+
 #define MAX_SOCKS 32
 
 struct {
@@ -53,36 +64,40 @@ static const int PROG_DONE = 1;
 static const __u32 KEY_SERVER_A = SERVER_A;
 static const __u32 KEY_SERVER_B = SERVER_B;
 
+static const __u16 SRC_PORT = bpf_htons(8008);
+static const __u32 SRC_IP4 = IP4(127, 0, 0, 2);
+static const __u32 SRC_IP6[] = IP6(0xfd000000, 0x0, 0x0, 0x00000002);
+
 static const __u16 DST_PORT = 7007; /* Host byte order */
 static const __u32 DST_IP4 = IP4(127, 0, 0, 1);
 static const __u32 DST_IP6[] = IP6(0xfd000000, 0x0, 0x0, 0x00000001);
 
-SEC("sk_lookup/lookup_pass")
+SEC("sk_lookup")
 int lookup_pass(struct bpf_sk_lookup *ctx)
 {
 	return SK_PASS;
 }
 
-SEC("sk_lookup/lookup_drop")
+SEC("sk_lookup")
 int lookup_drop(struct bpf_sk_lookup *ctx)
 {
 	return SK_DROP;
 }
 
-SEC("sk_reuseport/reuse_pass")
+SEC("sk_reuseport")
 int reuseport_pass(struct sk_reuseport_md *ctx)
 {
 	return SK_PASS;
 }
 
-SEC("sk_reuseport/reuse_drop")
+SEC("sk_reuseport")
 int reuseport_drop(struct sk_reuseport_md *ctx)
 {
 	return SK_DROP;
 }
 
 /* Redirect packets destined for port DST_PORT to socket at redir_map[0]. */
-SEC("sk_lookup/redir_port")
+SEC("sk_lookup")
 int redir_port(struct bpf_sk_lookup *ctx)
 {
 	struct bpf_sock *sk;
@@ -101,7 +116,7 @@ int redir_port(struct bpf_sk_lookup *ctx)
 }
 
 /* Redirect packets destined for DST_IP4 address to socket at redir_map[0]. */
-SEC("sk_lookup/redir_ip4")
+SEC("sk_lookup")
 int redir_ip4(struct bpf_sk_lookup *ctx)
 {
 	struct bpf_sock *sk;
@@ -124,7 +139,7 @@ int redir_ip4(struct bpf_sk_lookup *ctx)
 }
 
 /* Redirect packets destined for DST_IP6 address to socket at redir_map[0]. */
-SEC("sk_lookup/redir_ip6")
+SEC("sk_lookup")
 int redir_ip6(struct bpf_sk_lookup *ctx)
 {
 	struct bpf_sock *sk;
@@ -149,7 +164,7 @@ int redir_ip6(struct bpf_sk_lookup *ctx)
 	return err ? SK_DROP : SK_PASS;
 }
 
-SEC("sk_lookup/select_sock_a")
+SEC("sk_lookup")
 int select_sock_a(struct bpf_sk_lookup *ctx)
 {
 	struct bpf_sock *sk;
@@ -164,7 +179,7 @@ int select_sock_a(struct bpf_sk_lookup *ctx)
 	return err ? SK_DROP : SK_PASS;
 }
 
-SEC("sk_lookup/select_sock_a_no_reuseport")
+SEC("sk_lookup")
 int select_sock_a_no_reuseport(struct bpf_sk_lookup *ctx)
 {
 	struct bpf_sock *sk;
@@ -179,7 +194,7 @@ int select_sock_a_no_reuseport(struct bpf_sk_lookup *ctx)
 	return err ? SK_DROP : SK_PASS;
 }
 
-SEC("sk_reuseport/select_sock_b")
+SEC("sk_reuseport")
 int select_sock_b(struct sk_reuseport_md *ctx)
 {
 	__u32 key = KEY_SERVER_B;
@@ -190,7 +205,7 @@ int select_sock_b(struct sk_reuseport_md *ctx)
 }
 
 /* Check that bpf_sk_assign() returns -EEXIST if socket already selected. */
-SEC("sk_lookup/sk_assign_eexist")
+SEC("sk_lookup")
 int sk_assign_eexist(struct bpf_sk_lookup *ctx)
 {
 	struct bpf_sock *sk;
@@ -223,7 +238,7 @@ out:
 }
 
 /* Check that bpf_sk_assign(BPF_SK_LOOKUP_F_REPLACE) can override selection. */
-SEC("sk_lookup/sk_assign_replace_flag")
+SEC("sk_lookup")
 int sk_assign_replace_flag(struct bpf_sk_lookup *ctx)
 {
 	struct bpf_sock *sk;
@@ -255,7 +270,7 @@ out:
 }
 
 /* Check that bpf_sk_assign(sk=NULL) is accepted. */
-SEC("sk_lookup/sk_assign_null")
+SEC("sk_lookup")
 int sk_assign_null(struct bpf_sk_lookup *ctx)
 {
 	struct bpf_sock *sk = NULL;
@@ -298,7 +313,7 @@ out:
 }
 
 /* Check that selected sk is accessible through context. */
-SEC("sk_lookup/access_ctx_sk")
+SEC("sk_lookup")
 int access_ctx_sk(struct bpf_sk_lookup *ctx)
 {
 	struct bpf_sock *sk1 = NULL, *sk2 = NULL;
@@ -364,176 +379,167 @@ out:
  * are not covered because they give bogus results, that is the
  * verifier ignores the offset.
  */
-SEC("sk_lookup/ctx_narrow_access")
+SEC("sk_lookup")
 int ctx_narrow_access(struct bpf_sk_lookup *ctx)
 {
 	struct bpf_sock *sk;
 	int err, family;
-	__u16 *half;
-	__u8 *byte;
 	bool v4;
 
 	v4 = (ctx->family == AF_INET);
 
 	/* Narrow loads from family field */
-	byte = (__u8 *)&ctx->family;
-	half = (__u16 *)&ctx->family;
-	if (byte[0] != (v4 ? AF_INET : AF_INET6) ||
-	    byte[1] != 0 || byte[2] != 0 || byte[3] != 0)
+	if (LSB(ctx->family, 0) != (v4 ? AF_INET : AF_INET6) ||
+	    LSB(ctx->family, 1) != 0 || LSB(ctx->family, 2) != 0 || LSB(ctx->family, 3) != 0)
 		return SK_DROP;
-	if (half[0] != (v4 ? AF_INET : AF_INET6))
+	if (LSW(ctx->family, 0) != (v4 ? AF_INET : AF_INET6))
 		return SK_DROP;
 
-	byte = (__u8 *)&ctx->protocol;
-	if (byte[0] != IPPROTO_TCP ||
-	    byte[1] != 0 || byte[2] != 0 || byte[3] != 0)
+	/* Narrow loads from protocol field */
+	if (LSB(ctx->protocol, 0) != IPPROTO_TCP ||
+	    LSB(ctx->protocol, 1) != 0 || LSB(ctx->protocol, 2) != 0 || LSB(ctx->protocol, 3) != 0)
 		return SK_DROP;
-	half = (__u16 *)&ctx->protocol;
-	if (half[0] != IPPROTO_TCP)
+	if (LSW(ctx->protocol, 0) != IPPROTO_TCP)
 		return SK_DROP;
 
-	/* Narrow loads from remote_port field. Expect non-0 value. */
-	byte = (__u8 *)&ctx->remote_port;
-	if (byte[0] == 0 && byte[1] == 0 && byte[2] == 0 && byte[3] == 0)
+	/* Narrow loads from remote_port field. Expect SRC_PORT. */
+	if (LSB(ctx->remote_port, 0) != ((SRC_PORT >> 0) & 0xff) ||
+	    LSB(ctx->remote_port, 1) != ((SRC_PORT >> 8) & 0xff) ||
+	    LSB(ctx->remote_port, 2) != 0 || LSB(ctx->remote_port, 3) != 0)
 		return SK_DROP;
-	half = (__u16 *)&ctx->remote_port;
-	if (half[0] == 0)
+	if (LSW(ctx->remote_port, 0) != SRC_PORT)
 		return SK_DROP;
 
 	/* Narrow loads from local_port field. Expect DST_PORT. */
-	byte = (__u8 *)&ctx->local_port;
-	if (byte[0] != ((DST_PORT >> 0) & 0xff) ||
-	    byte[1] != ((DST_PORT >> 8) & 0xff) ||
-	    byte[2] != 0 || byte[3] != 0)
+	if (LSB(ctx->local_port, 0) != ((DST_PORT >> 0) & 0xff) ||
+	    LSB(ctx->local_port, 1) != ((DST_PORT >> 8) & 0xff) ||
+	    LSB(ctx->local_port, 2) != 0 || LSB(ctx->local_port, 3) != 0)
 		return SK_DROP;
-	half = (__u16 *)&ctx->local_port;
-	if (half[0] != DST_PORT)
+	if (LSW(ctx->local_port, 0) != DST_PORT)
 		return SK_DROP;
 
 	/* Narrow loads from IPv4 fields */
 	if (v4) {
-		/* Expect non-0.0.0.0 in remote_ip4 */
-		byte = (__u8 *)&ctx->remote_ip4;
-		if (byte[0] == 0 && byte[1] == 0 &&
-		    byte[2] == 0 && byte[3] == 0)
+		/* Expect SRC_IP4 in remote_ip4 */
+		if (LSB(ctx->remote_ip4, 0) != ((SRC_IP4 >> 0) & 0xff) ||
+		    LSB(ctx->remote_ip4, 1) != ((SRC_IP4 >> 8) & 0xff) ||
+		    LSB(ctx->remote_ip4, 2) != ((SRC_IP4 >> 16) & 0xff) ||
+		    LSB(ctx->remote_ip4, 3) != ((SRC_IP4 >> 24) & 0xff))
 			return SK_DROP;
-		half = (__u16 *)&ctx->remote_ip4;
-		if (half[0] == 0 && half[1] == 0)
+		if (LSW(ctx->remote_ip4, 0) != ((SRC_IP4 >> 0) & 0xffff) ||
+		    LSW(ctx->remote_ip4, 1) != ((SRC_IP4 >> 16) & 0xffff))
 			return SK_DROP;
 
 		/* Expect DST_IP4 in local_ip4 */
-		byte = (__u8 *)&ctx->local_ip4;
-		if (byte[0] != ((DST_IP4 >>  0) & 0xff) ||
-		    byte[1] != ((DST_IP4 >>  8) & 0xff) ||
-		    byte[2] != ((DST_IP4 >> 16) & 0xff) ||
-		    byte[3] != ((DST_IP4 >> 24) & 0xff))
+		if (LSB(ctx->local_ip4, 0) != ((DST_IP4 >> 0) & 0xff) ||
+		    LSB(ctx->local_ip4, 1) != ((DST_IP4 >> 8) & 0xff) ||
+		    LSB(ctx->local_ip4, 2) != ((DST_IP4 >> 16) & 0xff) ||
+		    LSB(ctx->local_ip4, 3) != ((DST_IP4 >> 24) & 0xff))
 			return SK_DROP;
-		half = (__u16 *)&ctx->local_ip4;
-		if (half[0] != ((DST_IP4 >>  0) & 0xffff) ||
-		    half[1] != ((DST_IP4 >> 16) & 0xffff))
+		if (LSW(ctx->local_ip4, 0) != ((DST_IP4 >> 0) & 0xffff) ||
+		    LSW(ctx->local_ip4, 1) != ((DST_IP4 >> 16) & 0xffff))
 			return SK_DROP;
 	} else {
 		/* Expect 0.0.0.0 IPs when family != AF_INET */
-		byte = (__u8 *)&ctx->remote_ip4;
-		if (byte[0] != 0 || byte[1] != 0 &&
-		    byte[2] != 0 || byte[3] != 0)
+		if (LSB(ctx->remote_ip4, 0) != 0 || LSB(ctx->remote_ip4, 1) != 0 ||
+		    LSB(ctx->remote_ip4, 2) != 0 || LSB(ctx->remote_ip4, 3) != 0)
 			return SK_DROP;
-		half = (__u16 *)&ctx->remote_ip4;
-		if (half[0] != 0 || half[1] != 0)
+		if (LSW(ctx->remote_ip4, 0) != 0 || LSW(ctx->remote_ip4, 1) != 0)
 			return SK_DROP;
 
-		byte = (__u8 *)&ctx->local_ip4;
-		if (byte[0] != 0 || byte[1] != 0 &&
-		    byte[2] != 0 || byte[3] != 0)
+		if (LSB(ctx->local_ip4, 0) != 0 || LSB(ctx->local_ip4, 1) != 0 ||
+		    LSB(ctx->local_ip4, 2) != 0 || LSB(ctx->local_ip4, 3) != 0)
 			return SK_DROP;
-		half = (__u16 *)&ctx->local_ip4;
-		if (half[0] != 0 || half[1] != 0)
+		if (LSW(ctx->local_ip4, 0) != 0 || LSW(ctx->local_ip4, 1) != 0)
 			return SK_DROP;
 	}
 
 	/* Narrow loads from IPv6 fields */
 	if (!v4) {
-		/* Expenct non-:: IP in remote_ip6 */
-		byte = (__u8 *)&ctx->remote_ip6;
-		if (byte[0] == 0 && byte[1] == 0 &&
-		    byte[2] == 0 && byte[3] == 0 &&
-		    byte[4] == 0 && byte[5] == 0 &&
-		    byte[6] == 0 && byte[7] == 0 &&
-		    byte[8] == 0 && byte[9] == 0 &&
-		    byte[10] == 0 && byte[11] == 0 &&
-		    byte[12] == 0 && byte[13] == 0 &&
-		    byte[14] == 0 && byte[15] == 0)
+		/* Expect SRC_IP6 in remote_ip6 */
+		if (LSB(ctx->remote_ip6[0], 0) != ((SRC_IP6[0] >> 0) & 0xff) ||
+		    LSB(ctx->remote_ip6[0], 1) != ((SRC_IP6[0] >> 8) & 0xff) ||
+		    LSB(ctx->remote_ip6[0], 2) != ((SRC_IP6[0] >> 16) & 0xff) ||
+		    LSB(ctx->remote_ip6[0], 3) != ((SRC_IP6[0] >> 24) & 0xff) ||
+		    LSB(ctx->remote_ip6[1], 0) != ((SRC_IP6[1] >> 0) & 0xff) ||
+		    LSB(ctx->remote_ip6[1], 1) != ((SRC_IP6[1] >> 8) & 0xff) ||
+		    LSB(ctx->remote_ip6[1], 2) != ((SRC_IP6[1] >> 16) & 0xff) ||
+		    LSB(ctx->remote_ip6[1], 3) != ((SRC_IP6[1] >> 24) & 0xff) ||
+		    LSB(ctx->remote_ip6[2], 0) != ((SRC_IP6[2] >> 0) & 0xff) ||
+		    LSB(ctx->remote_ip6[2], 1) != ((SRC_IP6[2] >> 8) & 0xff) ||
+		    LSB(ctx->remote_ip6[2], 2) != ((SRC_IP6[2] >> 16) & 0xff) ||
+		    LSB(ctx->remote_ip6[2], 3) != ((SRC_IP6[2] >> 24) & 0xff) ||
+		    LSB(ctx->remote_ip6[3], 0) != ((SRC_IP6[3] >> 0) & 0xff) ||
+		    LSB(ctx->remote_ip6[3], 1) != ((SRC_IP6[3] >> 8) & 0xff) ||
+		    LSB(ctx->remote_ip6[3], 2) != ((SRC_IP6[3] >> 16) & 0xff) ||
+		    LSB(ctx->remote_ip6[3], 3) != ((SRC_IP6[3] >> 24) & 0xff))
 			return SK_DROP;
-		half = (__u16 *)&ctx->remote_ip6;
-		if (half[0] == 0 && half[1] == 0 &&
-		    half[2] == 0 && half[3] == 0 &&
-		    half[4] == 0 && half[5] == 0 &&
-		    half[6] == 0 && half[7] == 0)
+		if (LSW(ctx->remote_ip6[0], 0) != ((SRC_IP6[0] >> 0) & 0xffff) ||
+		    LSW(ctx->remote_ip6[0], 1) != ((SRC_IP6[0] >> 16) & 0xffff) ||
+		    LSW(ctx->remote_ip6[1], 0) != ((SRC_IP6[1] >> 0) & 0xffff) ||
+		    LSW(ctx->remote_ip6[1], 1) != ((SRC_IP6[1] >> 16) & 0xffff) ||
+		    LSW(ctx->remote_ip6[2], 0) != ((SRC_IP6[2] >> 0) & 0xffff) ||
+		    LSW(ctx->remote_ip6[2], 1) != ((SRC_IP6[2] >> 16) & 0xffff) ||
+		    LSW(ctx->remote_ip6[3], 0) != ((SRC_IP6[3] >> 0) & 0xffff) ||
+		    LSW(ctx->remote_ip6[3], 1) != ((SRC_IP6[3] >> 16) & 0xffff))
 			return SK_DROP;
-
 		/* Expect DST_IP6 in local_ip6 */
-		byte = (__u8 *)&ctx->local_ip6;
-		if (byte[0] != ((DST_IP6[0] >>  0) & 0xff) ||
-		    byte[1] != ((DST_IP6[0] >>  8) & 0xff) ||
-		    byte[2] != ((DST_IP6[0] >> 16) & 0xff) ||
-		    byte[3] != ((DST_IP6[0] >> 24) & 0xff) ||
-		    byte[4] != ((DST_IP6[1] >>  0) & 0xff) ||
-		    byte[5] != ((DST_IP6[1] >>  8) & 0xff) ||
-		    byte[6] != ((DST_IP6[1] >> 16) & 0xff) ||
-		    byte[7] != ((DST_IP6[1] >> 24) & 0xff) ||
-		    byte[8] != ((DST_IP6[2] >>  0) & 0xff) ||
-		    byte[9] != ((DST_IP6[2] >>  8) & 0xff) ||
-		    byte[10] != ((DST_IP6[2] >> 16) & 0xff) ||
-		    byte[11] != ((DST_IP6[2] >> 24) & 0xff) ||
-		    byte[12] != ((DST_IP6[3] >>  0) & 0xff) ||
-		    byte[13] != ((DST_IP6[3] >>  8) & 0xff) ||
-		    byte[14] != ((DST_IP6[3] >> 16) & 0xff) ||
-		    byte[15] != ((DST_IP6[3] >> 24) & 0xff))
+		if (LSB(ctx->local_ip6[0], 0) != ((DST_IP6[0] >> 0) & 0xff) ||
+		    LSB(ctx->local_ip6[0], 1) != ((DST_IP6[0] >> 8) & 0xff) ||
+		    LSB(ctx->local_ip6[0], 2) != ((DST_IP6[0] >> 16) & 0xff) ||
+		    LSB(ctx->local_ip6[0], 3) != ((DST_IP6[0] >> 24) & 0xff) ||
+		    LSB(ctx->local_ip6[1], 0) != ((DST_IP6[1] >> 0) & 0xff) ||
+		    LSB(ctx->local_ip6[1], 1) != ((DST_IP6[1] >> 8) & 0xff) ||
+		    LSB(ctx->local_ip6[1], 2) != ((DST_IP6[1] >> 16) & 0xff) ||
+		    LSB(ctx->local_ip6[1], 3) != ((DST_IP6[1] >> 24) & 0xff) ||
+		    LSB(ctx->local_ip6[2], 0) != ((DST_IP6[2] >> 0) & 0xff) ||
+		    LSB(ctx->local_ip6[2], 1) != ((DST_IP6[2] >> 8) & 0xff) ||
+		    LSB(ctx->local_ip6[2], 2) != ((DST_IP6[2] >> 16) & 0xff) ||
+		    LSB(ctx->local_ip6[2], 3) != ((DST_IP6[2] >> 24) & 0xff) ||
+		    LSB(ctx->local_ip6[3], 0) != ((DST_IP6[3] >> 0) & 0xff) ||
+		    LSB(ctx->local_ip6[3], 1) != ((DST_IP6[3] >> 8) & 0xff) ||
+		    LSB(ctx->local_ip6[3], 2) != ((DST_IP6[3] >> 16) & 0xff) ||
+		    LSB(ctx->local_ip6[3], 3) != ((DST_IP6[3] >> 24) & 0xff))
 			return SK_DROP;
-		half = (__u16 *)&ctx->local_ip6;
-		if (half[0] != ((DST_IP6[0] >>  0) & 0xffff) ||
-		    half[1] != ((DST_IP6[0] >> 16) & 0xffff) ||
-		    half[2] != ((DST_IP6[1] >>  0) & 0xffff) ||
-		    half[3] != ((DST_IP6[1] >> 16) & 0xffff) ||
-		    half[4] != ((DST_IP6[2] >>  0) & 0xffff) ||
-		    half[5] != ((DST_IP6[2] >> 16) & 0xffff) ||
-		    half[6] != ((DST_IP6[3] >>  0) & 0xffff) ||
-		    half[7] != ((DST_IP6[3] >> 16) & 0xffff))
+		if (LSW(ctx->local_ip6[0], 0) != ((DST_IP6[0] >> 0) & 0xffff) ||
+		    LSW(ctx->local_ip6[0], 1) != ((DST_IP6[0] >> 16) & 0xffff) ||
+		    LSW(ctx->local_ip6[1], 0) != ((DST_IP6[1] >> 0) & 0xffff) ||
+		    LSW(ctx->local_ip6[1], 1) != ((DST_IP6[1] >> 16) & 0xffff) ||
+		    LSW(ctx->local_ip6[2], 0) != ((DST_IP6[2] >> 0) & 0xffff) ||
+		    LSW(ctx->local_ip6[2], 1) != ((DST_IP6[2] >> 16) & 0xffff) ||
+		    LSW(ctx->local_ip6[3], 0) != ((DST_IP6[3] >> 0) & 0xffff) ||
+		    LSW(ctx->local_ip6[3], 1) != ((DST_IP6[3] >> 16) & 0xffff))
 			return SK_DROP;
 	} else {
 		/* Expect :: IPs when family != AF_INET6 */
-		byte = (__u8 *)&ctx->remote_ip6;
-		if (byte[0] != 0 || byte[1] != 0 ||
-		    byte[2] != 0 || byte[3] != 0 ||
-		    byte[4] != 0 || byte[5] != 0 ||
-		    byte[6] != 0 || byte[7] != 0 ||
-		    byte[8] != 0 || byte[9] != 0 ||
-		    byte[10] != 0 || byte[11] != 0 ||
-		    byte[12] != 0 || byte[13] != 0 ||
-		    byte[14] != 0 || byte[15] != 0)
+		if (LSB(ctx->remote_ip6[0], 0) != 0 || LSB(ctx->remote_ip6[0], 1) != 0 ||
+		    LSB(ctx->remote_ip6[0], 2) != 0 || LSB(ctx->remote_ip6[0], 3) != 0 ||
+		    LSB(ctx->remote_ip6[1], 0) != 0 || LSB(ctx->remote_ip6[1], 1) != 0 ||
+		    LSB(ctx->remote_ip6[1], 2) != 0 || LSB(ctx->remote_ip6[1], 3) != 0 ||
+		    LSB(ctx->remote_ip6[2], 0) != 0 || LSB(ctx->remote_ip6[2], 1) != 0 ||
+		    LSB(ctx->remote_ip6[2], 2) != 0 || LSB(ctx->remote_ip6[2], 3) != 0 ||
+		    LSB(ctx->remote_ip6[3], 0) != 0 || LSB(ctx->remote_ip6[3], 1) != 0 ||
+		    LSB(ctx->remote_ip6[3], 2) != 0 || LSB(ctx->remote_ip6[3], 3) != 0)
 			return SK_DROP;
-		half = (__u16 *)&ctx->remote_ip6;
-		if (half[0] != 0 || half[1] != 0 ||
-		    half[2] != 0 || half[3] != 0 ||
-		    half[4] != 0 || half[5] != 0 ||
-		    half[6] != 0 || half[7] != 0)
+		if (LSW(ctx->remote_ip6[0], 0) != 0 || LSW(ctx->remote_ip6[0], 1) != 0 ||
+		    LSW(ctx->remote_ip6[1], 0) != 0 || LSW(ctx->remote_ip6[1], 1) != 0 ||
+		    LSW(ctx->remote_ip6[2], 0) != 0 || LSW(ctx->remote_ip6[2], 1) != 0 ||
+		    LSW(ctx->remote_ip6[3], 0) != 0 || LSW(ctx->remote_ip6[3], 1) != 0)
 			return SK_DROP;
 
-		byte = (__u8 *)&ctx->local_ip6;
-		if (byte[0] != 0 || byte[1] != 0 ||
-		    byte[2] != 0 || byte[3] != 0 ||
-		    byte[4] != 0 || byte[5] != 0 ||
-		    byte[6] != 0 || byte[7] != 0 ||
-		    byte[8] != 0 || byte[9] != 0 ||
-		    byte[10] != 0 || byte[11] != 0 ||
-		    byte[12] != 0 || byte[13] != 0 ||
-		    byte[14] != 0 || byte[15] != 0)
+		if (LSB(ctx->local_ip6[0], 0) != 0 || LSB(ctx->local_ip6[0], 1) != 0 ||
+		    LSB(ctx->local_ip6[0], 2) != 0 || LSB(ctx->local_ip6[0], 3) != 0 ||
+		    LSB(ctx->local_ip6[1], 0) != 0 || LSB(ctx->local_ip6[1], 1) != 0 ||
+		    LSB(ctx->local_ip6[1], 2) != 0 || LSB(ctx->local_ip6[1], 3) != 0 ||
+		    LSB(ctx->local_ip6[2], 0) != 0 || LSB(ctx->local_ip6[2], 1) != 0 ||
+		    LSB(ctx->local_ip6[2], 2) != 0 || LSB(ctx->local_ip6[2], 3) != 0 ||
+		    LSB(ctx->local_ip6[3], 0) != 0 || LSB(ctx->local_ip6[3], 1) != 0 ||
+		    LSB(ctx->local_ip6[3], 2) != 0 || LSB(ctx->local_ip6[3], 3) != 0)
 			return SK_DROP;
-		half = (__u16 *)&ctx->local_ip6;
-		if (half[0] != 0 || half[1] != 0 ||
-		    half[2] != 0 || half[3] != 0 ||
-		    half[4] != 0 || half[5] != 0 ||
-		    half[6] != 0 || half[7] != 0)
+		if (LSW(ctx->remote_ip6[0], 0) != 0 || LSW(ctx->remote_ip6[0], 1) != 0 ||
+		    LSW(ctx->remote_ip6[1], 0) != 0 || LSW(ctx->remote_ip6[1], 1) != 0 ||
+		    LSW(ctx->remote_ip6[2], 0) != 0 || LSW(ctx->remote_ip6[2], 1) != 0 ||
+		    LSW(ctx->remote_ip6[3], 0) != 0 || LSW(ctx->remote_ip6[3], 1) != 0)
 			return SK_DROP;
 	}
 
@@ -547,7 +553,7 @@ int ctx_narrow_access(struct bpf_sk_lookup *ctx)
 }
 
 /* Check that sk_assign rejects SERVER_A socket with -ESOCKNOSUPPORT */
-SEC("sk_lookup/sk_assign_esocknosupport")
+SEC("sk_lookup")
 int sk_assign_esocknosupport(struct bpf_sk_lookup *ctx)
 {
 	struct bpf_sock *sk;
@@ -572,28 +578,28 @@ out:
 	return ret;
 }
 
-SEC("sk_lookup/multi_prog_pass1")
+SEC("sk_lookup")
 int multi_prog_pass1(struct bpf_sk_lookup *ctx)
 {
 	bpf_map_update_elem(&run_map, &KEY_PROG1, &PROG_DONE, BPF_ANY);
 	return SK_PASS;
 }
 
-SEC("sk_lookup/multi_prog_pass2")
+SEC("sk_lookup")
 int multi_prog_pass2(struct bpf_sk_lookup *ctx)
 {
 	bpf_map_update_elem(&run_map, &KEY_PROG2, &PROG_DONE, BPF_ANY);
 	return SK_PASS;
 }
 
-SEC("sk_lookup/multi_prog_drop1")
+SEC("sk_lookup")
 int multi_prog_drop1(struct bpf_sk_lookup *ctx)
 {
 	bpf_map_update_elem(&run_map, &KEY_PROG1, &PROG_DONE, BPF_ANY);
 	return SK_DROP;
 }
 
-SEC("sk_lookup/multi_prog_drop2")
+SEC("sk_lookup")
 int multi_prog_drop2(struct bpf_sk_lookup *ctx)
 {
 	bpf_map_update_elem(&run_map, &KEY_PROG2, &PROG_DONE, BPF_ANY);
@@ -617,7 +623,7 @@ static __always_inline int select_server_a(struct bpf_sk_lookup *ctx)
 	return SK_PASS;
 }
 
-SEC("sk_lookup/multi_prog_redir1")
+SEC("sk_lookup")
 int multi_prog_redir1(struct bpf_sk_lookup *ctx)
 {
 	int ret;
@@ -627,7 +633,7 @@ int multi_prog_redir1(struct bpf_sk_lookup *ctx)
 	return SK_PASS;
 }
 
-SEC("sk_lookup/multi_prog_redir2")
+SEC("sk_lookup")
 int multi_prog_redir2(struct bpf_sk_lookup *ctx)
 {
 	int ret;
@@ -638,4 +644,3 @@ int multi_prog_redir2(struct bpf_sk_lookup *ctx)
 }
 
 char _license[] SEC("license") = "Dual BSD/GPL";
-__u32 _version SEC("version") = 1;

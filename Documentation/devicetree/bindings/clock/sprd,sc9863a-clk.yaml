@@ -40,7 +40,6 @@ properties:
 
   clock-names:
     minItems: 1
-    maxItems: 4
     items:
       - const: ext-26m
       - const: ext-32k
@@ -72,6 +71,8 @@ else:
 
     The 'reg' property for the clock node is also required if there is a sub
     range of registers for the clocks.
+
+additionalProperties: false
 
 examples:
   - |

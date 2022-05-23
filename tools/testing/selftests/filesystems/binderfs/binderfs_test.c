@@ -62,6 +62,9 @@ static int __do_binderfs_test(struct __test_metadata *_metadata)
 	struct binder_version version = { 0 };
 	char binderfs_mntpt[] = P_tmpdir "/binderfs_XXXXXX",
 		device_path[sizeof(P_tmpdir "/binderfs_XXXXXX/") + BINDERFS_MAX_NAME];
+	static const char * const binder_features[] = {
+		"oneway_spam_detection",
+	};
 
 	change_mountns(_metadata);
 
@@ -74,7 +77,7 @@ static int __do_binderfs_test(struct __test_metadata *_metadata)
 	ret = mount(NULL, binderfs_mntpt, "binder", 0, 0);
 	EXPECT_EQ(ret, 0) {
 		if (errno == ENODEV)
-			XFAIL(goto out, "binderfs missing");
+			SKIP(goto out, "binderfs missing");
 		TH_LOG("%s - Failed to mount binderfs", strerror(errno));
 		goto rmdir;
 	}
@@ -150,6 +153,20 @@ static int __do_binderfs_test(struct __test_metadata *_metadata)
 	}
 
 	/* success: binder-control device removal failed as expected */
+
+	for (int i = 0; i < ARRAY_SIZE(binder_features); i++) {
+		snprintf(device_path, sizeof(device_path), "%s/features/%s",
+			 binderfs_mntpt, binder_features[i]);
+		fd = open(device_path, O_CLOEXEC | O_RDONLY);
+		EXPECT_GE(fd, 0) {
+			TH_LOG("%s - Failed to open binder feature: %s",
+				strerror(errno), binder_features[i]);
+			goto umount;
+		}
+		close(fd);
+	}
+
+	/* success: binder feature files found */
 	result = 0;
 
 umount:
@@ -475,10 +492,10 @@ TEST(binderfs_stress)
 TEST(binderfs_test_privileged)
 {
 	if (geteuid() != 0)
-		XFAIL(return, "Tests are not run as root. Skipping privileged tests");
+		SKIP(return, "Tests are not run as root. Skipping privileged tests");
 
 	if (__do_binderfs_test(_metadata))
-		XFAIL(return, "The Android binderfs filesystem is not available");
+		SKIP(return, "The Android binderfs filesystem is not available");
 }
 
 TEST(binderfs_test_unprivileged)
@@ -511,7 +528,7 @@ TEST(binderfs_test_unprivileged)
 	ret = wait_for_pid(pid);
 	if (ret) {
 		if (ret == 2)
-			XFAIL(return, "The Android binderfs filesystem is not available");
+			SKIP(return, "The Android binderfs filesystem is not available");
 		ASSERT_EQ(ret, 0) {
 			TH_LOG("wait_for_pid() failed");
 		}

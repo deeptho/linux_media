@@ -280,7 +280,7 @@
 
 	chosen {
 		stdout-path = &uart1;
-		bootargs = "console=ttyS1,9600n8 root=/dev/ram rw earlyprintk";
+		bootargs = "console=ttyS1,9600n8 root=/dev/ram rw earlycon";
 	};
 
 	ast-adc-hwmon {
@@ -1570,4 +1570,21 @@
 
 &sdhci1 {
 	status = "disabled";
+};
+
+&fmc_flash0 {
+#include "facebook-bmc-flash-layout.dtsi"
+};
+
+&fmc_flash1 {
+	partitions {
+		compatible = "fixed-partitions";
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		flash1@0 {
+			reg = <0x0 0x2000000>;
+			label = "flash1";
+		};
+	};
 };

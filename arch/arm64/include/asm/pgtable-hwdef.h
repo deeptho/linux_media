@@ -72,38 +72,32 @@
 #define PTRS_PER_PGD		(1 << (VA_BITS - PGDIR_SHIFT))
 
 /*
- * Section address mask and size definitions.
- */
-#define SECTION_SHIFT		PMD_SHIFT
-#define SECTION_SIZE		(_AC(1, UL) << SECTION_SHIFT)
-#define SECTION_MASK		(~(SECTION_SIZE-1))
-
-/*
  * Contiguous page definitions.
  */
-#ifdef CONFIG_ARM64_64K_PAGES
-#define CONT_PTE_SHIFT		(5 + PAGE_SHIFT)
-#define CONT_PMD_SHIFT		(5 + PMD_SHIFT)
-#elif defined(CONFIG_ARM64_16K_PAGES)
-#define CONT_PTE_SHIFT		(7 + PAGE_SHIFT)
-#define CONT_PMD_SHIFT		(5 + PMD_SHIFT)
-#else
-#define CONT_PTE_SHIFT		(4 + PAGE_SHIFT)
-#define CONT_PMD_SHIFT		(4 + PMD_SHIFT)
-#endif
-
+#define CONT_PTE_SHIFT		(CONFIG_ARM64_CONT_PTE_SHIFT + PAGE_SHIFT)
 #define CONT_PTES		(1 << (CONT_PTE_SHIFT - PAGE_SHIFT))
 #define CONT_PTE_SIZE		(CONT_PTES * PAGE_SIZE)
 #define CONT_PTE_MASK		(~(CONT_PTE_SIZE - 1))
+
+#define CONT_PMD_SHIFT		(CONFIG_ARM64_CONT_PMD_SHIFT + PMD_SHIFT)
 #define CONT_PMDS		(1 << (CONT_PMD_SHIFT - PMD_SHIFT))
 #define CONT_PMD_SIZE		(CONT_PMDS * PMD_SIZE)
 #define CONT_PMD_MASK		(~(CONT_PMD_SIZE - 1))
-/* the numerical offset of the PTE within a range of CONT_PTES */
-#define CONT_RANGE_OFFSET(addr) (((addr)>>PAGE_SHIFT)&(CONT_PTES-1))
 
 /*
  * Hardware page table definitions.
  *
+ * Level 0 descriptor (P4D).
+ */
+#define P4D_TYPE_TABLE		(_AT(p4dval_t, 3) << 0)
+#define P4D_TABLE_BIT		(_AT(p4dval_t, 1) << 1)
+#define P4D_TYPE_MASK		(_AT(p4dval_t, 3) << 0)
+#define P4D_TYPE_SECT		(_AT(p4dval_t, 1) << 0)
+#define P4D_SECT_RDONLY		(_AT(p4dval_t, 1) << 7)		/* AP[2] */
+#define P4D_TABLE_PXN		(_AT(p4dval_t, 1) << 59)
+#define P4D_TABLE_UXN		(_AT(p4dval_t, 1) << 60)
+
+/*
  * Level 1 descriptor (PUD).
  */
 #define PUD_TYPE_TABLE		(_AT(pudval_t, 3) << 0)
@@ -111,6 +105,8 @@
 #define PUD_TYPE_MASK		(_AT(pudval_t, 3) << 0)
 #define PUD_TYPE_SECT		(_AT(pudval_t, 1) << 0)
 #define PUD_SECT_RDONLY		(_AT(pudval_t, 1) << 7)		/* AP[2] */
+#define PUD_TABLE_PXN		(_AT(pudval_t, 1) << 59)
+#define PUD_TABLE_UXN		(_AT(pudval_t, 1) << 60)
 
 /*
  * Level 2 descriptor (PMD).
@@ -132,6 +128,8 @@
 #define PMD_SECT_CONT		(_AT(pmdval_t, 1) << 52)
 #define PMD_SECT_PXN		(_AT(pmdval_t, 1) << 53)
 #define PMD_SECT_UXN		(_AT(pmdval_t, 1) << 54)
+#define PMD_TABLE_PXN		(_AT(pmdval_t, 1) << 59)
+#define PMD_TABLE_UXN		(_AT(pmdval_t, 1) << 60)
 
 /*
  * AttrIndx[2:0] encoding (mapping attributes defined in the MAIR* registers).
@@ -156,7 +154,6 @@
 #define PTE_CONT		(_AT(pteval_t, 1) << 52)	/* Contiguous range */
 #define PTE_PXN			(_AT(pteval_t, 1) << 53)	/* Privileged XN */
 #define PTE_UXN			(_AT(pteval_t, 1) << 54)	/* User XN */
-#define PTE_HYP_XN		(_AT(pteval_t, 1) << 54)	/* HYP XN */
 
 #define PTE_ADDR_LOW		(((_AT(pteval_t, 1) << (48 - PAGE_SHIFT)) - 1) << PAGE_SHIFT)
 #ifdef CONFIG_ARM64_PA_BITS_52
@@ -173,32 +170,9 @@
 #define PTE_ATTRINDX_MASK	(_AT(pteval_t, 7) << 2)
 
 /*
- * 2nd stage PTE definitions
- */
-#define PTE_S2_RDONLY		(_AT(pteval_t, 1) << 6)   /* HAP[2:1] */
-#define PTE_S2_RDWR		(_AT(pteval_t, 3) << 6)   /* HAP[2:1] */
-#define PTE_S2_XN		(_AT(pteval_t, 2) << 53)  /* XN[1:0] */
-#define PTE_S2_SW_RESVD		(_AT(pteval_t, 15) << 55) /* Reserved for SW */
-
-#define PMD_S2_RDONLY		(_AT(pmdval_t, 1) << 6)   /* HAP[2:1] */
-#define PMD_S2_RDWR		(_AT(pmdval_t, 3) << 6)   /* HAP[2:1] */
-#define PMD_S2_XN		(_AT(pmdval_t, 2) << 53)  /* XN[1:0] */
-#define PMD_S2_SW_RESVD		(_AT(pmdval_t, 15) << 55) /* Reserved for SW */
-
-#define PUD_S2_RDONLY		(_AT(pudval_t, 1) << 6)   /* HAP[2:1] */
-#define PUD_S2_RDWR		(_AT(pudval_t, 3) << 6)   /* HAP[2:1] */
-#define PUD_S2_XN		(_AT(pudval_t, 2) << 53)  /* XN[1:0] */
-
-/*
  * Memory Attribute override for Stage-2 (MemAttr[3:0])
  */
 #define PTE_S2_MEMATTR(t)	(_AT(pteval_t, (t)) << 2)
-
-/*
- * EL2/HYP PTE/PMD definitions
- */
-#define PMD_HYP			PMD_SECT_USER
-#define PTE_HYP			PTE_USER
 
 /*
  * Highest possible physical address supported.
@@ -294,6 +268,7 @@
 #define TCR_TBI1		(UL(1) << 38)
 #define TCR_HA			(UL(1) << 39)
 #define TCR_HD			(UL(1) << 40)
+#define TCR_TBID1		(UL(1) << 52)
 #define TCR_NFD0		(UL(1) << 53)
 #define TCR_NFD1		(UL(1) << 54)
 #define TCR_E0PD0		(UL(1) << 55)

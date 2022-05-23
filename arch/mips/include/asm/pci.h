@@ -20,6 +20,10 @@
 #include <linux/list.h>
 #include <linux/of.h>
 
+#ifdef CONFIG_PCI_DRIVERS_GENERIC
+#define pci_remap_iospace pci_remap_iospace
+#endif
+
 #ifdef CONFIG_PCI_DRIVERS_LEGACY
 
 /*
@@ -38,7 +42,6 @@ struct pci_controller {
 	struct resource *io_resource;
 	unsigned long io_offset;
 	unsigned long io_map_base;
-	struct resource *busn_resource;
 
 #ifndef CONFIG_PCI_DOMAINS_GENERIC
 	unsigned int index;

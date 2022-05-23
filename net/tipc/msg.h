@@ -82,6 +82,7 @@ struct plist;
 #define  NAME_DISTRIBUTOR     11
 #define  MSG_FRAGMENTER       12
 #define  LINK_CONFIG          13
+#define  MSG_CRYPTO           14
 #define  SOCK_WAKEUP          14       /* pseudo user */
 #define  TOP_SRV              15       /* pseudo user */
 
@@ -98,8 +99,9 @@ struct plist;
 #define MAX_H_SIZE                60	/* Largest possible TIPC header size */
 
 #define MAX_MSG_SIZE (MAX_H_SIZE + TIPC_MAX_USER_MSG_SIZE)
-#define FB_MTU                  3744
 #define TIPC_MEDIA_INFO_OFFSET	5
+
+extern const int one_page_mtu;
 
 struct tipc_skb_cb {
 	union {
@@ -127,7 +129,9 @@ struct tipc_skb_cb {
 #ifdef CONFIG_TIPC_CRYPTO
 			u8 encrypted:1;
 			u8 decrypted:1;
-			u8 probe:1;
+#define SKB_PROBING	1
+#define SKB_GRACING	2
+			u8 xmit_type:2;
 			u8 tx_clone_deferred:1;
 #endif
 		};
@@ -746,6 +750,9 @@ static inline void msg_set_nameupper(struct tipc_msg *m, u32 n)
 #define GRP_ACK_MSG          3
 #define GRP_RECLAIM_MSG      4
 #define GRP_REMIT_MSG        5
+
+/* Crypto message types */
+#define KEY_DISTR_MSG		0
 
 /*
  * Word 1

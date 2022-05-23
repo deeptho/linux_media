@@ -1,8 +1,8 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 /*
- * WFx hardware interface definitions
+ * WF200 hardware interface definitions
  *
- * Copyright (c) 2018-2019, Silicon Laboratories Inc.
+ * Copyright (c) 2018-2020, Silicon Laboratories Inc.
  */
 
 #ifndef WFX_HIF_API_MIB_H
@@ -82,50 +82,6 @@ struct hif_mib_gl_set_multi_msg {
 	u8     reserved2[3];
 } __packed;
 
-enum hif_mac_addr_type {
-	HIF_MAC_ADDR_A1 = 0x0,
-	HIF_MAC_ADDR_A2 = 0x1,
-	HIF_MAC_ADDR_A3 = 0x2
-};
-
-struct hif_mib_mac_addr_data_frame_condition {
-	u8     condition_idx;
-	u8     address_type;
-	u8     mac_address[ETH_ALEN];
-} __packed;
-
-#define HIF_FILTER_UNICAST   0x1
-#define HIF_FILTER_MULTICAST 0x2
-#define HIF_FILTER_BROADCAST 0x4
-
-struct hif_mib_uc_mc_bc_data_frame_condition {
-	u8     condition_idx;
-	u8     allowed_frames;
-	u8     reserved[2];
-} __packed;
-
-struct hif_mib_config_data_filter {
-	u8     filter_idx;
-	u8     enable;
-	u8     reserved1[2];
-	u8     eth_type_cond;
-	u8     port_cond;
-	u8     magic_cond;
-	u8     mac_cond;
-	u8     ipv4_cond;
-	u8     ipv6_cond;
-	u8     uc_mc_bc_cond;
-	u8     reserved2;
-} __packed;
-
-struct hif_mib_set_data_filtering {
-	u8     invert_matching:1;
-	u8     reserved1:7;
-	u8     enable:1;
-	u8     reserved2:7;
-	u8     reserved3[2];
-} __packed;
-
 enum hif_arp_ns_frame_treatment {
 	HIF_ARP_NS_FILTERING_DISABLE = 0x0,
 	HIF_ARP_NS_FILTERING_ENABLE  = 0x1,
@@ -177,58 +133,61 @@ struct hif_mib_bcn_filter_enable {
 } __packed;
 
 struct hif_mib_extended_count_table {
-	__le32 count_plcp_errors;
-	__le32 count_fcs_errors;
-	__le32 count_tx_packets;
-	__le32 count_rx_packets;
-	__le32 count_rx_packet_errors;
-	__le32 count_rx_decryption_failures;
-	__le32 count_rx_mic_failures;
-	__le32 count_rx_no_key_failures;
-	__le32 count_tx_multicast_frames;
+	__le32 count_drop_plcp;
+	__le32 count_drop_fcs;
+	__le32 count_tx_frames;
+	__le32 count_rx_frames;
+	__le32 count_rx_frames_failed;
+	__le32 count_drop_decryption;
+	__le32 count_drop_tkip_mic;
+	__le32 count_drop_no_key;
+	__le32 count_tx_frames_multicast;
 	__le32 count_tx_frames_success;
-	__le32 count_tx_frame_failures;
+	__le32 count_tx_frames_failed;
 	__le32 count_tx_frames_retried;
 	__le32 count_tx_frames_multi_retried;
-	__le32 count_rx_frame_duplicates;
+	__le32 count_drop_duplicate;
 	__le32 count_rts_success;
-	__le32 count_rts_failures;
-	__le32 count_ack_failures;
-	__le32 count_rx_multicast_frames;
+	__le32 count_rts_failed;
+	__le32 count_ack_failed;
+	__le32 count_rx_frames_multicast;
 	__le32 count_rx_frames_success;
-	__le32 count_rx_cmacicv_errors;
-	__le32 count_rx_cmac_replays;
-	__le32 count_rx_mgmt_ccmp_replays;
-	__le32 count_rx_bipmic_errors;
-	__le32 count_rx_beacon;
-	__le32 count_miss_beacon;
-	__le32 reserved[15];
+	__le32 count_drop_cmac_icv;
+	__le32 count_drop_cmac_replay;
+	__le32 count_drop_ccmp_replay;
+	__le32 count_drop_bip_mic;
+	__le32 count_rx_bcn_success;
+	__le32 count_rx_bcn_miss;
+	__le32 count_rx_bcn_dtim;
+	__le32 count_rx_bcn_dtim_aid0_clr;
+	__le32 count_rx_bcn_dtim_aid0_set;
+	__le32 reserved[12];
 } __packed;
 
 struct hif_mib_count_table {
-	__le32 count_plcp_errors;
-	__le32 count_fcs_errors;
-	__le32 count_tx_packets;
-	__le32 count_rx_packets;
-	__le32 count_rx_packet_errors;
-	__le32 count_rx_decryption_failures;
-	__le32 count_rx_mic_failures;
-	__le32 count_rx_no_key_failures;
-	__le32 count_tx_multicast_frames;
+	__le32 count_drop_plcp;
+	__le32 count_drop_fcs;
+	__le32 count_tx_frames;
+	__le32 count_rx_frames;
+	__le32 count_rx_frames_failed;
+	__le32 count_drop_decryption;
+	__le32 count_drop_tkip_mic;
+	__le32 count_drop_no_key;
+	__le32 count_tx_frames_multicast;
 	__le32 count_tx_frames_success;
-	__le32 count_tx_frame_failures;
+	__le32 count_tx_frames_failed;
 	__le32 count_tx_frames_retried;
 	__le32 count_tx_frames_multi_retried;
-	__le32 count_rx_frame_duplicates;
+	__le32 count_drop_duplicate;
 	__le32 count_rts_success;
-	__le32 count_rts_failures;
-	__le32 count_ack_failures;
-	__le32 count_rx_multicast_frames;
+	__le32 count_rts_failed;
+	__le32 count_ack_failed;
+	__le32 count_rx_frames_multicast;
 	__le32 count_rx_frames_success;
-	__le32 count_rx_cmacicv_errors;
-	__le32 count_rx_cmac_replays;
-	__le32 count_rx_mgmt_ccmp_replays;
-	__le32 count_rx_bipmic_errors;
+	__le32 count_drop_cmac_icv;
+	__le32 count_drop_cmac_replay;
+	__le32 count_drop_ccmp_replay;
+	__le32 count_drop_bip_mic;
 } __packed;
 
 struct hif_mib_mac_address {
@@ -250,7 +209,7 @@ struct hif_mib_slot_time {
 } __packed;
 
 struct hif_mib_current_tx_power_level {
-	__le32 power_level; // signed value
+	__le32 power_level; /* signed value */
 } __packed;
 
 struct hif_mib_non_erp_protection {
@@ -349,7 +308,7 @@ struct hif_mib_set_uapsd_information {
 	__le16 auto_trigger_step;
 } __packed;
 
-struct hif_mib_tx_rate_retry_policy {
+struct hif_tx_rate_retry_policy {
 	u8     policy_index;
 	u8     short_retry_count;
 	u8     long_retry_count;
@@ -368,7 +327,7 @@ struct hif_mib_tx_rate_retry_policy {
 struct hif_mib_set_tx_rate_retry_policy {
 	u8     num_tx_rate_policies;
 	u8     reserved[3];
-	struct hif_mib_tx_rate_retry_policy tx_rate_retry_policy[];
+	struct hif_tx_rate_retry_policy tx_rate_retry_policy[];
 } __packed;
 
 struct hif_mib_protected_mgmt_policy {

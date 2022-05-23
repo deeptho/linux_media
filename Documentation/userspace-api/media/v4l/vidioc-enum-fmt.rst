@@ -1,4 +1,5 @@
 .. SPDX-License-Identifier: GFDL-1.1-no-invariants-or-later
+.. c:namespace:: V4L
 
 .. _VIDIOC_ENUM_FMT:
 
@@ -11,23 +12,21 @@ Name
 
 VIDIOC_ENUM_FMT - Enumerate image formats
 
-
 Synopsis
 ========
 
-.. c:function:: int ioctl( int fd, VIDIOC_ENUM_FMT, struct v4l2_fmtdesc *argp )
-    :name: VIDIOC_ENUM_FMT
+.. c:macro:: VIDIOC_ENUM_FMT
 
+``int ioctl(int fd, VIDIOC_ENUM_FMT, struct v4l2_fmtdesc *argp)``
 
 Arguments
 =========
 
 ``fd``
-    File descriptor returned by :ref:`open() <func-open>`.
+    File descriptor returned by :c:func:`open()`.
 
 ``argp``
     Pointer to struct :c:type:`v4l2_fmtdesc`.
-
 
 Description
 ===========
@@ -72,10 +71,11 @@ the ``mbus_code`` field is handled differently:
    formats shall not depend on the active configuration of the video device
    or device pipeline.
 
-
-.. tabularcolumns:: |p{4.4cm}|p{4.4cm}|p{8.7cm}|
-
 .. c:type:: v4l2_fmtdesc
+
+.. cssclass:: longtable
+
+.. tabularcolumns:: |p{4.4cm}|p{4.4cm}|p{8.5cm}|
 
 .. flat-table:: struct v4l2_fmtdesc
     :header-rows:  0
@@ -137,8 +137,9 @@ the ``mbus_code`` field is handled differently:
 	zero.
 
 
+.. tabularcolumns:: |p{8.4cm}|p{1.8cm}|p{7.1cm}|
 
-.. tabularcolumns:: |p{6.6cm}|p{2.2cm}|p{8.7cm}|
+.. cssclass:: longtable
 
 .. _fmtdesc-flags:
 
@@ -226,7 +227,6 @@ the ``mbus_code`` field is handled differently:
 	The application can ask to configure the quantization of the capture
 	device when calling the :ref:`VIDIOC_S_FMT <VIDIOC_G_FMT>` ioctl with
 	:ref:`V4L2_PIX_FMT_FLAG_SET_CSC <v4l2-pix-fmt-flag-set-csc>` set.
-
 
 Return Value
 ============

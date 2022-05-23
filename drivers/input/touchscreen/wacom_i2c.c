@@ -6,6 +6,7 @@
  * <tobita.tatsunosuke@wacom.co.jp>
  */
 
+#include <linux/bits.h>
 #include <linux/module.h>
 #include <linux/input.h>
 #include <linux/i2c.h>
@@ -14,6 +15,15 @@
 #include <linux/interrupt.h>
 #include <asm/unaligned.h>
 
+/* Bitmasks (for data[3]) */
+#define WACOM_TIP_SWITCH	BIT(0)
+#define WACOM_BARREL_SWITCH	BIT(1)
+#define WACOM_ERASER		BIT(2)
+#define WACOM_INVERT		BIT(3)
+#define WACOM_BARREL_SWITCH_2	BIT(4)
+#define WACOM_IN_PROXIMITY	BIT(5)
+
+/* Registers */
 #define WACOM_CMD_QUERY0	0x04
 #define WACOM_CMD_QUERY1	0x00
 #define WACOM_CMD_QUERY2	0x33
@@ -99,19 +109,19 @@ static irqreturn_t wacom_i2c_irq(int irq, void *dev_id)
 	if (error < 0)
 		goto out;
 
-	tsw = data[3] & 0x01;
-	ers = data[3] & 0x04;
-	f1 = data[3] & 0x02;
-	f2 = data[3] & 0x10;
+	tsw = data[3] & WACOM_TIP_SWITCH;
+	ers = data[3] & WACOM_ERASER;
+	f1 = data[3] & WACOM_BARREL_SWITCH;
+	f2 = data[3] & WACOM_BARREL_SWITCH_2;
 	x = le16_to_cpup((__le16 *)&data[4]);
 	y = le16_to_cpup((__le16 *)&data[6]);
 	pressure = le16_to_cpup((__le16 *)&data[8]);
 
 	if (!wac_i2c->prox)
-		wac_i2c->tool = (data[3] & 0x0c) ?
+		wac_i2c->tool = (data[3] & (WACOM_ERASER | WACOM_INVERT)) ?
 			BTN_TOOL_RUBBER : BTN_TOOL_PEN;
 
-	wac_i2c->prox = data[3] & 0x20;
+	wac_i2c->prox = data[3] & WACOM_IN_PROXIMITY;
 
 	input_report_key(input, BTN_TOUCH, tsw || ers);
 	input_report_key(input, wac_i2c->tool, wac_i2c->prox);
@@ -145,15 +155,16 @@ static void wacom_i2c_close(struct input_dev *dev)
 }
 
 static int wacom_i2c_probe(struct i2c_client *client,
-				     const struct i2c_device_id *id)
+			   const struct i2c_device_id *id)
 {
+	struct device *dev = &client->dev;
 	struct wacom_i2c *wac_i2c;
 	struct input_dev *input;
 	struct wacom_features features = { 0 };
 	int error;
 
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C)) {
-		dev_err(&client->dev, "i2c_check_functionality error\n");
+		dev_err(dev, "i2c_check_functionality error\n");
 		return -EIO;
 	}
 
@@ -161,21 +172,22 @@ static int wacom_i2c_probe(struct i2c_client *client,
 	if (error)
 		return error;
 
-	wac_i2c = kzalloc(sizeof(*wac_i2c), GFP_KERNEL);
-	input = input_allocate_device();
-	if (!wac_i2c || !input) {
-		error = -ENOMEM;
-		goto err_free_mem;
-	}
+	wac_i2c = devm_kzalloc(dev, sizeof(*wac_i2c), GFP_KERNEL);
+	if (!wac_i2c)
+		return -ENOMEM;
 
 	wac_i2c->client = client;
+
+	input = devm_input_allocate_device(dev);
+	if (!input)
+		return -ENOMEM;
+
 	wac_i2c->input = input;
 
 	input->name = "Wacom I2C Digitizer";
 	input->id.bustype = BUS_I2C;
 	input->id.vendor = 0x56a;
 	input->id.version = features.fw_version;
-	input->dev.parent = &client->dev;
 	input->open = wacom_i2c_open;
 	input->close = wacom_i2c_close;
 
@@ -194,13 +206,11 @@ static int wacom_i2c_probe(struct i2c_client *client,
 
 	input_set_drvdata(input, wac_i2c);
 
-	error = request_threaded_irq(client->irq, NULL, wacom_i2c_irq,
-				     IRQF_TRIGGER_LOW | IRQF_ONESHOT,
-				     "wacom_i2c", wac_i2c);
+	error = devm_request_threaded_irq(dev, client->irq, NULL, wacom_i2c_irq,
+					  IRQF_ONESHOT, "wacom_i2c", wac_i2c);
 	if (error) {
-		dev_err(&client->dev,
-			"Failed to enable IRQ, error: %d\n", error);
-		goto err_free_mem;
+		dev_err(dev, "Failed to request IRQ: %d\n", error);
+		return error;
 	}
 
 	/* Disable the IRQ, we'll enable it in wac_i2c_open() */
@@ -208,30 +218,9 @@ static int wacom_i2c_probe(struct i2c_client *client,
 
 	error = input_register_device(wac_i2c->input);
 	if (error) {
-		dev_err(&client->dev,
-			"Failed to register input device, error: %d\n", error);
-		goto err_free_irq;
+		dev_err(dev, "Failed to register input device: %d\n", error);
+		return error;
 	}
-
-	i2c_set_clientdata(client, wac_i2c);
-	return 0;
-
-err_free_irq:
-	free_irq(client->irq, wac_i2c);
-err_free_mem:
-	input_free_device(input);
-	kfree(wac_i2c);
-
-	return error;
-}
-
-static int wacom_i2c_remove(struct i2c_client *client)
-{
-	struct wacom_i2c *wac_i2c = i2c_get_clientdata(client);
-
-	free_irq(client->irq, wac_i2c);
-	input_unregister_device(wac_i2c->input);
-	kfree(wac_i2c);
 
 	return 0;
 }
@@ -269,7 +258,6 @@ static struct i2c_driver wacom_i2c_driver = {
 	},
 
 	.probe		= wacom_i2c_probe,
-	.remove		= wacom_i2c_remove,
 	.id_table	= wacom_i2c_id,
 };
 module_i2c_driver(wacom_i2c_driver);

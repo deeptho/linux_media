@@ -32,7 +32,7 @@ struct display_mode_lib;
 
 // Function: dml_rq_dlg_get_rq_reg
 //  Main entry point for test to get the register values out of this DML class.
-//  This function calls <get_rq_param> and <extract_rq_regs> fucntions to calculate
+//  This function calls <get_rq_param> and <extract_rq_regs> functions to calculate
 //  and then populate the rq_regs struct
 // Input:
 //  pipe_param - pipe source configuration (e.g. vp, pitch, scaling, dest, etc.)
@@ -41,7 +41,7 @@ struct display_mode_lib;
 //            See also: <display_rq_regs_st>
 void dml30_rq_dlg_get_rq_reg(struct display_mode_lib *mode_lib,
 		display_rq_regs_st *rq_regs,
-		const display_pipe_params_st pipe_param);
+		const display_pipe_params_st *pipe_param);
 
 // Function: dml_rq_dlg_get_dlg_reg
 //   Calculate and return DLG and TTU register struct given the system setting
@@ -57,7 +57,7 @@ void dml30_rq_dlg_get_rq_reg(struct display_mode_lib *mode_lib,
 void dml30_rq_dlg_get_dlg_reg(struct display_mode_lib             *mode_lib,
 		display_dlg_regs_st          *dlg_regs,
 		display_ttu_regs_st          *ttu_regs,
-		display_e2e_pipe_params_st   *e2e_pipe_param,
+		const display_e2e_pipe_params_st   *e2e_pipe_param,
 		const unsigned int            num_pipes,
 		const unsigned int            pipe_idx,
 		const bool                    cstate_en,

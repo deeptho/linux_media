@@ -319,18 +319,6 @@ static inline int ovl_dir_read(struct path *realpath,
 	return err;
 }
 
-/*
- * Can we iterate real dir directly?
- *
- * Non-merge dir may contain whiteouts from a time it was a merge upper, before
- * lower dir was removed under it and possibly before it was rotated from upper
- * to lower layer.
- */
-static bool ovl_dir_is_real(struct dentry *dir)
-{
-	return !ovl_test_flag(OVL_WHITEOUTS, d_inode(dir));
-}
-
 static void ovl_dir_reset(struct file *file)
 {
 	struct ovl_dir_file *od = file->private_data;
@@ -493,6 +481,8 @@ static int ovl_cache_update_ino(struct path *path, struct ovl_cache_entry *p)
 	}
 	this = lookup_one_len(p->name, dir, p->len);
 	if (IS_ERR_OR_NULL(this) || !this->d_inode) {
+		/* Mark a stale entry */
+		p->is_whiteout = true;
 		if (IS_ERR(this)) {
 			err = PTR_ERR(this);
 			this = NULL;
@@ -606,6 +596,7 @@ static struct ovl_dir_cache *ovl_cache_get_impure(struct path *path)
 {
 	int res;
 	struct dentry *dentry = path->dentry;
+	struct ovl_fs *ofs = OVL_FS(dentry->d_sb);
 	struct ovl_dir_cache *cache;
 
 	cache = ovl_dir_cache(d_inode(dentry));
@@ -632,7 +623,7 @@ static struct ovl_dir_cache *ovl_cache_get_impure(struct path *path)
 		 * Removing the "impure" xattr is best effort.
 		 */
 		if (!ovl_want_write(dentry)) {
-			ovl_do_removexattr(ovl_dentry_upper(dentry),
+			ovl_do_removexattr(ofs, ovl_dentry_upper(dentry),
 					   OVL_XATTR_IMPURE);
 			ovl_drop_write(dentry);
 		}
@@ -787,6 +778,9 @@ static int ovl_iterate(struct file *file, struct dir_context *ctx)
 				if (err)
 					goto out;
 			}
+		}
+		/* ovl_cache_update_ino() sets is_whiteout on stale entry */
+		if (!p->is_whiteout) {
 			if (!dir_emit(ctx, p->name, p->len, p->ino, p->type))
 				break;
 		}
@@ -839,7 +833,7 @@ out_unlock:
 	return res;
 }
 
-static struct file *ovl_dir_open_realfile(struct file *file,
+static struct file *ovl_dir_open_realfile(const struct file *file,
 					  struct path *realpath)
 {
 	struct file *res;
@@ -852,46 +846,63 @@ static struct file *ovl_dir_open_realfile(struct file *file,
 	return res;
 }
 
-static int ovl_dir_fsync(struct file *file, loff_t start, loff_t end,
-			 int datasync)
+/*
+ * Like ovl_real_fdget(), returns upperfile if dir was copied up since open.
+ * Unlike ovl_real_fdget(), this caches upperfile in file->private_data.
+ *
+ * TODO: use same abstract type for file->private_data of dir and file so
+ * upperfile could also be cached for files as well.
+ */
+struct file *ovl_dir_real_file(const struct file *file, bool want_upper)
 {
+
 	struct ovl_dir_file *od = file->private_data;
 	struct dentry *dentry = file->f_path.dentry;
-	struct file *realfile = od->realfile;
+	struct file *old, *realfile = od->realfile;
 
-	/* Nothing to sync for lower */
 	if (!OVL_TYPE_UPPER(ovl_path_type(dentry)))
-		return 0;
+		return want_upper ? NULL : realfile;
 
 	/*
 	 * Need to check if we started out being a lower dir, but got copied up
 	 */
 	if (!od->is_upper) {
-		struct inode *inode = file_inode(file);
-
 		realfile = READ_ONCE(od->upperfile);
 		if (!realfile) {
 			struct path upperpath;
 
 			ovl_path_upper(dentry, &upperpath);
 			realfile = ovl_dir_open_realfile(file, &upperpath);
+			if (IS_ERR(realfile))
+				return realfile;
 
-			inode_lock(inode);
-			if (!od->upperfile) {
-				if (IS_ERR(realfile)) {
-					inode_unlock(inode);
-					return PTR_ERR(realfile);
-				}
-				smp_store_release(&od->upperfile, realfile);
-			} else {
-				/* somebody has beaten us to it */
-				if (!IS_ERR(realfile))
-					fput(realfile);
-				realfile = od->upperfile;
+			old = cmpxchg_release(&od->upperfile, NULL, realfile);
+			if (old) {
+				fput(realfile);
+				realfile = old;
 			}
-			inode_unlock(inode);
 		}
 	}
+
+	return realfile;
+}
+
+static int ovl_dir_fsync(struct file *file, loff_t start, loff_t end,
+			 int datasync)
+{
+	struct file *realfile;
+	int err;
+
+	err = ovl_sync_status(OVL_FS(file->f_path.dentry->d_sb));
+	if (err <= 0)
+		return err;
+
+	realfile = ovl_dir_real_file(file, true);
+	err = PTR_ERR_OR_ZERO(realfile);
+
+	/* Nothing to sync for lower */
+	if (!realfile || err)
+		return err;
 
 	return vfs_fsync_range(realfile, start, end, datasync);
 }
@@ -1051,7 +1062,9 @@ int ovl_check_d_type_supported(struct path *realpath)
 	return rdd.d_type_supported;
 }
 
-static void ovl_workdir_cleanup_recurse(struct path *path, int level)
+#define OVL_INCOMPATDIR_NAME "incompat"
+
+static int ovl_workdir_cleanup_recurse(struct path *path, int level)
 {
 	int err;
 	struct inode *dir = path->dentry->d_inode;
@@ -1065,6 +1078,19 @@ static void ovl_workdir_cleanup_recurse(struct path *path, int level)
 		.root = &root,
 		.is_lowest = false,
 	};
+	bool incompat = false;
+
+	/*
+	 * The "work/incompat" directory is treated specially - if it is not
+	 * empty, instead of printing a generic error and mounting read-only,
+	 * we will error about incompat features and fail the mount.
+	 *
+	 * When called from ovl_indexdir_cleanup(), path->dentry->d_name.name
+	 * starts with '#'.
+	 */
+	if (level == 2 &&
+	    !strcmp(path->dentry->d_name.name, OVL_INCOMPATDIR_NAME))
+		incompat = true;
 
 	err = ovl_dir_read(path, &rdd);
 	if (err)
@@ -1079,17 +1105,25 @@ static void ovl_workdir_cleanup_recurse(struct path *path, int level)
 				continue;
 			if (p->len == 2 && p->name[1] == '.')
 				continue;
+		} else if (incompat) {
+			pr_err("overlay with incompat feature '%s' cannot be mounted\n",
+				p->name);
+			err = -EINVAL;
+			break;
 		}
 		dentry = lookup_one_len(p->name, path->dentry, p->len);
 		if (IS_ERR(dentry))
 			continue;
 		if (dentry->d_inode)
-			ovl_workdir_cleanup(dir, path->mnt, dentry, level);
+			err = ovl_workdir_cleanup(dir, path->mnt, dentry, level);
 		dput(dentry);
+		if (err)
+			break;
 	}
 	inode_unlock(dir);
 out:
 	ovl_cache_free(&list);
+	return err;
 }
 
 int ovl_workdir_cleanup(struct inode *dir, struct vfsmount *mnt,
@@ -1106,9 +1140,10 @@ int ovl_workdir_cleanup(struct inode *dir, struct vfsmount *mnt,
 		struct path path = { .mnt = mnt, .dentry = dentry };
 
 		inode_unlock(dir);
-		ovl_workdir_cleanup_recurse(&path, level + 1);
+		err = ovl_workdir_cleanup_recurse(&path, level + 1);
 		inode_lock_nested(dir, I_MUTEX_PARENT);
-		err = ovl_cleanup(dir, dentry);
+		if (!err)
+			err = ovl_cleanup(dir, dentry);
 	}
 
 	return err;

@@ -54,6 +54,16 @@ struct xfs_dquot_res {
 	xfs_qwarncnt_t		warnings;
 };
 
+static inline bool
+xfs_dquot_res_over_limits(
+	const struct xfs_dquot_res	*qres)
+{
+	if ((qres->softlimit && qres->softlimit < qres->reserved) ||
+	    (qres->hardlimit && qres->hardlimit < qres->reserved))
+		return true;
+	return false;
+}
+
 /*
  * The incore dquot structure
  */
@@ -236,5 +246,8 @@ typedef int (*xfs_qm_dqiterate_fn)(struct xfs_dquot *dq,
 		xfs_dqtype_t type, void *priv);
 int xfs_qm_dqiterate(struct xfs_mount *mp, xfs_dqtype_t type,
 		xfs_qm_dqiterate_fn iter_fn, void *priv);
+
+time64_t xfs_dquot_set_timeout(struct xfs_mount *mp, time64_t timeout);
+time64_t xfs_dquot_set_grace_period(time64_t grace);
 
 #endif /* __XFS_DQUOT_H__ */

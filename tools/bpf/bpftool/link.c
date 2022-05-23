@@ -7,6 +7,7 @@
 #include <unistd.h>
 
 #include <bpf/bpf.h>
+#include <bpf/hashmap.h>
 
 #include "json_writer.h"
 #include "main.h"
@@ -19,6 +20,8 @@ static const char * const link_type_name[] = {
 	[BPF_LINK_TYPE_ITER]			= "iter",
 	[BPF_LINK_TYPE_NETNS]			= "netns",
 };
+
+static struct hashmap *link_table;
 
 static int link_parse_fd(int *argc, char ***argv)
 {
@@ -77,6 +80,22 @@ static void show_link_attach_type_json(__u32 attach_type, json_writer_t *wtr)
 		jsonw_uint_field(wtr, "attach_type", attach_type);
 }
 
+static bool is_iter_map_target(const char *target_name)
+{
+	return strcmp(target_name, "bpf_map_elem") == 0 ||
+	       strcmp(target_name, "bpf_sk_storage_map") == 0;
+}
+
+static void show_iter_json(struct bpf_link_info *info, json_writer_t *wtr)
+{
+	const char *target_name = u64_to_ptr(info->iter.target_name);
+
+	jsonw_string_field(wtr, "target_name", target_name);
+
+	if (is_iter_map_target(target_name))
+		jsonw_uint_field(wtr, "map_id", info->iter.map.map_id);
+}
+
 static int get_prog_info(int prog_id, struct bpf_prog_info *info)
 {
 	__u32 len = sizeof(*info);
@@ -128,6 +147,9 @@ static int show_link_close_json(int fd, struct bpf_link_info *info)
 				   info->cgroup.cgroup_id);
 		show_link_attach_type_json(info->cgroup.attach_type, json_wtr);
 		break;
+	case BPF_LINK_TYPE_ITER:
+		show_iter_json(info, json_wtr);
+		break;
 	case BPF_LINK_TYPE_NETNS:
 		jsonw_uint_field(json_wtr, "netns_ino",
 				 info->netns.netns_ino);
@@ -137,19 +159,18 @@ static int show_link_close_json(int fd, struct bpf_link_info *info)
 		break;
 	}
 
-	if (!hash_empty(link_table.table)) {
-		struct pinned_obj *obj;
+	if (!hashmap__empty(link_table)) {
+		struct hashmap_entry *entry;
 
 		jsonw_name(json_wtr, "pinned");
 		jsonw_start_array(json_wtr);
-		hash_for_each_possible(link_table.table, obj, hash, info->id) {
-			if (obj->id == info->id)
-				jsonw_string(json_wtr, obj->path);
-		}
+		hashmap__for_each_key_entry(link_table, entry,
+					    u32_as_hash_field(info->id))
+			jsonw_string(json_wtr, entry->value);
 		jsonw_end_array(json_wtr);
 	}
 
-	emit_obj_refs_json(&refs_table, info->id, json_wtr);
+	emit_obj_refs_json(refs_table, info->id, json_wtr);
 
 	jsonw_end_object(json_wtr);
 
@@ -173,6 +194,16 @@ static void show_link_attach_type_plain(__u32 attach_type)
 		printf("attach_type %s  ", attach_type_name[attach_type]);
 	else
 		printf("attach_type %u  ", attach_type);
+}
+
+static void show_iter_plain(struct bpf_link_info *info)
+{
+	const char *target_name = u64_to_ptr(info->iter.target_name);
+
+	printf("target_name %s  ", target_name);
+
+	if (is_iter_map_target(target_name))
+		printf("map_id %u  ", info->iter.map.map_id);
 }
 
 static int show_link_close_plain(int fd, struct bpf_link_info *info)
@@ -204,6 +235,9 @@ static int show_link_close_plain(int fd, struct bpf_link_info *info)
 		printf("\n\tcgroup_id %zu  ", (size_t)info->cgroup.cgroup_id);
 		show_link_attach_type_plain(info->cgroup.attach_type);
 		break;
+	case BPF_LINK_TYPE_ITER:
+		show_iter_plain(info);
+		break;
 	case BPF_LINK_TYPE_NETNS:
 		printf("\n\tnetns_ino %u  ", info->netns.netns_ino);
 		show_link_attach_type_plain(info->netns.attach_type);
@@ -212,15 +246,14 @@ static int show_link_close_plain(int fd, struct bpf_link_info *info)
 		break;
 	}
 
-	if (!hash_empty(link_table.table)) {
-		struct pinned_obj *obj;
+	if (!hashmap__empty(link_table)) {
+		struct hashmap_entry *entry;
 
-		hash_for_each_possible(link_table.table, obj, hash, info->id) {
-			if (obj->id == info->id)
-				printf("\n\tpinned %s", obj->path);
-		}
+		hashmap__for_each_key_entry(link_table, entry,
+					    u32_as_hash_field(info->id))
+			printf("\n\tpinned %s", (char *)entry->value);
 	}
-	emit_obj_refs_plain(&refs_table, info->id, "\n\tpids ");
+	emit_obj_refs_plain(refs_table, info->id, "\n\tpids ");
 
 	printf("\n");
 
@@ -231,7 +264,7 @@ static int do_show_link(int fd)
 {
 	struct bpf_link_info info;
 	__u32 len = sizeof(info);
-	char raw_tp_name[256];
+	char buf[256];
 	int err;
 
 	memset(&info, 0, sizeof(info));
@@ -245,8 +278,14 @@ again:
 	}
 	if (info.type == BPF_LINK_TYPE_RAW_TRACEPOINT &&
 	    !info.raw_tracepoint.tp_name) {
-		info.raw_tracepoint.tp_name = (unsigned long)&raw_tp_name;
-		info.raw_tracepoint.tp_name_len = sizeof(raw_tp_name);
+		info.raw_tracepoint.tp_name = (unsigned long)&buf;
+		info.raw_tracepoint.tp_name_len = sizeof(buf);
+		goto again;
+	}
+	if (info.type == BPF_LINK_TYPE_ITER &&
+	    !info.iter.target_name) {
+		info.iter.target_name = (unsigned long)&buf;
+		info.iter.target_name_len = sizeof(buf);
 		goto again;
 	}
 
@@ -264,8 +303,15 @@ static int do_show(int argc, char **argv)
 	__u32 id = 0;
 	int err, fd;
 
-	if (show_pinned)
-		build_pinned_obj_table(&link_table, BPF_OBJ_LINK);
+	if (show_pinned) {
+		link_table = hashmap__new(hash_fn_for_key_as_id,
+					  equal_fn_for_key_as_id, NULL);
+		if (!link_table) {
+			p_err("failed to create hashmap for pinned paths");
+			return -1;
+		}
+		build_pinned_obj_table(link_table, BPF_OBJ_LINK);
+	}
 	build_obj_refs_table(&refs_table, BPF_OBJ_LINK);
 
 	if (argc == 2) {
@@ -306,7 +352,10 @@ static int do_show(int argc, char **argv)
 	if (json_output)
 		jsonw_end_array(json_wtr);
 
-	delete_obj_refs_table(&refs_table);
+	delete_obj_refs_table(refs_table);
+
+	if (show_pinned)
+		delete_pinned_obj_table(link_table);
 
 	return errno == ENOENT ? 0 : -1;
 }
@@ -363,7 +412,8 @@ static int do_help(int argc, char **argv)
 		"       %1$s %2$s help\n"
 		"\n"
 		"       " HELP_SPEC_LINK "\n"
-		"       " HELP_SPEC_OPTIONS "\n"
+		"       " HELP_SPEC_OPTIONS " |\n"
+		"                    {-f|--bpffs} | {-n|--nomount} }\n"
 		"",
 		bin_name, argv[-2]);
 

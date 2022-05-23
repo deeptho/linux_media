@@ -338,23 +338,16 @@ static void dw8250_set_termios(struct uart_port *p, struct ktermios *termios,
 	rate = clk_round_rate(d->clk, newrate);
 	if (rate > 0) {
 		/*
-		 * Premilinary set the uartclk to the new clock rate so the
-		 * clock update event handler caused by the clk_set_rate()
-		 * calling wouldn't actually update the UART divisor since
-		 * we about to do this anyway.
+		 * Note that any clock-notifer worker will block in
+		 * serial8250_update_uartclk() until we are done.
 		 */
-		swap(p->uartclk, rate);
 		ret = clk_set_rate(d->clk, newrate);
-		if (ret)
-			swap(p->uartclk, rate);
+		if (!ret)
+			p->uartclk = rate;
 	}
 	clk_prepare_enable(d->clk);
 
-	p->status &= ~UPSTAT_AUTOCTS;
-	if (termios->c_cflag & CRTSCTS)
-		p->status |= UPSTAT_AUTOCTS;
-
-	serial8250_do_set_termios(p, termios, old);
+	dw8250_do_set_termios(p, termios, old);
 }
 
 static void dw8250_set_ldisc(struct uart_port *p, struct ktermios *termios)
@@ -371,39 +364,6 @@ static void dw8250_set_ldisc(struct uart_port *p, struct ktermios *termios)
 		p->serial_out(p, UART_MCR, mcr);
 	}
 	serial8250_do_set_ldisc(p, termios);
-}
-
-static int dw8250_startup(struct uart_port *p)
-{
-	struct dw8250_data *d = to_dw8250_data(p->private_data);
-	int ret;
-
-	/*
-	 * Some platforms may provide a reference clock shared between several
-	 * devices. In this case before using the serial port first we have to
-	 * make sure that any clock state change is known to the UART port at
-	 * least post factum.
-	 */
-	if (d->clk) {
-		ret = clk_notifier_register(d->clk, &d->clk_notifier);
-		if (ret)
-			dev_warn(p->dev, "Failed to set the clock notifier\n");
-	}
-
-	return serial8250_do_startup(p);
-}
-
-static void dw8250_shutdown(struct uart_port *p)
-{
-	struct dw8250_data *d = to_dw8250_data(p->private_data);
-
-	serial8250_do_shutdown(p);
-
-	if (d->clk) {
-		clk_notifier_unregister(d->clk, &d->clk_notifier);
-
-		flush_work(&d->clk_work);
-	}
 }
 
 /*
@@ -426,8 +386,9 @@ static bool dw8250_idma_filter(struct dma_chan *chan, void *param)
 
 static void dw8250_quirks(struct uart_port *p, struct dw8250_data *data)
 {
-	if (p->dev->of_node) {
-		struct device_node *np = p->dev->of_node;
+	struct device_node *np = p->dev->of_node;
+
+	if (np) {
 		int id;
 
 		/* get index of serial line, if found in DT aliases */
@@ -444,11 +405,13 @@ static void dw8250_quirks(struct uart_port *p, struct dw8250_data *data)
 			data->skip_autocfg = true;
 		}
 #endif
-		if (of_device_is_big_endian(p->dev->of_node)) {
+
+		if (of_device_is_big_endian(np)) {
 			p->iotype = UPIO_MEM32BE;
 			p->serial_in = dw8250_serial_in32be;
 			p->serial_out = dw8250_serial_out32be;
 		}
+
 		if (of_device_is_compatible(np, "marvell,armada-38x-uart"))
 			p->serial_out = dw8250_serial_out38x;
 
@@ -501,8 +464,6 @@ static int dw8250_probe(struct platform_device *pdev)
 	p->serial_out	= dw8250_serial_out;
 	p->set_ldisc	= dw8250_set_ldisc;
 	p->set_termios	= dw8250_set_termios;
-	p->startup	= dw8250_startup;
-	p->shutdown	= dw8250_shutdown;
 
 	p->membase = devm_ioremap(dev, regs->start, resource_size(regs));
 	if (!p->membase)
@@ -622,6 +583,19 @@ static int dw8250_probe(struct platform_device *pdev)
 		goto err_reset;
 	}
 
+	/*
+	 * Some platforms may provide a reference clock shared between several
+	 * devices. In this case any clock state change must be known to the
+	 * UART port at least post factum.
+	 */
+	if (data->clk) {
+		err = clk_notifier_register(data->clk, &data->clk_notifier);
+		if (err)
+			dev_warn(p->dev, "Failed to set the clock notifier\n");
+		else
+			queue_work(system_unbound_wq, &data->clk_work);
+	}
+
 	platform_set_drvdata(pdev, data);
 
 	pm_runtime_set_active(dev);
@@ -647,6 +621,12 @@ static int dw8250_remove(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 
 	pm_runtime_get_sync(dev);
+
+	if (data->clk) {
+		clk_notifier_unregister(data->clk, &data->clk_notifier);
+
+		flush_work(&data->clk_work);
+	}
 
 	serial8250_unregister_port(data->data.line);
 
@@ -730,6 +710,7 @@ static const struct acpi_device_id dw8250_acpi_match[] = {
 	{ "APMC0D08", 0},
 	{ "AMD0020", 0 },
 	{ "AMDI0020", 0 },
+	{ "AMDI0022", 0 },
 	{ "BRCM2032", 0 },
 	{ "HISI0031", 0 },
 	{ },
@@ -741,7 +722,7 @@ static struct platform_driver dw8250_platform_driver = {
 		.name		= "dw-apb-uart",
 		.pm		= &dw8250_pm_ops,
 		.of_match_table	= dw8250_of_match,
-		.acpi_match_table = ACPI_PTR(dw8250_acpi_match),
+		.acpi_match_table = dw8250_acpi_match,
 	},
 	.probe			= dw8250_probe,
 	.remove			= dw8250_remove,

@@ -10,9 +10,8 @@
 
 #include <linux/bitops.h>
 #include <linux/module.h>
-#include <linux/of.h>
+#include <linux/mod_devicetable.h>
 #include <linux/spi/spi.h>
-#include <linux/acpi.h>
 
 #define AD5592R_GPIO_READBACK_EN	BIT(10)
 #define AD5592R_LDAC_READBACK_EN	BIT(6)
@@ -133,7 +132,9 @@ static int ad5592r_spi_probe(struct spi_device *spi)
 
 static int ad5592r_spi_remove(struct spi_device *spi)
 {
-	return ad5592r_remove(&spi->dev);
+	ad5592r_remove(&spi->dev);
+
+	return 0;
 }
 
 static const struct spi_device_id ad5592r_spi_ids[] = {
@@ -157,8 +158,8 @@ MODULE_DEVICE_TABLE(acpi, ad5592r_acpi_match);
 static struct spi_driver ad5592r_spi_driver = {
 	.driver = {
 		.name = "ad5592r",
-		.of_match_table = of_match_ptr(ad5592r_of_match),
-		.acpi_match_table = ACPI_PTR(ad5592r_acpi_match),
+		.of_match_table = ad5592r_of_match,
+		.acpi_match_table = ad5592r_acpi_match,
 	},
 	.probe = ad5592r_spi_probe,
 	.remove = ad5592r_spi_remove,

@@ -137,7 +137,7 @@ static int write_sq_ctxts(struct hinic_func_to_io *func_to_io, u16 base_qpn,
 	err = hinic_cmdq_direct_resp(&func_to_io->cmdqs, HINIC_MOD_L2NIC,
 				     IO_CMD_MODIFY_QUEUE_CTXT, &cmdq_buf,
 				     &out_param);
-	if ((err) || (out_param != 0)) {
+	if (err || out_param != 0) {
 		dev_err(&pdev->dev, "Failed to set SQ ctxts\n");
 		err = -EFAULT;
 	}
@@ -181,7 +181,7 @@ static int write_rq_ctxts(struct hinic_func_to_io *func_to_io, u16 base_qpn,
 	err = hinic_cmdq_direct_resp(&func_to_io->cmdqs, HINIC_MOD_L2NIC,
 				     IO_CMD_MODIFY_QUEUE_CTXT, &cmdq_buf,
 				     &out_param);
-	if ((err) || (out_param != 0)) {
+	if (err || out_param != 0) {
 		dev_err(&pdev->dev, "Failed to set RQ ctxts\n");
 		err = -EFAULT;
 	}
@@ -305,6 +305,7 @@ static int init_qp(struct hinic_func_to_io *func_to_io,
 
 	func_to_io->sq_db[q_id] = db_base;
 
+	qp->sq.qid = q_id;
 	err = hinic_init_sq(&qp->sq, hwif, &func_to_io->sq_wq[q_id],
 			    sq_msix_entry,
 			    CI_ADDR(func_to_io->ci_addr_base, q_id),
@@ -314,6 +315,7 @@ static int init_qp(struct hinic_func_to_io *func_to_io,
 		goto err_sq_init;
 	}
 
+	qp->rq.qid = q_id;
 	err = hinic_init_rq(&qp->rq, hwif, &func_to_io->rq_wq[q_id],
 			    rq_msix_entry);
 	if (err) {
@@ -361,8 +363,8 @@ static void destroy_qp(struct hinic_func_to_io *func_to_io,
  * @func_to_io: func to io channel that holds the IO components
  * @base_qpn: base qp number
  * @num_qps: number queue pairs to create
- * @sq_msix_entry: msix entries for sq
- * @rq_msix_entry: msix entries for rq
+ * @sq_msix_entries: msix entries for sq
+ * @rq_msix_entries: msix entries for rq
  *
  * Return 0 - Success, negative - Failure
  **/

@@ -30,10 +30,11 @@ The ``ice`` driver reports the following versions
         PHY, link, etc.
     * - ``fw.mgmt.api``
       - running
-      - 1.5
-      - 2-digit version number of the API exported over the AdminQ by the
-        management firmware. Used by the driver to identify what commands
-        are supported.
+      - 1.5.1
+      - 3-digit version number (major.minor.patch) of the API exported over
+        the AdminQ by the management firmware. Used by the driver to
+        identify what commands are supported. Historical versions of the
+        kernel only displayed a 2-digit version number (major.minor).
     * - ``fw.mgmt.build``
       - running
       - 0x305d955f
@@ -69,6 +70,12 @@ The ``ice`` driver reports the following versions
       - The version of the DDP package that is active in the device. Note
         that both the name (as reported by ``fw.app.name``) and version are
         required to uniquely identify the package.
+    * - ``fw.app.bundle_id``
+      - running
+      - 0xc0000001
+      - Unique identifier for the DDP package loaded in the device. Also
+        referred to as the DDP Track ID. Can be used to uniquely identify
+        the specific DDP package.
     * - ``fw.netlist``
       - running
       - 1.1.2000-6.7.0
@@ -80,6 +87,37 @@ The ``ice`` driver reports the following versions
       - running
       - 0xee16ced7
       - The first 4 bytes of the hash of the netlist module contents.
+
+Flash Update
+============
+
+The ``ice`` driver implements support for flash update using the
+``devlink-flash`` interface. It supports updating the device flash using a
+combined flash image that contains the ``fw.mgmt``, ``fw.undi``, and
+``fw.netlist`` components.
+
+.. list-table:: List of supported overwrite modes
+   :widths: 5 95
+
+   * - Bits
+     - Behavior
+   * - ``DEVLINK_FLASH_OVERWRITE_SETTINGS``
+     - Do not preserve settings stored in the flash components being
+       updated. This includes overwriting the port configuration that
+       determines the number of physical functions the device will
+       initialize with.
+   * - ``DEVLINK_FLASH_OVERWRITE_SETTINGS`` and ``DEVLINK_FLASH_OVERWRITE_IDENTIFIERS``
+     - Do not preserve either settings or identifiers. Overwrite everything
+       in the flash with the contents from the provided image, without
+       performing any preservation. This includes overwriting device
+       identifying fields such as the MAC address, VPD area, and device
+       serial number. It is expected that this combination be used with an
+       image customized for the specific device.
+
+The ice hardware does not support overwriting only identifiers while
+preserving settings, and thus ``DEVLINK_FLASH_OVERWRITE_IDENTIFIERS`` on its
+own will be rejected. If no overwrite mask is provided, the firmware will be
+instructed to preserve all settings and identifying fields when updating.
 
 Regions
 =======
@@ -103,6 +141,10 @@ Users can request an immediate capture of a snapshot via the
 ``DEVLINK_CMD_REGION_NEW``
 
 .. code:: shell
+
+    $ devlink region show
+    pci/0000:01:00.0/nvm-flash: size 10485760 snapshot [] max 1
+    pci/0000:01:00.0/device-caps: size 4096 snapshot [] max 10
 
     $ devlink region new pci/0000:01:00.0/nvm-flash snapshot 1
     $ devlink region dump pci/0000:01:00.0/nvm-flash snapshot 1

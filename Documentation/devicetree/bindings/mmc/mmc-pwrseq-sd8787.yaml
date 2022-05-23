@@ -11,7 +11,9 @@ maintainers:
 
 properties:
   compatible:
-    const: mmc-pwrseq-sd8787
+    enum:
+      - mmc-pwrseq-sd8787
+      - mmc-pwrseq-wilc1000
 
   powerdown-gpios:
     minItems: 1
@@ -27,6 +29,8 @@ required:
   - compatible
   - powerdown-gpios
   - reset-gpios
+
+additionalProperties: false
 
 examples:
   - |

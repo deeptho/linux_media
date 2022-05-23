@@ -20,6 +20,12 @@ struct thread;
 struct auxtrace;
 struct itrace_synth_opts;
 
+struct decomp_data {
+	struct decomp	 *decomp;
+	struct decomp	 *decomp_last;
+	struct zstd_data *zstd_decomp;
+};
+
 struct perf_session {
 	struct perf_header	header;
 	struct machines		machines;
@@ -39,8 +45,8 @@ struct perf_session {
 	u64			bytes_transferred;
 	u64			bytes_compressed;
 	struct zstd_data	zstd_data;
-	struct decomp		*decomp;
-	struct decomp		*decomp_last;
+	struct decomp_data	decomp_data;
+	struct decomp_data	*active_decomp;
 };
 
 struct decomp {
@@ -54,8 +60,16 @@ struct decomp {
 
 struct perf_tool;
 
-struct perf_session *perf_session__new(struct perf_data *data,
-				       bool repipe, struct perf_tool *tool);
+struct perf_session *__perf_session__new(struct perf_data *data,
+					 bool repipe, int repipe_fd,
+					 struct perf_tool *tool);
+
+static inline struct perf_session *perf_session__new(struct perf_data *data,
+						     struct perf_tool *tool)
+{
+	return __perf_session__new(data, false, -1, tool);
+}
+
 void perf_session__delete(struct perf_session *session);
 
 void perf_event_header__bswap(struct perf_event_header *hdr);
@@ -113,7 +127,8 @@ size_t perf_session__fprintf_dsos(struct perf_session *session, FILE *fp);
 size_t perf_session__fprintf_dsos_buildid(struct perf_session *session, FILE *fp,
 					  bool (fn)(struct dso *dso, int parm), int parm);
 
-size_t perf_session__fprintf_nr_events(struct perf_session *session, FILE *fp);
+size_t perf_session__fprintf_nr_events(struct perf_session *session, FILE *fp,
+				       bool skip_empty);
 
 struct evsel *perf_session__find_first_evtype(struct perf_session *session,
 					    unsigned int type);

@@ -1,8 +1,8 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Datapath implementation.
+ * Data transmitting implementation.
  *
- * Copyright (c) 2017-2019, Silicon Laboratories, Inc.
+ * Copyright (c) 2017-2020, Silicon Laboratories, Inc.
  * Copyright (c) 2010, ST-Ericsson
  */
 #ifndef WFX_DATA_TX_H
@@ -27,7 +27,7 @@ struct tx_policy {
 
 struct tx_policy_cache {
 	struct tx_policy cache[HIF_TX_RETRY_POLICY_MAX];
-	// FIXME: use a trees and drop hash from tx_policy
+	/* FIXME: use a trees and drop hash from tx_policy */
 	struct list_head used;
 	struct list_head free;
 	spinlock_t lock;
@@ -35,8 +35,8 @@ struct tx_policy_cache {
 
 struct wfx_tx_priv {
 	ktime_t xmit_timestamp;
-	struct ieee80211_key_conf *hw_key;
-} __packed;
+	unsigned char icv_size;
+};
 
 void wfx_tx_policy_init(struct wfx_vif *wvif);
 void wfx_tx_policy_upload_work(struct work_struct *work);
@@ -65,4 +65,4 @@ static inline struct hif_req_tx *wfx_skb_txreq(struct sk_buff *skb)
 	return req;
 }
 
-#endif /* WFX_DATA_TX_H */
+#endif

@@ -159,8 +159,8 @@ static const struct nla_policy entry_policy[TCA_GATE_ENTRY_MAX + 1] = {
 };
 
 static const struct nla_policy gate_policy[TCA_GATE_MAX + 1] = {
-	[TCA_GATE_PARMS]		= { .len = sizeof(struct tc_gate),
-					    .type = NLA_EXACT_LEN },
+	[TCA_GATE_PARMS]		=
+		NLA_POLICY_EXACT_LEN(sizeof(struct tc_gate)),
 	[TCA_GATE_PRIORITY]		= { .type = NLA_S32 },
 	[TCA_GATE_ENTRY_LIST]		= { .type = NLA_NESTED },
 	[TCA_GATE_BASE_TIME]		= { .type = NLA_U64 },
@@ -295,12 +295,12 @@ static void gate_setup_timer(struct tcf_gate *gact, u64 basetime,
 
 static int tcf_gate_init(struct net *net, struct nlattr *nla,
 			 struct nlattr *est, struct tc_action **a,
-			 int ovr, int bind, bool rtnl_held,
 			 struct tcf_proto *tp, u32 flags,
 			 struct netlink_ext_ack *extack)
 {
 	struct tc_action_net *tn = net_generic(net, gate_net_id);
 	enum tk_offsets tk_offset = TK_OFFS_TAI;
+	bool bind = flags & TCA_ACT_FLAGS_BIND;
 	struct nlattr *tb[TCA_GATE_MAX + 1];
 	struct tcf_chain *goto_ch = NULL;
 	u64 cycletime = 0, basetime = 0;
@@ -364,7 +364,7 @@ static int tcf_gate_init(struct net *net, struct nlattr *nla,
 		}
 
 		ret = ACT_P_CREATED;
-	} else if (!ovr) {
+	} else if (!(flags & TCA_ACT_FLAGS_REPLACE)) {
 		tcf_idr_release(*a, bind);
 		return -EEXIST;
 	}
@@ -436,9 +436,6 @@ static int tcf_gate_init(struct net *net, struct nlattr *nla,
 
 	if (goto_ch)
 		tcf_chain_put_by_act(goto_ch);
-
-	if (ret == ACT_P_CREATED)
-		tcf_idr_insert(tn, *a);
 
 	return ret;
 

@@ -460,7 +460,7 @@ static void set_event_from_interrupt(struct kfd_process *p,
 	}
 }
 
-void kfd_signal_event_interrupt(unsigned int pasid, uint32_t partial_id,
+void kfd_signal_event_interrupt(u32 pasid, uint32_t partial_id,
 				uint32_t valid_id_bits)
 {
 	struct kfd_event *ev = NULL;
@@ -872,7 +872,7 @@ static void lookup_events_by_type_and_signal(struct kfd_process *p,
 }
 
 #ifdef KFD_SUPPORT_IOMMU_V2
-void kfd_signal_iommu_event(struct kfd_dev *dev, unsigned int pasid,
+void kfd_signal_iommu_event(struct kfd_dev *dev, u32 pasid,
 		unsigned long address, bool is_write_requested,
 		bool is_execute_requested)
 {
@@ -950,7 +950,7 @@ void kfd_signal_iommu_event(struct kfd_dev *dev, unsigned int pasid,
 }
 #endif /* KFD_SUPPORT_IOMMU_V2 */
 
-void kfd_signal_hw_exception_event(unsigned int pasid)
+void kfd_signal_hw_exception_event(u32 pasid)
 {
 	/*
 	 * Because we are called from arbitrary context (workqueue) as opposed
@@ -971,7 +971,7 @@ void kfd_signal_hw_exception_event(unsigned int pasid)
 	kfd_unref_process(p);
 }
 
-void kfd_signal_vm_fault_event(struct kfd_dev *dev, unsigned int pasid,
+void kfd_signal_vm_fault_event(struct kfd_dev *dev, u32 pasid,
 				struct kfd_vm_fault_info *info)
 {
 	struct kfd_event *ev;
@@ -1049,4 +1049,45 @@ void kfd_signal_reset_event(struct kfd_dev *dev)
 		mutex_unlock(&p->event_mutex);
 	}
 	srcu_read_unlock(&kfd_processes_srcu, idx);
+}
+
+void kfd_signal_poison_consumed_event(struct kfd_dev *dev, u32 pasid)
+{
+	struct kfd_process *p = kfd_lookup_process_by_pasid(pasid);
+	struct kfd_hsa_memory_exception_data memory_exception_data;
+	struct kfd_hsa_hw_exception_data hw_exception_data;
+	struct kfd_event *ev;
+	uint32_t id = KFD_FIRST_NONSIGNAL_EVENT_ID;
+
+	if (!p)
+		return; /* Presumably process exited. */
+
+	memset(&hw_exception_data, 0, sizeof(hw_exception_data));
+	hw_exception_data.gpu_id = dev->id;
+	hw_exception_data.memory_lost = 1;
+	hw_exception_data.reset_cause = KFD_HW_EXCEPTION_ECC;
+
+	memset(&memory_exception_data, 0, sizeof(memory_exception_data));
+	memory_exception_data.ErrorType = KFD_MEM_ERR_POISON_CONSUMED;
+	memory_exception_data.gpu_id = dev->id;
+	memory_exception_data.failure.imprecise = true;
+
+	mutex_lock(&p->event_mutex);
+	idr_for_each_entry_continue(&p->event_idr, ev, id) {
+		if (ev->type == KFD_EVENT_TYPE_HW_EXCEPTION) {
+			ev->hw_exception_data = hw_exception_data;
+			set_event(ev);
+		}
+
+		if (ev->type == KFD_EVENT_TYPE_MEMORY) {
+			ev->memory_exception_data = memory_exception_data;
+			set_event(ev);
+		}
+	}
+	mutex_unlock(&p->event_mutex);
+
+	/* user application will handle SIGBUS signal */
+	send_sig(SIGBUS, p->lead_thread, 0);
+
+	kfd_unref_process(p);
 }

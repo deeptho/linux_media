@@ -1,3 +1,5 @@
+.. _elf_hwcaps_index:
+
 ================
 ARM64 ELF hwcaps
 ================
@@ -72,7 +74,7 @@ HWCAP_ASIMD
 
 HWCAP_EVTSTRM
     The generic timer is configured to generate events at a frequency of
-    approximately 100KHz.
+    approximately 10KHz.
 
 HWCAP_AES
     Functionality implied by ID_AA64ISAR0_EL1.AES == 0b0001.
@@ -240,6 +242,14 @@ HWCAP2_BTI
 
     Functionality implied by ID_AA64PFR0_EL1.BT == 0b0001.
 
+HWCAP2_MTE
+
+    Functionality implied by ID_AA64PFR1_EL1.MTE == 0b0010, as described
+    by Documentation/arm64/memory-tagging-extension.rst.
+
+HWCAP2_ECV
+
+    Functionality implied by ID_AA64MMFR0_EL1.ECV == 0b0001.
 
 4. Unused AT_HWCAP bits
 -----------------------

@@ -117,15 +117,7 @@ static const char stats_strings[][ETH_GSTRING_LEN] = {
 	"vlan_insertions        ",
 	"gro_packets            ",
 	"gro_merged             ",
-};
-
-static char adapter_stats_strings[][ETH_GSTRING_LEN] = {
-	"db_drop                ",
-	"db_full                ",
-	"db_empty               ",
-	"write_coal_success     ",
-	"write_coal_fail        ",
-#ifdef CONFIG_CHELSIO_TLS_DEVICE
+#if  IS_ENABLED(CONFIG_CHELSIO_TLS_DEVICE)
 	"tx_tls_encrypted_packets",
 	"tx_tls_encrypted_bytes  ",
 	"tx_tls_ctx              ",
@@ -134,6 +126,14 @@ static char adapter_stats_strings[][ETH_GSTRING_LEN] = {
 	"tx_tls_drop_no_sync_data",
 	"tx_tls_drop_bypass_req  ",
 #endif
+};
+
+static char adapter_stats_strings[][ETH_GSTRING_LEN] = {
+	"db_drop                ",
+	"db_full                ",
+	"db_empty               ",
+	"write_coal_success     ",
+	"write_coal_fail        ",
 };
 
 static char loopback_stats_strings[][ETH_GSTRING_LEN] = {
@@ -257,15 +257,7 @@ struct queue_port_stats {
 	u64 vlan_ins;
 	u64 gro_pkts;
 	u64 gro_merged;
-};
-
-struct adapter_stats {
-	u64 db_drop;
-	u64 db_full;
-	u64 db_empty;
-	u64 wc_success;
-	u64 wc_fail;
-#ifdef CONFIG_CHELSIO_TLS_DEVICE
+#if IS_ENABLED(CONFIG_CHELSIO_TLS_DEVICE)
 	u64 tx_tls_encrypted_packets;
 	u64 tx_tls_encrypted_bytes;
 	u64 tx_tls_ctx;
@@ -276,12 +268,23 @@ struct adapter_stats {
 #endif
 };
 
+struct adapter_stats {
+	u64 db_drop;
+	u64 db_full;
+	u64 db_empty;
+	u64 wc_success;
+	u64 wc_fail;
+};
+
 static void collect_sge_port_stats(const struct adapter *adap,
 				   const struct port_info *p,
 				   struct queue_port_stats *s)
 {
 	const struct sge_eth_txq *tx = &adap->sge.ethtxq[p->first_qset];
 	const struct sge_eth_rxq *rx = &adap->sge.ethrxq[p->first_qset];
+#if IS_ENABLED(CONFIG_CHELSIO_TLS_DEVICE)
+	const struct ch_ktls_port_stats_debug *ktls_stats;
+#endif
 	struct sge_eohw_txq *eohw_tx;
 	unsigned int i;
 
@@ -306,6 +309,21 @@ static void collect_sge_port_stats(const struct adapter *adap,
 			s->vlan_ins += eohw_tx->vlan_ins;
 		}
 	}
+#if IS_ENABLED(CONFIG_CHELSIO_TLS_DEVICE)
+	ktls_stats = &adap->ch_ktls_stats.ktls_port[p->port_id];
+	s->tx_tls_encrypted_packets =
+		atomic64_read(&ktls_stats->ktls_tx_encrypted_packets);
+	s->tx_tls_encrypted_bytes =
+		atomic64_read(&ktls_stats->ktls_tx_encrypted_bytes);
+	s->tx_tls_ctx = atomic64_read(&ktls_stats->ktls_tx_ctx);
+	s->tx_tls_ooo = atomic64_read(&ktls_stats->ktls_tx_ooo);
+	s->tx_tls_skip_no_sync_data =
+		atomic64_read(&ktls_stats->ktls_tx_skip_no_sync_data);
+	s->tx_tls_drop_no_sync_data =
+		atomic64_read(&ktls_stats->ktls_tx_drop_no_sync_data);
+	s->tx_tls_drop_bypass_req =
+		atomic64_read(&ktls_stats->ktls_tx_drop_bypass_req);
+#endif
 }
 
 static void collect_adapter_stats(struct adapter *adap, struct adapter_stats *s)
@@ -1129,7 +1147,9 @@ static int set_dbqtimer_tickval(struct net_device *dev,
 }
 
 static int set_coalesce(struct net_device *dev,
-			struct ethtool_coalesce *coalesce)
+			struct ethtool_coalesce *coalesce,
+			struct kernel_ethtool_coalesce *kernel_coal,
+			struct netlink_ext_ack *extack)
 {
 	int ret;
 
@@ -1145,7 +1165,9 @@ static int set_coalesce(struct net_device *dev,
 				    coalesce->tx_coalesce_usecs);
 }
 
-static int get_coalesce(struct net_device *dev, struct ethtool_coalesce *c)
+static int get_coalesce(struct net_device *dev, struct ethtool_coalesce *c,
+			struct kernel_ethtool_coalesce *kernel_coal,
+			struct netlink_ext_ack *extack)
 {
 	const struct port_info *pi = netdev_priv(dev);
 	const struct adapter *adap = pi->adapter;
@@ -1319,13 +1341,27 @@ static int cxgb4_ethtool_flash_phy(struct net_device *netdev,
 		return ret;
 	}
 
-	spin_lock_bh(&adap->win0_lock);
-	ret = t4_load_phy_fw(adap, MEMWIN_NIC, NULL, data, size);
-	spin_unlock_bh(&adap->win0_lock);
-	if (ret)
-		dev_err(adap->pdev_dev, "Failed to load PHY FW\n");
+	/* We have to RESET the chip/firmware because we need the
+	 * chip in uninitialized state for loading new PHY image.
+	 * Otherwise, the running firmware will only store the PHY
+	 * image in local RAM which will be lost after next reset.
+	 */
+	ret = t4_fw_reset(adap, adap->mbox, PIORSTMODE_F | PIORST_F);
+	if (ret < 0) {
+		dev_err(adap->pdev_dev,
+			"Set FW to RESET for flashing PHY FW failed. ret: %d\n",
+			ret);
+		return ret;
+	}
 
-	return ret;
+	ret = t4_load_phy_fw(adap, MEMWIN_NIC, NULL, data, size);
+	if (ret < 0) {
+		dev_err(adap->pdev_dev, "Failed to load PHY FW. ret: %d\n",
+			ret);
+		return ret;
+	}
+
+	return 0;
 }
 
 static int cxgb4_ethtool_flash_fw(struct net_device *netdev,
@@ -1592,16 +1628,14 @@ static struct filter_entry *cxgb4_get_filter_entry(struct adapter *adap,
 						   u32 ftid)
 {
 	struct tid_info *t = &adap->tids;
-	struct filter_entry *f;
 
-	if (ftid < t->nhpftids)
-		f = &adap->tids.hpftid_tab[ftid];
-	else if (ftid < t->nftids)
-		f = &adap->tids.ftid_tab[ftid - t->nhpftids];
-	else
-		f = lookup_tid(&adap->tids, ftid);
+	if (ftid >= t->hpftid_base && ftid < t->hpftid_base + t->nhpftids)
+		return &t->hpftid_tab[ftid - t->hpftid_base];
 
-	return f;
+	if (ftid >= t->ftid_base && ftid < t->ftid_base + t->nftids)
+		return &t->ftid_tab[ftid - t->ftid_base];
+
+	return lookup_tid(t, ftid);
 }
 
 static void cxgb4_fill_filter_rule(struct ethtool_rx_flow_spec *fs,
@@ -1808,6 +1842,11 @@ static int cxgb4_ntuple_del_filter(struct net_device *dev,
 	filter_id = filter_info->loc_array[cmd->fs.location];
 	f = cxgb4_get_filter_entry(adapter, filter_id);
 
+	if (f->fs.prio)
+		filter_id -= adapter->tids.hpftid_base;
+	else if (!f->fs.hash)
+		filter_id -= (adapter->tids.ftid_base - adapter->tids.nhpftids);
+
 	ret = cxgb4_flow_rule_destroy(dev, f->fs.tc_prio, &f->fs, filter_id);
 	if (ret)
 		goto err;
@@ -1866,6 +1905,11 @@ static int cxgb4_ntuple_set_filter(struct net_device *netdev,
 		goto free;
 
 	filter_info = &adapter->ethtool_filters->port[pi->port_id];
+
+	if (fs.prio)
+		tid += adapter->tids.hpftid_base;
+	else if (!fs.hash)
+		tid += (adapter->tids.ftid_base - adapter->tids.nhpftids);
 
 	filter_info->loc_array[cmd->fs.location] = tid;
 	set_bit(cmd->fs.location, filter_info->bmap);
@@ -1971,12 +2015,15 @@ static int cxgb4_get_module_info(struct net_device *dev,
 		if (ret)
 			return ret;
 
-		if (!sff8472_comp || (sff_diag_type & 4)) {
+		if (!sff8472_comp || (sff_diag_type & SFP_DIAG_ADDRMODE)) {
 			modinfo->type = ETH_MODULE_SFF_8079;
 			modinfo->eeprom_len = ETH_MODULE_SFF_8079_LEN;
 		} else {
 			modinfo->type = ETH_MODULE_SFF_8472;
-			modinfo->eeprom_len = ETH_MODULE_SFF_8472_LEN;
+			if (sff_diag_type & SFP_DIAG_IMPLEMENTED)
+				modinfo->eeprom_len = ETH_MODULE_SFF_8472_LEN;
+			else
+				modinfo->eeprom_len = ETH_MODULE_SFF_8472_LEN / 2;
 		}
 		break;
 

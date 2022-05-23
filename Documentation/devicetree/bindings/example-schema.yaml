@@ -81,6 +81,8 @@ properties:
     maxItems: 1
     description: bus clock. A description is only needed for a single item if
       there's something unique to add.
+      The items should have a fixed order, so pattern matching names are
+      discouraged.
 
   clock-names:
     items:
@@ -89,7 +91,6 @@ properties:
   interrupts:
     # Either 1 or 2 interrupts can be present
     minItems: 1
-    maxItems: 2
     items:
       - description: tx or combined interrupt
       - description: rx interrupt
@@ -97,11 +98,12 @@ properties:
       A variable number of interrupts warrants a description of what conditions
       affect the number of interrupts. Otherwise, descriptions on standard
       properties are not necessary.
+      The items should have a fixed order, so pattern matching names are
+      discouraged.
 
   interrupt-names:
     # minItems must be specified here because the default would be 2
     minItems: 1
-    maxItems: 2
     items:
       - const: tx irq
       - const: rx irq
@@ -117,7 +119,7 @@ properties:
     # valid for this binding.
 
   clock-frequency:
-    # The type is set in the core schema. Per device schema only need to set
+    # The type is set in the core schema. Per-device schema only need to set
     # constraints on the possible values.
     minimum: 100
     maximum: 400000
@@ -131,24 +133,24 @@ properties:
   # *-supply is always a single phandle, so nothing more to define.
   foo-supply: true
 
-  # Vendor specific properties
+  # Vendor-specific properties
   #
-  # Vendor specific properties have slightly different schema requirements than
+  # Vendor-specific properties have slightly different schema requirements than
   # common properties. They must have at least a type definition and
   # 'description'.
   vendor,int-property:
-    description: Vendor specific properties must have a description
+    description: Vendor-specific properties must have a description
     $ref: /schemas/types.yaml#/definitions/uint32
     enum: [2, 4, 6, 8, 10]
 
   vendor,bool-property:
-    description: Vendor specific properties must have a description. Boolean
+    description: Vendor-specific properties must have a description. Boolean
       properties are one case where the json-schema 'type' keyword can be used
       directly.
     type: boolean
 
   vendor,string-array-property:
-    description: Vendor specific properties should reference a type in the
+    description: Vendor-specific properties should reference a type in the
       core schema.
     $ref: /schemas/types.yaml#/definitions/string-array
     items:
@@ -156,7 +158,7 @@ properties:
       - enum: [baz, boo]
 
   vendor,property-in-standard-units-microvolt:
-    description: Vendor specific properties having a standard unit suffix
+    description: Vendor-specific properties having a standard unit suffix
       don't need a type.
     enum: [ 100, 200, 300 ]
 
@@ -196,14 +198,24 @@ required:
 #
 # If the conditionals become too unweldy, then it may be better to just split
 # the binding into separate schema documents.
-if:
-  properties:
-    compatible:
-      contains:
-        const: vendor,soc2-ip
-then:
-  required:
-    - foo-supply
+allOf:
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: vendor,soc2-ip
+    then:
+      required:
+        - foo-supply
+  # Altering schema depending on presence of properties is usually done by
+  # dependencies (see above), however some adjustments might require if:
+  - if:
+      required:
+        - vendor,bool-property
+    then:
+      properties:
+        vendor,int-property:
+          enum: [2, 4, 6]
 
 # Ideally, the schema should have this line otherwise any other properties
 # present are allowed. There's a few common properties such as 'status' and
@@ -211,6 +223,9 @@ then:
 #
 # This can't be used in cases where another schema is referenced
 # (i.e. allOf: [{$ref: ...}]).
+# If and only if another schema is referenced and arbitrary children nodes can
+# appear, "unevaluatedProperties: false" could be used.  A typical example is
+# an I2C controller where no name pattern matching for children can be added.
 additionalProperties: false
 
 examples:

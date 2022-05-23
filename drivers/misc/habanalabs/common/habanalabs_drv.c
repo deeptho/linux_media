@@ -11,6 +11,7 @@
 #include "habanalabs.h"
 
 #include <linux/pci.h>
+#include <linux/aer.h>
 #include <linux/module.h>
 
 #define HL_DRIVER_AUTHOR	"HabanaLabs Kernel Driver Team"
@@ -26,25 +27,37 @@ static struct class *hl_class;
 static DEFINE_IDR(hl_devs_idr);
 static DEFINE_MUTEX(hl_devs_idr_lock);
 
-static int timeout_locked = 5;
+static int timeout_locked = 30;
 static int reset_on_lockup = 1;
+static int memory_scrub;
+static ulong boot_error_status_mask = ULONG_MAX;
 
 module_param(timeout_locked, int, 0444);
 MODULE_PARM_DESC(timeout_locked,
-	"Device lockup timeout in seconds (0 = disabled, default 5s)");
+	"Device lockup timeout in seconds (0 = disabled, default 30s)");
 
 module_param(reset_on_lockup, int, 0444);
 MODULE_PARM_DESC(reset_on_lockup,
 	"Do device reset on lockup (0 = no, 1 = yes, default yes)");
 
+module_param(memory_scrub, int, 0444);
+MODULE_PARM_DESC(memory_scrub,
+	"Scrub device memory in various states (0 = no, 1 = yes, default no)");
+
+module_param(boot_error_status_mask, ulong, 0444);
+MODULE_PARM_DESC(boot_error_status_mask,
+	"Mask of the error status during device CPU boot (If bitX is cleared then error X is masked. Default all 1's)");
+
 #define PCI_VENDOR_ID_HABANALABS	0x1da3
 
 #define PCI_IDS_GOYA			0x0001
 #define PCI_IDS_GAUDI			0x1000
+#define PCI_IDS_GAUDI_SEC		0x1010
 
 static const struct pci_device_id ids[] = {
 	{ PCI_DEVICE(PCI_VENDOR_ID_HABANALABS, PCI_IDS_GOYA), },
 	{ PCI_DEVICE(PCI_VENDOR_ID_HABANALABS, PCI_IDS_GAUDI), },
+	{ PCI_DEVICE(PCI_VENDOR_ID_HABANALABS, PCI_IDS_GAUDI_SEC), },
 	{ 0, }
 };
 MODULE_DEVICE_TABLE(pci, ids);
@@ -68,12 +81,25 @@ static enum hl_asic_type get_asic_type(u16 device)
 	case PCI_IDS_GAUDI:
 		asic_type = ASIC_GAUDI;
 		break;
+	case PCI_IDS_GAUDI_SEC:
+		asic_type = ASIC_GAUDI_SEC;
+		break;
 	default:
 		asic_type = ASIC_INVALID;
 		break;
 	}
 
 	return asic_type;
+}
+
+static bool is_asic_secured(enum hl_asic_type asic_type)
+{
+	switch (asic_type) {
+	case ASIC_GAUDI_SEC:
+		return true;
+	default:
+		return false;
+	}
 }
 
 /*
@@ -86,6 +112,7 @@ static enum hl_asic_type get_asic_type(u16 device)
  */
 int hl_device_open(struct inode *inode, struct file *filp)
 {
+	enum hl_device_status status;
 	struct hl_device *hdev;
 	struct hl_fpriv *hpriv;
 	int rc;
@@ -114,14 +141,14 @@ int hl_device_open(struct inode *inode, struct file *filp)
 	hl_cb_mgr_init(&hpriv->cb_mgr);
 	hl_ctx_mgr_init(&hpriv->ctx_mgr);
 
-	hpriv->taskpid = find_get_pid(current->pid);
+	hpriv->taskpid = get_task_pid(current, PIDTYPE_PID);
 
 	mutex_lock(&hdev->fpriv_list_lock);
 
-	if (hl_device_disabled_or_in_reset(hdev)) {
+	if (!hl_device_operational(hdev, &status)) {
 		dev_err_ratelimited(hdev->dev,
-			"Can't open %s because it is disabled or in reset\n",
-			dev_name(hdev->dev));
+			"Can't open %s because it is %s\n",
+			dev_name(hdev->dev), hdev->status[status]);
 		rc = -EPERM;
 		goto out_err;
 	}
@@ -160,11 +187,13 @@ int hl_device_open(struct inode *inode, struct file *filp)
 
 	hl_debugfs_add_file(hpriv);
 
+	hdev->open_counter++;
+	hdev->last_successful_open_jif = jiffies;
+
 	return 0;
 
 out_err:
 	mutex_unlock(&hdev->fpriv_list_lock);
-
 	hl_cb_mgr_fini(hpriv->hdev, &hpriv->cb_mgr);
 	hl_ctx_mgr_fini(hpriv->hdev, &hpriv->ctx_mgr);
 	filp->private_data = NULL;
@@ -196,9 +225,20 @@ int hl_device_open_ctrl(struct inode *inode, struct file *filp)
 	if (!hpriv)
 		return -ENOMEM;
 
+	/* Prevent other routines from reading partial hpriv data by
+	 * initializing hpriv fields before inserting it to the list
+	 */
+	hpriv->hdev = hdev;
+	filp->private_data = hpriv;
+	hpriv->filp = filp;
+	hpriv->is_control = true;
+	nonseekable_open(inode, filp);
+
+	hpriv->taskpid = find_get_pid(current->pid);
+
 	mutex_lock(&hdev->fpriv_list_lock);
 
-	if (hl_device_disabled_or_in_reset(hdev)) {
+	if (!hl_device_operational(hdev, NULL)) {
 		dev_err_ratelimited(hdev->dev_ctrl,
 			"Can't open %s because it is disabled or in reset\n",
 			dev_name(hdev->dev_ctrl));
@@ -209,37 +249,34 @@ int hl_device_open_ctrl(struct inode *inode, struct file *filp)
 	list_add(&hpriv->dev_node, &hdev->fpriv_list);
 	mutex_unlock(&hdev->fpriv_list_lock);
 
-	hpriv->hdev = hdev;
-	filp->private_data = hpriv;
-	hpriv->filp = filp;
-	hpriv->is_control = true;
-	nonseekable_open(inode, filp);
-
-	hpriv->taskpid = find_get_pid(current->pid);
-
 	return 0;
 
 out_err:
 	mutex_unlock(&hdev->fpriv_list_lock);
+	filp->private_data = NULL;
+	put_pid(hpriv->taskpid);
+
 	kfree(hpriv);
+
 	return rc;
 }
 
 static void set_driver_behavior_per_device(struct hl_device *hdev)
 {
-	hdev->mmu_enable = 1;
-	hdev->cpu_enable = 1;
-	hdev->fw_loading = 1;
+	hdev->fw_components = FW_TYPE_ALL_TYPES;
 	hdev->cpu_queues_enable = 1;
 	hdev->heartbeat = 1;
+	hdev->mmu_enable = 1;
 	hdev->clock_gating_mask = ULONG_MAX;
-
-	hdev->reset_pcilink = 0;
-	hdev->axi_drain = 0;
 	hdev->sram_scrambler_enable = 1;
 	hdev->dram_scrambler_enable = 1;
 	hdev->bmc_enable = 1;
 	hdev->hard_reset_on_fw_events = 1;
+	hdev->reset_on_preboot_fail = 1;
+	hdev->reset_if_device_not_idle = 1;
+
+	hdev->reset_pcilink = 0;
+	hdev->axi_drain = 0;
 }
 
 /*
@@ -280,11 +317,36 @@ int create_hdev(struct hl_device **dev, struct pci_dev *pdev,
 		hdev->asic_type = asic_type;
 	}
 
+	if (pdev)
+		hdev->asic_prop.fw_security_enabled =
+					is_asic_secured(hdev->asic_type);
+	else
+		hdev->asic_prop.fw_security_enabled = false;
+
+	/* Assign status description string */
+	strncpy(hdev->status[HL_DEVICE_STATUS_OPERATIONAL],
+					"operational", HL_STR_MAX);
+	strncpy(hdev->status[HL_DEVICE_STATUS_IN_RESET],
+					"in reset", HL_STR_MAX);
+	strncpy(hdev->status[HL_DEVICE_STATUS_MALFUNCTION],
+					"disabled", HL_STR_MAX);
+	strncpy(hdev->status[HL_DEVICE_STATUS_NEEDS_RESET],
+					"needs reset", HL_STR_MAX);
+	strncpy(hdev->status[HL_DEVICE_STATUS_IN_DEVICE_CREATION],
+					"in device creation", HL_STR_MAX);
+
 	hdev->major = hl_major;
 	hdev->reset_on_lockup = reset_on_lockup;
+	hdev->memory_scrub = memory_scrub;
+	hdev->boot_error_status_mask = boot_error_status_mask;
+	hdev->stop_on_err = true;
+
 	hdev->pldm = 0;
 
 	set_driver_behavior_per_device(hdev);
+
+	hdev->curr_reset_cause = HL_RESET_CAUSE_UNKNOWN;
+	hdev->prev_reset_trigger = HL_RESET_TRIGGER_DEFAULT;
 
 	if (timeout_locked)
 		hdev->timeout_jiffies = msecs_to_jiffies(timeout_locked * 1000);
@@ -408,6 +470,8 @@ static int hl_pci_probe(struct pci_dev *pdev,
 
 	pci_set_drvdata(pdev, hdev);
 
+	pci_enable_pcie_error_reporting(pdev);
+
 	rc = hl_device_init(hdev, hl_class);
 	if (rc) {
 		dev_err(&pdev->dev, "Fatal error during habanalabs device init\n");
@@ -418,6 +482,7 @@ static int hl_pci_probe(struct pci_dev *pdev,
 	return 0;
 
 disable_device:
+	pci_disable_pcie_error_reporting(pdev);
 	pci_set_drvdata(pdev, NULL);
 	destroy_hdev(hdev);
 
@@ -440,9 +505,73 @@ static void hl_pci_remove(struct pci_dev *pdev)
 		return;
 
 	hl_device_fini(hdev);
+	pci_disable_pcie_error_reporting(pdev);
 	pci_set_drvdata(pdev, NULL);
-
 	destroy_hdev(hdev);
+}
+
+/**
+ * hl_pci_err_detected - a PCI bus error detected on this device
+ *
+ * @pdev: pointer to pci device
+ * @state: PCI error type
+ *
+ * Called by the PCI subsystem whenever a non-correctable
+ * PCI bus error is detected
+ */
+static pci_ers_result_t
+hl_pci_err_detected(struct pci_dev *pdev, pci_channel_state_t state)
+{
+	struct hl_device *hdev = pci_get_drvdata(pdev);
+	enum pci_ers_result result;
+
+	switch (state) {
+	case pci_channel_io_normal:
+		return PCI_ERS_RESULT_CAN_RECOVER;
+
+	case pci_channel_io_frozen:
+		dev_warn(hdev->dev, "frozen state error detected\n");
+		result = PCI_ERS_RESULT_NEED_RESET;
+		break;
+
+	case pci_channel_io_perm_failure:
+		dev_warn(hdev->dev, "failure state error detected\n");
+		result = PCI_ERS_RESULT_DISCONNECT;
+		break;
+
+	default:
+		result = PCI_ERS_RESULT_NONE;
+	}
+
+	hdev->asic_funcs->halt_engines(hdev, true, false);
+
+	return result;
+}
+
+/**
+ * hl_pci_err_resume - resume after a PCI slot reset
+ *
+ * @pdev: pointer to pci device
+ *
+ */
+static void hl_pci_err_resume(struct pci_dev *pdev)
+{
+	struct hl_device *hdev = pci_get_drvdata(pdev);
+
+	dev_warn(hdev->dev, "Resuming device after PCI slot reset\n");
+	hl_device_resume(hdev);
+}
+
+/**
+ * hl_pci_err_slot_reset - a PCI slot reset has just happened
+ *
+ * @pdev: pointer to pci device
+ *
+ * Determine if the driver can recover from the PCI slot reset
+ */
+static pci_ers_result_t hl_pci_err_slot_reset(struct pci_dev *pdev)
+{
+	return PCI_ERS_RESULT_RECOVERED;
 }
 
 static const struct dev_pm_ops hl_pm_ops = {
@@ -450,12 +579,24 @@ static const struct dev_pm_ops hl_pm_ops = {
 	.resume = hl_pmops_resume,
 };
 
+static const struct pci_error_handlers hl_pci_err_handler = {
+	.error_detected = hl_pci_err_detected,
+	.slot_reset = hl_pci_err_slot_reset,
+	.resume = hl_pci_err_resume,
+};
+
 static struct pci_driver hl_pci_driver = {
 	.name = HL_NAME,
 	.id_table = ids,
 	.probe = hl_pci_probe,
 	.remove = hl_pci_remove,
-	.driver.pm = &hl_pm_ops,
+	.shutdown = hl_pci_remove,
+	.driver = {
+		.name = HL_NAME,
+		.pm = &hl_pm_ops,
+		.probe_type = PROBE_PREFER_ASYNCHRONOUS,
+	},
+	.err_handler = &hl_pci_err_handler,
 };
 
 /*

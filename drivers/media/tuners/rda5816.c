@@ -4,7 +4,7 @@
 struct rda5816_priv{
 	struct i2c_adapter*i2c;
 	struct rda5816_config*cfg;
-
+	bool init_done;
 };
 
 /* write multiple (continuous) registers */
@@ -68,9 +68,12 @@ static int rda5816_rd(struct rda5816_priv *priv, u8 addr, u8 *data)
 static int rda5816_init(struct dvb_frontend *fe)
 {
 	struct rda5816_priv *priv = fe->tuner_priv;
-	dev_dbg(&priv->i2c->dev,"%s()\n",__func__);
 	u8 buffer;
+	dev_dbg(&priv->i2c->dev,"%s()\n",__func__);
 
+
+	if(priv->init_done)
+		return 0;
 	 msleep(1);  //Wait 1ms. 
 
 	 // Chip register soft reset	 
@@ -282,7 +285,8 @@ static int rda5816_init(struct dvb_frontend *fe)
 	  rda5816_wr(priv,0x65,(buffer&0xF9)); 
 	  priv->cfg->i2c_adr=0x8;
 	}
-
+	priv->init_done = 1;
+	
 	return 0;
 
 }
@@ -290,10 +294,10 @@ static int rda5816_set_params(struct dvb_frontend *fe)
 {
 	struct rda5816_priv *priv = fe->tuner_priv;
 	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
-	u32 fPLL, bw,fSym,temp_value = 0;;
 	u8 buffer; 
 	u8 Filter_bw_control_bit;	
 	int i;
+	u32 fPLL, bw,fSym,temp_value = 0;
 
 	dev_dbg(&priv->i2c->dev, "%s() delivery_system=%d frequency=%d " \
 			"symbol_rate=%d\n", __func__,
@@ -476,7 +480,7 @@ struct dvb_frontend *rda5816_attach(struct dvb_frontend *fe,
 
 	priv->cfg = cfg;
 	priv->i2c = i2c;
-
+	priv->init_done = 0;
 	dev_info(&priv->i2c->dev,
 		"%s: RDA5816 successfully attached\n",
 		KBUILD_MODNAME);

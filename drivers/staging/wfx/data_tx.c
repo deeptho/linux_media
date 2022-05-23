@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Datapath implementation.
+ * Data transmitting implementation.
  *
- * Copyright (c) 2017-2019, Silicon Laboratories, Inc.
+ * Copyright (c) 2017-2020, Silicon Laboratories, Inc.
  * Copyright (c) 2010, ST-Ericsson
  */
 #include <net/mac80211.h>
@@ -31,9 +31,14 @@ static int wfx_get_hw_rate(struct wfx_dev *wdev,
 		}
 		return rate->idx + 14;
 	}
-	// WFx only support 2GHz, else band information should be retrieved
-	// from ieee80211_tx_info
+	/* The device only support 2GHz, else band information should be
+	 * retrieved from ieee80211_tx_info
+	 */
 	band = wdev->hw->wiphy->bands[NL80211_BAND_2GHZ];
+	if (rate->idx >= band->n_bitrates) {
+		WARN(1, "wrong rate->idx value: %d", rate->idx);
+		return -1;
+	}
 	return band->bitrates[rate->idx].hw_value;
 }
 
@@ -53,7 +58,7 @@ static void wfx_tx_policy_build(struct wfx_vif *wvif, struct tx_policy *policy,
 			break;
 		WARN_ON(rates[i].count > 15);
 		rateid = wfx_get_hw_rate(wdev, &rates[i]);
-		// Pack two values in each byte of policy->rates
+		/* Pack two values in each byte of policy->rates */
 		count = rates[i].count;
 		if (rateid % 2)
 			count <<= 4;
@@ -104,6 +109,7 @@ static int wfx_tx_policy_get(struct wfx_vif *wvif,
 	int idx;
 	struct tx_policy_cache *cache = &wvif->tx_policy_cache;
 	struct tx_policy wanted;
+	struct tx_policy *entry;
 
 	wfx_tx_policy_build(wvif, &wanted, rates);
 
@@ -117,11 +123,10 @@ static int wfx_tx_policy_get(struct wfx_vif *wvif,
 	if (idx >= 0) {
 		*renew = false;
 	} else {
-		struct tx_policy *entry;
-		*renew = true;
-		/* If policy is not found create a new one
-		 * using the oldest entry in "free" list
+		/* If policy is not found create a new one using the oldest
+		 * entry in "free" list
 		 */
+		*renew = true;
 		entry = list_entry(cache->free.prev, struct tx_policy, link);
 		memcpy(entry->rates, wanted.rates, sizeof(entry->rates));
 		entry->uploaded = false;
@@ -234,7 +239,7 @@ static void wfx_tx_fixup_rates(struct ieee80211_tx_rate *rates)
 	int i;
 	bool finished;
 
-	// Firmware is not able to mix rates with differents flags
+	/* Firmware is not able to mix rates with different flags */
 	for (i = 0; i < IEEE80211_TX_MAX_RATES; i++) {
 		if (rates[0].flags & IEEE80211_TX_RC_SHORT_GI)
 			rates[i].flags |= IEEE80211_TX_RC_SHORT_GI;
@@ -244,7 +249,7 @@ static void wfx_tx_fixup_rates(struct ieee80211_tx_rate *rates)
 			rates[i].flags &= ~IEEE80211_TX_RC_USE_RTS_CTS;
 	}
 
-	// Sort rates and remove duplicates
+	/* Sort rates and remove duplicates */
 	do {
 		finished = true;
 		for (i = 0; i < IEEE80211_TX_MAX_RATES - 1; i++) {
@@ -264,32 +269,31 @@ static void wfx_tx_fixup_rates(struct ieee80211_tx_rate *rates)
 			}
 		}
 	} while (!finished);
-	// Ensure that MCS0 or 1Mbps is present at the end of the retry list
+	/* Ensure that MCS0 or 1Mbps is present at the end of the retry list */
 	for (i = 0; i < IEEE80211_TX_MAX_RATES; i++) {
 		if (rates[i].idx == 0)
 			break;
 		if (rates[i].idx == -1) {
 			rates[i].idx = 0;
-			rates[i].count = 8; // == hw->max_rate_tries
+			rates[i].count = 8; /* == hw->max_rate_tries */
 			rates[i].flags = rates[i - 1].flags &
 					 IEEE80211_TX_RC_MCS;
 			break;
 		}
 	}
-	// All retries use long GI
+	/* All retries use long GI */
 	for (i = 1; i < IEEE80211_TX_MAX_RATES; i++)
 		rates[i].flags &= ~IEEE80211_TX_RC_SHORT_GI;
 }
 
-static u8 wfx_tx_get_rate_id(struct wfx_vif *wvif,
-			     struct ieee80211_tx_info *tx_info)
+static u8 wfx_tx_get_retry_policy_id(struct wfx_vif *wvif,
+				     struct ieee80211_tx_info *tx_info)
 {
 	bool tx_policy_renew = false;
-	u8 rate_id;
+	u8 ret;
 
-	rate_id = wfx_tx_policy_get(wvif,
-				    tx_info->driver_rates, &tx_policy_renew);
-	if (rate_id == HIF_TX_RETRY_POLICY_INVALID)
+	ret = wfx_tx_policy_get(wvif, tx_info->driver_rates, &tx_policy_renew);
+	if (ret == HIF_TX_RETRY_POLICY_INVALID)
 		dev_warn(wvif->wdev->dev, "unable to get a valid Tx policy");
 
 	if (tx_policy_renew) {
@@ -297,26 +301,17 @@ static u8 wfx_tx_get_rate_id(struct wfx_vif *wvif,
 		if (!schedule_work(&wvif->tx_policy_upload_work))
 			wfx_tx_unlock(wvif->wdev);
 	}
-	return rate_id;
+	return ret;
 }
 
-static struct hif_ht_tx_parameters wfx_tx_get_tx_parms(struct wfx_dev *wdev,
-						       struct ieee80211_tx_info *tx_info)
+static int wfx_tx_get_frame_format(struct ieee80211_tx_info *tx_info)
 {
-	struct ieee80211_tx_rate *rate = &tx_info->driver_rates[0];
-	struct hif_ht_tx_parameters ret = { };
-
-	if (!(rate->flags & IEEE80211_TX_RC_MCS))
-		ret.frame_format = HIF_FRAME_FORMAT_NON_HT;
-	else if (!(rate->flags & IEEE80211_TX_RC_GREEN_FIELD))
-		ret.frame_format = HIF_FRAME_FORMAT_MIXED_FORMAT_HT;
+	if (!(tx_info->driver_rates[0].flags & IEEE80211_TX_RC_MCS))
+		return HIF_FRAME_FORMAT_NON_HT;
+	else if (!(tx_info->driver_rates[0].flags & IEEE80211_TX_RC_GREEN_FIELD))
+		return HIF_FRAME_FORMAT_MIXED_FORMAT_HT;
 	else
-		ret.frame_format = HIF_FRAME_FORMAT_GF_HT_11N;
-	if (rate->flags & IEEE80211_TX_RC_SHORT_GI)
-		ret.short_gi = 1;
-	if (tx_info->flags & IEEE80211_TX_CTL_STBC)
-		ret.stbc = 0; // FIXME: Not yet supported by firmware?
-	return ret;
+		return HIF_FRAME_FORMAT_GF_HT_11N;
 }
 
 static int wfx_tx_get_icv_len(struct ieee80211_key_conf *hw_key)
@@ -324,6 +319,8 @@ static int wfx_tx_get_icv_len(struct ieee80211_key_conf *hw_key)
 	int mic_space;
 
 	if (!hw_key)
+		return 0;
+	if (hw_key->cipher == WLAN_CIPHER_SUITE_AES_CMAC)
 		return 0;
 	mic_space = (hw_key->cipher == WLAN_CIPHER_SUITE_TKIP) ? 8 : 0;
 	return hw_key->icv_len + mic_space;
@@ -346,17 +343,16 @@ static int wfx_tx_inner(struct wfx_vif *wvif, struct ieee80211_sta *sta,
 	WARN(queue_id >= IEEE80211_NUM_ACS, "unsupported queue_id");
 	wfx_tx_fixup_rates(tx_info->driver_rates);
 
-	// From now tx_info->control is unusable
+	/* From now tx_info->control is unusable */
 	memset(tx_info->rate_driver_data, 0, sizeof(struct wfx_tx_priv));
-	// Fill tx_priv
+	/* Fill tx_priv */
 	tx_priv = (struct wfx_tx_priv *)tx_info->rate_driver_data;
-	if (ieee80211_has_protected(hdr->frame_control))
-		tx_priv->hw_key = hw_key;
+	tx_priv->icv_size = wfx_tx_get_icv_len(hw_key);
 
-	// Fill hif_msg
+	/* Fill hif_msg */
 	WARN(skb_headroom(skb) < wmsg_len, "not enough space in skb");
 	WARN(offset & 1, "attempt to transmit an unaligned frame");
-	skb_put(skb, wfx_tx_get_icv_len(tx_priv->hw_key));
+	skb_put(skb, tx_priv->icv_size);
 	skb_push(skb, wmsg_len);
 	memset(skb->data, 0, wmsg_len);
 	hif_msg = (struct hif_msg *)skb->data;
@@ -371,25 +367,28 @@ static int wfx_tx_inner(struct wfx_vif *wvif, struct ieee80211_sta *sta,
 		return -EIO;
 	}
 
-	// Fill tx request
+	/* Fill tx request */
 	req = (struct hif_req_tx *)hif_msg->body;
-	// packet_id just need to be unique on device. 32bits are more than
-	// necessary for that task, so we tae advantage of it to add some extra
-	// data for debug.
+	/* packet_id just need to be unique on device. 32bits are more than
+	 * necessary for that task, so we tae advantage of it to add some extra
+	 * data for debug.
+	 */
 	req->packet_id = atomic_add_return(1, &wvif->wdev->packet_id) & 0xFFFF;
 	req->packet_id |= IEEE80211_SEQ_TO_SN(le16_to_cpu(hdr->seq_ctrl)) << 16;
 	req->packet_id |= queue_id << 28;
 
-	req->data_flags.fc_offset = offset;
+	req->fc_offset = offset;
+	/* Queue index are inverted between firmware and Linux */
+	req->queue_id = 3 - queue_id;
+	req->peer_sta_id = wfx_tx_get_link_id(wvif, sta, hdr);
+	req->retry_policy_index = wfx_tx_get_retry_policy_id(wvif, tx_info);
+	req->frame_format = wfx_tx_get_frame_format(tx_info);
+	if (tx_info->driver_rates[0].flags & IEEE80211_TX_RC_SHORT_GI)
+		req->short_gi = 1;
 	if (tx_info->flags & IEEE80211_TX_CTL_SEND_AFTER_DTIM)
-		req->data_flags.after_dtim = 1;
-	req->queue_id.peer_sta_id = wfx_tx_get_link_id(wvif, sta, hdr);
-	// Queue index are inverted between firmware and Linux
-	req->queue_id.queue_id = 3 - queue_id;
-	req->ht_tx_parameters = wfx_tx_get_tx_parms(wvif->wdev, tx_info);
-	req->tx_flags.retry_policy_index = wfx_tx_get_rate_id(wvif, tx_info);
+		req->after_dtim = 1;
 
-	// Auxiliary operations
+	/* Auxiliary operations */
 	wfx_tx_queues_put(wvif, skb);
 	if (tx_info->flags & IEEE80211_TX_CTL_SEND_AFTER_DTIM)
 		schedule_work(&wvif->update_tim_work);
@@ -411,15 +410,16 @@ void wfx_tx(struct ieee80211_hw *hw, struct ieee80211_tx_control *control,
 	compiletime_assert(sizeof(struct wfx_tx_priv) <= driver_data_room,
 			   "struct tx_priv is too large");
 	WARN(skb->next || skb->prev, "skb is already member of a list");
-	// control.vif can be NULL for injected frames
+	/* control.vif can be NULL for injected frames */
 	if (tx_info->control.vif)
 		wvif = (struct wfx_vif *)tx_info->control.vif->drv_priv;
 	else
 		wvif = wvif_iterate(wdev, NULL);
 	if (WARN_ON(!wvif))
 		goto drop;
-	// Because of TX_AMPDU_SETUP_IN_HW, mac80211 does not try to send any
-	// BlockAck session management frame. The check below exist just in case.
+	/* Because of TX_AMPDU_SETUP_IN_HW, mac80211 does not try to send any
+	 * BlockAck session management frame. The check below exist just in case.
+	 */
 	if (ieee80211_is_action_back(hdr)) {
 		dev_info(wdev->dev, "drop BA action\n");
 		goto drop;
@@ -439,10 +439,13 @@ static void wfx_skb_dtor(struct wfx_vif *wvif, struct sk_buff *skb)
 	struct hif_req_tx *req = (struct hif_req_tx *)hif->body;
 	unsigned int offset = sizeof(struct hif_msg) +
 			      sizeof(struct hif_req_tx) +
-			      req->data_flags.fc_offset;
+			      req->fc_offset;
 
-	WARN_ON(!wvif);
-	wfx_tx_policy_put(wvif, req->tx_flags.retry_policy_index);
+	if (!wvif) {
+		pr_warn("%s: vif associated with the skb does not exist anymore\n", __func__);
+		return;
+	}
+	wfx_tx_policy_put(wvif, req->retry_policy_index);
 	skb_pull(skb, offset);
 	ieee80211_tx_status_irqsafe(wvif->wdev->hw, skb);
 }
@@ -457,7 +460,7 @@ static void wfx_tx_fill_rates(struct wfx_dev *wdev,
 
 	tx_count = arg->ack_failures;
 	if (!arg->status || arg->ack_failures)
-		tx_count += 1; // Also report success
+		tx_count += 1; /* Also report success */
 	for (i = 0; i < IEEE80211_TX_MAX_RATES; i++) {
 		rate = &tx_info->status.rates[i];
 		if (rate->idx < 0)
@@ -487,8 +490,8 @@ static void wfx_tx_fill_rates(struct wfx_dev *wdev,
 
 void wfx_tx_confirm_cb(struct wfx_dev *wdev, const struct hif_cnf_tx *arg)
 {
-	struct ieee80211_tx_info *tx_info;
 	const struct wfx_tx_priv *tx_priv;
+	struct ieee80211_tx_info *tx_info;
 	struct wfx_vif *wvif;
 	struct sk_buff *skb;
 
@@ -498,21 +501,22 @@ void wfx_tx_confirm_cb(struct wfx_dev *wdev, const struct hif_cnf_tx *arg)
 			 arg->packet_id);
 		return;
 	}
+	tx_info = IEEE80211_SKB_CB(skb);
+	tx_priv = wfx_skb_tx_priv(skb);
 	wvif = wdev_to_wvif(wdev, ((struct hif_msg *)skb->data)->interface);
 	WARN_ON(!wvif);
 	if (!wvif)
 		return;
-	tx_info = IEEE80211_SKB_CB(skb);
-	tx_priv = wfx_skb_tx_priv(skb);
+
+	/* Note that wfx_pending_get_pkt_us_delay() get data from tx_info */
 	_trace_tx_stats(arg, skb, wfx_pending_get_pkt_us_delay(wdev, skb));
-
-	// You can touch to tx_priv, but don't touch to tx_info->status.
 	wfx_tx_fill_rates(wdev, tx_info, arg);
-	skb_trim(skb, skb->len - wfx_tx_get_icv_len(tx_priv->hw_key));
+	skb_trim(skb, skb->len - tx_priv->icv_size);
 
-	// From now, you can touch to tx_info->status, but do not touch to
-	// tx_priv anymore
-	// FIXME: use ieee80211_tx_info_clear_status()
+	/* From now, you can touch to tx_info->status, but do not touch to
+	 * tx_priv anymore
+	 */
+	/* FIXME: use ieee80211_tx_info_clear_status() */
 	memset(tx_info->rate_driver_data, 0, sizeof(tx_info->rate_driver_data));
 	memset(tx_info->pad, 0, sizeof(tx_info->pad));
 
@@ -525,10 +529,9 @@ void wfx_tx_confirm_cb(struct wfx_dev *wdev, const struct hif_cnf_tx *arg)
 		else
 			tx_info->flags |= IEEE80211_TX_STAT_ACK;
 	} else if (arg->status == HIF_STATUS_TX_FAIL_REQUEUE) {
-		WARN(!arg->tx_result_flags.requeue,
-		     "incoherent status and result_flags");
+		WARN(!arg->requeue, "incoherent status and result_flags");
 		if (tx_info->flags & IEEE80211_TX_CTL_SEND_AFTER_DTIM) {
-			wvif->after_dtim_tx_allowed = false; // DTIM period elapsed
+			wvif->after_dtim_tx_allowed = false; /* DTIM period elapsed */
 			schedule_work(&wvif->update_tim_work);
 		}
 		tx_info->flags |= IEEE80211_TX_STAT_TX_FILTERED;

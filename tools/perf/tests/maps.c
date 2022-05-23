@@ -33,7 +33,7 @@ static int check_maps(struct map_def *merged, unsigned int size, struct maps *ma
 	return TEST_OK;
 }
 
-int test__maps__merge_in(struct test *t __maybe_unused, int subtest __maybe_unused)
+static int test__maps__merge_in(struct test_suite *t __maybe_unused, int subtest __maybe_unused)
 {
 	struct maps maps;
 	unsigned int i;
@@ -116,5 +116,9 @@ int test__maps__merge_in(struct test *t __maybe_unused, int subtest __maybe_unus
 
 	ret = check_maps(merged3, ARRAY_SIZE(merged3), &maps);
 	TEST_ASSERT_VAL("merge check failed", !ret);
+
+	maps__exit(&maps);
 	return TEST_OK;
 }
+
+DEFINE_SUITE("maps__merge_in", maps__merge_in);

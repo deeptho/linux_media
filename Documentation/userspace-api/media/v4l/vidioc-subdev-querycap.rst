@@ -1,4 +1,5 @@
 .. SPDX-License-Identifier: GFDL-1.1-no-invariants-or-later
+.. c:namespace:: V4L
 
 .. _VIDIOC_SUBDEV_QUERYCAP:
 
@@ -11,23 +12,21 @@ Name
 
 VIDIOC_SUBDEV_QUERYCAP - Query sub-device capabilities
 
-
 Synopsis
 ========
 
-.. c:function:: int ioctl( int fd, VIDIOC_SUBDEV_QUERYCAP, struct v4l2_subdev_capability *argp )
-    :name: VIDIOC_SUBDEV_QUERYCAP
+.. c:macro:: VIDIOC_SUBDEV_QUERYCAP
 
+``int ioctl(int fd, VIDIOC_SUBDEV_QUERYCAP, struct v4l2_subdev_capability *argp)``
 
 Arguments
 =========
 
 ``fd``
-    File descriptor returned by :ref:`open() <func-open>`.
+    File descriptor returned by :c:func:`open()`.
 
 ``argp``
     Pointer to struct :c:type:`v4l2_subdev_capability`.
-
 
 Description
 ===========
@@ -39,7 +38,7 @@ a struct :c:type:`v4l2_subdev_capability` which is filled by the driver. When
 the driver is not compatible with this specification the ioctl returns
 ``ENOTTY`` error code.
 
-.. tabularcolumns:: |p{1.5cm}|p{2.5cm}|p{13cm}|
+.. tabularcolumns:: |p{1.5cm}|p{2.9cm}|p{12.9cm}|
 
 .. c:type:: v4l2_subdev_capability
 
@@ -76,7 +75,7 @@ the driver is not compatible with this specification the ioctl returns
       - ``reserved``\ [14]
       - Reserved for future extensions. Set to 0 by the V4L2 core.
 
-.. tabularcolumns:: |p{6cm}|p{2.2cm}|p{8.8cm}|
+.. tabularcolumns:: |p{6.8cm}|p{2.4cm}|p{8.1cm}|
 
 .. _subdevice-capabilities:
 

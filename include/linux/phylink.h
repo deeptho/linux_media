@@ -64,16 +64,21 @@ enum phylink_op_type {
  * @pcs_poll: MAC PCS cannot provide link change interrupt
  * @poll_fixed_state: if true, starts link_poll,
  *		      if MAC link is at %MLO_AN_FIXED mode.
+ * @ovr_an_inband: if true, override PCS to MLO_AN_INBAND
  * @get_fixed_state: callback to execute to determine the fixed link state,
  *		     if MAC link is at %MLO_AN_FIXED mode.
+ * @supported_interfaces: bitmap describing which PHY_INTERFACE_MODE_xxx
+ *                        are supported by the MAC/PCS.
  */
 struct phylink_config {
 	struct device *dev;
 	enum phylink_op_type type;
 	bool pcs_poll;
 	bool poll_fixed_state;
+	bool ovr_an_inband;
 	void (*get_fixed_state)(struct phylink_config *config,
 				struct phylink_link_state *state);
+	DECLARE_PHY_INTERFACE_MASK(supported_interfaces);
 };
 
 /**
@@ -131,8 +136,14 @@ struct phylink_mac_ops {
  * based on @state->advertising and/or @state->speed and update
  * @state->interface accordingly. See phylink_helper_basex_speed().
  *
- * When @state->interface is %PHY_INTERFACE_MODE_NA, phylink expects the
- * MAC driver to return all supported link modes.
+ * When @config->supported_interfaces has been set, phylink will iterate
+ * over the supported interfaces to determine the full capability of the
+ * MAC. The validation function must not print errors if @state->interface
+ * is set to an unexpected value.
+ *
+ * When @config->supported_interfaces is empty, phylink will call this
+ * function with @state->interface set to %PHY_INTERFACE_MODE_NA, and
+ * expects the MAC driver to return all supported link modes.
  *
  * If the @state->interface mode is not supported, then the @supported
  * mask must be cleared.
@@ -439,12 +450,18 @@ void phylink_destroy(struct phylink *);
 
 int phylink_connect_phy(struct phylink *, struct phy_device *);
 int phylink_of_phy_connect(struct phylink *, struct device_node *, u32 flags);
+int phylink_fwnode_phy_connect(struct phylink *pl,
+			       struct fwnode_handle *fwnode,
+			       u32 flags);
 void phylink_disconnect_phy(struct phylink *);
 
 void phylink_mac_change(struct phylink *, bool up);
 
 void phylink_start(struct phylink *);
 void phylink_stop(struct phylink *);
+
+void phylink_suspend(struct phylink *pl, bool mac_wol);
+void phylink_resume(struct phylink *pl);
 
 void phylink_ethtool_get_wol(struct phylink *, struct ethtool_wolinfo *);
 int phylink_ethtool_set_wol(struct phylink *, struct ethtool_wolinfo *);
@@ -476,6 +493,7 @@ int phylink_speed_up(struct phylink *pl);
 #define phylink_test(bm, mode)	__phylink_do_bit(test_bit, bm, mode)
 
 void phylink_set_port_modes(unsigned long *bits);
+void phylink_set_10g_modes(unsigned long *mask);
 void phylink_helper_basex_speed(struct phylink_link_state *state);
 
 void phylink_mii_c22_pcs_get_state(struct mdio_device *pcs,
@@ -490,4 +508,7 @@ void phylink_mii_c22_pcs_an_restart(struct mdio_device *pcs);
 
 void phylink_mii_c45_pcs_get_state(struct mdio_device *pcs,
 				   struct phylink_link_state *state);
+
+void phylink_decode_usxgmii_word(struct phylink_link_state *state,
+				 uint16_t lpa);
 #endif

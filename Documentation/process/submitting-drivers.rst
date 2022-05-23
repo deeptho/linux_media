@@ -60,10 +60,11 @@ What Criteria Determine Acceptance
 
 Licensing:
 		The code must be released to us under the
-		GNU General Public License. We don't insist on any kind
-		of exclusive GPL licensing, and if you wish the driver
-		to be useful to other communities such as BSD you may well
-		wish to release under multiple licenses.
+		GNU General Public License. If you wish the driver to be
+		useful to other communities such as BSD you may release
+		under multiple licenses. If you choose to release under
+		licenses other than the GPL, you should include your
+		rationale for your license choices in your cover letter.
 		See accepted licenses at include/linux/module.h
 
 Copyright:
@@ -184,7 +185,7 @@ Linux USB project:
 	http://www.linux-usb.org/
 
 How to NOT write kernel driver by Arjan van de Ven:
-	http://www.fenrus.org/how-to-not-write-a-device-driver-paper.pdf
+	https://landley.net/kdocs/ols/2002/ols2002-pages-545-555.pdf
 
 Kernel Janitor:
 	https://kernelnewbies.org/KernelJanitors

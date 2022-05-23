@@ -553,12 +553,12 @@ static int start_dma(struct goku_ep *ep, struct goku_request *req)
 
 		master &= ~MST_R_BITS;
 		if (unlikely(req->req.length == 0))
-			master = MST_RD_ENA | MST_RD_EOPB;
+			master |= MST_RD_ENA | MST_RD_EOPB;
 		else if ((req->req.length % ep->ep.maxpacket) != 0
 					|| req->req.zero)
-			master = MST_RD_ENA | MST_EOPB_ENA;
+			master |= MST_RD_ENA | MST_EOPB_ENA;
 		else
-			master = MST_RD_ENA | MST_EOPB_DIS;
+			master |= MST_RD_ENA | MST_EOPB_DIS;
 
 		ep->dev->int_enable |= INT_MSTRDEND;
 
@@ -1760,6 +1760,7 @@ static int goku_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		goto err;
 	}
 
+	pci_set_drvdata(pdev, dev);
 	spin_lock_init(&dev->lock);
 	dev->pdev = pdev;
 	dev->gadget.ops = &goku_ops;
@@ -1793,7 +1794,6 @@ static int goku_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	}
 	dev->regs = (struct goku_udc_regs __iomem *) base;
 
-	pci_set_drvdata(pdev, dev);
 	INFO(dev, "%s\n", driver_desc);
 	INFO(dev, "version: " DRIVER_VERSION " %s\n", dmastr());
 	INFO(dev, "irq %d, pci mem %p\n", pdev->irq, base);

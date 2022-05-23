@@ -16,6 +16,8 @@
 #include <linux/platform_device.h>
 #include <linux/sort.h>
 
+#include "fan.h"
+
 MODULE_AUTHOR("Paul Diefenbaugh");
 MODULE_DESCRIPTION("ACPI Fan Driver");
 MODULE_LICENSE("GPL");
@@ -24,9 +26,7 @@ static int acpi_fan_probe(struct platform_device *pdev);
 static int acpi_fan_remove(struct platform_device *pdev);
 
 static const struct acpi_device_id fan_device_ids[] = {
-	{"PNP0C0B", 0},
-	{"INT3404", 0},
-	{"INTC1044", 0},
+	ACPI_FAN_DEVICE_IDS,
 	{"", 0},
 };
 MODULE_DEVICE_TABLE(acpi, fan_device_ids);
@@ -351,6 +351,7 @@ static int acpi_fan_get_fps(struct acpi_device *device)
 		struct acpi_fan_fps *fps = &fan->fps[i];
 
 		snprintf(fps->name, ACPI_FPS_NAME_LEN, "state%d", i);
+		sysfs_attr_init(&fps->dev_attr.attr);
 		fps->dev_attr.show = show_state;
 		fps->dev_attr.store = NULL;
 		fps->dev_attr.attr.name = fps->name;

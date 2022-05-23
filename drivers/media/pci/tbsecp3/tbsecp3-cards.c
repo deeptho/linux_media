@@ -18,6 +18,193 @@
 #include "tbsecp3.h"
 
 struct tbsecp3_board tbsecp3_boards[] = {
+	[TBSECP3_BOARD_TBS7230] = {
+		.board_id	= TBSECP3_BOARD_TBS7230,
+		.name		= "Turbosight TBS 7230(Octa DVB-T/T2/C/C2/ISDB-T/C/ATSC)",
+		.i2c_speed  = 39,
+		.eeprom_i2c	= 0,
+		.eeprom_addr = 0x10,
+		.adapters	= 1,
+		.adap_config ={
+			{
+				.ts_in = 0,
+				.i2c_bus_nr = 0,
+				.gpio.demod_reset.lvl = TBSECP3_GPIODEF_LOW,
+				.gpio.demod_reset.nr  = TBSECP3_GPIO_PIN(0, 0),
+			}, 
+	
+		}
+	},
+	[TBSECP3_BOARD_TBS6209SE] = {
+		.board_id	= TBSECP3_BOARD_TBS6209SE,
+		.name		= "Turbosight TBS 6209SE(Octa DVB-T/T2/C/C2/ISDB-T/C/ATSC)",
+		.i2c_speed  = 39,
+		.eeprom_i2c	= 3,
+		.eeprom_addr = 0x10,
+		.adapters	= 8,
+		.adap_config ={
+			{
+				.ts_in = 0,
+				.i2c_bus_nr = 0,
+			}, 
+			{
+				.ts_in = 1,
+				.i2c_bus_nr = 0,
+			},
+			{
+				.ts_in = 2,
+				.i2c_bus_nr = 1,
+			},
+			{
+				.ts_in = 3,
+				.i2c_bus_nr = 1,
+			},
+			{
+				.ts_in = 4,
+				.i2c_bus_nr = 2,
+
+			},
+			{
+				.ts_in = 5,
+				.i2c_bus_nr = 2,
+			},
+			{
+				.ts_in = 6,
+				.i2c_bus_nr = 3,
+
+			},
+			{
+				.ts_in = 7,
+				.i2c_bus_nr = 3,
+			}
+
+		}
+	},
+	[TBSECP3_BOARD_TBS7901] = {
+		.board_id	= TBSECP3_BOARD_TBS7901,
+		.name		= "TurboSight TBS 7901 DVB-S/S2/S2x ",
+		.adapters	= 1,
+		.i2c_speed	= 39,
+		.eeprom_i2c	= 0,
+		.eeprom_addr = 0x10,
+		.adap_config	= {
+			{
+				.ts_in = 0,
+				.i2c_bus_nr = 0,
+				.gpio.demod_reset.lvl = TBSECP3_GPIODEF_LOW,
+				.gpio.demod_reset.nr  = TBSECP3_GPIO_PIN(0, 0),
+				.gpio.lnb_power.lvl   = TBSECP3_GPIODEF_LOW,
+				.gpio.lnb_power.nr    = TBSECP3_GPIO_PIN(0, 2),
+				.gpio.lnb_voltage.lvl = TBSECP3_GPIODEF_HIGH,
+				.gpio.lnb_voltage.nr  = TBSECP3_GPIO_PIN(0,1),				
+			}	
+			
+		}
+	},
+
+	[TBSECP3_BOARD_TBS6910SE] = {
+		.board_id	= TBSECP3_BOARD_TBS6910SE,
+		.name		= "TurboSight TBS 6910SE DVB-S/S2/S2x + 2xCI ",
+		.adapters	= 2,
+		.i2c_speed	= 39,
+		.eeprom_i2c	= 1,
+		.eeprom_addr = 0x10,
+		.adap_config	= {
+			{
+				.ts_in = 0,
+				.i2c_bus_nr = 0,
+				.gpio.demod_reset.lvl = TBSECP3_GPIODEF_LOW,
+				.gpio.demod_reset.nr  = TBSECP3_GPIO_PIN(0, 0),
+			},
+			{
+				.ts_in = 1,
+				.i2c_bus_nr = 1,
+				.gpio.demod_reset.lvl = TBSECP3_GPIODEF_LOW,
+				.gpio.demod_reset.nr  = TBSECP3_GPIO_PIN(1, 0),
+			},
+		}
+	},
+	[TBSECP3_BOARD_TBS6902SE] = {
+		.board_id	= TBSECP3_BOARD_TBS6902SE,
+		.name		= "TurboSight TBS 6902SE DVB-S/S2/S2x ",
+		.adapters	= 2,
+		.i2c_speed	= 39,
+		.eeprom_i2c	= 1,
+		.eeprom_addr = 0x10,
+		.adap_config	= {
+			{
+				.ts_in = 0,
+				.i2c_bus_nr = 0,
+				.gpio.demod_reset.lvl = TBSECP3_GPIODEF_LOW,
+				.gpio.demod_reset.nr  = TBSECP3_GPIO_PIN(0, 0),
+				.gpio.lnb_power.lvl   = TBSECP3_GPIODEF_LOW,
+				.gpio.lnb_power.nr    = TBSECP3_GPIO_PIN(0, 2),
+				.gpio.lnb_voltage.lvl = TBSECP3_GPIODEF_HIGH,
+				.gpio.lnb_voltage.nr  = TBSECP3_GPIO_PIN(0, 1),				
+			},	
+			{
+				.ts_in = 1,
+				.i2c_bus_nr = 1,
+				.gpio.demod_reset.lvl = TBSECP3_GPIODEF_LOW,
+				.gpio.demod_reset.nr  = TBSECP3_GPIO_PIN(1, 0),
+				.gpio.lnb_power.lvl   = TBSECP3_GPIODEF_LOW,
+				.gpio.lnb_power.nr    = TBSECP3_GPIO_PIN(1, 2),
+				.gpio.lnb_voltage.lvl = TBSECP3_GPIODEF_HIGH,
+				.gpio.lnb_voltage.nr  = TBSECP3_GPIO_PIN(1, 1),			
+			}
+			
+		}
+	},
+
+	[TBSECP3_BOARD_TBS6904SE] = {
+		.board_id	= TBSECP3_BOARD_TBS6904SE,
+		.name		= "TurboSight TBS 6904se DVB-S/S2/S2x ",
+		.adapters	= 4,
+		.i2c_speed	= 39,
+		.eeprom_i2c	= 3,
+		.adap_config	= {
+			{
+				.ts_in = 0,
+				.i2c_bus_nr = 0,
+				.gpio.demod_reset.lvl = TBSECP3_GPIODEF_LOW,
+				.gpio.demod_reset.nr  = TBSECP3_GPIO_PIN(0, 0),
+				.gpio.lnb_power.lvl   = TBSECP3_GPIODEF_LOW,
+				.gpio.lnb_power.nr    = TBSECP3_GPIO_PIN(0, 2),
+				.gpio.lnb_voltage.lvl = TBSECP3_GPIODEF_HIGH,
+				.gpio.lnb_voltage.nr  = TBSECP3_GPIO_PIN(0, 1),
+			},
+			{
+				.ts_in = 1,
+				.i2c_bus_nr = 1,
+				.gpio.demod_reset.lvl = TBSECP3_GPIODEF_LOW,
+				.gpio.demod_reset.nr  = TBSECP3_GPIO_PIN(1, 0),
+				.gpio.lnb_power.lvl   = TBSECP3_GPIODEF_LOW,
+				.gpio.lnb_power.nr    = TBSECP3_GPIO_PIN(1, 2),
+				.gpio.lnb_voltage.lvl = TBSECP3_GPIODEF_HIGH,
+				.gpio.lnb_voltage.nr  = TBSECP3_GPIO_PIN(1, 1),				
+			},
+			{
+				.ts_in = 2,
+				.i2c_bus_nr = 2,
+				.gpio.demod_reset.lvl = TBSECP3_GPIODEF_LOW,
+				.gpio.demod_reset.nr  = TBSECP3_GPIO_PIN(2, 0),
+				.gpio.lnb_power.lvl   = TBSECP3_GPIODEF_LOW,
+				.gpio.lnb_power.nr    = TBSECP3_GPIO_PIN(2, 2),
+				.gpio.lnb_voltage.lvl = TBSECP3_GPIODEF_HIGH,
+				.gpio.lnb_voltage.nr  = TBSECP3_GPIO_PIN(2, 1),	
+			},
+			{
+				.ts_in = 3,
+				.i2c_bus_nr = 3,
+				.gpio.demod_reset.lvl = TBSECP3_GPIODEF_LOW,
+				.gpio.demod_reset.nr  = TBSECP3_GPIO_PIN(3, 0),
+				.gpio.lnb_power.lvl   = TBSECP3_GPIODEF_LOW,
+				.gpio.lnb_power.nr    = TBSECP3_GPIO_PIN(3, 2),
+				.gpio.lnb_voltage.lvl = TBSECP3_GPIODEF_HIGH,
+				.gpio.lnb_voltage.nr  = TBSECP3_GPIO_PIN(3, 1),			
+			}, 
+		}
+	},
 	[TBSECP3_BOARD_TBS6508] = {
 		.board_id	= TBSECP3_BOARD_TBS6508,
 		.name		= "TurboSight TBS 6508 DVB-S/S2/S2X/T/T2/C(QAM-A/B/C)/C2/ISDB-T ",
@@ -314,6 +501,58 @@ struct tbsecp3_board tbsecp3_boards[] = {
 				.gpio.lnb_power.nr    = TBSECP3_GPIO_PIN(3, 2),
 			},
 
+		}
+	},
+	[TBSECP3_BOARD_TBS6301SE] = {
+		.board_id	= TBSECP3_BOARD_TBS6301SE,
+		.name		= "TurboSight TBS 6301T HDMI Capture ",
+		.adapters	= 1,
+		.i2c_speed	= 39,
+		.eeprom_i2c	= 1,
+		.adap_config	= {
+			{
+				.ts_in = 0,
+				.i2c_bus_nr = 3,
+				.gpio.demod_reset.lvl = TBSECP3_GPIODEF_LOW,
+				.gpio.demod_reset.nr  = TBSECP3_GPIO_PIN(3, 0),
+				.gpio.lnb_power.lvl   = TBSECP3_GPIODEF_LOW,
+				.gpio.lnb_power.nr    = TBSECP3_GPIO_PIN(3, 2),
+			},
+			
+		}
+	},
+	[TBSECP3_BOARD_TBS6302T] = {
+		.board_id	= TBSECP3_BOARD_TBS6302T,
+		.name		= "TurboSight TBS 6302T HDMI Capture ",
+		.adapters	= 2,
+		.i2c_speed	= 39,
+		.eeprom_i2c	= 1,
+		.adap_config	= {
+			{
+				.ts_in = 0,
+				.i2c_bus_nr = 3,
+			},
+			{
+				.ts_in = 1,
+				.i2c_bus_nr = 2,
+			},
+		}
+	},
+	[TBSECP3_BOARD_TBS6302T60] = {
+		.board_id	= TBSECP3_BOARD_TBS6302T60,
+		.name		= "TurboSight TBS 6302T 60 HDMI Capture ",
+		.adapters	= 2,
+		.i2c_speed	= 39,
+		.eeprom_i2c	= 1,
+		.adap_config	= {
+			{
+				.ts_in = 0,
+				.i2c_bus_nr = 3,
+			},
+			{
+				.ts_in = 1,
+				.i2c_bus_nr = 2,
+			},
 		}
 	},
 	[TBSECP3_BOARD_TBS690a] = {

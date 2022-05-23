@@ -40,7 +40,7 @@
 			 role.direct ? " direct" : "",			\
 			 access_str[role.access],			\
 			 role.invalid ? " invalid" : "",		\
-			 role.nxe ? "" : "!",				\
+			 role.efer_nx ? "" : "!",			\
 			 role.ad_disabled ? "!" : "",			\
 			 __entry->root_count,				\
 			 __entry->unsync ? "unsync" : "sync", 0);	\
@@ -53,6 +53,12 @@
 	{ PFERR_USER_MASK, "U" },	\
 	{ PFERR_RSVD_MASK, "RSVD" },	\
 	{ PFERR_FETCH_MASK, "F" }
+
+TRACE_DEFINE_ENUM(RET_PF_RETRY);
+TRACE_DEFINE_ENUM(RET_PF_EMULATE);
+TRACE_DEFINE_ENUM(RET_PF_INVALID);
+TRACE_DEFINE_ENUM(RET_PF_FIXED);
+TRACE_DEFINE_ENUM(RET_PF_SPURIOUS);
 
 /*
  * A pagetable walk has started
@@ -202,8 +208,8 @@ DEFINE_EVENT(kvm_mmu_page_class, kvm_mmu_prepare_zap_page,
 
 TRACE_EVENT(
 	mark_mmio_spte,
-	TP_PROTO(u64 *sptep, gfn_t gfn, unsigned access, unsigned int gen),
-	TP_ARGS(sptep, gfn, access, gen),
+	TP_PROTO(u64 *sptep, gfn_t gfn, u64 spte),
+	TP_ARGS(sptep, gfn, spte),
 
 	TP_STRUCT__entry(
 		__field(void *, sptep)
@@ -215,8 +221,8 @@ TRACE_EVENT(
 	TP_fast_assign(
 		__entry->sptep = sptep;
 		__entry->gfn = gfn;
-		__entry->access = access;
-		__entry->gen = gen;
+		__entry->access = spte & ACC_ALL;
+		__entry->gen = get_mmio_spte_generation(spte);
 	),
 
 	TP_printk("sptep:%p gfn %llx access %x gen %x", __entry->sptep,
@@ -244,14 +250,11 @@ TRACE_EVENT(
 		  __entry->access)
 );
 
-#define __spte_satisfied(__spte)				\
-	(__entry->retry && is_writable_pte(__entry->__spte))
-
 TRACE_EVENT(
 	fast_page_fault,
-	TP_PROTO(struct kvm_vcpu *vcpu, gpa_t cr2_or_gpa, u32 error_code,
-		 u64 *sptep, u64 old_spte, bool retry),
-	TP_ARGS(vcpu, cr2_or_gpa, error_code, sptep, old_spte, retry),
+	TP_PROTO(struct kvm_vcpu *vcpu, struct kvm_page_fault *fault,
+		 u64 *sptep, u64 old_spte, int ret),
+	TP_ARGS(vcpu, fault, sptep, old_spte, ret),
 
 	TP_STRUCT__entry(
 		__field(int, vcpu_id)
@@ -260,17 +263,17 @@ TRACE_EVENT(
 		__field(u64 *, sptep)
 		__field(u64, old_spte)
 		__field(u64, new_spte)
-		__field(bool, retry)
+		__field(int, ret)
 	),
 
 	TP_fast_assign(
 		__entry->vcpu_id = vcpu->vcpu_id;
-		__entry->cr2_or_gpa = cr2_or_gpa;
-		__entry->error_code = error_code;
+		__entry->cr2_or_gpa = fault->addr;
+		__entry->error_code = fault->error_code;
 		__entry->sptep = sptep;
 		__entry->old_spte = old_spte;
 		__entry->new_spte = *sptep;
-		__entry->retry = retry;
+		__entry->ret = ret;
 	),
 
 	TP_printk("vcpu %d gva %llx error_code %s sptep %p old %#llx"
@@ -278,7 +281,7 @@ TRACE_EVENT(
 		  __entry->cr2_or_gpa, __print_flags(__entry->error_code, "|",
 		  kvm_mmu_trace_pferr_flags), __entry->sptep,
 		  __entry->old_spte, __entry->new_spte,
-		  __spte_satisfied(old_spte), __spte_satisfied(new_spte)
+		  __entry->ret == RET_PF_SPURIOUS, __entry->ret == RET_PF_FIXED
 	)
 );
 
@@ -364,8 +367,8 @@ TRACE_EVENT(
 
 TRACE_EVENT(
 	kvm_mmu_spte_requested,
-	TP_PROTO(gpa_t addr, int level, kvm_pfn_t pfn),
-	TP_ARGS(addr, level, pfn),
+	TP_PROTO(struct kvm_page_fault *fault),
+	TP_ARGS(fault),
 
 	TP_STRUCT__entry(
 		__field(u64, gfn)
@@ -374,13 +377,42 @@ TRACE_EVENT(
 	),
 
 	TP_fast_assign(
-		__entry->gfn = addr >> PAGE_SHIFT;
-		__entry->pfn = pfn | (__entry->gfn & (KVM_PAGES_PER_HPAGE(level) - 1));
-		__entry->level = level;
+		__entry->gfn = fault->gfn;
+		__entry->pfn = fault->pfn | (fault->gfn & (KVM_PAGES_PER_HPAGE(fault->goal_level) - 1));
+		__entry->level = fault->goal_level;
 	),
 
 	TP_printk("gfn %llx pfn %llx level %d",
 		  __entry->gfn, __entry->pfn, __entry->level
+	)
+);
+
+TRACE_EVENT(
+	kvm_tdp_mmu_spte_changed,
+	TP_PROTO(int as_id, gfn_t gfn, int level, u64 old_spte, u64 new_spte),
+	TP_ARGS(as_id, gfn, level, old_spte, new_spte),
+
+	TP_STRUCT__entry(
+		__field(u64, gfn)
+		__field(u64, old_spte)
+		__field(u64, new_spte)
+		/* Level cannot be larger than 5 on x86, so it fits in a u8. */
+		__field(u8, level)
+		/* as_id can only be 0 or 1 x86, so it fits in a u8. */
+		__field(u8, as_id)
+	),
+
+	TP_fast_assign(
+		__entry->gfn = gfn;
+		__entry->old_spte = old_spte;
+		__entry->new_spte = new_spte;
+		__entry->level = level;
+		__entry->as_id = as_id;
+	),
+
+	TP_printk("as id %d gfn %llx level %d old_spte %llx new_spte %llx",
+		  __entry->as_id, __entry->gfn, __entry->level,
+		  __entry->old_spte, __entry->new_spte
 	)
 );
 

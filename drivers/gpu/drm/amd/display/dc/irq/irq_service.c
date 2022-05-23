@@ -32,6 +32,9 @@
 
 #include "dce110/irq_service_dce110.h"
 
+#if defined(CONFIG_DRM_AMD_DC_SI)
+#include "dce60/irq_service_dce60.h"
+#endif
 
 #include "dce80/irq_service_dce80.h"
 
@@ -116,7 +119,7 @@ bool dal_irq_service_set(
 
 	dal_irq_service_ack(irq_service, source);
 
-	if (info->funcs->set)
+	if (info->funcs && info->funcs->set)
 		return info->funcs->set(irq_service, info, enable);
 
 	dal_irq_service_set_generic(irq_service, info, enable);
@@ -150,7 +153,7 @@ bool dal_irq_service_ack(
 		return false;
 	}
 
-	if (info->funcs->ack)
+	if (info->funcs && info->funcs->ack)
 		return info->funcs->ack(irq_service, info);
 
 	dal_irq_service_ack_generic(irq_service, info);

@@ -290,8 +290,7 @@ clear_user(void __user *addr, unsigned long size)
 #define __clear_user  __xtensa_clear_user
 
 
-#ifndef CONFIG_GENERIC_STRNCPY_FROM_USER
-
+#ifdef CONFIG_ARCH_HAS_STRNCPY_FROM_USER
 extern long __strncpy_user(char *dst, const char __user *src, long count);
 
 static inline long
@@ -302,7 +301,7 @@ strncpy_from_user(char *dst, const char __user *src, long count)
 	return -EFAULT;
 }
 #else
-long strncpy_from_user(char *dst, const char *src, long count);
+long strncpy_from_user(char *dst, const char __user *src, long count);
 #endif
 
 /*

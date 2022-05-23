@@ -215,30 +215,7 @@ static const struct btmrvl_sdio_card_reg btmrvl_reg_8897 = {
 	.fw_dump_end = 0xea,
 };
 
-static const struct btmrvl_sdio_card_reg btmrvl_reg_8977 = {
-	.cfg = 0x00,
-	.host_int_mask = 0x08,
-	.host_intstatus = 0x0c,
-	.card_status = 0x5c,
-	.sq_read_base_addr_a0 = 0xf8,
-	.sq_read_base_addr_a1 = 0xf9,
-	.card_revision = 0xc8,
-	.card_fw_status0 = 0xe8,
-	.card_fw_status1 = 0xe9,
-	.card_rx_len = 0xea,
-	.card_rx_unit = 0xeb,
-	.io_port_0 = 0xe4,
-	.io_port_1 = 0xe5,
-	.io_port_2 = 0xe6,
-	.int_read_to_clear = true,
-	.host_int_rsr = 0x04,
-	.card_misc_cfg = 0xD8,
-	.fw_dump_ctrl = 0xf0,
-	.fw_dump_start = 0xf1,
-	.fw_dump_end = 0xf8,
-};
-
-static const struct btmrvl_sdio_card_reg btmrvl_reg_8987 = {
+static const struct btmrvl_sdio_card_reg btmrvl_reg_89xx = {
 	.cfg = 0x00,
 	.host_int_mask = 0x08,
 	.host_intstatus = 0x0c,
@@ -256,29 +233,6 @@ static const struct btmrvl_sdio_card_reg btmrvl_reg_8987 = {
 	.int_read_to_clear = true,
 	.host_int_rsr = 0x04,
 	.card_misc_cfg = 0xd8,
-	.fw_dump_ctrl = 0xf0,
-	.fw_dump_start = 0xf1,
-	.fw_dump_end = 0xf8,
-};
-
-static const struct btmrvl_sdio_card_reg btmrvl_reg_8997 = {
-	.cfg = 0x00,
-	.host_int_mask = 0x08,
-	.host_intstatus = 0x0c,
-	.card_status = 0x5c,
-	.sq_read_base_addr_a0 = 0xf8,
-	.sq_read_base_addr_a1 = 0xf9,
-	.card_revision = 0xc8,
-	.card_fw_status0 = 0xe8,
-	.card_fw_status1 = 0xe9,
-	.card_rx_len = 0xea,
-	.card_rx_unit = 0xeb,
-	.io_port_0 = 0xe4,
-	.io_port_1 = 0xe5,
-	.io_port_2 = 0xe6,
-	.int_read_to_clear = true,
-	.host_int_rsr = 0x04,
-	.card_misc_cfg = 0xD8,
 	.fw_dump_ctrl = 0xf0,
 	.fw_dump_start = 0xf1,
 	.fw_dump_end = 0xf8,
@@ -332,7 +286,7 @@ static const struct btmrvl_sdio_device btmrvl_sdio_sd8897 = {
 static const struct btmrvl_sdio_device btmrvl_sdio_sd8977 = {
 	.helper         = NULL,
 	.firmware       = "mrvl/sdsd8977_combo_v2.bin",
-	.reg            = &btmrvl_reg_8977,
+	.reg            = &btmrvl_reg_89xx,
 	.support_pscan_win_report = true,
 	.sd_blksz_fw_dl = 256,
 	.supports_fw_dump = true,
@@ -341,7 +295,7 @@ static const struct btmrvl_sdio_device btmrvl_sdio_sd8977 = {
 static const struct btmrvl_sdio_device btmrvl_sdio_sd8987 = {
 	.helper		= NULL,
 	.firmware	= "mrvl/sd8987_uapsta.bin",
-	.reg		= &btmrvl_reg_8987,
+	.reg		= &btmrvl_reg_89xx,
 	.support_pscan_win_report = true,
 	.sd_blksz_fw_dl	= 256,
 	.supports_fw_dump = true,
@@ -350,7 +304,7 @@ static const struct btmrvl_sdio_device btmrvl_sdio_sd8987 = {
 static const struct btmrvl_sdio_device btmrvl_sdio_sd8997 = {
 	.helper         = NULL,
 	.firmware       = "mrvl/sdsd8997_combo_v4.bin",
-	.reg            = &btmrvl_reg_8997,
+	.reg            = &btmrvl_reg_89xx,
 	.support_pscan_win_report = true,
 	.sd_blksz_fw_dl = 256,
 	.supports_fw_dump = true,
@@ -1396,6 +1350,7 @@ static void btmrvl_sdio_coredump(struct device *dev)
 	u8 *dbg_ptr, *end_ptr, *fw_dump_data, *fw_dump_ptr;
 	u8 dump_num = 0, idx, i, read_reg, doneflag = 0;
 	u32 memory_size, fw_dump_len = 0;
+	int size = 0;
 
 	card = sdio_get_drvdata(func);
 	priv = card->priv;
@@ -1507,9 +1462,7 @@ static void btmrvl_sdio_coredump(struct device *dev)
 					BT_ERR("Allocated buffer not enough");
 			}
 
-			if (stat != RDWR_STATUS_DONE) {
-				continue;
-			} else {
+			if (stat == RDWR_STATUS_DONE) {
 				BT_INFO("%s done: size=0x%tx",
 					entry->mem_name,
 					dbg_ptr - entry->mem_ptr);
@@ -1526,7 +1479,7 @@ done:
 	if (fw_dump_len == 0)
 		return;
 
-	fw_dump_data = vzalloc(fw_dump_len+1);
+	fw_dump_data = vzalloc(fw_dump_len + 1);
 	if (!fw_dump_data) {
 		BT_ERR("Vzalloc fw_dump_data fail!");
 		return;
@@ -1541,20 +1494,18 @@ done:
 		struct memory_type_mapping *entry = &mem_type_mapping_tbl[idx];
 
 		if (entry->mem_ptr) {
-			strcpy(fw_dump_ptr, "========Start dump ");
-			fw_dump_ptr += strlen("========Start dump ");
+			size += scnprintf(fw_dump_ptr + size,
+					  fw_dump_len + 1 - size,
+					  "========Start dump %s========\n",
+					  entry->mem_name);
 
-			strcpy(fw_dump_ptr, entry->mem_name);
-			fw_dump_ptr += strlen(entry->mem_name);
+			memcpy(fw_dump_ptr + size, entry->mem_ptr,
+			       entry->mem_size);
+			size += entry->mem_size;
 
-			strcpy(fw_dump_ptr, "========\n");
-			fw_dump_ptr += strlen("========\n");
-
-			memcpy(fw_dump_ptr, entry->mem_ptr, entry->mem_size);
-			fw_dump_ptr += entry->mem_size;
-
-			strcpy(fw_dump_ptr, "\n========End dump========\n");
-			fw_dump_ptr += strlen("\n========End dump========\n");
+			size += scnprintf(fw_dump_ptr + size,
+					  fw_dump_len + 1 - size,
+					  "\n========End dump========\n");
 
 			vfree(mem_type_mapping_tbl[idx].mem_ptr);
 			mem_type_mapping_tbl[idx].mem_ptr = NULL;

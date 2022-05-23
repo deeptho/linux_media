@@ -28,12 +28,13 @@ OPTIONS
 	specified: function_graph or function.
 
 -v::
---verbose=::
-        Verbosity level.
+--verbose::
+        Increase the verbosity level.
 
 -F::
 --funcs::
-        List all available functions to trace.
+        List available functions to trace. It accepts a pattern to
+        only list interested functions.
 
 -p::
 --pid=::

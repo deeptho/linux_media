@@ -373,7 +373,7 @@ static int wait_for_api_cmd_completion(struct hinic_api_cmd_chain *chain)
  * @chain: chain for the command
  * @dest: destination node on the card that will receive the command
  * @cmd: command data
- * @size: the command size
+ * @cmd_size: the command size
  *
  * Return 0 - Success, negative - Failure
  **/
@@ -629,10 +629,8 @@ static int alloc_cmd_buf(struct hinic_api_cmd_chain *chain,
 
 	cmd_vaddr = dma_alloc_coherent(&pdev->dev, API_CMD_BUF_SIZE,
 				       &cmd_paddr, GFP_KERNEL);
-	if (!cmd_vaddr) {
-		dev_err(&pdev->dev, "Failed to allocate API CMD DMA memory\n");
+	if (!cmd_vaddr)
 		return -ENOMEM;
-	}
 
 	cell_ctxt = &chain->cell_ctxt[cell_idx];
 
@@ -679,10 +677,8 @@ static int api_cmd_create_cell(struct hinic_api_cmd_chain *chain,
 
 	node = dma_alloc_coherent(&pdev->dev, chain->cell_size, &node_paddr,
 				  GFP_KERNEL);
-	if (!node) {
-		dev_err(&pdev->dev, "Failed to allocate dma API CMD cell\n");
+	if (!node)
 		return -ENOMEM;
-	}
 
 	node->read.hw_wb_resp_paddr = 0;
 

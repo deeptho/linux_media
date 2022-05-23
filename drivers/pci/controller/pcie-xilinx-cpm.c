@@ -222,7 +222,7 @@ static void xilinx_cpm_pcie_intx_flow(struct irq_desc *desc)
 			pcie_read(port, XILINX_CPM_PCIE_REG_IDRN));
 
 	for_each_set_bit(i, &val, PCI_NUM_INTX)
-		generic_handle_irq(irq_find_mapping(port->intx_domain, i));
+		generic_handle_domain_irq(port->intx_domain, i);
 
 	chained_irq_exit(chip, desc);
 }
@@ -282,7 +282,7 @@ static void xilinx_cpm_pcie_event_flow(struct irq_desc *desc)
 	val =  pcie_read(port, XILINX_CPM_PCIE_REG_IDR);
 	val &= pcie_read(port, XILINX_CPM_PCIE_REG_IMR);
 	for_each_set_bit(i, &val, 32)
-		generic_handle_irq(irq_find_mapping(port->cpm_domain, i));
+		generic_handle_domain_irq(port->cpm_domain, i);
 	pcie_write(port, val, XILINX_CPM_PCIE_REG_IDR);
 
 	/*
@@ -404,6 +404,7 @@ static int xilinx_cpm_pcie_init_irq_domain(struct xilinx_cpm_pcie_port *port)
 	return 0;
 out:
 	xilinx_cpm_free_irq_domains(port);
+	of_node_put(pcie_intc_node);
 	dev_err(dev, "Failed to allocate IRQ domains\n");
 
 	return -ENOMEM;
@@ -572,12 +573,8 @@ static int xilinx_cpm_pcie_probe(struct platform_device *pdev)
 		goto err_setup_irq;
 	}
 
-	bridge->dev.parent = dev;
 	bridge->sysdata = port->cfg;
-	bridge->busnr = port->cfg->busr.start;
 	bridge->ops = (struct pci_ops *)&pci_generic_ecam_ops.pci_ops;
-	bridge->map_irq = of_irq_parse_and_map_pci;
-	bridge->swizzle_irq = pci_common_swizzle;
 
 	err = pci_host_probe(bridge);
 	if (err < 0)

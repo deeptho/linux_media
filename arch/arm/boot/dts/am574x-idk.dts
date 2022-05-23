@@ -36,11 +36,14 @@
 	pinctrl-2 = <&mmc2_pins_default>;
 };
 
-&mac {
+&emif1 {
 	status = "okay";
-	dual_emac;
 };
 
-&m_can0 {
+&pruss1_mdio {
+	status = "disabled";
+};
+
+&pruss2_mdio {
 	status = "disabled";
 };

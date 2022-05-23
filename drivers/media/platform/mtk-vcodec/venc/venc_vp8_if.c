@@ -302,8 +302,7 @@ static int vp8_enc_encode_frame(struct venc_vp8_inst *inst,
 
 	mtk_vcodec_debug(inst, "->frm_cnt=%d", inst->frm_cnt);
 
-	ret = vpu_enc_encode(&inst->vpu_inst, 0, frm_buf, bs_buf, bs_size,
-			     NULL);
+	ret = vpu_enc_encode(&inst->vpu_inst, 0, frm_buf, bs_buf, NULL);
 	if (ret)
 		return ret;
 
@@ -367,7 +366,7 @@ static int vp8_enc_encode(void *handle,
 
 	mtk_vcodec_debug_enter(inst);
 
-	enable_irq(ctx->dev->enc_lt_irq);
+	enable_irq(ctx->dev->enc_irq);
 
 	switch (opt) {
 	case VENC_START_OPT_ENCODE_FRAME:
@@ -386,7 +385,7 @@ static int vp8_enc_encode(void *handle,
 
 encode_err:
 
-	disable_irq(ctx->dev->enc_lt_irq);
+	disable_irq(ctx->dev->enc_irq);
 	mtk_vcodec_debug_leave(inst);
 
 	return ret;

@@ -4,7 +4,6 @@
 #ifndef MLX5_CORE_EQ_H
 #define MLX5_CORE_EQ_H
 
-#define MLX5_IRQ_VEC_COMP_BASE 1
 #define MLX5_NUM_CMD_EQE   (32)
 #define MLX5_NUM_ASYNC_EQE (0x1000)
 #define MLX5_NUM_SPARE_EQE (0x80)
@@ -16,6 +15,7 @@ struct mlx5_eq_param {
 	u8             irq_index;
 	int            nent;
 	u64            mask[4];
+	cpumask_var_t  affinity;
 };
 
 struct mlx5_eq *

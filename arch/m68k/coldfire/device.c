@@ -554,7 +554,7 @@ static struct platform_device mcf_edma = {
 };
 #endif /* IS_ENABLED(CONFIG_MCF_EDMA) */
 
-#if IS_ENABLED(CONFIG_MMC)
+#ifdef MCFSDHC_BASE
 static struct mcf_esdhc_platform_data mcf_esdhc_data = {
 	.max_bus_width = 4,
 	.cd_type = ESDHC_CD_NONE,
@@ -579,7 +579,48 @@ static struct platform_device mcf_esdhc = {
 	.resource		= mcf_esdhc_resources,
 	.dev.platform_data	= &mcf_esdhc_data,
 };
-#endif /* IS_ENABLED(CONFIG_MMC) */
+#endif /* MCFSDHC_BASE */
+
+#if IS_ENABLED(CONFIG_CAN_FLEXCAN)
+
+#include <linux/can/platform/flexcan.h>
+
+static struct flexcan_platform_data mcf5441x_flexcan_info = {
+	.clk_src = 1,
+	.clock_frequency = 120000000,
+};
+
+static struct resource mcf5441x_flexcan0_resource[] = {
+	{
+		.start = MCFFLEXCAN_BASE0,
+		.end = MCFFLEXCAN_BASE0 + MCFFLEXCAN_SIZE,
+		.flags = IORESOURCE_MEM,
+	},
+	{
+		.start = MCF_IRQ_IFL0,
+		.end = MCF_IRQ_IFL0,
+		.flags = IORESOURCE_IRQ,
+	},
+	{
+		.start = MCF_IRQ_BOFF0,
+		.end = MCF_IRQ_BOFF0,
+		.flags = IORESOURCE_IRQ,
+	},
+	{
+		.start = MCF_IRQ_ERR0,
+		.end = MCF_IRQ_ERR0,
+		.flags = IORESOURCE_IRQ,
+	},
+};
+
+static struct platform_device mcf_flexcan0 = {
+	.name = "flexcan-mcf5441x",
+	.id = 0,
+	.num_resources = ARRAY_SIZE(mcf5441x_flexcan0_resource),
+	.resource = mcf5441x_flexcan0_resource,
+	.dev.platform_data = &mcf5441x_flexcan_info,
+};
+#endif /* IS_ENABLED(CONFIG_CAN_FLEXCAN) */
 
 static struct platform_device *mcf_devices[] __initdata = {
 	&mcf_uart,
@@ -613,8 +654,11 @@ static struct platform_device *mcf_devices[] __initdata = {
 #if IS_ENABLED(CONFIG_MCF_EDMA)
 	&mcf_edma,
 #endif
-#if IS_ENABLED(CONFIG_MMC)
+#ifdef MCFSDHC_BASE
 	&mcf_esdhc,
+#endif
+#if IS_ENABLED(CONFIG_CAN_FLEXCAN)
+	&mcf_flexcan0,
 #endif
 };
 

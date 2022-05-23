@@ -28,6 +28,12 @@ struct symbol test_symbols[] = {
 	{ "func",    BTF_KIND_FUNC,    -1 },
 };
 
+/* Align the .BTF_ids section to 4 bytes */
+asm (
+".pushsection " BTF_IDS_SECTION " ,\"a\"; \n"
+".balign 4, 0;                            \n"
+".popsection;                             \n");
+
 BTF_ID_LIST(test_list_local)
 BTF_ID_UNUSED
 BTF_ID(typedef, S)
@@ -47,6 +53,15 @@ BTF_ID(struct,  S)
 BTF_ID(union,   U)
 BTF_ID(func,    func)
 
+BTF_SET_START(test_set)
+BTF_ID(typedef, S)
+BTF_ID(typedef, T)
+BTF_ID(typedef, U)
+BTF_ID(struct,  S)
+BTF_ID(union,   U)
+BTF_ID(func,    func)
+BTF_SET_END(test_set)
+
 static int
 __resolve_symbol(struct btf *btf, int type_id)
 {
@@ -61,7 +76,7 @@ __resolve_symbol(struct btf *btf, int type_id)
 	}
 
 	for (i = 0; i < ARRAY_SIZE(test_symbols); i++) {
-		if (test_symbols[i].id != -1)
+		if (test_symbols[i].id >= 0)
 			continue;
 
 		if (BTF_INFO_KIND(type->info) != test_symbols[i].type)
@@ -91,9 +106,9 @@ static int resolve_symbols(void)
 		  "Failed to load BTF from btf_data.o\n"))
 		return -1;
 
-	nr = btf__get_nr_types(btf);
+	nr = btf__type_cnt(btf);
 
-	for (type_id = 1; type_id <= nr; type_id++) {
+	for (type_id = 1; type_id < nr; type_id++) {
 		if (__resolve_symbol(btf, type_id))
 			break;
 	}
@@ -102,28 +117,51 @@ static int resolve_symbols(void)
 	return 0;
 }
 
-int test_resolve_btfids(void)
+void test_resolve_btfids(void)
 {
 	__u32 *test_list, *test_lists[] = { test_list_local, test_list_global };
 	unsigned int i, j;
 	int ret = 0;
 
 	if (resolve_symbols())
-		return -1;
+		return;
 
 	/* Check BTF_ID_LIST(test_list_local) and
 	 * BTF_ID_LIST_GLOBAL(test_list_global) IDs
 	 */
 	for (j = 0; j < ARRAY_SIZE(test_lists); j++) {
 		test_list = test_lists[j];
-		for (i = 0; i < ARRAY_SIZE(test_symbols) && !ret; i++) {
+		for (i = 0; i < ARRAY_SIZE(test_symbols); i++) {
 			ret = CHECK(test_list[i] != test_symbols[i].id,
 				    "id_check",
 				    "wrong ID for %s (%d != %d)\n",
 				    test_symbols[i].name,
 				    test_list[i], test_symbols[i].id);
+			if (ret)
+				return;
 		}
 	}
 
-	return ret;
+	/* Check BTF_SET_START(test_set) IDs */
+	for (i = 0; i < test_set.cnt; i++) {
+		bool found = false;
+
+		for (j = 0; j < ARRAY_SIZE(test_symbols); j++) {
+			if (test_symbols[j].id != test_set.ids[i])
+				continue;
+			found = true;
+			break;
+		}
+
+		ret = CHECK(!found, "id_check",
+			    "ID %d not found in test_symbols\n",
+			    test_set.ids[i]);
+		if (ret)
+			break;
+
+		if (i > 0) {
+			if (!ASSERT_LE(test_set.ids[i - 1], test_set.ids[i], "sort_check"))
+				return;
+		}
+	}
 }

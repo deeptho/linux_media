@@ -1,8 +1,7 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * QLogic qlcnic NIC Driver
  * Copyright (c) 2009-2013 QLogic Corporation
- *
- * See LICENSE.qlcnic for copyright and licensing details.
  */
 
 #include <linux/vmalloc.h>
@@ -305,7 +304,7 @@ int qlcnic_read_mac_addr(struct qlcnic_adapter *adapter)
 	if (ret)
 		return ret;
 
-	memcpy(netdev->dev_addr, mac_addr, ETH_ALEN);
+	eth_hw_addr_set(netdev, mac_addr);
 	memcpy(adapter->mac_addr, netdev->dev_addr, netdev->addr_len);
 
 	/* set station address */
@@ -320,10 +319,8 @@ int qlcnic_read_mac_addr(struct qlcnic_adapter *adapter)
 static void qlcnic_delete_adapter_mac(struct qlcnic_adapter *adapter)
 {
 	struct qlcnic_mac_vlan_list *cur;
-	struct list_head *head;
 
-	list_for_each(head, &adapter->mac_list) {
-		cur = list_entry(head, struct qlcnic_mac_vlan_list, list);
+	list_for_each_entry(cur, &adapter->mac_list, list) {
 		if (ether_addr_equal_unaligned(adapter->mac_addr, cur->mac_addr)) {
 			qlcnic_sre_macaddr_change(adapter, cur->mac_addr,
 						  0, QLCNIC_MAC_DEL);
@@ -359,7 +356,7 @@ static int qlcnic_set_mac(struct net_device *netdev, void *p)
 
 	qlcnic_delete_adapter_mac(adapter);
 	memcpy(adapter->mac_addr, addr->sa_data, netdev->addr_len);
-	memcpy(netdev->dev_addr, addr->sa_data, netdev->addr_len);
+	eth_hw_addr_set(netdev, addr->sa_data);
 	qlcnic_set_multi(adapter->netdev);
 
 	if (test_bit(__QLCNIC_DEV_UP, &adapter->state)) {
@@ -521,8 +518,6 @@ static const struct net_device_ops qlcnic_netdev_ops = {
 	.ndo_fdb_del		= qlcnic_fdb_del,
 	.ndo_fdb_dump		= qlcnic_fdb_dump,
 	.ndo_get_phys_port_id	= qlcnic_get_phys_port_id,
-	.ndo_udp_tunnel_add	= udp_tunnel_nic_add_port,
-	.ndo_udp_tunnel_del	= udp_tunnel_nic_del_port,
 	.ndo_features_check	= qlcnic_features_check,
 #ifdef CONFIG_QLCNIC_SRIOV
 	.ndo_set_vf_mac		= qlcnic_sriov_set_vf_mac,
@@ -2348,11 +2343,9 @@ qlcnic_setup_netdev(struct qlcnic_adapter *adapter, struct net_device *netdev,
 
 static int qlcnic_set_dma_mask(struct pci_dev *pdev, int *pci_using_dac)
 {
-	if (!pci_set_dma_mask(pdev, DMA_BIT_MASK(64)) &&
-			!pci_set_consistent_dma_mask(pdev, DMA_BIT_MASK(64)))
+	if (!dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(64)))
 		*pci_using_dac = 1;
-	else if (!pci_set_dma_mask(pdev, DMA_BIT_MASK(32)) &&
-			!pci_set_consistent_dma_mask(pdev, DMA_BIT_MASK(32)))
+	else if (!dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(32)))
 		*pci_using_dac = 0;
 	else {
 		dev_err(&pdev->dev, "Unable to set DMA mask, aborting\n");
@@ -2493,6 +2486,7 @@ qlcnic_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 		qlcnic_sriov_vf_register_map(ahw);
 		break;
 	default:
+		err = -EINVAL;
 		goto err_out_free_hw_res;
 	}
 
@@ -2692,6 +2686,7 @@ err_out_free_hw_res:
 	kfree(ahw);
 
 err_out_free_res:
+	pci_disable_pcie_error_reporting(pdev);
 	pci_release_regions(pdev);
 
 err_out_disable_pdev:
@@ -3345,9 +3340,6 @@ qlcnic_can_start_firmware(struct qlcnic_adapter *adapter)
 	do {
 		msleep(1000);
 		prev_state = QLC_SHARED_REG_RD32(adapter, QLCNIC_CRB_DEV_STATE);
-
-		if (prev_state == QLCNIC_DEV_QUISCENT)
-			continue;
 	} while ((prev_state != QLCNIC_DEV_READY) && --dev_init_timeo);
 
 	if (!dev_init_timeo) {
@@ -3457,6 +3449,7 @@ wait_npar:
 			adapter->fw_wait_cnt = 0;
 			return;
 		}
+		break;
 	case QLCNIC_DEV_FAILED:
 		break;
 	default:

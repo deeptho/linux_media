@@ -12,7 +12,9 @@
 #include <linux/regmap.h>
 #include <linux/thermal.h>
 
-#define MLXREG_FAN_MAX_TACHO		12
+#define MLXREG_FAN_MAX_TACHO		14
+#define MLXREG_FAN_MAX_PWM		4
+#define MLXREG_FAN_PWM_NOT_CONNECTED	0xff
 #define MLXREG_FAN_MAX_STATE		10
 #define MLXREG_FAN_MIN_DUTY		51	/* 20% */
 #define MLXREG_FAN_MAX_DUTY		255	/* 100% */
@@ -61,28 +63,38 @@
 					 MLXREG_FAN_MAX_DUTY,		\
 					 MLXREG_FAN_MAX_STATE))
 
+struct mlxreg_fan;
+
 /*
  * struct mlxreg_fan_tacho - tachometer data (internal use):
  *
  * @connected: indicates if tachometer is connected;
  * @reg: register offset;
  * @mask: fault mask;
+ * @prsnt: present register offset;
  */
 struct mlxreg_fan_tacho {
 	bool connected;
 	u32 reg;
 	u32 mask;
+	u32 prsnt;
 };
 
 /*
  * struct mlxreg_fan_pwm - PWM data (internal use):
  *
+ * @fan: private data;
  * @connected: indicates if PWM is connected;
  * @reg: register offset;
+ * @cooling: cooling device levels;
+ * @cdev: cooling device;
  */
 struct mlxreg_fan_pwm {
+	struct mlxreg_fan *fan;
 	bool connected;
 	u32 reg;
+	u8 cooling_levels[MLXREG_FAN_MAX_STATE + 1];
+	struct thermal_cooling_device *cdev;
 };
 
 /*
@@ -92,21 +104,19 @@ struct mlxreg_fan_pwm {
  * @regmap: register map of parent device;
  * @tacho: tachometer data;
  * @pwm: PWM data;
+ * @tachos_per_drwr - number of tachometers per drawer;
  * @samples: minimum allowed samples per pulse;
  * @divider: divider value for tachometer RPM calculation;
- * @cooling: cooling device levels;
- * @cdev: cooling device;
  */
 struct mlxreg_fan {
 	struct device *dev;
 	void *regmap;
 	struct mlxreg_core_platform_data *pdata;
 	struct mlxreg_fan_tacho tacho[MLXREG_FAN_MAX_TACHO];
-	struct mlxreg_fan_pwm pwm;
+	struct mlxreg_fan_pwm pwm[MLXREG_FAN_MAX_PWM];
+	int tachos_per_drwr;
 	int samples;
 	int divider;
-	u8 cooling_levels[MLXREG_FAN_MAX_STATE + 1];
-	struct thermal_cooling_device *cdev;
 };
 
 static int
@@ -115,6 +125,7 @@ mlxreg_fan_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 {
 	struct mlxreg_fan *fan = dev_get_drvdata(dev);
 	struct mlxreg_fan_tacho *tacho;
+	struct mlxreg_fan_pwm *pwm;
 	u32 regval;
 	int err;
 
@@ -123,6 +134,26 @@ mlxreg_fan_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 		tacho = &fan->tacho[channel];
 		switch (attr) {
 		case hwmon_fan_input:
+			/*
+			 * Check FAN presence: FAN related bit in presence register is one,
+			 * if FAN is physically connected, zero - otherwise.
+			 */
+			if (tacho->prsnt && fan->tachos_per_drwr) {
+				err = regmap_read(fan->regmap, tacho->prsnt, &regval);
+				if (err)
+					return err;
+
+				/*
+				 * Map channel to presence bit - drawer can be equipped with
+				 * one or few FANs, while presence is indicated per drawer.
+				 */
+				if (BIT(channel / fan->tachos_per_drwr) & regval) {
+					/* FAN is not connected - return zero for FAN speed. */
+					*val = 0;
+					return 0;
+				}
+			}
+
 			err = regmap_read(fan->regmap, tacho->reg, &regval);
 			if (err)
 				return err;
@@ -145,9 +176,10 @@ mlxreg_fan_read(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 		break;
 
 	case hwmon_pwm:
+		pwm = &fan->pwm[channel];
 		switch (attr) {
 		case hwmon_pwm_input:
-			err = regmap_read(fan->regmap, fan->pwm.reg, &regval);
+			err = regmap_read(fan->regmap, pwm->reg, &regval);
 			if (err)
 				return err;
 
@@ -171,6 +203,7 @@ mlxreg_fan_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 		 int channel, long val)
 {
 	struct mlxreg_fan *fan = dev_get_drvdata(dev);
+	struct mlxreg_fan_pwm *pwm;
 
 	switch (type) {
 	case hwmon_pwm:
@@ -179,7 +212,8 @@ mlxreg_fan_write(struct device *dev, enum hwmon_sensor_types type, u32 attr,
 			if (val < MLXREG_FAN_MIN_DUTY ||
 			    val > MLXREG_FAN_MAX_DUTY)
 				return -EINVAL;
-			return regmap_write(fan->regmap, fan->pwm.reg, val);
+			pwm = &fan->pwm[channel];
+			return regmap_write(fan->regmap, pwm->reg, val);
 		default:
 			return -EOPNOTSUPP;
 		}
@@ -211,7 +245,7 @@ mlxreg_fan_is_visible(const void *data, enum hwmon_sensor_types type, u32 attr,
 		break;
 
 	case hwmon_pwm:
-		if (!(((struct mlxreg_fan *)data)->pwm.connected))
+		if (!(((struct mlxreg_fan *)data)->pwm[channel].connected))
 			return 0;
 
 		switch (attr) {
@@ -229,6 +263,13 @@ mlxreg_fan_is_visible(const void *data, enum hwmon_sensor_types type, u32 attr,
 	return 0;
 }
 
+static char *mlxreg_fan_name[] = {
+	"mlxreg_fan",
+	"mlxreg_fan1",
+	"mlxreg_fan2",
+	"mlxreg_fan3",
+};
+
 static const struct hwmon_channel_info *mlxreg_fan_hwmon_info[] = {
 	HWMON_CHANNEL_INFO(fan,
 			   HWMON_F_INPUT | HWMON_F_FAULT,
@@ -242,8 +283,13 @@ static const struct hwmon_channel_info *mlxreg_fan_hwmon_info[] = {
 			   HWMON_F_INPUT | HWMON_F_FAULT,
 			   HWMON_F_INPUT | HWMON_F_FAULT,
 			   HWMON_F_INPUT | HWMON_F_FAULT,
+			   HWMON_F_INPUT | HWMON_F_FAULT,
+			   HWMON_F_INPUT | HWMON_F_FAULT,
 			   HWMON_F_INPUT | HWMON_F_FAULT),
 	HWMON_CHANNEL_INFO(pwm,
+			   HWMON_PWM_INPUT,
+			   HWMON_PWM_INPUT,
+			   HWMON_PWM_INPUT,
 			   HWMON_PWM_INPUT),
 	NULL
 };
@@ -270,11 +316,12 @@ static int mlxreg_fan_get_cur_state(struct thermal_cooling_device *cdev,
 				    unsigned long *state)
 
 {
-	struct mlxreg_fan *fan = cdev->devdata;
+	struct mlxreg_fan_pwm *pwm = cdev->devdata;
+	struct mlxreg_fan *fan = pwm->fan;
 	u32 regval;
 	int err;
 
-	err = regmap_read(fan->regmap, fan->pwm.reg, &regval);
+	err = regmap_read(fan->regmap, pwm->reg, &regval);
 	if (err) {
 		dev_err(fan->dev, "Failed to query PWM duty\n");
 		return err;
@@ -289,10 +336,11 @@ static int mlxreg_fan_set_cur_state(struct thermal_cooling_device *cdev,
 				    unsigned long state)
 
 {
-	struct mlxreg_fan *fan = cdev->devdata;
+	struct mlxreg_fan_pwm *pwm = cdev->devdata;
+	struct mlxreg_fan *fan = pwm->fan;
 	unsigned long cur_state;
+	int i, config = 0;
 	u32 regval;
-	int i;
 	int err;
 
 	/*
@@ -305,13 +353,19 @@ static int mlxreg_fan_set_cur_state(struct thermal_cooling_device *cdev,
 	 * overwritten.
 	 */
 	if (state >= MLXREG_FAN_SPEED_MIN && state <= MLXREG_FAN_SPEED_MAX) {
+		/*
+		 * This is configuration change, which is only supported through sysfs.
+		 * For configuration non-zero value is to be returned to avoid thermal
+		 * statistics update.
+		 */
+		config = 1;
 		state -= MLXREG_FAN_MAX_STATE;
 		for (i = 0; i < state; i++)
-			fan->cooling_levels[i] = state;
+			pwm->cooling_levels[i] = state;
 		for (i = state; i <= MLXREG_FAN_MAX_STATE; i++)
-			fan->cooling_levels[i] = i;
+			pwm->cooling_levels[i] = i;
 
-		err = regmap_read(fan->regmap, fan->pwm.reg, &regval);
+		err = regmap_read(fan->regmap, pwm->reg, &regval);
 		if (err) {
 			dev_err(fan->dev, "Failed to query PWM duty\n");
 			return err;
@@ -319,7 +373,7 @@ static int mlxreg_fan_set_cur_state(struct thermal_cooling_device *cdev,
 
 		cur_state = MLXREG_FAN_PWM_DUTY2STATE(regval);
 		if (state < cur_state)
-			return 0;
+			return config;
 
 		state = cur_state;
 	}
@@ -328,14 +382,14 @@ static int mlxreg_fan_set_cur_state(struct thermal_cooling_device *cdev,
 		return -EINVAL;
 
 	/* Normalize the state to the valid speed range. */
-	state = fan->cooling_levels[state];
-	err = regmap_write(fan->regmap, fan->pwm.reg,
+	state = pwm->cooling_levels[state];
+	err = regmap_write(fan->regmap, pwm->reg,
 			   MLXREG_FAN_PWM_STATE2DUTY(state));
 	if (err) {
 		dev_err(fan->dev, "Failed to write PWM duty\n");
 		return err;
 	}
-	return 0;
+	return config;
 }
 
 static const struct thermal_cooling_device_ops mlxreg_fan_cooling_ops = {
@@ -358,6 +412,22 @@ static int mlxreg_fan_connect_verify(struct mlxreg_fan *fan,
 	}
 
 	return !!(regval & data->bit);
+}
+
+static int mlxreg_pwm_connect_verify(struct mlxreg_fan *fan,
+				     struct mlxreg_core_data *data)
+{
+	u32 regval;
+	int err;
+
+	err = regmap_read(fan->regmap, data->reg, &regval);
+	if (err) {
+		dev_err(fan->dev, "Failed to query pwm register 0x%08x\n",
+			data->reg);
+		return err;
+	}
+
+	return regval != MLXREG_FAN_PWM_NOT_CONNECTED;
 }
 
 static int mlxreg_fan_speed_divider_get(struct mlxreg_fan *fan,
@@ -388,9 +458,9 @@ static int mlxreg_fan_speed_divider_get(struct mlxreg_fan *fan,
 static int mlxreg_fan_config(struct mlxreg_fan *fan,
 			     struct mlxreg_core_platform_data *pdata)
 {
+	int tacho_num = 0, tacho_avail = 0, pwm_num = 0, i;
 	struct mlxreg_core_data *data = pdata->data;
 	bool configured = false;
-	int tacho_num = 0, i;
 	int err;
 
 	fan->samples = MLXREG_FAN_TACHO_SAMPLES_PER_PULSE_DEF;
@@ -415,15 +485,28 @@ static int mlxreg_fan_config(struct mlxreg_fan *fan,
 
 			fan->tacho[tacho_num].reg = data->reg;
 			fan->tacho[tacho_num].mask = data->mask;
+			fan->tacho[tacho_num].prsnt = data->reg_prsnt;
 			fan->tacho[tacho_num++].connected = true;
+			tacho_avail++;
 		} else if (strnstr(data->label, "pwm", sizeof(data->label))) {
-			if (fan->pwm.connected) {
-				dev_err(fan->dev, "duplicate pwm entry: %s\n",
+			if (pwm_num == MLXREG_FAN_MAX_TACHO) {
+				dev_err(fan->dev, "too many pwm entries: %s\n",
 					data->label);
 				return -EINVAL;
 			}
-			fan->pwm.reg = data->reg;
-			fan->pwm.connected = true;
+
+			/* Validate if more then one PWM is connected. */
+			if (pwm_num) {
+				err = mlxreg_pwm_connect_verify(fan, data);
+				if (err < 0)
+					return err;
+				else if (!err)
+					continue;
+			}
+
+			fan->pwm[pwm_num].reg = data->reg;
+			fan->pwm[pwm_num].connected = true;
+			pwm_num++;
 		} else if (strnstr(data->label, "conf", sizeof(data->label))) {
 			if (configured) {
 				dev_err(fan->dev, "duplicate conf entry: %s\n",
@@ -453,11 +536,55 @@ static int mlxreg_fan_config(struct mlxreg_fan *fan,
 		}
 	}
 
-	/* Init cooling levels per PWM state. */
-	for (i = 0; i < MLXREG_FAN_SPEED_MIN_LEVEL; i++)
-		fan->cooling_levels[i] = MLXREG_FAN_SPEED_MIN_LEVEL;
-	for (i = MLXREG_FAN_SPEED_MIN_LEVEL; i <= MLXREG_FAN_MAX_STATE; i++)
-		fan->cooling_levels[i] = i;
+	if (pdata->capability) {
+		int drwr_avail;
+		u32 regval;
+
+		/* Obtain the number of FAN drawers, supported by system. */
+		err = regmap_read(fan->regmap, pdata->capability, &regval);
+		if (err) {
+			dev_err(fan->dev, "Failed to query capability register 0x%08x\n",
+				pdata->capability);
+			return err;
+		}
+
+		drwr_avail = hweight32(regval);
+		if (!tacho_avail || !drwr_avail || tacho_avail < drwr_avail) {
+			dev_err(fan->dev, "Configuration is invalid: drawers num %d tachos num %d\n",
+				drwr_avail, tacho_avail);
+			return -EINVAL;
+		}
+
+		/* Set the number of tachometers per one drawer. */
+		fan->tachos_per_drwr = tacho_avail / drwr_avail;
+	}
+
+	return 0;
+}
+
+static int mlxreg_fan_cooling_config(struct device *dev, struct mlxreg_fan *fan)
+{
+	int i, j;
+
+	for (i = 0; i < MLXREG_FAN_MAX_PWM; i++) {
+		struct mlxreg_fan_pwm *pwm = &fan->pwm[i];
+
+		if (!pwm->connected)
+			continue;
+		pwm->fan = fan;
+		pwm->cdev = devm_thermal_of_cooling_device_register(dev, NULL, mlxreg_fan_name[i],
+								    pwm, &mlxreg_fan_cooling_ops);
+		if (IS_ERR(pwm->cdev)) {
+			dev_err(dev, "Failed to register cooling device\n");
+			return PTR_ERR(pwm->cdev);
+		}
+
+		/* Init cooling levels per PWM state. */
+		for (j = 0; j < MLXREG_FAN_SPEED_MIN_LEVEL; j++)
+			pwm->cooling_levels[j] = MLXREG_FAN_SPEED_MIN_LEVEL;
+		for (j = MLXREG_FAN_SPEED_MIN_LEVEL; j <= MLXREG_FAN_MAX_STATE; j++)
+			pwm->cooling_levels[j] = j;
+	}
 
 	return 0;
 }
@@ -496,16 +623,10 @@ static int mlxreg_fan_probe(struct platform_device *pdev)
 		return PTR_ERR(hwm);
 	}
 
-	if (IS_REACHABLE(CONFIG_THERMAL)) {
-		fan->cdev = devm_thermal_of_cooling_device_register(dev,
-			NULL, "mlxreg_fan", fan, &mlxreg_fan_cooling_ops);
-		if (IS_ERR(fan->cdev)) {
-			dev_err(dev, "Failed to register cooling device\n");
-			return PTR_ERR(fan->cdev);
-		}
-	}
+	if (IS_REACHABLE(CONFIG_THERMAL))
+		err = mlxreg_fan_cooling_config(dev, fan);
 
-	return 0;
+	return err;
 }
 
 static struct platform_driver mlxreg_fan_driver = {

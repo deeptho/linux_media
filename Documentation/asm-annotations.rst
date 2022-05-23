@@ -64,7 +64,7 @@ macros, it was decided that brand new macros should be introduced instead::
     of importing all the crappy, historic, essentially randomly chosen
     debug symbol macro names from the binutils and older kernels?
 
-.. _discussion: https://lkml.kernel.org/r/20170217104757.28588-1-jslaby@suse.cz
+.. _discussion: https://lore.kernel.org/r/20170217104757.28588-1-jslaby@suse.cz
 
 Macros Description
 ------------------
@@ -99,6 +99,11 @@ three main groups:
 Instruction Macros
 ~~~~~~~~~~~~~~~~~~
 This section covers ``SYM_FUNC_*`` and ``SYM_CODE_*`` enumerated above.
+
+``objtool`` requires that all code must be contained in an ELF symbol. Symbol
+names that have a ``.L`` prefix do not emit symbol table entries. ``.L``
+prefixed symbols can be used within a code region, but should be avoided for
+denoting a range of code via ``SYM_*_START/END`` annotations.
 
 * ``SYM_FUNC_START`` and ``SYM_FUNC_START_LOCAL`` are supposed to be **the
   most frequent markings**. They are used for functions with standard calling

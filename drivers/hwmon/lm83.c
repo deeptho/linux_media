@@ -105,7 +105,7 @@ struct lm83_data {
 	struct i2c_client *client;
 	const struct attribute_group *groups[3];
 	struct mutex update_lock;
-	char valid; /* zero until following fields are valid */
+	bool valid; /* false until following fields are valid */
 	unsigned long last_updated; /* in jiffies */
 
 	/* registers values */
@@ -137,7 +137,7 @@ static struct lm83_data *lm83_update_device(struct device *dev)
 		    << 8);
 
 		data->last_updated = jiffies;
-		data->valid = 1;
+		data->valid = true;
 	}
 
 	mutex_unlock(&data->update_lock);
@@ -317,8 +317,9 @@ static int lm83_detect(struct i2c_client *new_client,
 	return 0;
 }
 
-static int lm83_probe(struct i2c_client *new_client,
-		      const struct i2c_device_id *id)
+static const struct i2c_device_id lm83_id[];
+
+static int lm83_probe(struct i2c_client *new_client)
 {
 	struct device *hwmon_dev;
 	struct lm83_data *data;
@@ -338,7 +339,7 @@ static int lm83_probe(struct i2c_client *new_client,
 	 * declare 1 and 3 common, and then 2 and 4 only for the LM83.
 	 */
 	data->groups[0] = &lm83_group;
-	if (id->driver_data == lm83)
+	if (i2c_match_id(lm83_id, new_client)->driver_data == lm83)
 		data->groups[1] = &lm83_group_opt;
 
 	hwmon_dev = devm_hwmon_device_register_with_groups(&new_client->dev,
@@ -363,7 +364,7 @@ static struct i2c_driver lm83_driver = {
 	.driver = {
 		.name	= "lm83",
 	},
-	.probe		= lm83_probe,
+	.probe_new	= lm83_probe,
 	.id_table	= lm83_id,
 	.detect		= lm83_detect,
 	.address_list	= normal_i2c,

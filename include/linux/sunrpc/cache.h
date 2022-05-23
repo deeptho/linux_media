@@ -14,6 +14,7 @@
 #include <linux/kref.h>
 #include <linux/slab.h>
 #include <linux/atomic.h>
+#include <linux/kstrtox.h>
 #include <linux/proc_fs.h>
 
 /*
@@ -45,7 +46,8 @@
  */
 struct cache_head {
 	struct hlist_node	cache_list;
-	time64_t	expiry_time;	/* After time time, don't use the data */
+	time64_t	expiry_time;	/* After time expiry_time, don't use
+					 * the data */
 	time64_t	last_refresh;   /* If CACHE_PENDING, this is when upcall was
 					 * sent, else this is when update was
 					 * received, though it is alway set to

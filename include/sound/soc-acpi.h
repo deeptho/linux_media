@@ -58,11 +58,13 @@ static inline struct snd_soc_acpi_mach *snd_soc_acpi_codec_list(void *arg)
  * snd_soc_acpi_mach_params: interface for machine driver configuration
  *
  * @acpi_ipc_irq_index: used for BYT-CR detection
- * @platform: string used for HDaudio codec support
+ * @platform: string used for HDAudio codec support
  * @codec_mask: used for HDAudio support
  * @common_hdmi_codec_drv: use commom HDAudio HDMI codec driver
  * @link_mask: links enabled on the board
  * @links: array of link _ADR descriptors, null terminated
+ * @num_dai_drivers: number of elements in @dai_drivers
+ * @dai_drivers: pointer to dai_drivers, used e.g. in nocodec mode
  */
 struct snd_soc_acpi_mach_params {
 	u32 acpi_ipc_irq_index;
@@ -72,6 +74,8 @@ struct snd_soc_acpi_mach_params {
 	bool common_hdmi_codec_drv;
 	u32 link_mask;
 	const struct snd_soc_acpi_link_adr *links;
+	u32 num_dai_drivers;
+	struct snd_soc_dai_driver *dai_drivers;
 };
 
 /**
@@ -93,11 +97,13 @@ struct snd_soc_acpi_endpoint {
  * @adr: 64 bit ACPI _ADR value
  * @num_endpoints: number of endpoints for this device
  * @endpoints: array of endpoints
+ * @name_prefix: string used for codec controls
  */
 struct snd_soc_acpi_adr_device {
 	const u64 adr;
 	const u8 num_endpoints;
 	const struct snd_soc_acpi_endpoint *endpoints;
+	const char *name_prefix;
 };
 
 /**
@@ -123,6 +129,8 @@ struct snd_soc_acpi_link_adr {
  * all firmware/topology related fields.
  *
  * @id: ACPI ID (usually the codec's) used to find a matching machine driver.
+ * @comp_ids: list of compatible audio codecs using the same machine driver,
+ * firmware and topology
  * @link_mask: describes required board layout, e.g. for SoundWire.
  * @links: array of link _ADR descriptors, null terminated.
  * @drv_name: machine driver name
@@ -139,7 +147,8 @@ struct snd_soc_acpi_link_adr {
  */
 /* Descriptor for SST ASoC machine driver */
 struct snd_soc_acpi_mach {
-	const u8 id[ACPI_ID_LEN];
+	u8 id[ACPI_ID_LEN];
+	const struct snd_soc_acpi_codecs *comp_ids;
 	const u32 link_mask;
 	const struct snd_soc_acpi_link_adr *links;
 	const char *drv_name;
@@ -168,5 +177,11 @@ struct snd_soc_acpi_codecs {
 	int num_codecs;
 	u8 codecs[SND_SOC_ACPI_MAX_CODECS][ACPI_ID_LEN];
 };
+
+static inline bool snd_soc_acpi_sof_parent(struct device *dev)
+{
+	return dev->parent && dev->parent->driver && dev->parent->driver->name &&
+		!strncmp(dev->parent->driver->name, "sof-audio-acpi", strlen("sof-audio-acpi"));
+}
 
 #endif

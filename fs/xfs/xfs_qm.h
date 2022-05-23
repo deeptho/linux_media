@@ -11,7 +11,7 @@
 
 struct xfs_inode;
 
-extern struct kmem_zone	*xfs_qm_dqtrxzone;
+extern struct kmem_cache	*xfs_dqtrx_cache;
 
 /*
  * Number of bmaps that we ask from bmapi when doing a quotacheck.
@@ -65,6 +65,10 @@ struct xfs_quotainfo {
 	struct xfs_def_quota	qi_grp_default;
 	struct xfs_def_quota	qi_prj_default;
 	struct shrinker		qi_shrinker;
+
+	/* Minimum and maximum quota expiration timestamp values. */
+	time64_t		qi_expiry_min;
+	time64_t		qi_expiry_max;
 };
 
 static inline struct radix_tree_root *
@@ -135,10 +139,6 @@ struct xfs_dquot_acct {
 #define XFS_QM_RTBWARNLIMIT	5
 
 extern void		xfs_qm_destroy_quotainfo(struct xfs_mount *);
-
-/* dquot stuff */
-extern void		xfs_qm_dqpurge_all(struct xfs_mount *, uint);
-extern void		xfs_qm_dqrele_all_inodes(struct xfs_mount *, uint);
 
 /* quota ops */
 extern int		xfs_qm_scall_trunc_qfiles(struct xfs_mount *, uint);

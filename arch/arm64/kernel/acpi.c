@@ -239,6 +239,18 @@ done:
 	}
 }
 
+static pgprot_t __acpi_get_writethrough_mem_attribute(void)
+{
+	/*
+	 * Although UEFI specifies the use of Normal Write-through for
+	 * EFI_MEMORY_WT, it is seldom used in practice and not implemented
+	 * by most (all?) CPUs. Rather than allocate a MAIR just for this
+	 * purpose, emit a warning and use Normal Non-cacheable instead.
+	 */
+	pr_warn_once("No MAIR allocation for EFI_MEMORY_WT; treating as Normal Non-cacheable\n");
+	return __pgprot(PROT_NORMAL_NC);
+}
+
 pgprot_t __acpi_get_mem_attribute(phys_addr_t addr)
 {
 	/*
@@ -246,7 +258,7 @@ pgprot_t __acpi_get_mem_attribute(phys_addr_t addr)
 	 * types" of UEFI 2.5 section 2.3.6.1, each EFI memory type is
 	 * mapped to a corresponding MAIR attribute encoding.
 	 * The EFI memory attribute advises all possible capabilities
-	 * of a memory region. We use the most efficient capability.
+	 * of a memory region.
 	 */
 
 	u64 attr;
@@ -254,10 +266,10 @@ pgprot_t __acpi_get_mem_attribute(phys_addr_t addr)
 	attr = efi_mem_attributes(addr);
 	if (attr & EFI_MEMORY_WB)
 		return PAGE_KERNEL;
-	if (attr & EFI_MEMORY_WT)
-		return __pgprot(PROT_NORMAL_WT);
 	if (attr & EFI_MEMORY_WC)
 		return __pgprot(PROT_NORMAL_NC);
+	if (attr & EFI_MEMORY_WT)
+		return __acpi_get_writethrough_mem_attribute();
 	return __pgprot(PROT_DEVICE_nGnRnE);
 }
 
@@ -298,8 +310,21 @@ void __iomem *acpi_os_ioremap(acpi_physical_address phys, acpi_size size)
 		case EFI_BOOT_SERVICES_DATA:
 		case EFI_CONVENTIONAL_MEMORY:
 		case EFI_PERSISTENT_MEMORY:
-			pr_warn(FW_BUG "requested region covers kernel memory @ %pa\n", &phys);
-			return NULL;
+			if (memblock_is_map_memory(phys) ||
+			    !memblock_is_region_memory(phys, size)) {
+				pr_warn(FW_BUG "requested region covers kernel memory @ %pa\n", &phys);
+				return NULL;
+			}
+			/*
+			 * Mapping kernel memory is permitted if the region in
+			 * question is covered by a single memblock with the
+			 * NOMAP attribute set: this enables the use of ACPI
+			 * table overrides passed via initramfs, which are
+			 * reserved in memory using arch_reserve_mem_area()
+			 * below. As this particular use case only requires
+			 * read access, fall through to the R/O mapping case.
+			 */
+			fallthrough;
 
 		case EFI_RUNTIME_SERVICES_CODE:
 			/*
@@ -327,10 +352,10 @@ void __iomem *acpi_os_ioremap(acpi_physical_address phys, acpi_size size)
 		default:
 			if (region->attribute & EFI_MEMORY_WB)
 				prot = PAGE_KERNEL;
-			else if (region->attribute & EFI_MEMORY_WT)
-				prot = __pgprot(PROT_NORMAL_WT);
 			else if (region->attribute & EFI_MEMORY_WC)
 				prot = __pgprot(PROT_NORMAL_NC);
+			else if (region->attribute & EFI_MEMORY_WT)
+				prot = __acpi_get_writethrough_mem_attribute();
 		}
 	}
 	return __ioremap(phys, size, prot);
@@ -387,4 +412,9 @@ int apei_claim_sea(struct pt_regs *regs)
 	local_daif_restore(current_flags);
 
 	return err;
+}
+
+void arch_reserve_mem_area(acpi_physical_address addr, size_t size)
+{
+	memblock_mark_nomap(addr, size);
 }

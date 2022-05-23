@@ -29,10 +29,9 @@ struct machdep_calls {
 	char		*name;
 #ifdef CONFIG_PPC64
 #ifdef CONFIG_PM
-	void		(*iommu_save)(void);
 	void		(*iommu_restore)(void);
 #endif
-#ifdef CONFIG_MEMORY_HOTPLUG_SPARSE
+#ifdef CONFIG_MEMORY_HOTPLUG
 	unsigned long	(*memory_block_size)(void);
 #endif
 #endif /* CONFIG_PPC64 */
@@ -43,7 +42,6 @@ struct machdep_calls {
 	void		(*setup_arch)(void); /* Optional, may be NULL */
 	/* Optional, may be NULL. */
 	void		(*show_cpuinfo)(struct seq_file *m);
-	void		(*show_percpuinfo)(struct seq_file *m, int i);
 	/* Returns the current operating frequency of "cpu" in Hz */
 	unsigned long  	(*get_proc_freq)(unsigned int cpu);
 
@@ -59,21 +57,21 @@ struct machdep_calls {
 	int		(*pcibios_root_bridge_prepare)(struct pci_host_bridge
 				*bridge);
 
+	/* finds all the pci_controllers present at boot */
+	void 		(*discover_phbs)(void);
+
 	/* To setup PHBs when using automatic OF platform driver for PCI */
 	int		(*pci_setup_phb)(struct pci_controller *host);
 
 	void __noreturn	(*restart)(char *cmd);
 	void __noreturn (*halt)(void);
 	void		(*panic)(char *str);
-	void		(*cpu_die)(void);
 
 	long		(*time_init)(void); /* Optional, may be NULL */
 
 	int		(*set_rtc_time)(struct rtc_time *);
 	void		(*get_rtc_time)(struct rtc_time *);
 	time64_t	(*get_boot_time)(void);
-	unsigned char 	(*rtc_read_val)(int addr);
-	void		(*rtc_write_val)(int addr, unsigned char val);
 
 	void		(*calibrate_decr)(void);
 
@@ -139,8 +137,6 @@ struct machdep_calls {
 	   May be NULL. */
 	void		(*init)(void);
 
-	void		(*kgdb_map_scc)(void);
-
 	/*
 	 * optional PCI "hooks"
 	 */
@@ -185,13 +181,6 @@ struct machdep_calls {
 #ifdef CONFIG_KEXEC_CORE
 	void (*kexec_cpu_down)(int crash_shutdown, int secondary);
 
-	/* Called to do what every setup is needed on image and the
-	 * reboot code buffer. Returns 0 on success.
-	 * Provide your own (maybe dummy) implementation if your platform
-	 * claims to support kexec.
-	 */
-	int (*machine_kexec_prepare)(struct kimage *image);
-
 	/* Called to perform the _real_ kexec.
 	 * Do NOT allocate memory or fail here. We are past the point of
 	 * no return.
@@ -208,7 +197,6 @@ struct machdep_calls {
 	void (*suspend_disable_irqs)(void);
 	void (*suspend_enable_irqs)(void);
 #endif
-	int (*suspend_disable_cpu)(void);
 
 #ifdef CONFIG_ARCH_CPU_PROBE_RELEASE
 	ssize_t (*cpu_probe)(const char *, size_t);
@@ -222,8 +210,6 @@ struct machdep_calls {
 
 extern void e500_idle(void);
 extern void power4_idle(void);
-extern void power7_idle(void);
-extern void power9_idle(void);
 extern void ppc6xx_idle(void);
 extern void book3e_idle(void);
 
@@ -235,7 +221,7 @@ extern void book3e_idle(void);
 extern struct machdep_calls ppc_md;
 extern struct machdep_calls *machine_id;
 
-#define __machine_desc __attribute__ ((__section__ (".machine.desc")))
+#define __machine_desc __section(".machine.desc")
 
 #define define_machine(name)					\
 	extern struct machdep_calls mach_##name;		\

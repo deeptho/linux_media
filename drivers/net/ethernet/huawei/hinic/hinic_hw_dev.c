@@ -48,7 +48,7 @@ enum io_status {
 };
 
 /**
- * get_capability - convert device capabilities to NIC capabilities
+ * parse_capability - convert device capabilities to NIC capabilities
  * @hwdev: the HW device to set and convert device capabilities for
  * @dev_cap: device capabilities from FW
  *
@@ -92,7 +92,7 @@ static int parse_capability(struct hinic_hwdev *hwdev,
 }
 
 /**
- * get_cap_from_fw - get device capabilities from FW
+ * get_capability - get device capabilities from FW
  * @pfhwdev: the PF HW device to get capabilities for
  *
  * Return 0 - Success, negative - Failure
@@ -257,7 +257,7 @@ static int init_fw_ctxt(struct hinic_hwdev *hwdev)
 	err = hinic_port_msg_cmd(hwdev, HINIC_PORT_CMD_FWCTXT_INIT,
 				 &fw_ctxt, sizeof(fw_ctxt),
 				 &fw_ctxt, &out_size);
-	if (err || (out_size != sizeof(fw_ctxt)) || fw_ctxt.status) {
+	if (err || out_size != sizeof(fw_ctxt) || fw_ctxt.status) {
 		dev_err(&pdev->dev, "Failed to init FW ctxt, err: %d, status: 0x%x, out size: 0x%x\n",
 			err, fw_ctxt.status, out_size);
 		return -EIO;
@@ -346,7 +346,7 @@ static int wait_for_db_state(struct hinic_hwdev *hwdev)
 }
 
 /**
- * clear_io_resource - set the IO resources as not active in the NIC
+ * clear_io_resources - set the IO resources as not active in the NIC
  * @hwdev: the NIC HW device
  *
  * Return 0 - Success, negative - Failure
@@ -424,7 +424,7 @@ static int get_base_qpn(struct hinic_hwdev *hwdev, u16 *base_qpn)
 	err = hinic_port_msg_cmd(hwdev, HINIC_PORT_CMD_GET_GLOBAL_QPN,
 				 &cmd_base_qpn, sizeof(cmd_base_qpn),
 				 &cmd_base_qpn, &out_size);
-	if (err || (out_size != sizeof(cmd_base_qpn)) || cmd_base_qpn.status) {
+	if (err || out_size != sizeof(cmd_base_qpn) || cmd_base_qpn.status) {
 		dev_err(&pdev->dev, "Failed to get base qpn, err: %d, status: 0x%x, out size: 0x%x\n",
 			err, cmd_base_qpn.status, out_size);
 		return -EIO;
@@ -437,6 +437,8 @@ static int get_base_qpn(struct hinic_hwdev *hwdev, u16 *base_qpn)
 /**
  * hinic_hwdev_ifup - Preparing the HW for passing IO
  * @hwdev: the NIC HW device
+ * @sq_depth: the send queue depth
+ * @rq_depth: the receive queue depth
  *
  * Return 0 - Success, negative - Failure
  **/
@@ -465,6 +467,7 @@ int hinic_hwdev_ifup(struct hinic_hwdev *hwdev, u16 sq_depth, u16 rq_depth)
 	func_to_io->hwdev = hwdev;
 	func_to_io->sq_depth = sq_depth;
 	func_to_io->rq_depth = rq_depth;
+	func_to_io->global_qpn = base_qpn;
 
 	err = hinic_io_init(func_to_io, hwif, nic_cap->max_qps, num_ceqs,
 			    ceq_msix_entries);
@@ -581,6 +584,7 @@ void hinic_hwdev_cb_unregister(struct hinic_hwdev *hwdev,
 /**
  * nic_mgmt_msg_handler - nic mgmt event handler
  * @handle: private data for the handler
+ * @cmd: message command
  * @buf_in: input buffer
  * @in_size: input size
  * @buf_out: output buffer
@@ -601,8 +605,8 @@ static void nic_mgmt_msg_handler(void *handle, u8 cmd, void *buf_in,
 	hwif = hwdev->hwif;
 	pdev = hwif->pdev;
 
-	if ((cmd < HINIC_MGMT_MSG_CMD_BASE) ||
-	    (cmd >= HINIC_MGMT_MSG_CMD_MAX)) {
+	if (cmd < HINIC_MGMT_MSG_CMD_BASE ||
+	    cmd >= HINIC_MGMT_MSG_CMD_MAX) {
 		dev_err(&pdev->dev, "unknown L2NIC event, cmd = %d\n", cmd);
 		return;
 	}
@@ -615,7 +619,7 @@ static void nic_mgmt_msg_handler(void *handle, u8 cmd, void *buf_in,
 			   HINIC_CB_ENABLED,
 			   HINIC_CB_ENABLED | HINIC_CB_RUNNING);
 
-	if ((cb_state == HINIC_CB_ENABLED) && (nic_cb->handler))
+	if (cb_state == HINIC_CB_ENABLED && nic_cb->handler)
 		nic_cb->handler(nic_cb->handle, buf_in,
 				in_size, buf_out, out_size);
 	else
@@ -750,17 +754,9 @@ static int init_pfhwdev(struct hinic_pfhwdev *pfhwdev)
 		return err;
 	}
 
-	err = hinic_devlink_register(hwdev->devlink_dev, &pdev->dev);
-	if (err) {
-		dev_err(&hwif->pdev->dev, "Failed to register devlink\n");
-		hinic_pf_to_mgmt_free(&pfhwdev->pf_to_mgmt);
-		return err;
-	}
-
 	err = hinic_func_to_func_init(hwdev);
 	if (err) {
 		dev_err(&hwif->pdev->dev, "Failed to init mailbox\n");
-		hinic_devlink_unregister(hwdev->devlink_dev);
 		hinic_pf_to_mgmt_free(&pfhwdev->pf_to_mgmt);
 		return err;
 	}
@@ -783,7 +779,7 @@ static int init_pfhwdev(struct hinic_pfhwdev *pfhwdev)
 	}
 
 	hinic_set_pf_action(hwif, HINIC_PF_MGMT_ACTIVE);
-
+	hinic_devlink_register(hwdev->devlink_dev);
 	return 0;
 }
 
@@ -795,6 +791,7 @@ static void free_pfhwdev(struct hinic_pfhwdev *pfhwdev)
 {
 	struct hinic_hwdev *hwdev = &pfhwdev->hwdev;
 
+	hinic_devlink_unregister(hwdev->devlink_dev);
 	hinic_set_pf_action(hwdev->hwif, HINIC_PF_MGMT_INIT);
 
 	if (!HINIC_IS_VF(hwdev->hwif)) {
@@ -811,8 +808,6 @@ static void free_pfhwdev(struct hinic_pfhwdev *pfhwdev)
 	}
 
 	hinic_func_to_func_free(hwdev);
-
-	hinic_devlink_unregister(hwdev->devlink_dev);
 
 	hinic_pf_to_mgmt_free(&pfhwdev->pf_to_mgmt);
 }
@@ -908,6 +903,7 @@ int hinic_set_interrupt_cfg(struct hinic_hwdev *hwdev,
 /**
  * hinic_init_hwdev - Initialize the NIC HW
  * @pdev: the NIC pci device
+ * @devlink: the poniter of hinic devlink
  *
  * Return initialized NIC HW device
  *
@@ -1085,7 +1081,7 @@ struct hinic_sq *hinic_hwdev_get_sq(struct hinic_hwdev *hwdev, int i)
 }
 
 /**
- * hinic_hwdev_get_sq - get RQ
+ * hinic_hwdev_get_rq - get RQ
  * @hwdev: the NIC HW device
  * @i: the position of the RQ
  *
@@ -1120,7 +1116,7 @@ int hinic_hwdev_msix_cnt_set(struct hinic_hwdev *hwdev, u16 msix_index)
  * @msix_index: msix_index
  * @pending_limit: the maximum pending interrupt events (unit 8)
  * @coalesc_timer: coalesc period for interrupt (unit 8 us)
- * @lli_timer: replenishing period for low latency credit (unit 8 us)
+ * @lli_timer_cfg: replenishing period for low latency credit (unit 8 us)
  * @lli_credit_limit: maximum credits for low latency msix messages (unit 8)
  * @resend_timer: maximum wait for resending msix (unit coalesc period)
  *

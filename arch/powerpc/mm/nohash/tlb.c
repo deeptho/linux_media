@@ -83,16 +83,12 @@ struct mmu_psize_def mmu_psize_defs[MMU_PAGE_COUNT] = {
 };
 #elif defined(CONFIG_PPC_8xx)
 struct mmu_psize_def mmu_psize_defs[MMU_PAGE_COUNT] = {
-	/* we only manage 4k and 16k pages as normal pages */
-#ifdef CONFIG_PPC_4K_PAGES
 	[MMU_PAGE_4K] = {
 		.shift	= 12,
 	},
-#else
 	[MMU_PAGE_16K] = {
 		.shift	= 14,
 	},
-#endif
 	[MMU_PAGE_512K] = {
 		.shift	= 19,
 	},
@@ -189,6 +185,7 @@ EXPORT_PER_CPU_SYMBOL(next_tlbcam_idx);
  *    processor
  */
 
+#ifndef CONFIG_PPC_8xx
 /*
  * These are the base non-SMP variants of page and mm flushing
  */
@@ -222,6 +219,7 @@ void local_flush_tlb_page(struct vm_area_struct *vma, unsigned long vmaddr)
 			       mmu_get_tsize(mmu_virtual_psize), 0);
 }
 EXPORT_SYMBOL(local_flush_tlb_page);
+#endif
 
 /*
  * And here are the SMP non-local implementations
@@ -647,7 +645,7 @@ static void early_init_this_mmu(void)
 
 		if (map)
 			linear_map_top = map_mem_in_cams(linear_map_top,
-							 num_cams, false);
+							 num_cams, false, true);
 	}
 #endif
 
@@ -768,7 +766,7 @@ void setup_initial_memory_limit(phys_addr_t first_memblock_base,
 		num_cams = (mfspr(SPRN_TLB1CFG) & TLBnCFG_N_ENTRY) / 4;
 
 		linear_sz = map_mem_in_cams(first_memblock_size, num_cams,
-					    true);
+					    true, true);
 
 		ppc64_rma_size = min_t(u64, linear_sz, 0x40000000);
 	} else

@@ -18,8 +18,10 @@ general.
    devlink-info
    devlink-flash
    devlink-params
+   devlink-port
    devlink-region
    devlink-resource
+   devlink-reload
    devlink-trap
 
 Driver-specific documentation
@@ -32,6 +34,7 @@ parameters, info versions, and other features it supports.
    :maxdepth: 1
 
    bnxt
+   hns3
    ionic
    ice
    mlx4
@@ -40,6 +43,9 @@ parameters, info versions, and other features it supports.
    mv88e6xxx
    netdevsim
    nfp
-   sja1105
    qed
    ti-cpsw-switch
+   am65-nuss-cpsw-switch
+   prestera
+   iosm
+   octeontx2

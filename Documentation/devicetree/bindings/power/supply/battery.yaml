@@ -31,6 +31,20 @@ properties:
   compatible:
     const: simple-battery
 
+  device-chemistry:
+    description: This describes the chemical technology of the battery.
+    oneOf:
+      - const: nickel-cadmium
+      - const: nickel-metal-hydride
+      - const: lithium-ion
+        description: This is a blanket type for all lithium-ion batteries,
+          including those below. If possible, a precise compatible string
+          from below should be used, but sometimes it is unknown which specific
+          lithium ion battery is employed and this wide compatible can be used.
+      - const: lithium-ion-polymer
+      - const: lithium-ion-iron-phosphate
+      - const: lithium-ion-manganese-oxide
+
   over-voltage-threshold-microvolt:
     description: battery over-voltage limit
 
@@ -82,6 +96,24 @@ properties:
       An array containing the temperature in degree Celsius,
       for each of the battery capacity lookup table.
 
+  operating-range-celsius:
+    description: operating temperature range of a battery
+    items:
+      - description: minimum temperature at which battery can operate
+      - description: maximum temperature at which battery can operate
+
+  ambient-celsius:
+    description: safe range of ambient temperature
+    items:
+      - description: alert when ambient temperature is lower than this value
+      - description: alert when ambient temperature is higher than this value
+
+  alert-celsius:
+    description: safe range of battery temperature
+    items:
+      - description: alert when battery temperature is lower than this value
+      - description: alert when battery temperature is higher than this value
+
 required:
   - compatible
 
@@ -130,6 +162,9 @@ examples:
         /* table for 10 degree Celsius */
         ocv-capacity-table-2 = <4250000 100>, <4200000 95>, <4185000 90>;
         resistance-temp-table = <20 100>, <10 90>, <0 80>, <(-10) 60>;
+        operating-range-celsius = <(-30) 50>;
+        ambient-celsius = <(-5) 50>;
+        alert-celsius = <0 40>;
       };
 
       charger@11 {

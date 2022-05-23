@@ -23,7 +23,6 @@
 #include <linux/pm_runtime.h>
 #include <linux/slab.h>
 #include <linux/types.h>
-#include <linux/version.h>
 
 #include <media/media-device.h>
 #include <media/v4l2-ctrls.h>
@@ -131,11 +130,13 @@ static int camif_get_scaler_factor(u32 src, u32 tar, u32 *ratio, u32 *shift)
 	while (sh--) {
 		unsigned int tmp = 1 << sh;
 		if (src >= tar * tmp) {
-			*shift = sh, *ratio = tmp;
+			*shift = sh;
+			*ratio = tmp;
 			return 0;
 		}
 	}
-	*shift = 0, *ratio = 1;
+	*shift = 0;
+	*ratio = 1;
 	return 0;
 }
 
@@ -290,7 +291,6 @@ static void camif_unregister_media_entities(struct camif_dev *camif)
 {
 	camif_unregister_video_nodes(camif);
 	camif_unregister_sensor(camif);
-	s3c_camif_unregister_subdev(camif);
 }
 
 /*
@@ -400,7 +400,6 @@ static int s3c_camif_probe(struct platform_device *pdev)
 	struct s3c_camif_plat_data *pdata = dev->platform_data;
 	struct s3c_camif_drvdata *drvdata;
 	struct camif_dev *camif;
-	struct resource *mres;
 	int ret = 0;
 
 	camif = devm_kzalloc(dev, sizeof(*camif), GFP_KERNEL);
@@ -421,9 +420,7 @@ static int s3c_camif_probe(struct platform_device *pdev)
 	drvdata = (void *)platform_get_device_id(pdev)->driver_data;
 	camif->variant = drvdata->variant;
 
-	mres = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-
-	camif->io_base = devm_ioremap_resource(dev, mres);
+	camif->io_base = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(camif->io_base))
 		return PTR_ERR(camif->io_base);
 
@@ -458,9 +455,9 @@ static int s3c_camif_probe(struct platform_device *pdev)
 
 	pm_runtime_enable(dev);
 
-	ret = pm_runtime_get_sync(dev);
+	ret = pm_runtime_resume_and_get(dev);
 	if (ret < 0)
-		goto err_pm;
+		goto err_disable;
 
 	ret = camif_media_dev_init(camif);
 	if (ret < 0)
@@ -500,6 +497,7 @@ err_sens:
 	camif_unregister_media_entities(camif);
 err_pm:
 	pm_runtime_put(dev);
+err_disable:
 	pm_runtime_disable(dev);
 	camif_clk_put(camif);
 err_clk:
@@ -521,6 +519,7 @@ static int s3c_camif_remove(struct platform_device *pdev)
 
 	pm_runtime_disable(&pdev->dev);
 	camif_clk_put(camif);
+	s3c_camif_unregister_subdev(camif);
 	pdata->gpio_put();
 
 	return 0;

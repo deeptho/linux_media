@@ -223,6 +223,8 @@ static unsigned int group(pthread_t *pth,
 		snd_ctx->out_fds[i] = fds[1];
 		if (!thread_mode)
 			close(fds[0]);
+
+		free(ctx);
 	}
 
 	/* Now we have all the fds, fork the senders */
@@ -238,6 +240,8 @@ static unsigned int group(pthread_t *pth,
 	if (!thread_mode)
 		for (i = 0; i < num_fds; i++)
 			close(snd_ctx->out_fds[i]);
+
+	free(snd_ctx);
 
 	/* Return number of children to reap */
 	return num_fds * 2;
@@ -309,11 +313,11 @@ int bench_sched_messaging(int argc, const char **argv)
 		       num_groups, num_groups * 2 * num_fds,
 		       thread_mode ? "threads" : "processes");
 		printf(" %14s: %lu.%03lu [sec]\n", "Total time",
-		       diff.tv_sec,
+		       (unsigned long) diff.tv_sec,
 		       (unsigned long) (diff.tv_usec / USEC_PER_MSEC));
 		break;
 	case BENCH_FORMAT_SIMPLE:
-		printf("%lu.%03lu\n", diff.tv_sec,
+		printf("%lu.%03lu\n", (unsigned long) diff.tv_sec,
 		       (unsigned long) (diff.tv_usec / USEC_PER_MSEC));
 		break;
 	default:

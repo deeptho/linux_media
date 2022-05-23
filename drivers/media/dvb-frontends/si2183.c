@@ -314,6 +314,208 @@ static int si2183_read_status(struct dvb_frontend *fe, enum fe_status *status)
 		c->cnr.stat[0].scale = FE_SCALE_DECIBEL;
 		c->cnr.stat[0].svalue = (s64) cmd.args[3] * 250;
 		dev->snr *= cmd.args[3] * 164;
+		c->cnr.len = 2;
+		c->cnr.stat[0].scale = FE_SCALE_DECIBEL;
+		c->cnr.stat[0].svalue = (s64) cmd.args[3] * 250;
+		c->cnr.stat[1].scale = FE_SCALE_RELATIVE;
+		c->cnr.stat[1].svalue = dev->snr;
+
+		// writing missing properties
+		// CONSTELLATION or modulation
+		switch (cmd.args[8] & 0x3f){
+			case 0x03:
+			c->modulation = QPSK;
+			break;
+			case 0x07:
+			c->modulation = QAM_16;
+			break;
+			case 0x08:
+			c->modulation = QAM_32;
+			break;
+			case 0x09:
+			c->modulation = QAM_64;
+			break;
+			case 0x0a:
+			c->modulation = QAM_128;
+			break;
+			case 0x0b:
+			c->modulation = QAM_256;
+			break;
+			case 0x0e:
+			c->modulation = PSK_8;
+			break;
+			case 0x14:
+			c->modulation = APSK_16;
+			break;
+			case 0x17:
+			c->modulation = APSK_8L;
+			break;
+			case 0x18:
+			c->modulation = APSK_16L;
+			break;
+			case 0x15:
+			c->modulation = APSK_32;
+			break;
+			case 0x19:
+			c->modulation = APSK_32L;
+			break;
+			case 0x1a:
+			c->modulation = APSK_32;
+			break;
+			default:
+				c->modulation = QPSK;
+			break;
+		}
+		// fec_inner
+		switch (c->delivery_system) {
+		case SYS_DVBT2:
+		switch (cmd.args[12] & 0x0f){
+			case 0x01:
+			c->fec_inner = FEC_1_2;
+			break;
+			case 0x02:
+			c->fec_inner = FEC_2_3;
+			break;
+			case 0x03:
+			c->fec_inner = FEC_3_4;
+			break;
+			case 0x04:
+			c->fec_inner = FEC_4_5;
+			break;
+			case 0x05:
+			c->fec_inner = FEC_5_6;
+			break;
+			case 0x0a:
+			c->fec_inner = FEC_1_3;
+			break;
+			case 0x0c:
+			c->fec_inner = FEC_2_5;
+			break;
+			case 0x0d:
+			c->fec_inner = FEC_3_5;
+			break;
+			default:
+				c->fec_inner = FEC_AUTO;
+			break;
+		}
+		break;
+	case SYS_DVBS:
+		switch (cmd.args[9] & 0x0f){
+			case 0x01:
+			c->fec_inner = FEC_1_2;
+			break;
+			case 0x02:
+			c->fec_inner = FEC_2_3;
+			break;
+			case 0x03:
+			c->fec_inner = FEC_3_4;
+			break;
+			case 0x04:
+			c->fec_inner = FEC_4_5;
+			break;
+			case 0x05:
+			c->fec_inner = FEC_5_6;
+			break;
+			case 0x06:
+			c->fec_inner = FEC_6_7;
+			break;
+			case 0x07:
+			c->fec_inner = FEC_7_8;
+			break;
+			default:
+				c->fec_inner = FEC_AUTO;
+			break;
+		}
+		break;
+	case SYS_DVBS2:
+		switch (cmd.args[9] & 0x1f){
+			case 0x01:
+			c->fec_inner = FEC_1_2;
+			break;
+			case 0x02:
+			c->fec_inner = FEC_2_3;
+			break;
+			case 0x03:
+			c->fec_inner = FEC_3_4;
+			break;
+			case 0x04:
+			c->fec_inner = FEC_4_5;
+			break;
+			case 0x05:
+			c->fec_inner = FEC_5_6;
+			break;
+			case 0x08:
+			c->fec_inner = FEC_8_9;
+			break;
+			case 0x09:
+			c->fec_inner = FEC_9_10;
+			break;
+			case 0x0a:
+			c->fec_inner = FEC_1_3;
+			break;
+			case 0x0b:
+			c->fec_inner = FEC_1_4;
+			break;
+			case 0x0c:
+			c->fec_inner = FEC_2_5;
+			break;
+			case 0x0d:
+			c->fec_inner = FEC_3_5;
+			break;
+			default:
+				c->fec_inner = FEC_AUTO;
+			break;
+		}
+		break;
+		default:
+				c->fec_inner = FEC_AUTO;
+				break;
+		}
+		// rolloff and pilot (only available for dvb s2)
+		switch (c->delivery_system) {
+			case SYS_DVBS2:
+			// rolloff
+			switch (cmd.args[10] & 0x07){
+			case 0x00:
+			c->rolloff = ROLLOFF_35;
+			break;
+			case 0x01:
+			c->rolloff = ROLLOFF_25;
+			break;
+			case 0x02:
+			c->rolloff = ROLLOFF_20;
+			break;
+			case 0x04:
+			c->rolloff = ROLLOFF_15;
+			break;
+			case 0x05:
+			c->rolloff = ROLLOFF_10;
+			break;
+			case 0x06:
+			c->rolloff = ROLLOFF_5;
+			break;
+			default:
+				c->rolloff = ROLLOFF_AUTO;
+			break;
+			}
+			// pilot
+			switch ((cmd.args[8] >> 7) & 0x01){
+			case 0x01:
+			c->pilot = PILOT_ON;
+			break;
+			case 0x00:
+			c->pilot = PILOT_OFF;
+			break;
+			default:
+				c->pilot = PILOT_AUTO;
+			break;
+			}
+			break;
+			default:
+			c->rolloff = ROLLOFF_AUTO;
+			c->pilot = PILOT_AUTO;
+			break;
+		}
 		break;
 	default:
 		c->cnr.stat[0].scale = FE_SCALE_NOT_AVAILABLE;
@@ -342,6 +544,12 @@ static int si2183_read_status(struct dvb_frontend *fe, enum fe_status *status)
 		fe->ops.tuner_ops.get_rf_strength(fe, &agc);
 	}
 
+	if ( c->strength.len == 1 && c->strength.stat[0].scale == FE_SCALE_DECIBEL) {
+		c->strength.len ++;
+		c->strength.stat[1].scale = FE_SCALE_RELATIVE;
+		c->strength.stat[1].svalue = ((100000 + (s32)c->strength.stat[0].svalue) / 1000) * 656;
+    }
+
 	return 0;
 err:
 	dev_err(&client->dev, "read_status failed=%d\n", ret);
@@ -361,8 +569,16 @@ static int si2183_read_snr(struct dvb_frontend *fe, u16 *snr)
 static int si2183_read_signal_strength(struct dvb_frontend *fe, u16 *strength)
 {
 	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
+	int i;
 
-	*strength = c->strength.stat[0].scale == FE_SCALE_DECIBEL ? ((100000 + (s32)c->strength.stat[0].svalue) / 1000) * 656 : 0;
+	*strength = 0;
+	for (i=0; i < c->strength.len; i++)
+	{
+		if (c->strength.stat[i].scale == FE_SCALE_RELATIVE)
+			*strength = (u16)c->strength.stat[i].uvalue;
+		else if (c->strength.stat[i].scale == FE_SCALE_DECIBEL)
+			*strength = ((100000 + (s32)c->strength.stat[i].svalue)/1000) * 656;
+	}
 
 	return 0;
 }

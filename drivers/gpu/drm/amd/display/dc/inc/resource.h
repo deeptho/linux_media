@@ -48,9 +48,13 @@ struct resource_caps {
 	int num_ddc;
 	int num_vmid;
 	int num_dsc;
-#if defined(CONFIG_DRM_AMD_DC_DCN3_0)
-	int num_mpc_3dlut;
+	unsigned int num_dig_link_enc; // Total number of DIGs (digital encoders) in DIO (Display Input/Output).
+	unsigned int num_usb4_dpia; // Total number of USB4 DPIA (DisplayPort Input Adapters).
+#if defined(CONFIG_DRM_AMD_DC_DCN)
+	int num_hpo_dp_stream_encoder;
+	int num_hpo_dp_link_encoder;
 #endif
+	int num_mpc_3dlut;
 };
 
 struct resource_straps {
@@ -68,6 +72,15 @@ struct resource_create_funcs {
 
 	struct stream_encoder *(*create_stream_encoder)(
 			enum engine_id eng_id, struct dc_context *ctx);
+
+#if defined(CONFIG_DRM_AMD_DC_DCN)
+	struct hpo_dp_stream_encoder *(*create_hpo_dp_stream_encoder)(
+			enum engine_id eng_id, struct dc_context *ctx);
+
+	struct hpo_dp_link_encoder *(*create_hpo_dp_link_encoder)(
+			uint8_t inst,
+			struct dc_context *ctx);
+#endif
 
 	struct dce_hwseq *(*create_hwseq)(
 			struct dc_context *ctx);
@@ -114,6 +127,10 @@ int resource_get_clock_source_reference(
 		struct clock_source *clock_source);
 
 bool resource_are_streams_timing_synchronizable(
+		struct dc_stream_state *stream1,
+		struct dc_stream_state *stream2);
+
+bool resource_are_vblanks_synchronizable(
 		struct dc_stream_state *stream1,
 		struct dc_stream_state *stream2);
 
@@ -183,5 +200,10 @@ void get_audio_check(struct audio_info *aud_modes,
 int get_num_mpc_splits(struct pipe_ctx *pipe);
 
 int get_num_odm_splits(struct pipe_ctx *pipe);
+
+#if defined(CONFIG_DRM_AMD_DC_DCN)
+struct hpo_dp_link_encoder *resource_get_unused_hpo_dp_link_encoder(
+		const struct resource_pool *pool);
+#endif
 
 #endif /* DRIVERS_GPU_DRM_AMD_DC_DEV_DC_INC_RESOURCE_H_ */

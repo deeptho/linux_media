@@ -3,6 +3,7 @@
 #include <linux/path.h>
 #include <linux/slab.h>
 #include <linux/exportfs.h>
+#include <linux/hashtable.h>
 
 extern struct kmem_cache *fanotify_mark_cache;
 extern struct kmem_cache *fanotify_fid_event_cachep;
@@ -115,6 +116,11 @@ static inline void fanotify_info_init(struct fanotify_info *info)
 	info->name_len = 0;
 }
 
+static inline unsigned int fanotify_info_len(struct fanotify_info *info)
+{
+	return info->dir_fh_totlen + info->file_fh_totlen + info->name_len;
+}
+
 static inline void fanotify_info_copy_name(struct fanotify_info *info,
 					   const struct qstr *name)
 {
@@ -135,29 +141,48 @@ enum fanotify_event_type {
 	FANOTIFY_EVENT_TYPE_PATH,
 	FANOTIFY_EVENT_TYPE_PATH_PERM,
 	FANOTIFY_EVENT_TYPE_OVERFLOW, /* struct fanotify_event */
+	FANOTIFY_EVENT_TYPE_FS_ERROR, /* struct fanotify_error_event */
+	__FANOTIFY_EVENT_TYPE_NUM
 };
+
+#define FANOTIFY_EVENT_TYPE_BITS \
+	(ilog2(__FANOTIFY_EVENT_TYPE_NUM - 1) + 1)
+#define FANOTIFY_EVENT_HASH_BITS \
+	(32 - FANOTIFY_EVENT_TYPE_BITS)
 
 struct fanotify_event {
 	struct fsnotify_event fse;
+	struct hlist_node merge_list;	/* List for hashed merge */
 	u32 mask;
-	enum fanotify_event_type type;
+	struct {
+		unsigned int type : FANOTIFY_EVENT_TYPE_BITS;
+		unsigned int hash : FANOTIFY_EVENT_HASH_BITS;
+	};
 	struct pid *pid;
 };
 
 static inline void fanotify_init_event(struct fanotify_event *event,
-				       unsigned long id, u32 mask)
+				       unsigned int hash, u32 mask)
 {
-	fsnotify_init_event(&event->fse, id);
+	fsnotify_init_event(&event->fse);
+	INIT_HLIST_NODE(&event->merge_list);
+	event->hash = hash;
 	event->mask = mask;
 	event->pid = NULL;
+}
+
+#define FANOTIFY_INLINE_FH(name, size)					\
+struct {								\
+	struct fanotify_fh (name);					\
+	/* Space for object_fh.buf[] - access with fanotify_fh_buf() */	\
+	unsigned char _inline_fh_buf[(size)];				\
 }
 
 struct fanotify_fid_event {
 	struct fanotify_event fae;
 	__kernel_fsid_t fsid;
-	struct fanotify_fh object_fh;
-	/* Reserve space in object_fh.buf[] - access with fanotify_fh_buf() */
-	unsigned char _inline_fh_buf[FANOTIFY_INLINE_FH_LEN];
+
+	FANOTIFY_INLINE_FH(object_fh, FANOTIFY_INLINE_FH_LEN);
 };
 
 static inline struct fanotify_fid_event *
@@ -178,12 +203,30 @@ FANOTIFY_NE(struct fanotify_event *event)
 	return container_of(event, struct fanotify_name_event, fae);
 }
 
+struct fanotify_error_event {
+	struct fanotify_event fae;
+	s32 error; /* Error reported by the Filesystem. */
+	u32 err_count; /* Suppressed errors count */
+
+	__kernel_fsid_t fsid; /* FSID this error refers to. */
+
+	FANOTIFY_INLINE_FH(object_fh, MAX_HANDLE_SZ);
+};
+
+static inline struct fanotify_error_event *
+FANOTIFY_EE(struct fanotify_event *event)
+{
+	return container_of(event, struct fanotify_error_event, fae);
+}
+
 static inline __kernel_fsid_t *fanotify_event_fsid(struct fanotify_event *event)
 {
 	if (event->type == FANOTIFY_EVENT_TYPE_FID)
 		return &FANOTIFY_FE(event)->fsid;
 	else if (event->type == FANOTIFY_EVENT_TYPE_FID_NAME)
 		return &FANOTIFY_NE(event)->fsid;
+	else if (event->type == FANOTIFY_EVENT_TYPE_FS_ERROR)
+		return &FANOTIFY_EE(event)->fsid;
 	else
 		return NULL;
 }
@@ -195,6 +238,8 @@ static inline struct fanotify_fh *fanotify_event_object_fh(
 		return &FANOTIFY_FE(event)->object_fh;
 	else if (event->type == FANOTIFY_EVENT_TYPE_FID_NAME)
 		return fanotify_info_file_fh(&FANOTIFY_NE(event)->info);
+	else if (event->type == FANOTIFY_EVENT_TYPE_FS_ERROR)
+		return &FANOTIFY_EE(event)->object_fh;
 	else
 		return NULL;
 }
@@ -224,6 +269,19 @@ static inline int fanotify_event_dir_fh_len(struct fanotify_event *event)
 	struct fanotify_info *info = fanotify_event_info(event);
 
 	return info ? fanotify_info_dir_fh_len(info) : 0;
+}
+
+static inline bool fanotify_event_has_object_fh(struct fanotify_event *event)
+{
+	/* For error events, even zeroed fh are reported. */
+	if (event->type == FANOTIFY_EVENT_TYPE_FS_ERROR)
+		return true;
+	return fanotify_event_object_fh_len(event) > 0;
+}
+
+static inline bool fanotify_event_has_dir_fh(struct fanotify_event *event)
+{
+	return fanotify_event_dir_fh_len(event) > 0;
 }
 
 struct fanotify_path_event {
@@ -269,6 +327,11 @@ static inline struct fanotify_event *FANOTIFY_E(struct fsnotify_event *fse)
 	return container_of(fse, struct fanotify_event, fse);
 }
 
+static inline bool fanotify_is_error_event(u32 mask)
+{
+	return mask & FAN_FS_ERROR;
+}
+
 static inline bool fanotify_event_has_path(struct fanotify_event *event)
 {
 	return event->type == FANOTIFY_EVENT_TYPE_PATH ||
@@ -283,4 +346,27 @@ static inline struct path *fanotify_event_path(struct fanotify_event *event)
 		return &FANOTIFY_PERM(event)->path;
 	else
 		return NULL;
+}
+
+/*
+ * Use 128 size hash table to speed up events merge.
+ */
+#define FANOTIFY_HTABLE_BITS	(7)
+#define FANOTIFY_HTABLE_SIZE	(1 << FANOTIFY_HTABLE_BITS)
+#define FANOTIFY_HTABLE_MASK	(FANOTIFY_HTABLE_SIZE - 1)
+
+/*
+ * Permission events and overflow event do not get merged - don't hash them.
+ */
+static inline bool fanotify_is_hashed_event(u32 mask)
+{
+	return !(fanotify_is_perm_event(mask) ||
+		 fsnotify_is_overflow_event(mask));
+}
+
+static inline unsigned int fanotify_event_hash_bucket(
+						struct fsnotify_group *group,
+						struct fanotify_event *event)
+{
+	return event->hash & FANOTIFY_HTABLE_MASK;
 }

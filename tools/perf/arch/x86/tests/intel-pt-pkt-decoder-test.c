@@ -66,8 +66,8 @@ struct test_data {
 	{7, {0x9d, 1, 2, 3, 4, 5, 6}, 0, {INTEL_PT_FUP, 4, 0x60504030201}, 0, 0 },
 	{9, {0xdd, 1, 2, 3, 4, 5, 6, 7, 8}, 0, {INTEL_PT_FUP, 6, 0x807060504030201}, 0, 0 },
 	/* Paging Information Packet */
-	{8, {0x02, 0x43, 2, 4, 6, 8, 10, 12}, 0, {INTEL_PT_PIP, 0, 0x60504030201}, 0, 0 },
-	{8, {0x02, 0x43, 3, 4, 6, 8, 10, 12}, 0, {INTEL_PT_PIP, 0, 0x60504030201 | (1ULL << 63)}, 0, 0 },
+	{8, {0x02, 0x43, 2, 4, 6, 8, 10, 12}, 0, {INTEL_PT_PIP, 0, 0xC0A08060402}, 0, 0 },
+	{8, {0x02, 0x43, 3, 4, 6, 8, 10, 12}, 0, {INTEL_PT_PIP, 0, 0xC0A08060403}, 0, 0 },
 	/* Mode Exec Packet */
 	{2, {0x99, 0x00}, 0, {INTEL_PT_MODE_EXEC, 0, 16}, 0, 0 },
 	{2, {0x99, 0x01}, 0, {INTEL_PT_MODE_EXEC, 0, 64}, 0, 0 },
@@ -289,7 +289,7 @@ static int test_one(struct test_data *d)
  * This test feeds byte sequences to the Intel PT packet decoder and checks the
  * results. Changes to the packet context are also checked.
  */
-int test__intel_pt_pkt_decoder(struct test *test __maybe_unused, int subtest __maybe_unused)
+int test__intel_pt_pkt_decoder(struct test_suite *test __maybe_unused, int subtest __maybe_unused)
 {
 	struct test_data *d = data;
 	int ret;

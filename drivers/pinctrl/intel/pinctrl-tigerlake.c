@@ -15,11 +15,13 @@
 
 #include "pinctrl-intel.h"
 
-#define TGL_PAD_OWN	0x020
-#define TGL_PADCFGLOCK	0x080
-#define TGL_HOSTSW_OWN	0x0b0
-#define TGL_GPI_IS	0x100
-#define TGL_GPI_IE	0x120
+#define TGL_PAD_OWN		0x020
+#define TGL_LP_PADCFGLOCK	0x080
+#define TGL_H_PADCFGLOCK	0x090
+#define TGL_LP_HOSTSW_OWN	0x0b0
+#define TGL_H_HOSTSW_OWN	0x0c0
+#define TGL_GPI_IS		0x100
+#define TGL_GPI_IE		0x120
 
 #define TGL_GPP(r, s, e, g)				\
 	{						\
@@ -29,12 +31,12 @@
 		.gpio_base = (g),			\
 	}
 
-#define TGL_COMMUNITY(b, s, e, g)			\
+#define TGL_COMMUNITY(b, s, e, pl, ho, g)		\
 	{						\
 		.barno = (b),				\
 		.padown_offset = TGL_PAD_OWN,		\
-		.padcfglock_offset = TGL_PADCFGLOCK,	\
-		.hostown_offset = TGL_HOSTSW_OWN,	\
+		.padcfglock_offset = (pl),		\
+		.hostown_offset = (ho),			\
 		.is_offset = TGL_GPI_IS,		\
 		.ie_offset = TGL_GPI_IE,		\
 		.pin_base = (s),			\
@@ -42,6 +44,12 @@
 		.gpps = (g),				\
 		.ngpps = ARRAY_SIZE(g),			\
 	}
+
+#define TGL_LP_COMMUNITY(b, s, e, g)			\
+	TGL_COMMUNITY(b, s, e, TGL_LP_PADCFGLOCK, TGL_LP_HOSTSW_OWN, g)
+
+#define TGL_H_COMMUNITY(b, s, e, g)			\
+	TGL_COMMUNITY(b, s, e, TGL_H_PADCFGLOCK, TGL_H_HOSTSW_OWN, g)
 
 /* Tiger Lake-LP */
 static const struct pinctrl_pin_desc tgllp_pins[] = {
@@ -367,10 +375,10 @@ static const struct intel_padgroup tgllp_community5_gpps[] = {
 };
 
 static const struct intel_community tgllp_communities[] = {
-	TGL_COMMUNITY(0, 0, 66, tgllp_community0_gpps),
-	TGL_COMMUNITY(1, 67, 170, tgllp_community1_gpps),
-	TGL_COMMUNITY(2, 171, 259, tgllp_community4_gpps),
-	TGL_COMMUNITY(3, 260, 276, tgllp_community5_gpps),
+	TGL_LP_COMMUNITY(0, 0, 66, tgllp_community0_gpps),
+	TGL_LP_COMMUNITY(1, 67, 170, tgllp_community1_gpps),
+	TGL_LP_COMMUNITY(2, 171, 259, tgllp_community4_gpps),
+	TGL_LP_COMMUNITY(3, 260, 276, tgllp_community5_gpps),
 };
 
 static const struct intel_pinctrl_soc_data tgllp_soc_data = {
@@ -693,41 +701,41 @@ static const struct pinctrl_pin_desc tglh_pins[] = {
 
 static const struct intel_padgroup tglh_community0_gpps[] = {
 	TGL_GPP(0, 0, 24, 0),				/* GPP_A */
-	TGL_GPP(1, 25, 44, 128),			/* GPP_R */
-	TGL_GPP(2, 45, 70, 32),				/* GPP_B */
-	TGL_GPP(3, 71, 78, INTEL_GPIO_BASE_NOMAP),	/* vGPIO_0 */
+	TGL_GPP(1, 25, 44, 32),				/* GPP_R */
+	TGL_GPP(2, 45, 70, 64),				/* GPP_B */
+	TGL_GPP(3, 71, 78, 96),				/* vGPIO_0 */
 };
 
 static const struct intel_padgroup tglh_community1_gpps[] = {
-	TGL_GPP(0, 79, 104, 96),			/* GPP_D */
-	TGL_GPP(1, 105, 128, 64),			/* GPP_C */
-	TGL_GPP(2, 129, 136, 160),			/* GPP_S */
-	TGL_GPP(3, 137, 153, 192),			/* GPP_G */
-	TGL_GPP(4, 154, 180, 224),			/* vGPIO */
+	TGL_GPP(0, 79, 104, 128),			/* GPP_D */
+	TGL_GPP(1, 105, 128, 160),			/* GPP_C */
+	TGL_GPP(2, 129, 136, 192),			/* GPP_S */
+	TGL_GPP(3, 137, 153, 224),			/* GPP_G */
+	TGL_GPP(4, 154, 180, 256),			/* vGPIO */
 };
 
 static const struct intel_padgroup tglh_community3_gpps[] = {
-	TGL_GPP(0, 181, 193, 256),			/* GPP_E */
-	TGL_GPP(1, 194, 217, 288),			/* GPP_F */
+	TGL_GPP(0, 181, 193, 288),			/* GPP_E */
+	TGL_GPP(1, 194, 217, 320),			/* GPP_F */
 };
 
 static const struct intel_padgroup tglh_community4_gpps[] = {
-	TGL_GPP(0, 218, 241, 320),			/* GPP_H */
+	TGL_GPP(0, 218, 241, 352),			/* GPP_H */
 	TGL_GPP(1, 242, 251, 384),			/* GPP_J */
-	TGL_GPP(2, 252, 266, 352),			/* GPP_K */
+	TGL_GPP(2, 252, 266, 416),			/* GPP_K */
 };
 
 static const struct intel_padgroup tglh_community5_gpps[] = {
-	TGL_GPP(0, 267, 281, 416),			/* GPP_I */
+	TGL_GPP(0, 267, 281, 448),			/* GPP_I */
 	TGL_GPP(1, 282, 290, INTEL_GPIO_BASE_NOMAP),	/* JTAG */
 };
 
 static const struct intel_community tglh_communities[] = {
-	TGL_COMMUNITY(0, 0, 78, tglh_community0_gpps),
-	TGL_COMMUNITY(1, 79, 180, tglh_community1_gpps),
-	TGL_COMMUNITY(2, 181, 217, tglh_community3_gpps),
-	TGL_COMMUNITY(3, 218, 266, tglh_community4_gpps),
-	TGL_COMMUNITY(4, 267, 290, tglh_community5_gpps),
+	TGL_H_COMMUNITY(0, 0, 78, tglh_community0_gpps),
+	TGL_H_COMMUNITY(1, 79, 180, tglh_community1_gpps),
+	TGL_H_COMMUNITY(2, 181, 217, tglh_community3_gpps),
+	TGL_H_COMMUNITY(3, 218, 266, tglh_community4_gpps),
+	TGL_H_COMMUNITY(4, 267, 290, tglh_community5_gpps),
 };
 
 static const struct intel_pinctrl_soc_data tglh_soc_data = {
@@ -740,6 +748,8 @@ static const struct intel_pinctrl_soc_data tglh_soc_data = {
 static const struct acpi_device_id tgl_pinctrl_acpi_match[] = {
 	{ "INT34C5", (kernel_ulong_t)&tgllp_soc_data },
 	{ "INT34C6", (kernel_ulong_t)&tglh_soc_data },
+	{ "INTC1055", (kernel_ulong_t)&tgllp_soc_data },
+	{ "INTC1057", (kernel_ulong_t)&tgllp_soc_data },
 	{ }
 };
 MODULE_DEVICE_TABLE(acpi, tgl_pinctrl_acpi_match);

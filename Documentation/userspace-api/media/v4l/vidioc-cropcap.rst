@@ -1,4 +1,5 @@
 .. SPDX-License-Identifier: GFDL-1.1-no-invariants-or-later
+.. c:namespace:: V4L
 
 .. _VIDIOC_CROPCAP:
 
@@ -11,23 +12,21 @@ Name
 
 VIDIOC_CROPCAP - Information about the video cropping and scaling abilities
 
-
 Synopsis
 ========
 
-.. c:function:: int ioctl( int fd, VIDIOC_CROPCAP, struct v4l2_cropcap *argp )
-    :name: VIDIOC_CROPCAP
+.. c:macro:: VIDIOC_CROPCAP
 
+``int ioctl(int fd, VIDIOC_CROPCAP, struct v4l2_cropcap *argp)``
 
 Arguments
 =========
 
 ``fd``
-    File descriptor returned by :ref:`open() <func-open>`.
+    File descriptor returned by :c:func:`open()`.
 
 ``argp``
     Pointer to struct :c:type:`v4l2_cropcap`.
-
 
 Description
 ===========
@@ -46,7 +45,7 @@ overlay devices.
 
 .. c:type:: v4l2_cropcap
 
-.. tabularcolumns:: |p{4.4cm}|p{4.4cm}|p{8.7cm}|
+.. tabularcolumns:: |p{4.4cm}|p{4.4cm}|p{8.5cm}|
 
 .. flat-table:: struct v4l2_cropcap
     :header-rows:  0
@@ -95,10 +94,9 @@ overlay devices.
    Starting with kernel 4.13 both variations are allowed.
 
 
-
 .. _v4l2-rect-crop:
 
-.. tabularcolumns:: |p{4.4cm}|p{4.4cm}|p{8.7cm}|
+.. tabularcolumns:: |p{4.4cm}|p{4.4cm}|p{8.5cm}|
 
 .. flat-table:: struct v4l2_rect
     :header-rows:  0
@@ -119,7 +117,6 @@ overlay devices.
     * - __u32
       - ``height``
       - Height of the rectangle, in pixels.
-
 
 Return Value
 ============

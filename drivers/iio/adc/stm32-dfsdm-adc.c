@@ -198,7 +198,7 @@ static int stm32_dfsdm_compute_osrs(struct stm32_dfsdm_filter *fl,
 	unsigned int p = fl->ford;	/* filter order (ford) */
 	struct stm32_dfsdm_filter_osr *flo = &fl->flo[fast];
 
-	pr_debug("%s: Requested oversampling: %d\n",  __func__, oversamp);
+	pr_debug("Requested oversampling: %d\n", oversamp);
 	/*
 	 * This function tries to compute filter oversampling and integrator
 	 * oversampling, base on oversampling ratio requested by user.
@@ -293,9 +293,10 @@ static int stm32_dfsdm_compute_osrs(struct stm32_dfsdm_filter *fl,
 					max >>= flo->rshift;
 				}
 				flo->max = (s32)max;
+				flo->bits = bits;
 
-				pr_debug("%s: fast %d, fosr %d, iosr %d, res 0x%llx/%d bits, rshift %d, lshift %d\n",
-					 __func__, fast, flo->fosr, flo->iosr,
+				pr_debug("fast %d, fosr %d, iosr %d, res 0x%llx/%d bits, rshift %d, lshift %d\n",
+					 fast, flo->fosr, flo->iosr,
 					 flo->res, bits, flo->rshift,
 					 flo->lshift);
 			}
@@ -475,6 +476,9 @@ static int stm32_dfsdm_channels_configure(struct iio_dev *indio_dev,
 
 	if (!flo->res)
 		return -EINVAL;
+
+	dev_dbg(&indio_dev->dev, "Samples actual resolution: %d bits",
+		min(flo->bits, (u32)DFSDM_DATA_RES - 1));
 
 	for_each_set_bit(bit, &adc->smask,
 			 sizeof(adc->smask) * BITS_PER_BYTE) {
@@ -860,7 +864,7 @@ static void stm32_dfsdm_dma_buffer_done(void *data)
 	 * support in IIO.
 	 */
 
-	dev_dbg(&indio_dev->dev, "%s: pos = %d, available = %d\n", __func__,
+	dev_dbg(&indio_dev->dev, "pos = %d, available = %d\n",
 		adc->bufi, available);
 	old_pos = adc->bufi;
 
@@ -914,7 +918,7 @@ static int stm32_dfsdm_adc_dma_start(struct iio_dev *indio_dev)
 	if (!adc->dma_chan)
 		return -EINVAL;
 
-	dev_dbg(&indio_dev->dev, "%s size=%d watermark=%d\n", __func__,
+	dev_dbg(&indio_dev->dev, "size=%d watermark=%d\n",
 		adc->buf_sz, adc->buf_sz / 2);
 
 	if (adc->nconv == 1 && !indio_dev->trig)
@@ -1473,13 +1477,9 @@ static int stm32_dfsdm_adc_init(struct device *dev, struct iio_dev *indio_dev)
 	/* Optionally request DMA */
 	ret = stm32_dfsdm_dma_request(dev, indio_dev);
 	if (ret) {
-		if (ret != -ENODEV) {
-			if (ret != -EPROBE_DEFER)
-				dev_err(dev,
-					"DMA channel request failed with %d\n",
-					ret);
-			return ret;
-		}
+		if (ret != -ENODEV)
+			return dev_err_probe(dev, ret,
+					     "DMA channel request failed with\n");
 
 		dev_dbg(dev, "No DMA support\n");
 		return 0;

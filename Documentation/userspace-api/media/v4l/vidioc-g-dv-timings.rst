@@ -1,4 +1,5 @@
 .. SPDX-License-Identifier: GFDL-1.1-no-invariants-or-later
+.. c:namespace:: V4L
 
 .. _VIDIOC_G_DV_TIMINGS:
 
@@ -11,32 +12,33 @@ Name
 
 VIDIOC_G_DV_TIMINGS - VIDIOC_S_DV_TIMINGS - VIDIOC_SUBDEV_G_DV_TIMINGS - VIDIOC_SUBDEV_S_DV_TIMINGS - Get or set DV timings for input or output
 
-
 Synopsis
 ========
 
-.. c:function:: int ioctl( int fd, VIDIOC_G_DV_TIMINGS, struct v4l2_dv_timings *argp )
-    :name: VIDIOC_G_DV_TIMINGS
+.. c:macro:: VIDIOC_G_DV_TIMINGS
 
-.. c:function:: int ioctl( int fd, VIDIOC_S_DV_TIMINGS, struct v4l2_dv_timings *argp )
-    :name: VIDIOC_S_DV_TIMINGS
+``int ioctl(int fd, VIDIOC_G_DV_TIMINGS, struct v4l2_dv_timings *argp)``
 
-.. c:function:: int ioctl( int fd, VIDIOC_SUBDEV_G_DV_TIMINGS, struct v4l2_dv_timings *argp )
-    :name: VIDIOC_SUBDEV_G_DV_TIMINGS
+.. c:macro:: VIDIOC_S_DV_TIMINGS
 
-.. c:function:: int ioctl( int fd, VIDIOC_SUBDEV_S_DV_TIMINGS, struct v4l2_dv_timings *argp )
-    :name: VIDIOC_SUBDEV_S_DV_TIMINGS
+``int ioctl(int fd, VIDIOC_S_DV_TIMINGS, struct v4l2_dv_timings *argp)``
 
+.. c:macro:: VIDIOC_SUBDEV_G_DV_TIMINGS
+
+``int ioctl(int fd, VIDIOC_SUBDEV_G_DV_TIMINGS, struct v4l2_dv_timings *argp)``
+
+.. c:macro:: VIDIOC_SUBDEV_S_DV_TIMINGS
+
+``int ioctl(int fd, VIDIOC_SUBDEV_S_DV_TIMINGS, struct v4l2_dv_timings *argp)``
 
 Arguments
 =========
 
 ``fd``
-    File descriptor returned by :ref:`open() <func-open>`.
+    File descriptor returned by :c:func:`open()`.
 
 ``argp``
     Pointer to struct :c:type:`v4l2_dv_timings`.
-
 
 Description
 ===========
@@ -60,7 +62,6 @@ the current input or output does not support DV timings (e.g. if
 :ref:`VIDIOC_ENUMINPUT` does not set the
 ``V4L2_IN_CAP_DV_TIMINGS`` flag), then ``ENODATA`` error code is returned.
 
-
 Return Value
 ============
 
@@ -81,9 +82,11 @@ EBUSY
 EPERM
     ``VIDIOC_SUBDEV_S_DV_TIMINGS`` has been called on a read-only subdevice.
 
-.. tabularcolumns:: |p{4.4cm}|p{4.4cm}|p{8.7cm}|
-
 .. c:type:: v4l2_bt_timings
+
+.. tabularcolumns:: |p{4.4cm}|p{4.4cm}|p{8.5cm}|
+
+.. cssclass:: longtable
 
 .. flat-table:: struct v4l2_bt_timings
     :header-rows:  0
@@ -170,8 +173,7 @@ EPERM
       - Reserved for future extensions. Drivers and applications must set
 	the array to zero.
 
-
-.. tabularcolumns:: |p{3.5cm}|p{3.5cm}|p{7.0cm}|p{3.5cm}|
+.. tabularcolumns:: |p{3.5cm}|p{3.5cm}|p{7.0cm}|p{3.1cm}|
 
 .. c:type:: v4l2_dv_timings
 
@@ -194,7 +196,7 @@ EPERM
     * - }
       -
 
-.. tabularcolumns:: |p{4.4cm}|p{4.4cm}|p{8.7cm}|
+.. tabularcolumns:: |p{4.4cm}|p{4.4cm}|p{8.5cm}|
 
 .. _dv-timing-types:
 
@@ -213,7 +215,9 @@ EPERM
       - 0
       - BT.656/1120 timings
 
-.. tabularcolumns:: |p{4.5cm}|p{12.8cm}|
+.. tabularcolumns:: |p{6.5cm}|p{11.0cm}|
+
+.. cssclass:: longtable
 
 .. _dv-bt-standards:
 
@@ -236,7 +240,9 @@ EPERM
 	There are no horizontal syncs/porches at all in this format.
 	Total blanking timings must be set in hsync or vsync fields only.
 
-.. tabularcolumns:: |p{7.0cm}|p{10.5cm}|
+.. tabularcolumns:: |p{7.7cm}|p{9.8cm}|
+
+.. cssclass:: longtable
 
 .. _dv-bt-flags:
 

@@ -16,11 +16,12 @@
 #define NFP_FL_MAX_ROUTES               32
 
 #define NFP_TUN_PRE_TUN_RULE_LIMIT	32
-#define NFP_TUN_PRE_TUN_RULE_DEL	0x1
-#define NFP_TUN_PRE_TUN_IDX_BIT		0x8
+#define NFP_TUN_PRE_TUN_RULE_DEL	BIT(0)
+#define NFP_TUN_PRE_TUN_IDX_BIT		BIT(3)
+#define NFP_TUN_PRE_TUN_IPV6_BIT	BIT(7)
 
 /**
- * struct nfp_tun_pre_run_rule - rule matched before decap
+ * struct nfp_tun_pre_tun_rule - rule matched before decap
  * @flags:		options for the rule offset
  * @port_idx:		index of destination MAC address for the rule
  * @vlan_tci:		VLAN info associated with MAC
@@ -836,7 +837,7 @@ nfp_tunnel_put_ipv6_off(struct nfp_app *app, struct nfp_ipv6_addr_entry *entry)
 }
 
 static int
-__nfp_tunnel_offload_mac(struct nfp_app *app, u8 *mac, u16 idx, bool del)
+__nfp_tunnel_offload_mac(struct nfp_app *app, const u8 *mac, u16 idx, bool del)
 {
 	struct nfp_tun_mac_addr_offload payload;
 
@@ -885,7 +886,7 @@ static bool nfp_tunnel_is_mac_idx_global(u16 nfp_mac_idx)
 }
 
 static struct nfp_tun_offloaded_mac *
-nfp_tunnel_lookup_offloaded_macs(struct nfp_app *app, u8 *mac)
+nfp_tunnel_lookup_offloaded_macs(struct nfp_app *app, const u8 *mac)
 {
 	struct nfp_flower_priv *priv = app->priv;
 
@@ -1004,7 +1005,7 @@ err_free_ida:
 
 static int
 nfp_tunnel_del_shared_mac(struct nfp_app *app, struct net_device *netdev,
-			  u8 *mac, bool mod)
+			  const u8 *mac, bool mod)
 {
 	struct nfp_flower_priv *priv = app->priv;
 	struct nfp_flower_repr_priv *repr_priv;
@@ -1268,6 +1269,7 @@ int nfp_flower_xmit_pre_tun_flow(struct nfp_app *app,
 {
 	struct nfp_flower_priv *app_priv = app->priv;
 	struct nfp_tun_offloaded_mac *mac_entry;
+	struct nfp_flower_meta_tci *key_meta;
 	struct nfp_tun_pre_tun_rule payload;
 	struct net_device *internal_dev;
 	int err;
@@ -1289,6 +1291,15 @@ int nfp_flower_xmit_pre_tun_flow(struct nfp_app *app,
 						     internal_dev->dev_addr);
 	if (!mac_entry)
 		return -ENOENT;
+
+	/* Set/clear IPV6 bit. cpu_to_be16() swap will lead to MSB being
+	 * set/clear for port_idx.
+	 */
+	key_meta = (struct nfp_flower_meta_tci *)flow->unmasked_data;
+	if (key_meta->nfp_flow_key_layer & NFP_FLOWER_LAYER_IPV6)
+		mac_entry->index |= NFP_TUN_PRE_TUN_IPV6_BIT;
+	else
+		mac_entry->index &= ~NFP_TUN_PRE_TUN_IPV6_BIT;
 
 	payload.port_idx = cpu_to_be16(mac_entry->index);
 

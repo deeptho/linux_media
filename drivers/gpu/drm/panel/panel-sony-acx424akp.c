@@ -20,7 +20,6 @@
 #include <drm/drm_mipi_dsi.h>
 #include <drm/drm_modes.h>
 #include <drm/drm_panel.h>
-#include <drm/drm_print.h>
 
 #define ACX424_DCS_READ_ID1		0xDA
 #define ACX424_DCS_READ_ID2		0xDB
@@ -41,7 +40,6 @@
 struct acx424akp {
 	struct drm_panel panel;
 	struct device *dev;
-	struct backlight_device *bl;
 	struct regulator *supply;
 	struct gpio_desc *reset_gpio;
 	bool video_mode;
@@ -103,6 +101,18 @@ static int acx424akp_set_brightness(struct backlight_device *bl)
 	u8 par;
 	int ret;
 
+	if (backlight_is_blank(bl)) {
+		/* Disable backlight */
+		par = 0x00;
+		ret = mipi_dsi_dcs_write(dsi, MIPI_DCS_WRITE_CONTROL_DISPLAY,
+					 &par, 1);
+		if (ret) {
+			dev_err(acx->dev, "failed to disable display backlight (%d)\n", ret);
+			return ret;
+		}
+		return 0;
+	}
+
 	/* Calculate the PWM duty cycle in n/256's */
 	pwm_ratio = max(((duty_ns * 256) / period_ns) - 1, 1);
 	pwm_div = max(1,
@@ -110,13 +120,11 @@ static int acx424akp_set_brightness(struct backlight_device *bl)
 		      SCALE_FACTOR_NS_DIV_MHZ);
 
 	/* Set up PWM dutycycle ONE byte (differs from the standard) */
-	DRM_DEV_DEBUG(acx->dev, "calculated duty cycle %02x\n", pwm_ratio);
+	dev_dbg(acx->dev, "calculated duty cycle %02x\n", pwm_ratio);
 	ret = mipi_dsi_dcs_write(dsi, MIPI_DCS_SET_DISPLAY_BRIGHTNESS,
 				 &pwm_ratio, 1);
 	if (ret < 0) {
-		DRM_DEV_ERROR(acx->dev,
-			      "failed to set display PWM ratio (%d)\n",
-			      ret);
+		dev_err(acx->dev, "failed to set display PWM ratio (%d)\n", ret);
 		return ret;
 	}
 
@@ -132,40 +140,30 @@ static int acx424akp_set_brightness(struct backlight_device *bl)
 	par = 0xaa;
 	ret = mipi_dsi_dcs_write(dsi, 0xf3, &par, 1);
 	if (ret < 0) {
-		DRM_DEV_ERROR(acx->dev,
-			      "failed to unlock CMD 2 (%d)\n",
-			      ret);
+		dev_err(acx->dev, "failed to unlock CMD 2 (%d)\n", ret);
 		return ret;
 	}
 	par = 0x01;
 	ret = mipi_dsi_dcs_write(dsi, 0x00, &par, 1);
 	if (ret < 0) {
-		DRM_DEV_ERROR(acx->dev,
-			      "failed to enter page 1 (%d)\n",
-			      ret);
+		dev_err(acx->dev, "failed to enter page 1 (%d)\n", ret);
 		return ret;
 	}
 	par = 0x01;
 	ret = mipi_dsi_dcs_write(dsi, 0x7d, &par, 1);
 	if (ret < 0) {
-		DRM_DEV_ERROR(acx->dev,
-			      "failed to disable MTP reload (%d)\n",
-			      ret);
+		dev_err(acx->dev, "failed to disable MTP reload (%d)\n", ret);
 		return ret;
 	}
 	ret = mipi_dsi_dcs_write(dsi, 0x22, &pwm_div, 1);
 	if (ret < 0) {
-		DRM_DEV_ERROR(acx->dev,
-			      "failed to set PWM divisor (%d)\n",
-			      ret);
+		dev_err(acx->dev, "failed to set PWM divisor (%d)\n", ret);
 		return ret;
 	}
 	par = 0xaa;
 	ret = mipi_dsi_dcs_write(dsi, 0x7f, &par, 1);
 	if (ret < 0) {
-		DRM_DEV_ERROR(acx->dev,
-			      "failed to lock CMD 2 (%d)\n",
-			      ret);
+		dev_err(acx->dev, "failed to lock CMD 2 (%d)\n", ret);
 		return ret;
 	}
 
@@ -174,9 +172,7 @@ static int acx424akp_set_brightness(struct backlight_device *bl)
 	ret = mipi_dsi_dcs_write(dsi, MIPI_DCS_WRITE_CONTROL_DISPLAY,
 				 &par, 1);
 	if (ret < 0) {
-		DRM_DEV_ERROR(acx->dev,
-			      "failed to enable display backlight (%d)\n",
-			      ret);
+		dev_err(acx->dev, "failed to enable display backlight (%d)\n", ret);
 		return ret;
 	}
 
@@ -185,6 +181,12 @@ static int acx424akp_set_brightness(struct backlight_device *bl)
 
 static const struct backlight_ops acx424akp_bl_ops = {
 	.update_status = acx424akp_set_brightness,
+};
+
+static const struct backlight_properties acx424akp_bl_props = {
+	.type = BACKLIGHT_RAW,
+	.brightness = 512,
+	.max_brightness = 1023,
 };
 
 static int acx424akp_read_id(struct acx424akp *acx)
@@ -196,22 +198,22 @@ static int acx424akp_read_id(struct acx424akp *acx)
 
 	ret = mipi_dsi_dcs_read(dsi, ACX424_DCS_READ_ID1, &vendor, 1);
 	if (ret < 0) {
-		DRM_DEV_ERROR(acx->dev, "could not vendor ID byte\n");
+		dev_err(acx->dev, "could not vendor ID byte\n");
 		return ret;
 	}
 	ret = mipi_dsi_dcs_read(dsi, ACX424_DCS_READ_ID2, &version, 1);
 	if (ret < 0) {
-		DRM_DEV_ERROR(acx->dev, "could not read device version byte\n");
+		dev_err(acx->dev, "could not read device version byte\n");
 		return ret;
 	}
 	ret = mipi_dsi_dcs_read(dsi, ACX424_DCS_READ_ID3, &panel, 1);
 	if (ret < 0) {
-		DRM_DEV_ERROR(acx->dev, "could not read panel ID byte\n");
+		dev_err(acx->dev, "could not read panel ID byte\n");
 		return ret;
 	}
 
 	if (vendor == 0x00) {
-		DRM_DEV_ERROR(acx->dev, "device vendor ID is zero\n");
+		dev_err(acx->dev, "device vendor ID is zero\n");
 		return -ENODEV;
 	}
 
@@ -220,14 +222,12 @@ static int acx424akp_read_id(struct acx424akp *acx)
 	case DISPLAY_SONY_ACX424AKP_ID1:
 	case DISPLAY_SONY_ACX424AKP_ID2:
 	case DISPLAY_SONY_ACX424AKP_ID3:
-		DRM_DEV_INFO(acx->dev,
-			     "MTP vendor: %02x, version: %02x, panel: %02x\n",
-			     vendor, version, panel);
+		dev_info(acx->dev, "MTP vendor: %02x, version: %02x, panel: %02x\n",
+			 vendor, version, panel);
 		break;
 	default:
-		DRM_DEV_INFO(acx->dev,
-			     "unknown vendor: %02x, version: %02x, panel: %02x\n",
-			     vendor, version, panel);
+		dev_info(acx->dev, "unknown vendor: %02x, version: %02x, panel: %02x\n",
+			 vendor, version, panel);
 		break;
 	}
 
@@ -240,7 +240,7 @@ static int acx424akp_power_on(struct acx424akp *acx)
 
 	ret = regulator_enable(acx->supply);
 	if (ret) {
-		DRM_DEV_ERROR(acx->dev, "failed to enable supply (%d)\n", ret);
+		dev_err(acx->dev, "failed to enable supply (%d)\n", ret);
 		return ret;
 	}
 
@@ -276,7 +276,7 @@ static int acx424akp_prepare(struct drm_panel *panel)
 
 	ret = acx424akp_read_id(acx);
 	if (ret) {
-		DRM_DEV_ERROR(acx->dev, "failed to read panel ID (%d)\n", ret);
+		dev_err(acx->dev, "failed to read panel ID (%d)\n", ret);
 		goto err_power_off;
 	}
 
@@ -284,8 +284,7 @@ static int acx424akp_prepare(struct drm_panel *panel)
 	ret = mipi_dsi_dcs_set_tear_on(dsi,
 				       MIPI_DSI_DCS_TEAR_MODE_VBLANK);
 	if (ret) {
-		DRM_DEV_ERROR(acx->dev, "failed to enable vblank TE (%d)\n",
-			      ret);
+		dev_err(acx->dev, "failed to enable vblank TE (%d)\n", ret);
 		goto err_power_off;
 	}
 
@@ -302,23 +301,21 @@ static int acx424akp_prepare(struct drm_panel *panel)
 	ret = mipi_dsi_dcs_write(dsi, ACX424_DCS_SET_MDDI,
 				 &mddi, sizeof(mddi));
 	if (ret < 0) {
-		DRM_DEV_ERROR(acx->dev, "failed to set MDDI (%d)\n", ret);
+		dev_err(acx->dev, "failed to set MDDI (%d)\n", ret);
 		goto err_power_off;
 	}
 
 	/* Exit sleep mode */
 	ret = mipi_dsi_dcs_exit_sleep_mode(dsi);
 	if (ret) {
-		DRM_DEV_ERROR(acx->dev, "failed to exit sleep mode (%d)\n",
-			      ret);
+		dev_err(acx->dev, "failed to exit sleep mode (%d)\n", ret);
 		goto err_power_off;
 	}
 	msleep(140);
 
 	ret = mipi_dsi_dcs_set_display_on(dsi);
 	if (ret) {
-		DRM_DEV_ERROR(acx->dev, "failed to turn display on (%d)\n",
-			      ret);
+		dev_err(acx->dev, "failed to turn display on (%d)\n", ret);
 		goto err_power_off;
 	}
 	if (acx->video_mode) {
@@ -329,8 +326,6 @@ static int acx424akp_prepare(struct drm_panel *panel)
 			goto err_power_off;
 		}
 	}
-
-	acx->bl->props.power = FB_BLANK_NORMAL;
 
 	return 0;
 
@@ -343,67 +338,27 @@ static int acx424akp_unprepare(struct drm_panel *panel)
 {
 	struct acx424akp *acx = panel_to_acx424akp(panel);
 	struct mipi_dsi_device *dsi = to_mipi_dsi_device(acx->dev);
-	u8 par;
 	int ret;
-
-	/* Disable backlight */
-	par = 0x00;
-	ret = mipi_dsi_dcs_write(dsi, MIPI_DCS_WRITE_CONTROL_DISPLAY,
-				 &par, 1);
-	if (ret) {
-		DRM_DEV_ERROR(acx->dev,
-			      "failed to disable display backlight (%d)\n",
-			      ret);
-		return ret;
-	}
 
 	ret = mipi_dsi_dcs_set_display_off(dsi);
 	if (ret) {
-		DRM_DEV_ERROR(acx->dev, "failed to turn display off (%d)\n",
-			      ret);
+		dev_err(acx->dev, "failed to turn display off (%d)\n", ret);
 		return ret;
 	}
 
 	/* Enter sleep mode */
 	ret = mipi_dsi_dcs_enter_sleep_mode(dsi);
 	if (ret) {
-		DRM_DEV_ERROR(acx->dev, "failed to enter sleep mode (%d)\n",
-			      ret);
+		dev_err(acx->dev, "failed to enter sleep mode (%d)\n", ret);
 		return ret;
 	}
 	msleep(85);
 
 	acx424akp_power_off(acx);
-	acx->bl->props.power = FB_BLANK_POWERDOWN;
 
 	return 0;
 }
 
-static int acx424akp_enable(struct drm_panel *panel)
-{
-	struct acx424akp *acx = panel_to_acx424akp(panel);
-
-	/*
-	 * The backlight is on as long as the display is on
-	 * so no use to call backlight_enable() here.
-	 */
-	acx->bl->props.power = FB_BLANK_UNBLANK;
-
-	return 0;
-}
-
-static int acx424akp_disable(struct drm_panel *panel)
-{
-	struct acx424akp *acx = panel_to_acx424akp(panel);
-
-	/*
-	 * The backlight is on as long as the display is on
-	 * so no use to call backlight_disable() here.
-	 */
-	acx->bl->props.power = FB_BLANK_NORMAL;
-
-	return 0;
-}
 
 static int acx424akp_get_modes(struct drm_panel *panel,
 			       struct drm_connector *connector)
@@ -418,7 +373,7 @@ static int acx424akp_get_modes(struct drm_panel *panel,
 		mode = drm_mode_duplicate(connector->dev,
 					  &sony_acx424akp_cmd_mode);
 	if (!mode) {
-		DRM_ERROR("bad mode or failed to add mode\n");
+		dev_err(panel->dev, "bad mode or failed to add mode\n");
 		return -EINVAL;
 	}
 	drm_mode_set_name(mode);
@@ -433,10 +388,8 @@ static int acx424akp_get_modes(struct drm_panel *panel,
 }
 
 static const struct drm_panel_funcs acx424akp_drm_funcs = {
-	.disable = acx424akp_disable,
 	.unprepare = acx424akp_unprepare,
 	.prepare = acx424akp_prepare,
-	.enable = acx424akp_enable,
 	.get_modes = acx424akp_get_modes,
 };
 
@@ -473,8 +426,7 @@ static int acx424akp_probe(struct mipi_dsi_device *dsi)
 			MIPI_DSI_MODE_VIDEO_BURST;
 	else
 		dsi->mode_flags =
-			MIPI_DSI_CLOCK_NON_CONTINUOUS |
-			MIPI_DSI_MODE_EOT_PACKET;
+			MIPI_DSI_CLOCK_NON_CONTINUOUS;
 
 	acx->supply = devm_regulator_get(dev, "vddi");
 	if (IS_ERR(acx->supply))
@@ -483,30 +435,20 @@ static int acx424akp_probe(struct mipi_dsi_device *dsi)
 	/* This asserts RESET by default */
 	acx->reset_gpio = devm_gpiod_get_optional(dev, "reset",
 						  GPIOD_OUT_HIGH);
-	if (IS_ERR(acx->reset_gpio)) {
-		ret = PTR_ERR(acx->reset_gpio);
-		if (ret != -EPROBE_DEFER)
-			DRM_DEV_ERROR(dev, "failed to request GPIO (%d)\n",
-				      ret);
-		return ret;
-	}
+	if (IS_ERR(acx->reset_gpio))
+		return dev_err_probe(dev, PTR_ERR(acx->reset_gpio),
+				     "failed to request GPIO\n");
 
 	drm_panel_init(&acx->panel, dev, &acx424akp_drm_funcs,
 		       DRM_MODE_CONNECTOR_DSI);
 
-	acx->bl = devm_backlight_device_register(dev, "acx424akp", dev, acx,
-						 &acx424akp_bl_ops, NULL);
-	if (IS_ERR(acx->bl)) {
-		DRM_DEV_ERROR(dev, "failed to register backlight device\n");
-		return PTR_ERR(acx->bl);
-	}
-	acx->bl->props.max_brightness = 1023;
-	acx->bl->props.brightness = 512;
-	acx->bl->props.power = FB_BLANK_POWERDOWN;
+	acx->panel.backlight = devm_backlight_device_register(dev, "acx424akp", dev, acx,
+					&acx424akp_bl_ops, &acx424akp_bl_props);
+	if (IS_ERR(acx->panel.backlight))
+		return dev_err_probe(dev, PTR_ERR(acx->panel.backlight),
+				     "failed to register backlight device\n");
 
-	ret = drm_panel_add(&acx->panel);
-	if (ret < 0)
-		return ret;
+	drm_panel_add(&acx->panel);
 
 	ret = mipi_dsi_attach(dsi);
 	if (ret < 0) {

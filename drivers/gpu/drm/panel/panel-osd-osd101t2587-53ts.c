@@ -164,7 +164,9 @@ static int osd101t2587_panel_add(struct osd101t2587_panel *osd101t2587)
 	if (ret)
 		return ret;
 
-	return drm_panel_add(&osd101t2587->base);
+	drm_panel_add(&osd101t2587->base);
+
+	return 0;
 }
 
 static int osd101t2587_panel_probe(struct mipi_dsi_device *dsi)
@@ -182,7 +184,7 @@ static int osd101t2587_panel_probe(struct mipi_dsi_device *dsi)
 	dsi->mode_flags = MIPI_DSI_MODE_VIDEO |
 			  MIPI_DSI_MODE_VIDEO_BURST |
 			  MIPI_DSI_MODE_VIDEO_SYNC_PULSE |
-			  MIPI_DSI_MODE_EOT_PACKET;
+			  MIPI_DSI_MODE_NO_EOT_PACKET;
 
 	osd101t2587 = devm_kzalloc(&dsi->dev, sizeof(*osd101t2587), GFP_KERNEL);
 	if (!osd101t2587)

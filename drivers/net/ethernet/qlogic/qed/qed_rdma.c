@@ -19,9 +19,11 @@
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 #include <linux/string.h>
+#include <net/addrconf.h>
 #include "qed.h"
 #include "qed_cxt.h"
 #include "qed_hsi.h"
+#include "qed_iro_hsi.h"
 #include "qed_hw.h"
 #include "qed_init_ops.h"
 #include "qed_int.h"
@@ -32,7 +34,6 @@
 #include "qed_rdma.h"
 #include "qed_roce.h"
 #include "qed_sp.h"
-
 
 int qed_rdma_bmap_alloc(struct qed_hwfn *p_hwfn,
 			struct qed_bmap *bmap, u32 max_count, char *name)
@@ -410,18 +411,6 @@ static void qed_rdma_free(struct qed_hwfn *p_hwfn)
 	qed_rdma_resc_free(p_hwfn);
 }
 
-static void qed_rdma_get_guid(struct qed_hwfn *p_hwfn, u8 *guid)
-{
-	guid[0] = p_hwfn->hw_info.hw_mac_addr[0] ^ 2;
-	guid[1] = p_hwfn->hw_info.hw_mac_addr[1];
-	guid[2] = p_hwfn->hw_info.hw_mac_addr[2];
-	guid[3] = 0xff;
-	guid[4] = 0xfe;
-	guid[5] = p_hwfn->hw_info.hw_mac_addr[3];
-	guid[6] = p_hwfn->hw_info.hw_mac_addr[4];
-	guid[7] = p_hwfn->hw_info.hw_mac_addr[5];
-}
-
 static void qed_rdma_init_events(struct qed_hwfn *p_hwfn,
 				 struct qed_rdma_start_in_params *params)
 {
@@ -449,7 +438,9 @@ static void qed_rdma_init_devinfo(struct qed_hwfn *p_hwfn,
 	dev->fw_ver = (FW_MAJOR_VERSION << 24) | (FW_MINOR_VERSION << 16) |
 		      (FW_REVISION_VERSION << 8) | (FW_ENGINEERING_VERSION);
 
-	qed_rdma_get_guid(p_hwfn, (u8 *)&dev->sys_image_guid);
+	addrconf_addr_eui48((u8 *)&dev->sys_image_guid,
+			    p_hwfn->hw_info.hw_mac_addr);
+
 	dev->node_guid = dev->sys_image_guid;
 
 	dev->max_sge = min_t(u32, RDMA_MAX_SGE_PER_SQ_WQE,
@@ -504,7 +495,8 @@ static void qed_rdma_init_devinfo(struct qed_hwfn *p_hwfn,
 	dev->max_mw = 0;
 	dev->max_mr_mw_fmr_pbl = (PAGE_SIZE / 8) * (PAGE_SIZE / 8);
 	dev->max_mr_mw_fmr_size = dev->max_mr_mw_fmr_pbl * PAGE_SIZE;
-	dev->max_pkey = QED_RDMA_MAX_P_KEY;
+	if (QED_IS_ROCE_PERSONALITY(p_hwfn))
+		dev->max_pkey = QED_RDMA_MAX_P_KEY;
 
 	dev->max_srq = p_hwfn->p_rdma_info->num_srqs;
 	dev->max_srq_wr = QED_RDMA_MAX_SRQ_WQE_ELEM;
@@ -864,8 +856,8 @@ static void qed_rdma_cnq_prod_update(void *rdma_cxt, u8 qz_offset, u16 prod)
 	}
 
 	qz_num = p_hwfn->p_rdma_info->queue_zone_base + qz_offset;
-	addr = GTT_BAR0_MAP_REG_USDM_RAM +
-	       USTORM_COMMON_QUEUE_CONS_OFFSET(qz_num);
+	addr = GET_GTT_REG_ADDR(GTT_BAR0_MAP_REG_USDM_RAM,
+				USTORM_COMMON_QUEUE_CONS, qz_num);
 
 	REG_WR16(p_hwfn, addr, prod);
 
@@ -1151,7 +1143,6 @@ qed_rdma_destroy_cq(void *rdma_cxt,
 	DP_VERBOSE(p_hwfn, QED_MSG_RDMA, "icid = %08x\n", in_params->icid);
 
 	p_ramrod_res =
-	    (struct rdma_destroy_cq_output_params *)
 	    dma_alloc_coherent(&p_hwfn->cdev->pdev->dev,
 			       sizeof(struct rdma_destroy_cq_output_params),
 			       &ramrod_res_phys, GFP_KERNEL);
@@ -1285,8 +1276,7 @@ qed_rdma_create_qp(void *rdma_cxt,
 
 	if (!rdma_cxt || !in_params || !out_params ||
 	    !p_hwfn->p_rdma_info->active) {
-		DP_ERR(p_hwfn->cdev,
-		       "qed roce create qp failed due to NULL entry (rdma_cxt=%p, in=%p, out=%p, roce_info=?\n",
+		pr_err("qed roce create qp failed due to NULL entry (rdma_cxt=%p, in=%p, out=%p, roce_info=?\n",
 		       rdma_cxt, in_params, out_params);
 		return NULL;
 	}
@@ -1463,14 +1453,14 @@ static int qed_rdma_modify_qp(void *rdma_cxt,
 
 	switch (qp->qp_type) {
 	case QED_RDMA_QP_TYPE_XRC_INI:
-		qp->has_req = 1;
+		qp->has_req = true;
 		break;
 	case QED_RDMA_QP_TYPE_XRC_TGT:
-		qp->has_resp = 1;
+		qp->has_resp = true;
 		break;
 	default:
-		qp->has_req = 1;
-		qp->has_resp = 1;
+		qp->has_req  = true;
+		qp->has_resp = true;
 	}
 
 	if (QED_IS_IWARP_PERSONALITY(p_hwfn)) {
@@ -1520,7 +1510,7 @@ qed_rdma_register_tid(void *rdma_cxt,
 		  params->pbl_two_level);
 
 	SET_FIELD(flags, RDMA_REGISTER_TID_RAMROD_DATA_ZERO_BASED,
-		  params->zbva);
+		  false);
 
 	SET_FIELD(flags, RDMA_REGISTER_TID_RAMROD_DATA_PHY_MR, params->phy_mr);
 
@@ -1582,15 +1572,7 @@ qed_rdma_register_tid(void *rdma_cxt,
 	p_ramrod->pd = cpu_to_le16(params->pd);
 	p_ramrod->length_hi = (u8)(params->length >> 32);
 	p_ramrod->length_lo = DMA_LO_LE(params->length);
-	if (params->zbva) {
-		/* Lower 32 bits of the registered MR address.
-		 * In case of zero based MR, will hold FBO
-		 */
-		p_ramrod->va.hi = 0;
-		p_ramrod->va.lo = cpu_to_le32(params->fbo);
-	} else {
-		DMA_REGPAIR_LE(p_ramrod->va, params->vaddr);
-	}
+	DMA_REGPAIR_LE(p_ramrod->va, params->vaddr);
 	DMA_REGPAIR_LE(p_ramrod->pbl_base, params->pbl_ptr);
 
 	/* DIF */
@@ -1912,7 +1894,6 @@ void qed_rdma_dpm_conf(struct qed_hwfn *p_hwfn, struct qed_ptt *p_ptt)
 		   val, p_hwfn->dcbx_no_edpm, p_hwfn->db_bar_no_edpm);
 }
 
-
 void qed_rdma_dpm_bar(struct qed_hwfn *p_hwfn, struct qed_ptt *p_ptt)
 {
 	p_hwfn->db_bar_no_edpm = true;
@@ -1975,7 +1956,7 @@ static void qed_rdma_remove_user(void *rdma_cxt, u16 dpi)
 
 static int qed_roce_ll2_set_mac_filter(struct qed_dev *cdev,
 				       u8 *old_mac_address,
-				       u8 *new_mac_address)
+				       const u8 *new_mac_address)
 {
 	int rc = 0;
 

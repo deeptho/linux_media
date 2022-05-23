@@ -705,11 +705,11 @@ static void tegra_xudc_device_mode_on(struct tegra_xudc *xudc)
 
 	err = phy_power_on(xudc->curr_utmi_phy);
 	if (err < 0)
-		dev_err(xudc->dev, "utmi power on failed %d\n", err);
+		dev_err(xudc->dev, "UTMI power on failed: %d\n", err);
 
 	err = phy_power_on(xudc->curr_usb3_phy);
 	if (err < 0)
-		dev_err(xudc->dev, "usb3 phy power on failed %d\n", err);
+		dev_err(xudc->dev, "USB3 PHY power on failed: %d\n", err);
 
 	dev_dbg(xudc->dev, "device mode on\n");
 
@@ -759,11 +759,11 @@ static void tegra_xudc_device_mode_off(struct tegra_xudc *xudc)
 
 	err = phy_power_off(xudc->curr_utmi_phy);
 	if (err < 0)
-		dev_err(xudc->dev, "utmi_phy power off failed %d\n", err);
+		dev_err(xudc->dev, "UTMI PHY power off failed: %d\n", err);
 
 	err = phy_power_off(xudc->curr_usb3_phy);
 	if (err < 0)
-		dev_err(xudc->dev, "usb3_phy power off failed %d\n", err);
+		dev_err(xudc->dev, "USB3 PHY power off failed: %d\n", err);
 
 	pm_runtime_put(xudc->dev);
 }
@@ -1539,7 +1539,7 @@ static int __tegra_xudc_ep_set_halt(struct tegra_xudc_ep *ep, bool halt)
 		return -EINVAL;
 
 	if (usb_endpoint_xfer_isoc(ep->desc)) {
-		dev_err(xudc->dev, "can't halt isoc EP\n");
+		dev_err(xudc->dev, "can't halt isochronous EP\n");
 		return -ENOTSUPP;
 	}
 
@@ -1610,7 +1610,7 @@ static void tegra_xudc_ep_context_setup(struct tegra_xudc_ep *ep)
 	u16 maxpacket, maxburst = 0, esit = 0;
 	u32 val;
 
-	maxpacket = usb_endpoint_maxp(desc) & 0x7ff;
+	maxpacket = usb_endpoint_maxp(desc);
 	if (xudc->gadget.speed == USB_SPEED_SUPER) {
 		if (!usb_endpoint_xfer_control(desc))
 			maxburst = comp_desc->bMaxBurst;
@@ -1621,7 +1621,7 @@ static void tegra_xudc_ep_context_setup(struct tegra_xudc_ep *ep)
 		   (usb_endpoint_xfer_int(desc) ||
 		    usb_endpoint_xfer_isoc(desc))) {
 		if (xudc->gadget.speed == USB_SPEED_HIGH) {
-			maxburst = (usb_endpoint_maxp(desc) >> 11) & 0x3;
+			maxburst = usb_endpoint_maxp_mult(desc) - 1;
 			if (maxburst == 0x3) {
 				dev_warn(xudc->dev,
 					 "invalid endpoint maxburst\n");
@@ -1788,7 +1788,7 @@ static int __tegra_xudc_ep_enable(struct tegra_xudc_ep *ep,
 
 	if (usb_endpoint_xfer_isoc(desc)) {
 		if (xudc->nr_isoch_eps > XUDC_MAX_ISOCH_EPS) {
-			dev_err(xudc->dev, "too many isoch endpoints\n");
+			dev_err(xudc->dev, "too many isochronous endpoints\n");
 			return -EBUSY;
 		}
 		xudc->nr_isoch_eps++;
@@ -1907,7 +1907,7 @@ static void tegra_xudc_ep_free_request(struct usb_ep *usb_ep,
 	kfree(req);
 }
 
-static struct usb_ep_ops tegra_xudc_ep_ops = {
+static const struct usb_ep_ops tegra_xudc_ep_ops = {
 	.enable = tegra_xudc_ep_enable,
 	.disable = tegra_xudc_ep_disable,
 	.alloc_request = tegra_xudc_ep_alloc_request,
@@ -1928,7 +1928,7 @@ static int tegra_xudc_ep0_disable(struct usb_ep *usb_ep)
 	return -EBUSY;
 }
 
-static struct usb_ep_ops tegra_xudc_ep0_ops = {
+static const struct usb_ep_ops tegra_xudc_ep0_ops = {
 	.enable = tegra_xudc_ep0_enable,
 	.disable = tegra_xudc_ep0_disable,
 	.alloc_request = tegra_xudc_ep_alloc_request,
@@ -2168,7 +2168,7 @@ static int tegra_xudc_set_selfpowered(struct usb_gadget *gadget, int is_on)
 	return 0;
 }
 
-static struct usb_gadget_ops tegra_xudc_gadget_ops = {
+static const struct usb_gadget_ops tegra_xudc_gadget_ops = {
 	.get_frame = tegra_xudc_gadget_get_frame,
 	.wakeup = tegra_xudc_gadget_wakeup,
 	.pullup = tegra_xudc_gadget_pullup,
@@ -3508,10 +3508,8 @@ static int tegra_xudc_phy_get(struct tegra_xudc *xudc)
 		xudc->utmi_phy[i] = devm_phy_optional_get(xudc->dev, phy_name);
 		if (IS_ERR(xudc->utmi_phy[i])) {
 			err = PTR_ERR(xudc->utmi_phy[i]);
-			if (err != -EPROBE_DEFER)
-				dev_err(xudc->dev, "failed to get usb2-%d phy: %d\n",
-					i, err);
-
+			dev_err_probe(xudc->dev, err,
+				      "failed to get usb2-%d PHY\n", i);
 			goto clean_up;
 		} else if (xudc->utmi_phy[i]) {
 			/* Get usb-phy, if utmi phy is available */
@@ -3520,8 +3518,8 @@ static int tegra_xudc_phy_get(struct tegra_xudc *xudc)
 						&xudc->vbus_nb);
 			if (IS_ERR(xudc->usbphy[i])) {
 				err = PTR_ERR(xudc->usbphy[i]);
-				dev_err(xudc->dev, "failed to get usbphy-%d: %d\n",
-					i, err);
+				dev_err_probe(xudc->dev, err,
+					      "failed to get usbphy-%d\n", i);
 				goto clean_up;
 			}
 		} else if (!xudc->utmi_phy[i]) {
@@ -3538,13 +3536,11 @@ static int tegra_xudc_phy_get(struct tegra_xudc *xudc)
 		xudc->usb3_phy[i] = devm_phy_optional_get(xudc->dev, phy_name);
 		if (IS_ERR(xudc->usb3_phy[i])) {
 			err = PTR_ERR(xudc->usb3_phy[i]);
-			if (err != -EPROBE_DEFER)
-				dev_err(xudc->dev, "failed to get usb3-%d phy: %d\n",
-					usb3, err);
-
+			dev_err_probe(xudc->dev, err,
+				      "failed to get usb3-%d PHY\n", usb3);
 			goto clean_up;
 		} else if (xudc->usb3_phy[i])
-			dev_dbg(xudc->dev, "usb3_phy-%d registered", usb3);
+			dev_dbg(xudc->dev, "usb3-%d PHY registered", usb3);
 	}
 
 	return err;
@@ -3577,13 +3573,13 @@ static int tegra_xudc_phy_init(struct tegra_xudc *xudc)
 	for (i = 0; i < xudc->soc->num_phys; i++) {
 		err = phy_init(xudc->utmi_phy[i]);
 		if (err < 0) {
-			dev_err(xudc->dev, "utmi phy init failed: %d\n", err);
+			dev_err(xudc->dev, "UTMI PHY #%u initialization failed: %d\n", i, err);
 			goto exit_phy;
 		}
 
 		err = phy_init(xudc->usb3_phy[i]);
 		if (err < 0) {
-			dev_err(xudc->dev, "usb3 phy init failed: %d\n", err);
+			dev_err(xudc->dev, "USB3 PHY #%u initialization failed: %d\n", i, err);
 			goto exit_phy;
 		}
 	}
@@ -3692,34 +3688,33 @@ static int tegra_xudc_powerdomain_init(struct tegra_xudc *xudc)
 	struct device *dev = xudc->dev;
 	int err;
 
-	xudc->genpd_dev_device = dev_pm_domain_attach_by_name(dev,
-								"dev");
+	xudc->genpd_dev_device = dev_pm_domain_attach_by_name(dev, "dev");
 	if (IS_ERR(xudc->genpd_dev_device)) {
 		err = PTR_ERR(xudc->genpd_dev_device);
-		dev_err(dev, "failed to get dev pm-domain: %d\n", err);
+		dev_err(dev, "failed to get device power domain: %d\n", err);
 		return err;
 	}
 
 	xudc->genpd_dev_ss = dev_pm_domain_attach_by_name(dev, "ss");
 	if (IS_ERR(xudc->genpd_dev_ss)) {
 		err = PTR_ERR(xudc->genpd_dev_ss);
-		dev_err(dev, "failed to get superspeed pm-domain: %d\n", err);
+		dev_err(dev, "failed to get SuperSpeed power domain: %d\n", err);
 		return err;
 	}
 
 	xudc->genpd_dl_device = device_link_add(dev, xudc->genpd_dev_device,
-					       DL_FLAG_PM_RUNTIME |
-					       DL_FLAG_STATELESS);
+						DL_FLAG_PM_RUNTIME |
+						DL_FLAG_STATELESS);
 	if (!xudc->genpd_dl_device) {
-		dev_err(dev, "adding usb device device link failed!\n");
+		dev_err(dev, "failed to add USB device link\n");
 		return -ENODEV;
 	}
 
 	xudc->genpd_dl_ss = device_link_add(dev, xudc->genpd_dev_ss,
-					     DL_FLAG_PM_RUNTIME |
-					     DL_FLAG_STATELESS);
+					    DL_FLAG_PM_RUNTIME |
+					    DL_FLAG_STATELESS);
 	if (!xudc->genpd_dl_ss) {
-		dev_err(dev, "adding superspeed device link failed!\n");
+		dev_err(dev, "failed to add SuperSpeed device link\n");
 		return -ENODEV;
 	}
 
@@ -3733,7 +3728,7 @@ static int tegra_xudc_probe(struct platform_device *pdev)
 	unsigned int i;
 	int err;
 
-	xudc = devm_kzalloc(&pdev->dev, sizeof(*xudc), GFP_ATOMIC);
+	xudc = devm_kzalloc(&pdev->dev, sizeof(*xudc), GFP_KERNEL);
 	if (!xudc)
 		return -ENOMEM;
 
@@ -3772,18 +3767,17 @@ static int tegra_xudc_probe(struct platform_device *pdev)
 		return err;
 	}
 
-	xudc->clks = devm_kcalloc(&pdev->dev, xudc->soc->num_clks,
-				      sizeof(*xudc->clks), GFP_KERNEL);
+	xudc->clks = devm_kcalloc(&pdev->dev, xudc->soc->num_clks, sizeof(*xudc->clks),
+				  GFP_KERNEL);
 	if (!xudc->clks)
 		return -ENOMEM;
 
 	for (i = 0; i < xudc->soc->num_clks; i++)
 		xudc->clks[i].id = xudc->soc->clock_names[i];
 
-	err = devm_clk_bulk_get(&pdev->dev, xudc->soc->num_clks,
-				      xudc->clks);
+	err = devm_clk_bulk_get(&pdev->dev, xudc->soc->num_clks, xudc->clks);
 	if (err) {
-		dev_err(xudc->dev, "failed to request clks %d\n", err);
+		dev_err_probe(xudc->dev, err, "failed to request clocks\n");
 		return err;
 	}
 
@@ -3798,7 +3792,7 @@ static int tegra_xudc_probe(struct platform_device *pdev)
 	err = devm_regulator_bulk_get(&pdev->dev, xudc->soc->num_supplies,
 				      xudc->supplies);
 	if (err) {
-		dev_err(xudc->dev, "failed to request regulators %d\n", err);
+		dev_err_probe(xudc->dev, err, "failed to request regulators\n");
 		return err;
 	}
 
@@ -3808,7 +3802,7 @@ static int tegra_xudc_probe(struct platform_device *pdev)
 
 	err = regulator_bulk_enable(xudc->soc->num_supplies, xudc->supplies);
 	if (err) {
-		dev_err(xudc->dev, "failed to enable regulators %d\n", err);
+		dev_err(xudc->dev, "failed to enable regulators: %d\n", err);
 		goto put_padctl;
 	}
 
@@ -3859,6 +3853,7 @@ static int tegra_xudc_probe(struct platform_device *pdev)
 	return 0;
 
 free_eps:
+	pm_runtime_disable(&pdev->dev);
 	tegra_xudc_free_eps(xudc);
 free_event_ring:
 	tegra_xudc_free_event_ring(xudc);
@@ -3881,7 +3876,7 @@ static int tegra_xudc_remove(struct platform_device *pdev)
 
 	pm_runtime_get_sync(xudc->dev);
 
-	cancel_delayed_work(&xudc->plc_reset_work);
+	cancel_delayed_work_sync(&xudc->plc_reset_work);
 	cancel_work_sync(&xudc->usb_role_sw_work);
 
 	usb_del_gadget_udc(&xudc->gadget);

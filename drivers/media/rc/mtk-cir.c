@@ -151,15 +151,12 @@ static inline u32 mtk_chk_period(struct mtk_ir *ir)
 {
 	u32 val;
 
-	/* Period of raw software sampling in ns */
-	val = DIV_ROUND_CLOSEST(1000000000ul,
-				clk_get_rate(ir->bus) / ir->data->div);
-
 	/*
 	 * Period for software decoder used in the
 	 * unit of raw software sampling
 	 */
-	val = DIV_ROUND_CLOSEST(MTK_IR_SAMPLE, val);
+	val = DIV_ROUND_CLOSEST(clk_get_rate(ir->bus),
+				USEC_PER_SEC * ir->data->div / MTK_IR_SAMPLE);
 
 	dev_dbg(ir->dev, "@pwm clk  = \t%lu\n",
 		clk_get_rate(ir->bus) / ir->data->div);
@@ -295,7 +292,6 @@ static int mtk_ir_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct device_node *dn = dev->of_node;
-	struct resource *res;
 	struct mtk_ir *ir;
 	u32 val;
 	int ret = 0;
@@ -323,8 +319,7 @@ static int mtk_ir_probe(struct platform_device *pdev)
 		ir->bus = ir->clk;
 	}
 
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	ir->base = devm_ioremap_resource(dev, res);
+	ir->base = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(ir->base))
 		return PTR_ERR(ir->base);
 
@@ -412,7 +407,7 @@ static int mtk_ir_probe(struct platform_device *pdev)
 	mtk_irq_enable(ir, MTK_IRINT_EN);
 
 	dev_info(dev, "Initialized MT7623 IR driver, sample period = %dus\n",
-		 DIV_ROUND_CLOSEST(MTK_IR_SAMPLE, 1000));
+		 MTK_IR_SAMPLE);
 
 	return 0;
 

@@ -16,11 +16,6 @@
 #ifdef CONFIG_ISA_ARCOMPACT
 struct pt_regs {
 
-#ifdef CONFIG_ARC_PLAT_EZNPS
-	unsigned long eflags;	/* Extended FLAGS */
-	unsigned long gpa1;	/* General Purpose Aux */
-#endif
-
 	/* Real registers */
 	unsigned long bta;	/* bta_l1, bta_l2, erbta */
 
@@ -154,6 +149,11 @@ static inline long regs_return_value(struct pt_regs *regs)
 	return (long)regs->r0;
 }
 
+static inline void instruction_pointer_set(struct pt_regs *regs,
+					   unsigned long val)
+{
+	instruction_pointer(regs) = val;
+}
 #endif /* !__ASSEMBLY__ */
 
 #endif /* __ASM_PTRACE_H */

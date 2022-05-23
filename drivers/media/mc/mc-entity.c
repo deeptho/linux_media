@@ -14,22 +14,6 @@
 #include <media/media-entity.h>
 #include <media/media-device.h>
 
-static inline const char *gobj_type(enum media_gobj_type type)
-{
-	switch (type) {
-	case MEDIA_GRAPH_ENTITY:
-		return "entity";
-	case MEDIA_GRAPH_PAD:
-		return "pad";
-	case MEDIA_GRAPH_LINK:
-		return "link";
-	case MEDIA_GRAPH_INTF_DEVNODE:
-		return "intf-devnode";
-	default:
-		return "unknown";
-	}
-}
-
 static inline const char *intf_type(struct media_interface *intf)
 {
 	switch (intf->type) {
@@ -64,12 +48,10 @@ __must_check int __media_entity_enum_init(struct media_entity_enum *ent_enum,
 					  int idx_max)
 {
 	idx_max = ALIGN(idx_max, BITS_PER_LONG);
-	ent_enum->bmap = kcalloc(idx_max / BITS_PER_LONG, sizeof(long),
-				 GFP_KERNEL);
+	ent_enum->bmap = bitmap_zalloc(idx_max, GFP_KERNEL);
 	if (!ent_enum->bmap)
 		return -ENOMEM;
 
-	bitmap_zero(ent_enum->bmap, idx_max);
 	ent_enum->idx_max = idx_max;
 
 	return 0;
@@ -78,7 +60,7 @@ EXPORT_SYMBOL_GPL(__media_entity_enum_init);
 
 void media_entity_enum_cleanup(struct media_entity_enum *ent_enum)
 {
-	kfree(ent_enum->bmap);
+	bitmap_free(ent_enum->bmap);
 }
 EXPORT_SYMBOL_GPL(media_entity_enum_cleanup);
 
@@ -323,7 +305,7 @@ static void media_graph_walk_iter(struct media_graph *graph)
 		return;
 	}
 
-	/* Get the entity in the other end of the link . */
+	/* Get the entity at the other end of the link. */
 	next = media_entity_other(entity, link);
 
 	/* Has the entity already been visited? */
@@ -340,6 +322,7 @@ static void media_graph_walk_iter(struct media_graph *graph)
 	stack_push(graph, next);
 	dev_dbg(entity->graph_obj.mdev->dev, "walk: pushing '%s' on stack\n",
 		next->name);
+	lockdep_assert_held(&entity->graph_obj.mdev->graph_mutex);
 }
 
 struct media_entity *media_graph_walk_next(struct media_graph *graph)

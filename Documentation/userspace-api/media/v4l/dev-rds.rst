@@ -1,4 +1,5 @@
 .. SPDX-License-Identifier: GFDL-1.1-no-invariants-or-later
+.. c:namespace:: V4L
 
 .. _rds:
 
@@ -27,7 +28,6 @@ The RDS interface does not support this format. Should support for MMBS
 (or the so-called 'E blocks' in general) be needed, then please contact
 the linux-media mailing list:
 `https://linuxtv.org/lists.php <https://linuxtv.org/lists.php>`__.
-
 
 Querying Capabilities
 =====================
@@ -68,16 +68,14 @@ like program identification codes and radio text, the flag
 :ref:`Writing RDS data <writing-rds-data>` and
 :ref:`FM Transmitter Control Reference <fm-tx-controls>`.
 
-
 .. _reading-rds-data:
 
 Reading RDS data
 ================
 
 RDS data can be read from the radio device with the
-:ref:`read() <func-read>` function. The data is packed in groups of
+:c:func:`read()` function. The data is packed in groups of
 three bytes.
-
 
 .. _writing-rds-data:
 
@@ -85,17 +83,13 @@ Writing RDS data
 ================
 
 RDS data can be written to the radio device with the
-:ref:`write() <func-write>` function. The data is packed in groups of
+:c:func:`write()` function. The data is packed in groups of
 three bytes, as follows:
-
 
 RDS datastructures
 ==================
 
-
 .. c:type:: v4l2_rds_data
-
-.. tabularcolumns:: |p{2.5cm}|p{2.5cm}|p{12.5cm}|
 
 .. flat-table:: struct v4l2_rds_data
     :header-rows:  0
@@ -111,7 +105,6 @@ RDS datastructures
     * - __u8
       - ``block``
       - Block description
-
 
 
 .. _v4l2-rds-block:
@@ -136,10 +129,9 @@ RDS datastructures
 	reception of this block.
 
 
-
 .. _v4l2-rds-block-codes:
 
-.. tabularcolumns:: |p{6.4cm}|p{2.0cm}|p{1.2cm}|p{7.9cm}|
+.. tabularcolumns:: |p{6.4cm}|p{2.0cm}|p{1.2cm}|p{7.0cm}|
 
 .. flat-table:: Block defines
     :header-rows:  0

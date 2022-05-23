@@ -187,7 +187,7 @@ static bool mlx5e_rep_is_lag_netdev(struct net_device *netdev)
 	struct mlx5e_priv *priv;
 
 	/* A given netdev is not a representor or not a slave of LAG configuration */
-	if (!mlx5e_eswitch_rep(netdev) || !bond_slave_get_rtnl(netdev))
+	if (!mlx5e_eswitch_rep(netdev) || !netif_is_lag_port(netdev))
 		return false;
 
 	priv = netdev_priv(netdev);
@@ -223,6 +223,8 @@ static void mlx5e_rep_changelowerstate_event(struct net_device *netdev, void *pt
 	rpriv = priv->ppriv;
 	fwd_vport_num = rpriv->rep->vport;
 	lag_dev = netdev_master_upper_dev_get(netdev);
+	if (!lag_dev)
+		return;
 
 	netdev_dbg(netdev, "lag_dev(%s)'s slave vport(%d) is txable(%d)\n",
 		   lag_dev->name, fwd_vport_num, net_lag_port_dev_txable(netdev));

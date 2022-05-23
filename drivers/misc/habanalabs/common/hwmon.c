@@ -13,7 +13,7 @@
 #define HWMON_NR_SENSOR_TYPES		(hwmon_pwm + 1)
 
 int hl_build_hwmon_channel_info(struct hl_device *hdev,
-				struct armcp_sensor *sensors_arr)
+				struct cpucp_sensor *sensors_arr)
 {
 	u32 counts[HWMON_NR_SENSOR_TYPES] = {0};
 	u32 *sensors_by_type[HWMON_NR_SENSOR_TYPES] = {NULL};
@@ -24,7 +24,7 @@ int hl_build_hwmon_channel_info(struct hl_device *hdev,
 	enum hwmon_sensor_types type;
 	int rc, i, j;
 
-	for (i = 0 ; i < ARMCP_MAX_SENSORS ; i++) {
+	for (i = 0 ; i < CPUCP_MAX_SENSORS ; i++) {
 		type = le32_to_cpu(sensors_arr[i].type);
 
 		if ((type == 0) && (sensors_arr[i].flags == 0))
@@ -113,73 +113,145 @@ static int hl_read(struct device *dev, enum hwmon_sensor_types type,
 {
 	struct hl_device *hdev = dev_get_drvdata(dev);
 	int rc;
+	u32 cpucp_attr;
+	bool use_cpucp_enum = (hdev->asic_prop.fw_app_cpu_boot_dev_sts0 &
+				CPU_BOOT_DEV_STS0_MAP_HWMON_EN) ? true : false;
 
-	if (hl_device_disabled_or_in_reset(hdev))
+	if (!hl_device_operational(hdev, NULL))
 		return -ENODEV;
 
 	switch (type) {
 	case hwmon_temp:
 		switch (attr) {
 		case hwmon_temp_input:
+			cpucp_attr = cpucp_temp_input;
+			break;
 		case hwmon_temp_max:
+			cpucp_attr = cpucp_temp_max;
+			break;
 		case hwmon_temp_crit:
+			cpucp_attr = cpucp_temp_crit;
+			break;
 		case hwmon_temp_max_hyst:
+			cpucp_attr = cpucp_temp_max_hyst;
+			break;
 		case hwmon_temp_crit_hyst:
+			cpucp_attr = cpucp_temp_crit_hyst;
+			break;
 		case hwmon_temp_offset:
+			cpucp_attr = cpucp_temp_offset;
+			break;
 		case hwmon_temp_highest:
+			cpucp_attr = cpucp_temp_highest;
 			break;
 		default:
 			return -EINVAL;
 		}
 
-		rc = hl_get_temperature(hdev, channel, attr, val);
+		if (use_cpucp_enum)
+			rc = hl_get_temperature(hdev, channel, cpucp_attr, val);
+		else
+			rc = hl_get_temperature(hdev, channel, attr, val);
 		break;
 	case hwmon_in:
 		switch (attr) {
 		case hwmon_in_input:
+			cpucp_attr = cpucp_in_input;
+			break;
 		case hwmon_in_min:
+			cpucp_attr = cpucp_in_min;
+			break;
 		case hwmon_in_max:
+			cpucp_attr = cpucp_in_max;
+			break;
 		case hwmon_in_highest:
+			cpucp_attr = cpucp_in_highest;
 			break;
 		default:
 			return -EINVAL;
 		}
 
-		rc = hl_get_voltage(hdev, channel, attr, val);
+		if (use_cpucp_enum)
+			rc = hl_get_voltage(hdev, channel, cpucp_attr, val);
+		else
+			rc = hl_get_voltage(hdev, channel, attr, val);
 		break;
 	case hwmon_curr:
 		switch (attr) {
 		case hwmon_curr_input:
+			cpucp_attr = cpucp_curr_input;
+			break;
 		case hwmon_curr_min:
+			cpucp_attr = cpucp_curr_min;
+			break;
 		case hwmon_curr_max:
+			cpucp_attr = cpucp_curr_max;
+			break;
 		case hwmon_curr_highest:
+			cpucp_attr = cpucp_curr_highest;
 			break;
 		default:
 			return -EINVAL;
 		}
 
-		rc = hl_get_current(hdev, channel, attr, val);
+		if (use_cpucp_enum)
+			rc = hl_get_current(hdev, channel, cpucp_attr, val);
+		else
+			rc = hl_get_current(hdev, channel, attr, val);
 		break;
 	case hwmon_fan:
 		switch (attr) {
 		case hwmon_fan_input:
+			cpucp_attr = cpucp_fan_input;
+			break;
 		case hwmon_fan_min:
+			cpucp_attr = cpucp_fan_min;
+			break;
 		case hwmon_fan_max:
+			cpucp_attr = cpucp_fan_max;
 			break;
 		default:
 			return -EINVAL;
 		}
-		rc = hl_get_fan_speed(hdev, channel, attr, val);
+
+		if (use_cpucp_enum)
+			rc = hl_get_fan_speed(hdev, channel, cpucp_attr, val);
+		else
+			rc = hl_get_fan_speed(hdev, channel, attr, val);
 		break;
 	case hwmon_pwm:
 		switch (attr) {
 		case hwmon_pwm_input:
+			cpucp_attr = cpucp_pwm_input;
+			break;
 		case hwmon_pwm_enable:
+			cpucp_attr = cpucp_pwm_enable;
 			break;
 		default:
 			return -EINVAL;
 		}
-		rc = hl_get_pwm_info(hdev, channel, attr, val);
+
+		if (use_cpucp_enum)
+			rc = hl_get_pwm_info(hdev, channel, cpucp_attr, val);
+		else
+			rc = hl_get_pwm_info(hdev, channel, attr, val);
+		break;
+	case hwmon_power:
+		switch (attr) {
+		case hwmon_power_input:
+			cpucp_attr = CPUCP_POWER_INPUT;
+			break;
+		case hwmon_power_input_highest:
+			cpucp_attr = CPUCP_POWER_INPUT_HIGHEST;
+			break;
+		default:
+			return -EINVAL;
+		}
+
+		if (use_cpucp_enum)
+			rc = hl_get_power(hdev, channel, cpucp_attr, val);
+		else
+			rc = hl_get_power(hdev, channel, attr, val);
 		break;
 	default:
 		return -EINVAL;
@@ -191,48 +263,89 @@ static int hl_write(struct device *dev, enum hwmon_sensor_types type,
 			u32 attr, int channel, long val)
 {
 	struct hl_device *hdev = dev_get_drvdata(dev);
+	u32 cpucp_attr;
+	bool use_cpucp_enum = (hdev->asic_prop.fw_app_cpu_boot_dev_sts0 &
+				CPU_BOOT_DEV_STS0_MAP_HWMON_EN) ? true : false;
 
-	if (hl_device_disabled_or_in_reset(hdev))
+	if (!hl_device_operational(hdev, NULL))
 		return -ENODEV;
 
 	switch (type) {
 	case hwmon_temp:
 		switch (attr) {
 		case hwmon_temp_offset:
+			cpucp_attr = cpucp_temp_offset;
+			break;
 		case hwmon_temp_reset_history:
+			cpucp_attr = cpucp_temp_reset_history;
 			break;
 		default:
 			return -EINVAL;
 		}
-		hl_set_temperature(hdev, channel, attr, val);
+
+		if (use_cpucp_enum)
+			hl_set_temperature(hdev, channel, cpucp_attr, val);
+		else
+			hl_set_temperature(hdev, channel, attr, val);
 		break;
 	case hwmon_pwm:
 		switch (attr) {
 		case hwmon_pwm_input:
+			cpucp_attr = cpucp_pwm_input;
+			break;
 		case hwmon_pwm_enable:
+			cpucp_attr = cpucp_pwm_enable;
 			break;
 		default:
 			return -EINVAL;
 		}
-		hl_set_pwm_info(hdev, channel, attr, val);
+
+		if (use_cpucp_enum)
+			hl_set_pwm_info(hdev, channel, cpucp_attr, val);
+		else
+			hl_set_pwm_info(hdev, channel, attr, val);
 		break;
 	case hwmon_in:
 		switch (attr) {
 		case hwmon_in_reset_history:
+			cpucp_attr = cpucp_in_reset_history;
 			break;
 		default:
 			return -EINVAL;
 		}
-		hl_set_voltage(hdev, channel, attr, val);
+
+		if (use_cpucp_enum)
+			hl_set_voltage(hdev, channel, cpucp_attr, val);
+		else
+			hl_set_voltage(hdev, channel, attr, val);
 		break;
 	case hwmon_curr:
 		switch (attr) {
 		case hwmon_curr_reset_history:
+			cpucp_attr = cpucp_curr_reset_history;
 			break;
 		default:
 			return -EINVAL;
 		}
-		hl_set_current(hdev, channel, attr, val);
+
+		if (use_cpucp_enum)
+			hl_set_current(hdev, channel, cpucp_attr, val);
+		else
+			hl_set_current(hdev, channel, attr, val);
+		break;
+	case hwmon_power:
+		switch (attr) {
+		case hwmon_power_reset_history:
+			cpucp_attr = CPUCP_POWER_RESET_INPUT_HISTORY;
+			break;
+		default:
+			return -EINVAL;
+		}
+
+		if (use_cpucp_enum)
+			hl_set_power(hdev, channel, cpucp_attr, val);
+		else
+			hl_set_power(hdev, channel, attr, val);
 		break;
 	default:
 		return -EINVAL;
@@ -296,6 +409,15 @@ static umode_t hl_is_visible(const void *data, enum hwmon_sensor_types type,
 			return 0644;
 		}
 		break;
+	case hwmon_power:
+		switch (attr) {
+		case hwmon_power_input:
+		case hwmon_power_input_highest:
+			return 0444;
+		case hwmon_power_reset_history:
+			return 0200;
+		}
+		break;
 	default:
 		break;
 	}
@@ -311,18 +433,21 @@ static const struct hwmon_ops hl_hwmon_ops = {
 int hl_get_temperature(struct hl_device *hdev,
 			int sensor_index, u32 attr, long *value)
 {
-	struct armcp_packet pkt;
+	struct cpucp_packet pkt;
+	u64 result;
 	int rc;
 
 	memset(&pkt, 0, sizeof(pkt));
 
-	pkt.ctl = cpu_to_le32(ARMCP_PACKET_TEMPERATURE_GET <<
-				ARMCP_PKT_CTL_OPCODE_SHIFT);
+	pkt.ctl = cpu_to_le32(CPUCP_PACKET_TEMPERATURE_GET <<
+				CPUCP_PKT_CTL_OPCODE_SHIFT);
 	pkt.sensor_index = __cpu_to_le16(sensor_index);
 	pkt.type = __cpu_to_le16(attr);
 
 	rc = hdev->asic_funcs->send_cpu_message(hdev, (u32 *) &pkt, sizeof(pkt),
-						0, value);
+						0, &result);
+
+	*value = (long) result;
 
 	if (rc) {
 		dev_err(hdev->dev,
@@ -337,13 +462,13 @@ int hl_get_temperature(struct hl_device *hdev,
 int hl_set_temperature(struct hl_device *hdev,
 			int sensor_index, u32 attr, long value)
 {
-	struct armcp_packet pkt;
+	struct cpucp_packet pkt;
 	int rc;
 
 	memset(&pkt, 0, sizeof(pkt));
 
-	pkt.ctl = cpu_to_le32(ARMCP_PACKET_TEMPERATURE_SET <<
-				ARMCP_PKT_CTL_OPCODE_SHIFT);
+	pkt.ctl = cpu_to_le32(CPUCP_PACKET_TEMPERATURE_SET <<
+				CPUCP_PKT_CTL_OPCODE_SHIFT);
 	pkt.sensor_index = __cpu_to_le16(sensor_index);
 	pkt.type = __cpu_to_le16(attr);
 	pkt.value = __cpu_to_le64(value);
@@ -362,18 +487,21 @@ int hl_set_temperature(struct hl_device *hdev,
 int hl_get_voltage(struct hl_device *hdev,
 			int sensor_index, u32 attr, long *value)
 {
-	struct armcp_packet pkt;
+	struct cpucp_packet pkt;
+	u64 result;
 	int rc;
 
 	memset(&pkt, 0, sizeof(pkt));
 
-	pkt.ctl = cpu_to_le32(ARMCP_PACKET_VOLTAGE_GET <<
-				ARMCP_PKT_CTL_OPCODE_SHIFT);
+	pkt.ctl = cpu_to_le32(CPUCP_PACKET_VOLTAGE_GET <<
+				CPUCP_PKT_CTL_OPCODE_SHIFT);
 	pkt.sensor_index = __cpu_to_le16(sensor_index);
 	pkt.type = __cpu_to_le16(attr);
 
 	rc = hdev->asic_funcs->send_cpu_message(hdev, (u32 *) &pkt, sizeof(pkt),
-						0, value);
+						0, &result);
+
+	*value = (long) result;
 
 	if (rc) {
 		dev_err(hdev->dev,
@@ -388,18 +516,21 @@ int hl_get_voltage(struct hl_device *hdev,
 int hl_get_current(struct hl_device *hdev,
 			int sensor_index, u32 attr, long *value)
 {
-	struct armcp_packet pkt;
+	struct cpucp_packet pkt;
+	u64 result;
 	int rc;
 
 	memset(&pkt, 0, sizeof(pkt));
 
-	pkt.ctl = cpu_to_le32(ARMCP_PACKET_CURRENT_GET <<
-				ARMCP_PKT_CTL_OPCODE_SHIFT);
+	pkt.ctl = cpu_to_le32(CPUCP_PACKET_CURRENT_GET <<
+				CPUCP_PKT_CTL_OPCODE_SHIFT);
 	pkt.sensor_index = __cpu_to_le16(sensor_index);
 	pkt.type = __cpu_to_le16(attr);
 
 	rc = hdev->asic_funcs->send_cpu_message(hdev, (u32 *) &pkt, sizeof(pkt),
-						0, value);
+						0, &result);
+
+	*value = (long) result;
 
 	if (rc) {
 		dev_err(hdev->dev,
@@ -414,18 +545,21 @@ int hl_get_current(struct hl_device *hdev,
 int hl_get_fan_speed(struct hl_device *hdev,
 			int sensor_index, u32 attr, long *value)
 {
-	struct armcp_packet pkt;
+	struct cpucp_packet pkt;
+	u64 result;
 	int rc;
 
 	memset(&pkt, 0, sizeof(pkt));
 
-	pkt.ctl = cpu_to_le32(ARMCP_PACKET_FAN_SPEED_GET <<
-				ARMCP_PKT_CTL_OPCODE_SHIFT);
+	pkt.ctl = cpu_to_le32(CPUCP_PACKET_FAN_SPEED_GET <<
+				CPUCP_PKT_CTL_OPCODE_SHIFT);
 	pkt.sensor_index = __cpu_to_le16(sensor_index);
 	pkt.type = __cpu_to_le16(attr);
 
 	rc = hdev->asic_funcs->send_cpu_message(hdev, (u32 *) &pkt, sizeof(pkt),
-						0, value);
+						0, &result);
+
+	*value = (long) result;
 
 	if (rc) {
 		dev_err(hdev->dev,
@@ -440,18 +574,21 @@ int hl_get_fan_speed(struct hl_device *hdev,
 int hl_get_pwm_info(struct hl_device *hdev,
 			int sensor_index, u32 attr, long *value)
 {
-	struct armcp_packet pkt;
+	struct cpucp_packet pkt;
+	u64 result;
 	int rc;
 
 	memset(&pkt, 0, sizeof(pkt));
 
-	pkt.ctl = cpu_to_le32(ARMCP_PACKET_PWM_GET <<
-				ARMCP_PKT_CTL_OPCODE_SHIFT);
+	pkt.ctl = cpu_to_le32(CPUCP_PACKET_PWM_GET <<
+				CPUCP_PKT_CTL_OPCODE_SHIFT);
 	pkt.sensor_index = __cpu_to_le16(sensor_index);
 	pkt.type = __cpu_to_le16(attr);
 
 	rc = hdev->asic_funcs->send_cpu_message(hdev, (u32 *) &pkt, sizeof(pkt),
-						0, value);
+						0, &result);
+
+	*value = (long) result;
 
 	if (rc) {
 		dev_err(hdev->dev,
@@ -466,13 +603,13 @@ int hl_get_pwm_info(struct hl_device *hdev,
 void hl_set_pwm_info(struct hl_device *hdev, int sensor_index, u32 attr,
 			long value)
 {
-	struct armcp_packet pkt;
+	struct cpucp_packet pkt;
 	int rc;
 
 	memset(&pkt, 0, sizeof(pkt));
 
-	pkt.ctl = cpu_to_le32(ARMCP_PACKET_PWM_SET <<
-				ARMCP_PKT_CTL_OPCODE_SHIFT);
+	pkt.ctl = cpu_to_le32(CPUCP_PACKET_PWM_SET <<
+				CPUCP_PKT_CTL_OPCODE_SHIFT);
 	pkt.sensor_index = __cpu_to_le16(sensor_index);
 	pkt.type = __cpu_to_le16(attr);
 	pkt.value = cpu_to_le64(value);
@@ -489,13 +626,13 @@ void hl_set_pwm_info(struct hl_device *hdev, int sensor_index, u32 attr,
 int hl_set_voltage(struct hl_device *hdev,
 			int sensor_index, u32 attr, long value)
 {
-	struct armcp_packet pkt;
+	struct cpucp_packet pkt;
 	int rc;
 
 	memset(&pkt, 0, sizeof(pkt));
 
-	pkt.ctl = cpu_to_le32(ARMCP_PACKET_VOLTAGE_SET <<
-				ARMCP_PKT_CTL_OPCODE_SHIFT);
+	pkt.ctl = cpu_to_le32(CPUCP_PACKET_VOLTAGE_SET <<
+				CPUCP_PKT_CTL_OPCODE_SHIFT);
 	pkt.sensor_index = __cpu_to_le16(sensor_index);
 	pkt.type = __cpu_to_le16(attr);
 	pkt.value = __cpu_to_le64(value);
@@ -514,13 +651,13 @@ int hl_set_voltage(struct hl_device *hdev,
 int hl_set_current(struct hl_device *hdev,
 			int sensor_index, u32 attr, long value)
 {
-	struct armcp_packet pkt;
+	struct cpucp_packet pkt;
 	int rc;
 
 	memset(&pkt, 0, sizeof(pkt));
 
-	pkt.ctl = cpu_to_le32(ARMCP_PACKET_CURRENT_SET <<
-				ARMCP_PKT_CTL_OPCODE_SHIFT);
+	pkt.ctl = cpu_to_le32(CPUCP_PACKET_CURRENT_SET <<
+				CPUCP_PKT_CTL_OPCODE_SHIFT);
 	pkt.sensor_index = __cpu_to_le16(sensor_index);
 	pkt.type = __cpu_to_le16(attr);
 	pkt.value = __cpu_to_le64(value);
@@ -536,20 +673,74 @@ int hl_set_current(struct hl_device *hdev,
 	return rc;
 }
 
+int hl_set_power(struct hl_device *hdev,
+			int sensor_index, u32 attr, long value)
+{
+	struct cpucp_packet pkt;
+	int rc;
+
+	memset(&pkt, 0, sizeof(pkt));
+
+	pkt.ctl = cpu_to_le32(CPUCP_PACKET_POWER_GET <<
+				CPUCP_PKT_CTL_OPCODE_SHIFT);
+	pkt.sensor_index = __cpu_to_le16(sensor_index);
+	pkt.type = __cpu_to_le16(attr);
+	pkt.value = __cpu_to_le64(value);
+
+	rc = hdev->asic_funcs->send_cpu_message(hdev, (u32 *) &pkt, sizeof(pkt),
+						0, NULL);
+
+	if (rc)
+		dev_err(hdev->dev,
+			"Failed to set power of sensor %d, error %d\n",
+			sensor_index, rc);
+
+	return rc;
+}
+
+int hl_get_power(struct hl_device *hdev,
+			int sensor_index, u32 attr, long *value)
+{
+	struct cpucp_packet pkt;
+	u64 result;
+	int rc;
+
+	memset(&pkt, 0, sizeof(pkt));
+
+	pkt.ctl = cpu_to_le32(CPUCP_PACKET_POWER_GET <<
+				CPUCP_PKT_CTL_OPCODE_SHIFT);
+	pkt.sensor_index = __cpu_to_le16(sensor_index);
+	pkt.type = __cpu_to_le16(attr);
+
+	rc = hdev->asic_funcs->send_cpu_message(hdev, (u32 *) &pkt, sizeof(pkt),
+						0, &result);
+
+	*value = (long) result;
+
+	if (rc) {
+		dev_err(hdev->dev,
+			"Failed to get power of sensor %d, error %d\n",
+			sensor_index, rc);
+		*value = 0;
+	}
+
+	return rc;
+}
+
 int hl_hwmon_init(struct hl_device *hdev)
 {
 	struct device *dev = hdev->pdev ? &hdev->pdev->dev : hdev->dev;
 	struct asic_fixed_properties *prop = &hdev->asic_prop;
 	int rc;
 
-	if ((hdev->hwmon_initialized) || !(hdev->fw_loading))
+	if ((hdev->hwmon_initialized) || !(hdev->cpu_queues_enable))
 		return 0;
 
 	if (hdev->hl_chip_info->info) {
 		hdev->hl_chip_info->ops = &hl_hwmon_ops;
 
 		hdev->hwmon_dev = hwmon_device_register_with_info(dev,
-					prop->armcp_info.card_name, hdev,
+					prop->cpucp_info.card_name, hdev,
 					hdev->hl_chip_info, NULL);
 		if (IS_ERR(hdev->hwmon_dev)) {
 			rc = PTR_ERR(hdev->hwmon_dev);

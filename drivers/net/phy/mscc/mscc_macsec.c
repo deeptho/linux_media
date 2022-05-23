@@ -501,7 +501,7 @@ static u32 vsc8584_macsec_flow_context_id(struct macsec_flow *flow)
 }
 
 /* Derive the AES key to get a key for the hash autentication */
-static int vsc8584_macsec_derive_key(const u8 key[MACSEC_KEYID_LEN],
+static int vsc8584_macsec_derive_key(const u8 key[MACSEC_MAX_KEY_LEN],
 				     u16 key_len, u8 hkey[16])
 {
 	const u8 input[AES_BLOCK_SIZE] = {0};
@@ -958,7 +958,7 @@ static int vsc8584_macsec_del_txsa(struct macsec_context *ctx)
 	return 0;
 }
 
-static struct macsec_ops vsc8584_macsec_ops = {
+static const struct macsec_ops vsc8584_macsec_ops = {
 	.mdo_dev_open = vsc8584_macsec_dev_open,
 	.mdo_dev_stop = vsc8584_macsec_dev_stop,
 	.mdo_add_secy = vsc8584_macsec_add_secy,
@@ -981,7 +981,6 @@ int vsc8584_macsec_init(struct phy_device *phydev)
 
 	switch (phydev->phy_id & phydev->drv->phy_id_mask) {
 	case PHY_ID_VSC856X:
-	case PHY_ID_VSC8575:
 	case PHY_ID_VSC8582:
 	case PHY_ID_VSC8584:
 		INIT_LIST_HEAD(&vsc8531->macsec_flows);

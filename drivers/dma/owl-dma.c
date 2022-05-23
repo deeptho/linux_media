@@ -124,7 +124,7 @@
 #define FCNT_VAL				0x1
 
 /**
- * owl_dmadesc_offsets - Describe DMA descriptor, hardware link
+ * enum owl_dmadesc_offsets - Describe DMA descriptor, hardware link
  * list for dma transfer
  * @OWL_DMADESC_NEXT_LLI: physical address of the next link list
  * @OWL_DMADESC_SADDR: source physical address
@@ -135,6 +135,7 @@
  * @OWL_DMADESC_CTRLA: dma_mode and linklist ctrl config
  * @OWL_DMADESC_CTRLB: interrupt config
  * @OWL_DMADESC_CONST_NUM: data for constant fill
+ * @OWL_DMADESC_SIZE: max size of this enum
  */
 enum owl_dmadesc_offsets {
 	OWL_DMADESC_NEXT_LLI = 0,
@@ -1079,8 +1080,9 @@ static struct dma_chan *owl_dma_of_xlate(struct of_phandle_args *dma_spec,
 }
 
 static const struct of_device_id owl_dma_match[] = {
-	{ .compatible = "actions,s900-dma", .data = (void *)S900_DMA,},
+	{ .compatible = "actions,s500-dma", .data = (void *)S900_DMA,},
 	{ .compatible = "actions,s700-dma", .data = (void *)S700_DMA,},
+	{ .compatible = "actions,s900-dma", .data = (void *)S900_DMA,},
 	{ /* sentinel */ },
 };
 MODULE_DEVICE_TABLE(of, owl_dma_match);
@@ -1244,6 +1246,7 @@ static int owl_dma_remove(struct platform_device *pdev)
 	owl_dma_free(od);
 
 	clk_disable_unprepare(od->clk);
+	dma_pool_destroy(od->lli_pool);
 
 	return 0;
 }

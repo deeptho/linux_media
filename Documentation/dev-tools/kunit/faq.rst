@@ -90,14 +90,14 @@ things to try.
    re-run kunit_tool.
 5. Try to run ``make ARCH=um defconfig`` before running ``kunit.py run``. This
    may help clean up any residual config items which could be causing problems.
-6. Finally, try running KUnit outside UML. KUnit and KUnit tests can run be
+6. Finally, try running KUnit outside UML. KUnit and KUnit tests can be
    built into any kernel, or can be built as a module and loaded at runtime.
    Doing so should allow you to determine if UML is causing the issue you're
    seeing. When tests are built-in, they will execute when the kernel boots, and
    modules will automatically execute associated tests when loaded. Test results
    can be collected from ``/sys/kernel/debug/kunit/<test suite>/results``, and
    can be parsed with ``kunit.py parse``. For more details, see "KUnit on
-   non-UML architectures" in :doc:`usage`.
+   non-UML architectures" in Documentation/dev-tools/kunit/usage.rst.
 
 If none of the above tricks help, you are always welcome to email any issues to
 kunit-dev@googlegroups.com.

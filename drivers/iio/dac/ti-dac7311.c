@@ -110,7 +110,7 @@ static ssize_t ti_dac_read_powerdown(struct iio_dev *indio_dev,
 {
 	struct ti_dac_chip *ti_dac = iio_priv(indio_dev);
 
-	return sprintf(buf, "%d\n", ti_dac->powerdown);
+	return sysfs_emit(buf, "%d\n", ti_dac->powerdown);
 }
 
 static ssize_t ti_dac_write_powerdown(struct iio_dev *indio_dev,
@@ -266,10 +266,9 @@ static int ti_dac_probe(struct spi_device *spi)
 	ti_dac->resolution = spec->resolution;
 
 	ti_dac->vref = devm_regulator_get(dev, "vref");
-	if (IS_ERR(ti_dac->vref)) {
-		dev_err(dev, "error to get regulator\n");
-		return PTR_ERR(ti_dac->vref);
-	}
+	if (IS_ERR(ti_dac->vref))
+		return dev_err_probe(dev, PTR_ERR(ti_dac->vref),
+				     "error to get regulator\n");
 
 	ret = regulator_enable(ti_dac->vref);
 	if (ret < 0) {

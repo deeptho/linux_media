@@ -254,10 +254,18 @@ struct hal_rx_phyrx_rssi_legacy_info {
 } __packed;
 
 #define HAL_RX_MPDU_INFO_INFO0_PEERID	GENMASK(31, 16)
+#define HAL_RX_MPDU_INFO_INFO0_PEERID_WCN6855	GENMASK(15, 0)
+
 struct hal_rx_mpdu_info {
 	__le32 rsvd0;
 	__le32 info0;
 	__le32 rsvd1[21];
+} __packed;
+
+struct hal_rx_mpdu_info_wcn6855 {
+	__le32 rsvd0[8];
+	__le32 info0;
+	__le32 rsvd1[14];
 } __packed;
 
 #define HAL_RX_PPDU_END_DURATION	GENMASK(23, 0)
@@ -321,7 +329,7 @@ void ath11k_hal_rx_reo_ent_paddr_get(struct ath11k_base *ab, void *desc,
 				     dma_addr_t *paddr, u32 *desc_bank);
 void ath11k_hal_rx_reo_ent_buf_paddr_get(void *rx_desc,
 					 dma_addr_t *paddr, u32 *sw_cookie,
-					 void **pp_buf_addr_info,
+					 void **pp_buf_addr_info, u8 *rbm,
 					 u32 *msdu_cnt);
 enum hal_rx_mon_status
 ath11k_hal_rx_parse_mon_status(struct ath11k_base *ab,

@@ -12,10 +12,11 @@ void test_global_data_init(void)
 	size_t sz;
 
 	obj = bpf_object__open_file(file, NULL);
-	if (CHECK_FAIL(!obj))
+	err = libbpf_get_error(obj);
+	if (CHECK_FAIL(err))
 		return;
 
-	map = bpf_object__find_map_by_name(obj, "test_glo.rodata");
+	map = bpf_object__find_map_by_name(obj, ".rodata");
 	if (CHECK_FAIL(!map || !bpf_map__is_internal(map)))
 		goto out;
 

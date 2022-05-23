@@ -171,8 +171,8 @@ Shadow pages contain the following information:
     shadow pages) so role.quadrant takes values in the range 0..3.  Each
     quadrant maps 1GB virtual address space.
   role.access:
-    Inherited guest access permissions in the form uwx.  Note execute
-    permission is positive, not negative.
+    Inherited guest access permissions from the parent ptes in the form uwx.
+    Note execute permission is positive, not negative.
   role.invalid:
     The page is invalid and should not be used.  It is a root page that is
     currently pinned (by a cpu hardware register pointing to it); once it is
@@ -180,8 +180,8 @@ Shadow pages contain the following information:
   role.gpte_is_8_bytes:
     Reflects the size of the guest PTE for which the page is valid, i.e. '1'
     if 64-bit gptes are in use, '0' if 32-bit gptes are in use.
-  role.nxe:
-    Contains the value of efer.nxe for which the page is valid.
+  role.efer_nx:
+    Contains the value of efer.nx for which the page is valid.
   role.cr0_wp:
     Contains the value of cr0.wp for which the page is valid.
   role.smep_andnot_wp:
@@ -192,9 +192,6 @@ Shadow pages contain the following information:
     Contains the value of cr4.smap && !cr0.wp for which the page is valid
     (pages for which this is true are different from other pages; see the
     treatment of cr0.wp=0 below).
-  role.ept_sp:
-    This is a virtual flag to denote a shadowed nested EPT page.  ept_sp
-    is true if "cr0_wp && smap_andnot_wp", an otherwise invalid combination.
   role.smm:
     Is 1 if the page is valid in system management mode.  This field
     determines which of the kvm_memslots array was used to build this
@@ -455,7 +452,7 @@ If the generation number of the spte does not equal the global generation
 number, it will ignore the cached MMIO information and handle the page
 fault through the slow path.
 
-Since only 19 bits are used to store generation-number on mmio spte, all
+Since only 18 bits are used to store generation-number on mmio spte, all
 pages are zapped when there is an overflow.
 
 Unfortunately, a single memory access might access kvm_memslots(kvm) multiple

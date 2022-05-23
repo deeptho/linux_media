@@ -1,8 +1,7 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * QLogic iSCSI HBA Driver
  * Copyright (c)   2003-2013 QLogic Corporation
- *
- * See LICENSE.qla4xxx for copyright and licensing details.
  */
 
 #include <linux/ratelimit.h>
@@ -473,8 +472,7 @@ int qla4_83xx_can_perform_reset(struct scsi_qla_host *ha)
 		} else if (device_map[i].device_type == ISCSI_CLASS) {
 			if (drv_active & (1 << device_map[i].func_num)) {
 				if (!iscsi_present ||
-				    (iscsi_present &&
-				     (iscsi_func_low > device_map[i].func_num)))
+				iscsi_func_low > device_map[i].func_num)
 					iscsi_func_low = device_map[i].func_num;
 
 				iscsi_present++;

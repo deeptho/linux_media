@@ -59,6 +59,12 @@ static void kvm_psci_vcpu_off(struct kvm_vcpu *vcpu)
 	kvm_vcpu_kick(vcpu);
 }
 
+static inline bool kvm_psci_valid_affinity(struct kvm_vcpu *vcpu,
+					   unsigned long affinity)
+{
+	return !(affinity & ~MPIDR_HWID_BITMASK);
+}
+
 static unsigned long kvm_psci_vcpu_on(struct kvm_vcpu *source_vcpu)
 {
 	struct vcpu_reset_state *reset_state;
@@ -66,9 +72,9 @@ static unsigned long kvm_psci_vcpu_on(struct kvm_vcpu *source_vcpu)
 	struct kvm_vcpu *vcpu = NULL;
 	unsigned long cpu_id;
 
-	cpu_id = smccc_get_arg1(source_vcpu) & MPIDR_HWID_BITMASK;
-	if (vcpu_mode_is_32bit(source_vcpu))
-		cpu_id &= ~((u32) 0);
+	cpu_id = smccc_get_arg1(source_vcpu);
+	if (!kvm_psci_valid_affinity(source_vcpu, cpu_id))
+		return PSCI_RET_INVALID_PARAMS;
 
 	vcpu = kvm_mpidr_to_vcpu(kvm, cpu_id);
 
@@ -125,6 +131,9 @@ static unsigned long kvm_psci_vcpu_affinity_info(struct kvm_vcpu *vcpu)
 
 	target_affinity = smccc_get_arg1(vcpu);
 	lowest_affinity_level = smccc_get_arg2(vcpu);
+
+	if (!kvm_psci_valid_affinity(vcpu, target_affinity))
+		return PSCI_RET_INVALID_PARAMS;
 
 	/* Determine target affinity mask */
 	target_affinity_mask = psci_affinity_mask(lowest_affinity_level);
@@ -425,27 +434,30 @@ static int get_kernel_wa_level(u64 regid)
 {
 	switch (regid) {
 	case KVM_REG_ARM_SMCCC_ARCH_WORKAROUND_1:
-		switch (kvm_arm_harden_branch_predictor()) {
-		case KVM_BP_HARDEN_UNKNOWN:
+		switch (arm64_get_spectre_v2_state()) {
+		case SPECTRE_VULNERABLE:
 			return KVM_REG_ARM_SMCCC_ARCH_WORKAROUND_1_NOT_AVAIL;
-		case KVM_BP_HARDEN_WA_NEEDED:
+		case SPECTRE_MITIGATED:
 			return KVM_REG_ARM_SMCCC_ARCH_WORKAROUND_1_AVAIL;
-		case KVM_BP_HARDEN_NOT_REQUIRED:
+		case SPECTRE_UNAFFECTED:
 			return KVM_REG_ARM_SMCCC_ARCH_WORKAROUND_1_NOT_REQUIRED;
 		}
 		return KVM_REG_ARM_SMCCC_ARCH_WORKAROUND_1_NOT_AVAIL;
 	case KVM_REG_ARM_SMCCC_ARCH_WORKAROUND_2:
-		switch (kvm_arm_have_ssbd()) {
-		case KVM_SSBD_FORCE_DISABLE:
-			return KVM_REG_ARM_SMCCC_ARCH_WORKAROUND_2_NOT_AVAIL;
-		case KVM_SSBD_KERNEL:
-			return KVM_REG_ARM_SMCCC_ARCH_WORKAROUND_2_AVAIL;
-		case KVM_SSBD_FORCE_ENABLE:
-		case KVM_SSBD_MITIGATED:
+		switch (arm64_get_spectre_v4_state()) {
+		case SPECTRE_MITIGATED:
+			/*
+			 * As for the hypercall discovery, we pretend we
+			 * don't have any FW mitigation if SSBS is there at
+			 * all times.
+			 */
+			if (cpus_have_final_cap(ARM64_SSBS))
+				return KVM_REG_ARM_SMCCC_ARCH_WORKAROUND_2_NOT_AVAIL;
+			fallthrough;
+		case SPECTRE_UNAFFECTED:
 			return KVM_REG_ARM_SMCCC_ARCH_WORKAROUND_2_NOT_REQUIRED;
-		case KVM_SSBD_UNKNOWN:
-		default:
-			return KVM_REG_ARM_SMCCC_ARCH_WORKAROUND_2_UNKNOWN;
+		case SPECTRE_VULNERABLE:
+			return KVM_REG_ARM_SMCCC_ARCH_WORKAROUND_2_NOT_AVAIL;
 		}
 	}
 
@@ -462,14 +474,8 @@ int kvm_arm_get_fw_reg(struct kvm_vcpu *vcpu, const struct kvm_one_reg *reg)
 		val = kvm_psci_version(vcpu, vcpu->kvm);
 		break;
 	case KVM_REG_ARM_SMCCC_ARCH_WORKAROUND_1:
-		val = get_kernel_wa_level(reg->id) & KVM_REG_FEATURE_LEVEL_MASK;
-		break;
 	case KVM_REG_ARM_SMCCC_ARCH_WORKAROUND_2:
 		val = get_kernel_wa_level(reg->id) & KVM_REG_FEATURE_LEVEL_MASK;
-
-		if (val == KVM_REG_ARM_SMCCC_ARCH_WORKAROUND_2_AVAIL &&
-		    kvm_arm_get_vcpu_workaround_2_flag(vcpu))
-			val |= KVM_REG_ARM_SMCCC_ARCH_WORKAROUND_2_ENABLED;
 		break;
 	default:
 		return -ENOENT;
@@ -527,33 +533,34 @@ int kvm_arm_set_fw_reg(struct kvm_vcpu *vcpu, const struct kvm_one_reg *reg)
 			    KVM_REG_ARM_SMCCC_ARCH_WORKAROUND_2_ENABLED))
 			return -EINVAL;
 
-		wa_level = val & KVM_REG_FEATURE_LEVEL_MASK;
-
-		if (get_kernel_wa_level(reg->id) < wa_level)
-			return -EINVAL;
-
 		/* The enabled bit must not be set unless the level is AVAIL. */
-		if (wa_level != KVM_REG_ARM_SMCCC_ARCH_WORKAROUND_2_AVAIL &&
-		    wa_level != val)
+		if ((val & KVM_REG_ARM_SMCCC_ARCH_WORKAROUND_2_ENABLED) &&
+		    (val & KVM_REG_FEATURE_LEVEL_MASK) != KVM_REG_ARM_SMCCC_ARCH_WORKAROUND_2_AVAIL)
 			return -EINVAL;
-
-		/* Are we finished or do we need to check the enable bit ? */
-		if (kvm_arm_have_ssbd() != KVM_SSBD_KERNEL)
-			return 0;
 
 		/*
-		 * If this kernel supports the workaround to be switched on
-		 * or off, make sure it matches the requested setting.
+		 * Map all the possible incoming states to the only two we
+		 * really want to deal with.
 		 */
-		switch (wa_level) {
+		switch (val & KVM_REG_FEATURE_LEVEL_MASK) {
+		case KVM_REG_ARM_SMCCC_ARCH_WORKAROUND_2_NOT_AVAIL:
+		case KVM_REG_ARM_SMCCC_ARCH_WORKAROUND_2_UNKNOWN:
+			wa_level = KVM_REG_ARM_SMCCC_ARCH_WORKAROUND_2_NOT_AVAIL;
+			break;
 		case KVM_REG_ARM_SMCCC_ARCH_WORKAROUND_2_AVAIL:
-			kvm_arm_set_vcpu_workaround_2_flag(vcpu,
-			    val & KVM_REG_ARM_SMCCC_ARCH_WORKAROUND_2_ENABLED);
-			break;
 		case KVM_REG_ARM_SMCCC_ARCH_WORKAROUND_2_NOT_REQUIRED:
-			kvm_arm_set_vcpu_workaround_2_flag(vcpu, true);
+			wa_level = KVM_REG_ARM_SMCCC_ARCH_WORKAROUND_2_NOT_REQUIRED;
 			break;
+		default:
+			return -EINVAL;
 		}
+
+		/*
+		 * We can deal with NOT_AVAIL on NOT_REQUIRED, but not the
+		 * other way around.
+		 */
+		if (get_kernel_wa_level(reg->id) < wa_level)
+			return -EINVAL;
 
 		return 0;
 	default:

@@ -12,8 +12,10 @@ BPF instruction-set.
 The Cilium project also maintains a `BPF and XDP Reference Guide`_
 that goes into great technical depth about the BPF Architecture.
 
-The primary info for the bpf syscall is available in the `man-pages`_
-for `bpf(2)`_.
+libbpf
+======
+
+Documentation/bpf/libbpf/index.rst is a userspace library for loading and interacting with bpf programs.
 
 BPF Type Format (BTF)
 =====================
@@ -35,6 +37,12 @@ Two sets of Questions and Answers (Q&A) are maintained.
    bpf_design_QA
    bpf_devel_QA
 
+Syscall API
+===========
+
+The primary info for the bpf syscall is available in the `man-pages`_
+for `bpf(2)`_. For more information about the userspace API, see
+Documentation/userspace-api/ebpf/index.rst.
 
 Helper functions
 ================
@@ -52,6 +60,7 @@ Program types
    prog_cgroup_sysctl
    prog_flow_dissector
    bpf_lsm
+   prog_sk_lookup
 
 
 Map types
@@ -73,6 +82,15 @@ Testing and debugging BPF
    s390
 
 
+Licensing
+=========
+
+.. toctree::
+   :maxdepth: 1
+
+   bpf_licensing
+
+
 Other
 =====
 
@@ -80,6 +98,7 @@ Other
    :maxdepth: 1
 
    ringbuf
+   llvm_reloc
 
 .. Links:
 .. _networking-filter: ../networking/filter.rst

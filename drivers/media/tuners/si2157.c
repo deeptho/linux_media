@@ -175,8 +175,8 @@ static int si2157_init(struct dvb_frontend *fe)
 		goto err;
 	}
 
-	dev_info(&client->dev, "found a 'Silicon Labs Si21%d-%c%c%c'\n",
-			cmd.args[2], cmd.args[1], cmd.args[3], cmd.args[4]);
+//	dev_info(&client->dev, "found a 'Silicon Labs Si21%d-%c%c%c'\n",
+//			cmd.args[2], cmd.args[1], cmd.args[3], cmd.args[4]);
 
 	if (fw_name == NULL)
 		goto skip_fw_download;
@@ -237,8 +237,8 @@ skip_fw_download:
 	if (ret)
 		goto err;
 
-	dev_info(&client->dev, "firmware version: %c.%c.%d\n",
-			cmd.args[6], cmd.args[7], cmd.args[8]);
+//	dev_info(&client->dev, "firmware version: %c.%c.%d\n",
+//			cmd.args[6], cmd.args[7], cmd.args[8]);
 
 	/* enable tuner status flags */
 	memcpy(cmd.args, "\x14\x00\x01\x05\x01\x00", 6);

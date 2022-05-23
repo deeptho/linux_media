@@ -612,9 +612,8 @@ int netlbl_domhsh_remove_entry(struct netlbl_dom_map *entry,
 	audit_buf = netlbl_audit_start_common(AUDIT_MAC_MAP_DEL, audit_info);
 	if (audit_buf != NULL) {
 		audit_log_format(audit_buf,
-				 " nlbl_domain=%s res=%u",
-				 entry->domain ? entry->domain : "(default)",
-				 ret_val == 0 ? 1 : 0);
+				 " nlbl_domain=%s res=1",
+				 entry->domain ? entry->domain : "(default)");
 		audit_log_end(audit_buf);
 	}
 
@@ -930,7 +929,7 @@ struct netlbl_dommap_def *netlbl_domhsh_getentry_af6(const char *domain,
  * @cb_arg: argument for the callback function
  *
  * Description:
- * Interate over the domain mapping hash table, skipping the first @skip_bkt
+ * Iterate over the domain mapping hash table, skipping the first @skip_bkt
  * buckets and @skip_chain entries.  For each entry in the table call
  * @callback, if @callback returns a negative value stop 'walking' through the
  * table and return.  Updates the values in @skip_bkt and @skip_chain on

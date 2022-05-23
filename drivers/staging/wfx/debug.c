@@ -2,7 +2,7 @@
 /*
  * Debugfs interface.
  *
- * Copyright (c) 2017-2019, Silicon Laboratories, Inc.
+ * Copyright (c) 2017-2020, Silicon Laboratories, Inc.
  * Copyright (c) 2010, ST-Ericsson
  */
 #include <linux/debugfs.h>
@@ -32,7 +32,7 @@ static const struct trace_print_flags wfx_reg_print_map[] = {
 };
 
 static const char *get_symbol(unsigned long val,
-		const struct trace_print_flags *symbol_array)
+			      const struct trace_print_flags *symbol_array)
 {
 	int i;
 
@@ -82,33 +82,37 @@ static int wfx_counters_show(struct seq_file *seq, void *v)
 		   le32_to_cpu(counters[0].count_##name), \
 		   le32_to_cpu(counters[1].count_##name))
 
-	PUT_COUNTER(tx_packets);
-	PUT_COUNTER(tx_multicast_frames);
+	PUT_COUNTER(tx_frames);
+	PUT_COUNTER(tx_frames_multicast);
 	PUT_COUNTER(tx_frames_success);
-	PUT_COUNTER(tx_frame_failures);
 	PUT_COUNTER(tx_frames_retried);
 	PUT_COUNTER(tx_frames_multi_retried);
+	PUT_COUNTER(tx_frames_failed);
 
+	PUT_COUNTER(ack_failed);
 	PUT_COUNTER(rts_success);
-	PUT_COUNTER(rts_failures);
-	PUT_COUNTER(ack_failures);
+	PUT_COUNTER(rts_failed);
 
-	PUT_COUNTER(rx_packets);
+	PUT_COUNTER(rx_frames);
+	PUT_COUNTER(rx_frames_multicast);
 	PUT_COUNTER(rx_frames_success);
-	PUT_COUNTER(rx_packet_errors);
-	PUT_COUNTER(plcp_errors);
-	PUT_COUNTER(fcs_errors);
-	PUT_COUNTER(rx_decryption_failures);
-	PUT_COUNTER(rx_mic_failures);
-	PUT_COUNTER(rx_no_key_failures);
-	PUT_COUNTER(rx_frame_duplicates);
-	PUT_COUNTER(rx_multicast_frames);
-	PUT_COUNTER(rx_cmacicv_errors);
-	PUT_COUNTER(rx_cmac_replays);
-	PUT_COUNTER(rx_mgmt_ccmp_replays);
+	PUT_COUNTER(rx_frames_failed);
+	PUT_COUNTER(drop_plcp);
+	PUT_COUNTER(drop_fcs);
+	PUT_COUNTER(drop_no_key);
+	PUT_COUNTER(drop_decryption);
+	PUT_COUNTER(drop_tkip_mic);
+	PUT_COUNTER(drop_bip_mic);
+	PUT_COUNTER(drop_cmac_icv);
+	PUT_COUNTER(drop_cmac_replay);
+	PUT_COUNTER(drop_ccmp_replay);
+	PUT_COUNTER(drop_duplicate);
 
-	PUT_COUNTER(rx_beacon);
-	PUT_COUNTER(miss_beacon);
+	PUT_COUNTER(rx_bcn_miss);
+	PUT_COUNTER(rx_bcn_success);
+	PUT_COUNTER(rx_bcn_dtim);
+	PUT_COUNTER(rx_bcn_dtim_aid0_clr);
+	PUT_COUNTER(rx_bcn_dtim_aid0_set);
 
 #undef PUT_COUNTER
 
@@ -230,21 +234,6 @@ static const struct file_operations wfx_send_pds_fops = {
 	.write = wfx_send_pds_write,
 };
 
-static ssize_t wfx_burn_slk_key_write(struct file *file,
-				      const char __user *user_buf,
-				      size_t count, loff_t *ppos)
-{
-	struct wfx_dev *wdev = file->private_data;
-
-	dev_info(wdev->dev, "this driver does not support secure link\n");
-	return -EINVAL;
-}
-
-static const struct file_operations wfx_burn_slk_key_fops = {
-	.open = simple_open,
-	.write = wfx_burn_slk_key_write,
-};
-
 struct dbgfs_hif_msg {
 	struct wfx_dev *wdev;
 	struct completion complete;
@@ -267,9 +256,10 @@ static ssize_t wfx_send_hif_msg_write(struct file *file,
 	if (count < sizeof(struct hif_msg))
 		return -EINVAL;
 
-	// wfx_cmd_send() chekc that reply buffer is wide enough, but do not
-	// return precise length read. User have to know how many bytes should
-	// be read. Filling reply buffer with a memory pattern may help user.
+	/* wfx_cmd_send() checks that reply buffer is wide enough, but does not
+	 * return precise length read. User have to know how many bytes should
+	 * be read. Filling reply buffer with a memory pattern may help user.
+	 */
 	memset(context->reply, 0xFF, sizeof(context->reply));
 	request = memdup_user(user_buf, count);
 	if (IS_ERR(request))
@@ -299,8 +289,9 @@ static ssize_t wfx_send_hif_msg_read(struct file *file, char __user *user_buf,
 		return ret;
 	if (context->ret < 0)
 		return context->ret;
-	// Be carefull, write() is waiting for a full message while read()
-	// only return a payload
+	/* Be careful, write() is waiting for a full message while read()
+	 * only returns a payload
+	 */
 	if (copy_to_user(user_buf, context->reply, count))
 		return -EFAULT;
 
@@ -366,8 +357,6 @@ int wfx_debug_init(struct wfx_dev *wdev)
 	debugfs_create_file("tx_power_loop", 0444, d, wdev,
 			    &wfx_tx_power_loop_fops);
 	debugfs_create_file("send_pds", 0200, d, wdev, &wfx_send_pds_fops);
-	debugfs_create_file("burn_slk_key", 0200, d, wdev,
-			    &wfx_burn_slk_key_fops);
 	debugfs_create_file("send_hif_msg", 0600, d, wdev,
 			    &wfx_send_hif_msg_fops);
 	debugfs_create_file("ps_timeout", 0600, d, wdev, &wfx_ps_timeout_fops);

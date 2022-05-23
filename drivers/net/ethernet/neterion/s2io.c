@@ -1000,7 +1000,7 @@ static void free_shared_mem(struct s2io_nic *nic)
 	}
 }
 
-/**
+/*
  * s2io_verify_pci_mode -
  */
 
@@ -1035,7 +1035,7 @@ static int s2io_on_nec_bridge(struct pci_dev *s2io_pdev)
 }
 
 static int bus_speed[8] = {33, 133, 133, 200, 266, 133, 200, 266};
-/**
+/*
  * s2io_print_pci_mode -
  */
 static int s2io_print_pci_mode(struct s2io_nic *nic)
@@ -1101,12 +1101,14 @@ static int s2io_print_pci_mode(struct s2io_nic *nic)
  *  @nic: device private variable
  *  @link: link status (UP/DOWN) used to enable/disable continuous
  *  transmit interrupts
+ *  @may_sleep: parameter indicates if sleeping when waiting for
+ *  command complete
  *  Description: The function configures transmit traffic interrupts
  *  Return Value:  SUCCESS on success and
  *  '-1' on failure
  */
 
-static int init_tti(struct s2io_nic *nic, int link)
+static int init_tti(struct s2io_nic *nic, int link, bool may_sleep)
 {
 	struct XENA_dev_config __iomem *bar0 = nic->bar0;
 	register u64 val64 = 0;
@@ -1166,7 +1168,7 @@ static int init_tti(struct s2io_nic *nic, int link)
 
 		if (wait_for_cmd_complete(&bar0->tti_command_mem,
 					  TTI_CMD_MEM_STROBE_NEW_CMD,
-					  S2IO_BIT_RESET) != SUCCESS)
+					  S2IO_BIT_RESET, may_sleep) != SUCCESS)
 			return FAILURE;
 	}
 
@@ -1659,7 +1661,7 @@ static int init_nic(struct s2io_nic *nic)
 	 */
 
 	/* Initialize TTI */
-	if (SUCCESS != init_tti(nic, nic->last_link_state))
+	if (SUCCESS != init_tti(nic, nic->last_link_state, true))
 		return -ENODEV;
 
 	/* RTI Initialization */
@@ -2064,6 +2066,9 @@ static void en_dis_able_nic_intrs(struct s2io_nic *nic, u16 mask, int flag)
 
 /**
  *  verify_pcc_quiescent- Checks for PCC quiescent state
+ *  @sp : private member of the device structure, which is a pointer to the
+ *  s2io_nic structure.
+ *  @flag: boolean controlling function path
  *  Return: 1 If PCC is quiescence
  *          0 If PCC is not quiescence
  */
@@ -2099,6 +2104,8 @@ static int verify_pcc_quiescent(struct s2io_nic *sp, int flag)
 }
 /**
  *  verify_xena_quiescence - Checks whether the H/W is ready
+ *  @sp : private member of the device structure, which is a pointer to the
+ *  s2io_nic structure.
  *  Description: Returns whether the H/W is ready to go or not. Depending
  *  on whether adapter enable bit was written or not the comparison
  *  differs and the calling function passes the input argument flag to
@@ -2305,6 +2312,9 @@ static int start_nic(struct s2io_nic *nic)
 }
 /**
  * s2io_txdl_getskb - Get the skb from txdl, unmap and return skb
+ * @fifo_data: fifo data pointer
+ * @txdlp: descriptor
+ * @get_off: unused
  */
 static struct sk_buff *s2io_txdl_getskb(struct fifo_info *fifo_data,
 					struct TxD *txdlp, int get_off)
@@ -2391,7 +2401,7 @@ static void free_tx_buffers(struct s2io_nic *nic)
 
 /**
  *   stop_nic -  To stop the nic
- *   @nic ; device private variable.
+ *   @nic : device private variable.
  *   Description:
  *   This function does exactly the opposite of what the start_nic()
  *   function does. This function is called to stop the device.
@@ -2419,7 +2429,8 @@ static void stop_nic(struct s2io_nic *nic)
 
 /**
  *  fill_rx_buffers - Allocates the Rx side skbs
- *  @ring_info: per ring structure
+ *  @nic : device private variable.
+ *  @ring: per ring structure
  *  @from_card_up: If this is true, we will map the buffer to get
  *     the dma address for buf0 and buf1 to give it to the card.
  *     Else we will sync the already mapped buffer to give it to the card.
@@ -2734,7 +2745,7 @@ static int s2io_chk_rx_buffers(struct s2io_nic *nic, struct ring_info *ring)
 }
 
 /**
- * s2io_poll - Rx interrupt handler for NAPI support
+ * s2io_poll_msix - Rx interrupt handler for NAPI support
  * @napi : pointer to the napi structure.
  * @budget : The number of packets that were budgeted to be processed
  * during  one pass through the 'Poll" function.
@@ -2864,7 +2875,7 @@ static void s2io_netpoll(struct net_device *dev)
 
 /**
  *  rx_intr_handler - Rx interrupt handler
- *  @ring_info: per ring structure.
+ *  @ring_data: per ring structure.
  *  @budget: budget for napi processing.
  *  Description:
  *  If the interrupt is because of a received frame or if the
@@ -2972,7 +2983,7 @@ static int rx_intr_handler(struct ring_info *ring_data, int budget)
 
 /**
  *  tx_intr_handler - Transmit interrupt handler
- *  @nic : device private variable
+ *  @fifo_data : fifo data pointer
  *  Description:
  *  If an interrupt was raised to indicate DMA complete of the
  *  Tx packet, this function is called. It identifies the last TxD
@@ -3153,6 +3164,8 @@ static u64 s2io_mdio_read(u32 mmd_type, u64 addr, struct net_device *dev)
 /**
  *  s2io_chk_xpak_counter - Function to check the status of the xpak counters
  *  @counter      : counter value to be updated
+ *  @regs_stat    : registers status
+ *  @index        : index
  *  @flag         : flag to indicate the status
  *  @type         : counter type
  *  Description:
@@ -3309,8 +3322,11 @@ static void s2io_updt_xpak_counter(struct net_device *dev)
 
 /**
  *  wait_for_cmd_complete - waits for a command to complete.
- *  @sp : private member of the device structure, which is a pointer to the
- *  s2io_nic structure.
+ *  @addr: address
+ *  @busy_bit: bit to check for busy
+ *  @bit_state: state to check
+ *  @may_sleep: parameter indicates if sleeping when waiting for
+ *  command complete
  *  Description: Function that waits for a command to Write into RMAC
  *  ADDR DATA registers to be completed and returns either success or
  *  error depending on whether the command was complete or not.
@@ -3319,7 +3335,7 @@ static void s2io_updt_xpak_counter(struct net_device *dev)
  */
 
 static int wait_for_cmd_complete(void __iomem *addr, u64 busy_bit,
-				 int bit_state)
+				 int bit_state, bool may_sleep)
 {
 	int ret = FAILURE, cnt = 0, delay = 1;
 	u64 val64;
@@ -3341,7 +3357,7 @@ static int wait_for_cmd_complete(void __iomem *addr, u64 busy_bit,
 			}
 		}
 
-		if (in_interrupt())
+		if (!may_sleep)
 			mdelay(delay);
 		else
 			msleep(delay);
@@ -4335,7 +4351,7 @@ static int do_s2io_chk_alarm_bit(u64 value, void __iomem *addr,
 
 /**
  *  s2io_handle_errors - Xframe error indication handler
- *  @nic: device private variable
+ *  @dev_id: opaque handle to dev
  *  Description: Handle alarms such as loss of link, single or
  *  double ECC errors, critical and serious errors.
  *  Return Value:
@@ -4739,7 +4755,7 @@ static irqreturn_t s2io_isr(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
-/**
+/*
  * s2io_updt_stats -
  */
 static void s2io_updt_stats(struct s2io_nic *sp)
@@ -4856,6 +4872,8 @@ static struct net_device_stats *s2io_get_stats(struct net_device *dev)
 /**
  *  s2io_set_multicast - entry point for multicast address enable/disable.
  *  @dev : pointer to the device structure
+ *  @may_sleep: parameter indicates if sleeping when waiting for command
+ *  complete
  *  Description:
  *  This function is a driver entry point which gets called by the kernel
  *  whenever multicast addresses must be enabled/disabled. This also gets
@@ -4865,8 +4883,7 @@ static struct net_device_stats *s2io_get_stats(struct net_device *dev)
  *  Return value:
  *  void.
  */
-
-static void s2io_set_multicast(struct net_device *dev)
+static void s2io_set_multicast(struct net_device *dev, bool may_sleep)
 {
 	int i, j, prev_cnt;
 	struct netdev_hw_addr *ha;
@@ -4891,7 +4908,7 @@ static void s2io_set_multicast(struct net_device *dev)
 		/* Wait till command completes */
 		wait_for_cmd_complete(&bar0->rmac_addr_cmd_mem,
 				      RMAC_ADDR_CMD_MEM_STROBE_CMD_EXECUTING,
-				      S2IO_BIT_RESET);
+				      S2IO_BIT_RESET, may_sleep);
 
 		sp->m_cast_flg = 1;
 		sp->all_multi_pos = config->max_mc_addr - 1;
@@ -4908,7 +4925,7 @@ static void s2io_set_multicast(struct net_device *dev)
 		/* Wait till command completes */
 		wait_for_cmd_complete(&bar0->rmac_addr_cmd_mem,
 				      RMAC_ADDR_CMD_MEM_STROBE_CMD_EXECUTING,
-				      S2IO_BIT_RESET);
+				      S2IO_BIT_RESET, may_sleep);
 
 		sp->m_cast_flg = 0;
 		sp->all_multi_pos = 0;
@@ -4988,7 +5005,7 @@ static void s2io_set_multicast(struct net_device *dev)
 			/* Wait for command completes */
 			if (wait_for_cmd_complete(&bar0->rmac_addr_cmd_mem,
 						  RMAC_ADDR_CMD_MEM_STROBE_CMD_EXECUTING,
-						  S2IO_BIT_RESET)) {
+						  S2IO_BIT_RESET, may_sleep)) {
 				DBG_PRINT(ERR_DBG,
 					  "%s: Adding Multicasts failed\n",
 					  dev->name);
@@ -5018,7 +5035,7 @@ static void s2io_set_multicast(struct net_device *dev)
 			/* Wait for command completes */
 			if (wait_for_cmd_complete(&bar0->rmac_addr_cmd_mem,
 						  RMAC_ADDR_CMD_MEM_STROBE_CMD_EXECUTING,
-						  S2IO_BIT_RESET)) {
+						  S2IO_BIT_RESET, may_sleep)) {
 				DBG_PRINT(ERR_DBG,
 					  "%s: Adding Multicasts failed\n",
 					  dev->name);
@@ -5027,6 +5044,12 @@ static void s2io_set_multicast(struct net_device *dev)
 			i++;
 		}
 	}
+}
+
+/* NDO wrapper for s2io_set_multicast */
+static void s2io_ndo_set_multicast(struct net_device *dev)
+{
+	s2io_set_multicast(dev, false);
 }
 
 /* read from CAM unicast & multicast addresses and store it in
@@ -5115,7 +5138,7 @@ static int do_s2io_add_mac(struct s2io_nic *sp, u64 addr, int off)
 	/* Wait till command completes */
 	if (wait_for_cmd_complete(&bar0->rmac_addr_cmd_mem,
 				  RMAC_ADDR_CMD_MEM_STROBE_CMD_EXECUTING,
-				  S2IO_BIT_RESET)) {
+				  S2IO_BIT_RESET, true)) {
 		DBG_PRINT(INFO_DBG, "do_s2io_add_mac failed\n");
 		return FAILURE;
 	}
@@ -5159,7 +5182,7 @@ static u64 do_s2io_read_unicast_mc(struct s2io_nic *sp, int offset)
 	/* Wait till command completes */
 	if (wait_for_cmd_complete(&bar0->rmac_addr_cmd_mem,
 				  RMAC_ADDR_CMD_MEM_STROBE_CMD_EXECUTING,
-				  S2IO_BIT_RESET)) {
+				  S2IO_BIT_RESET, true)) {
 		DBG_PRINT(INFO_DBG, "do_s2io_read_unicast_mc failed\n");
 		return FAILURE;
 	}
@@ -5168,7 +5191,7 @@ static u64 do_s2io_read_unicast_mc(struct s2io_nic *sp, int offset)
 	return tmp64 >> 16;
 }
 
-/**
+/*
  * s2io_set_mac_addr - driver entry point
  */
 
@@ -5179,7 +5202,7 @@ static int s2io_set_mac_addr(struct net_device *dev, void *p)
 	if (!is_valid_ether_addr(addr->sa_data))
 		return -EADDRNOTAVAIL;
 
-	memcpy(dev->dev_addr, addr->sa_data, dev->addr_len);
+	eth_hw_addr_set(dev, addr->sa_data);
 
 	/* store the MAC address in CAM */
 	return do_s2io_prog_unicast(dev, dev->dev_addr);
@@ -5194,7 +5217,7 @@ static int s2io_set_mac_addr(struct net_device *dev, void *p)
  *  as defined in errno.h file on failure.
  */
 
-static int do_s2io_prog_unicast(struct net_device *dev, u8 *addr)
+static int do_s2io_prog_unicast(struct net_device *dev, const u8 *addr)
 {
 	struct s2io_nic *sp = netdev_priv(dev);
 	register u64 mac_addr = 0, perm_addr = 0;
@@ -5243,8 +5266,7 @@ static int do_s2io_prog_unicast(struct net_device *dev, u8 *addr)
 
 /**
  * s2io_ethtool_set_link_ksettings - Sets different link parameters.
- * @sp : private member of the device structure, which is a pointer to the
- * s2io_nic structure.
+ * @dev : pointer to netdev
  * @cmd: pointer to the structure with parameters given by ethtool to set
  * link information.
  * Description:
@@ -5272,9 +5294,8 @@ s2io_ethtool_set_link_ksettings(struct net_device *dev,
 }
 
 /**
- * s2io_ethtol_get_link_ksettings - Return link specific information.
- * @sp : private member of the device structure, pointer to the
- *      s2io_nic structure.
+ * s2io_ethtool_get_link_ksettings - Return link specific information.
+ * @dev: pointer to netdev
  * @cmd : pointer to the structure with parameters given by ethtool
  * to return link information.
  * Description:
@@ -5313,8 +5334,7 @@ s2io_ethtool_get_link_ksettings(struct net_device *dev,
 
 /**
  * s2io_ethtool_gdrvinfo - Returns driver specific information.
- * @sp : private member of the device structure, which is a pointer to the
- * s2io_nic structure.
+ * @dev: pointer to netdev
  * @info : pointer to the structure with parameters given by ethtool to
  * return driver information.
  * Description:
@@ -5335,11 +5355,10 @@ static void s2io_ethtool_gdrvinfo(struct net_device *dev,
 
 /**
  *  s2io_ethtool_gregs - dumps the entire space of Xfame into the buffer.
- *  @sp: private member of the device structure, which is a pointer to the
- *  s2io_nic structure.
+ *  @dev: pointer to netdev
  *  @regs : pointer to the structure with parameters given by ethtool for
- *  dumping the registers.
- *  @reg_space: The input argument into which all the registers are dumped.
+ *          dumping the registers.
+ *  @space: The input argument into which all the registers are dumped.
  *  Description:
  *  Dumps the entire register space of xFrame NIC into the user given
  *  buffer area.
@@ -5471,8 +5490,7 @@ static void s2io_ethtool_gringparam(struct net_device *dev,
 
 /**
  * s2io_ethtool_getpause_data -Pause frame frame generation and reception.
- * @sp : private member of the device structure, which is a pointer to the
- *	s2io_nic structure.
+ * @dev: pointer to netdev
  * @ep : pointer to the structure with pause parameters given by ethtool.
  * Description:
  * Returns the Pause frame generation and reception capability of the NIC.
@@ -5496,8 +5514,7 @@ static void s2io_ethtool_getpause_data(struct net_device *dev,
 
 /**
  * s2io_ethtool_setpause_data -  set/reset pause frame generation.
- * @sp : private member of the device structure, which is a pointer to the
- *      s2io_nic structure.
+ * @dev: pointer to netdev
  * @ep : pointer to the structure with pause parameters given by ethtool.
  * Description:
  * It can be used to set or reset Pause frame generation or reception
@@ -5526,6 +5543,7 @@ static int s2io_ethtool_setpause_data(struct net_device *dev,
 	return 0;
 }
 
+#define S2IO_DEV_ID		5
 /**
  * read_eeprom - reads 4 bytes of data from user given offset.
  * @sp : private member of the device structure, which is a pointer to the
@@ -5541,8 +5559,6 @@ static int s2io_ethtool_setpause_data(struct net_device *dev,
  * Return value:
  *  -1 on failure and 0 on success.
  */
-
-#define S2IO_DEV_ID		5
 static int read_eeprom(struct s2io_nic *sp, int off, u64 *data)
 {
 	int ret = -1;
@@ -5734,8 +5750,7 @@ static void s2io_vpd_read(struct s2io_nic *nic)
 
 /**
  *  s2io_ethtool_geeprom  - reads the value stored in the Eeprom.
- *  @sp : private member of the device structure, which is a pointer to the
- *  s2io_nic structure.
+ *  @dev: pointer to netdev
  *  @eeprom : pointer to the user level structure provided by ethtool,
  *  containing all relevant information.
  *  @data_buf : user defined value to be written into Eeprom.
@@ -5771,11 +5786,10 @@ static int s2io_ethtool_geeprom(struct net_device *dev,
 
 /**
  *  s2io_ethtool_seeprom - tries to write the user provided value in Eeprom
- *  @sp : private member of the device structure, which is a pointer to the
- *  s2io_nic structure.
+ *  @dev: pointer to netdev
  *  @eeprom : pointer to the user level structure provided by ethtool,
  *  containing all relevant information.
- *  @data_buf ; user defined value to be written into Eeprom.
+ *  @data_buf : user defined value to be written into Eeprom.
  *  Description:
  *  Tries to write the user provided value in the Eeprom, at the offset
  *  given by the user.
@@ -6027,7 +6041,7 @@ static int s2io_bist_test(struct s2io_nic *sp, uint64_t *data)
 
 /**
  * s2io_link_test - verifies the link state of the nic
- * @sp ; private member of the device structure, which is a pointer to the
+ * @sp: private member of the device structure, which is a pointer to the
  * s2io_nic structure.
  * @data: variable that returns the result of each of the test conducted by
  * the driver.
@@ -6150,8 +6164,7 @@ static int s2io_rldram_test(struct s2io_nic *sp, uint64_t *data)
 
 /**
  *  s2io_ethtool_test - conducts 6 tsets to determine the health of card.
- *  @sp : private member of the device structure, which is a pointer to the
- *  s2io_nic structure.
+ *  @dev: pointer to netdev
  *  @ethtest : pointer to a ethtool command specific structure that will be
  *  returned to the user.
  *  @data : variable that returns the result of each of the test
@@ -6597,7 +6610,7 @@ static const struct ethtool_ops netdev_ethtool_ops = {
 /**
  *  s2io_ioctl - Entry point for the Ioctl
  *  @dev :  Device pointer.
- *  @ifr :  An IOCTL specefic structure, that can contain a pointer to
+ *  @rq :  An IOCTL specefic structure, that can contain a pointer to
  *  a proprietary structure used to pass information to the driver.
  *  @cmd :  This is used to distinguish between the different commands that
  *  can be passed to the IOCTL functions.
@@ -6650,7 +6663,7 @@ static int s2io_change_mtu(struct net_device *dev, int new_mtu)
 
 /**
  * s2io_set_link - Set the LInk status
- * @data: long pointer to device private structue
+ * @work: work struct containing a pointer to device private structure
  * Description: Sets the link status for the adapter
  */
 
@@ -7139,7 +7152,7 @@ static int s2io_card_up(struct s2io_nic *sp)
 	}
 
 	/* Setting its receive mode */
-	s2io_set_multicast(dev);
+	s2io_set_multicast(dev, true);
 
 	if (dev->features & NETIF_F_LRO) {
 		/* Initialize max aggregatable pkts per session based on MTU */
@@ -7187,7 +7200,7 @@ static int s2io_card_up(struct s2io_nic *sp)
 
 /**
  * s2io_restart_nic - Resets the NIC.
- * @data : long pointer to the device private structure
+ * @work : work struct containing a pointer to the device private structure
  * Description:
  * This function is scheduled to be run by the s2io_tx_watchdog
  * function after 0.5 secs to reset the NIC. The idea is to reduce
@@ -7218,6 +7231,7 @@ out_unlock:
 /**
  *  s2io_tx_watchdog - Watchdog for transmit side.
  *  @dev : Pointer to net device structure
+ *  @txqueue: index of the hanging queue
  *  Description:
  *  This function is triggered if the Tx Queue is stopped
  *  for a pre-defined amount of time when the Interface is still up.
@@ -7242,11 +7256,8 @@ static void s2io_tx_watchdog(struct net_device *dev, unsigned int txqueue)
 
 /**
  *   rx_osm_handler - To perform some OS related operations on SKB.
- *   @sp: private member of the device structure,pointer to s2io_nic structure.
- *   @skb : the socket buffer pointer.
- *   @len : length of the packet
- *   @cksum : FCS checksum of the frame.
- *   @ring_no : the ring from which this RxD was extracted.
+ *   @ring_data : the ring from which this RxD was extracted.
+ *   @rxdp: descriptor
  *   Description:
  *   This function is called by the Rx interrupt serivce routine to perform
  *   some OS related operations on the SKB before passing it to the upper
@@ -7447,7 +7458,7 @@ static void s2io_link(struct s2io_nic *sp, int link)
 	struct swStat *swstats = &sp->mac_control.stats_info->sw_stat;
 
 	if (link != sp->last_link_state) {
-		init_tti(sp, link);
+		init_tti(sp, link, false);
 		if (link == LINK_DOWN) {
 			DBG_PRINT(ERR_DBG, "%s: Link down\n", dev->name);
 			s2io_stop_all_tx_queue(sp);
@@ -7576,9 +7587,10 @@ static int s2io_verify_parm(struct pci_dev *pdev, u8 *dev_intr_type,
 }
 
 /**
- * rts_ds_steer - Receive traffic steering based on IPv4 or IPv6 TOS
- * or Traffic class respectively.
+ * rts_ds_steer - Receive traffic steering based on IPv4 or IPv6 TOS or Traffic class respectively.
  * @nic: device private variable
+ * @ds_codepoint: data
+ * @ring: ring index
  * Description: The function configures the receive steering to
  * desired receive ring.
  * Return Value:  SUCCESS on success and
@@ -7603,7 +7615,7 @@ static int rts_ds_steer(struct s2io_nic *nic, u8 ds_codepoint, u8 ring)
 
 	return wait_for_cmd_complete(&bar0->rts_ds_mem_ctrl,
 				     RTS_DS_MEM_CTRL_STROBE_CMD_BEING_EXECUTED,
-				     S2IO_BIT_RESET);
+				     S2IO_BIT_RESET, true);
 }
 
 static const struct net_device_ops s2io_netdev_ops = {
@@ -7612,8 +7624,8 @@ static const struct net_device_ops s2io_netdev_ops = {
 	.ndo_get_stats	        = s2io_get_stats,
 	.ndo_start_xmit    	= s2io_xmit,
 	.ndo_validate_addr	= eth_validate_addr,
-	.ndo_set_rx_mode	= s2io_set_multicast,
-	.ndo_do_ioctl	   	= s2io_ioctl,
+	.ndo_set_rx_mode	= s2io_ndo_set_multicast,
+	.ndo_eth_ioctl		= s2io_ioctl,
 	.ndo_set_mac_address    = s2io_set_mac_addr,
 	.ndo_change_mtu	   	= s2io_change_mtu,
 	.ndo_set_features	= s2io_set_features,
@@ -7928,7 +7940,7 @@ s2io_init_nic(struct pci_dev *pdev, const struct pci_device_id *pre)
 	writeq(val64, &bar0->rmac_addr_cmd_mem);
 	wait_for_cmd_complete(&bar0->rmac_addr_cmd_mem,
 			      RMAC_ADDR_CMD_MEM_STROBE_CMD_EXECUTING,
-			      S2IO_BIT_RESET);
+			      S2IO_BIT_RESET, true);
 	tmp64 = readq(&bar0->rmac_addr_data0_mem);
 	mac_down = (u32)tmp64;
 	mac_up = (u32) (tmp64 >> 32);
@@ -7942,7 +7954,7 @@ s2io_init_nic(struct pci_dev *pdev, const struct pci_device_id *pre)
 
 	/*  Set the factory defined MAC address initially   */
 	dev->addr_len = ETH_ALEN;
-	memcpy(dev->dev_addr, sp->def_mac_addr, ETH_ALEN);
+	eth_hw_addr_set(dev, sp->def_mac_addr[0].mac_addr);
 
 	/* initialize number of multicast & unicast MAC entries variables */
 	if (sp->device_type == XFRAME_I_DEVICE) {
@@ -8554,7 +8566,7 @@ static void s2io_io_resume(struct pci_dev *pdev)
 			return;
 		}
 
-		if (s2io_set_mac_addr(netdev, netdev->dev_addr) == FAILURE) {
+		if (do_s2io_prog_unicast(netdev, netdev->dev_addr) == FAILURE) {
 			s2io_card_down(sp);
 			pr_err("Can't restore mac addr after reset.\n");
 			return;
