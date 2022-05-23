@@ -205,7 +205,6 @@ STCHIP_Info_t*	ChipGetNext(STCHIP_Info_t* hPrevChip)
 STCHIP_Info_t* ChipGetHandleFromName(char *Name)
 {
 	STCHIP_Info_t* hChip;
-
 	hChip = ChipGetFirst();
 	while((hChip != NULL) && (strcmp(hChip->Name,Name) != 0))
 	{
