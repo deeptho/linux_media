@@ -176,10 +176,15 @@ static void dvb_frontend_put(struct dvb_frontend *fe)
 	 * Check if the frontend was registered, as otherwise
 	 * kref was not initialized yet.
 	 */
-	if (fe->frontend_priv)
+	if (fe->frontend_priv) {
+		dprintk("refcount %p=%d fe=%p\n", &fe->refcount, fe->refcount, fe);
+		release_dtv_fe_spectrum_scan(fe);
 		kref_put(&fe->refcount, dvb_frontend_free);
-	else
+	}
+	else {
+		dprintk("calling __dvb_frontend_free fe=%p\n", fe);
 		__dvb_frontend_free(fe);
+	}
 }
 
 static void dvb_frontend_get(struct dvb_frontend *fe)
@@ -840,19 +845,22 @@ restart:
 			dvb_frontend_swzigzag(fe);
 		}
 	}
-
+	dprintk("Exiting frontend thread\n");
 	if (dvb_powerdown_on_sleep) {
 		if (fe->ops.set_voltage)
 			fe->ops.set_voltage(fe, SEC_VOLTAGE_OFF);
 		if (fe->ops.tuner_ops.sleep) {
 			if (fe->ops.i2c_gate_ctrl)
 				fe->ops.i2c_gate_ctrl(fe, 1);
+			dprintk("Calling tuner sleep\n");
 			fe->ops.tuner_ops.sleep(fe);
 			if (fe->ops.i2c_gate_ctrl)
 				fe->ops.i2c_gate_ctrl(fe, 0);
 		}
-		if (fe->ops.sleep)
+		if (fe->ops.sleep) {
+			dprintk("Calling sleep\n");
 			fe->ops.sleep(fe);
+		}
 	}
 
 	fepriv->thread = NULL;
@@ -3509,12 +3517,14 @@ int dvb_frontend_suspend(struct dvb_frontend *fe)
 
 	if (fe->ops.tuner_ops.suspend)
 		ret = fe->ops.tuner_ops.suspend(fe);
-	else if (fe->ops.tuner_ops.sleep)
+	else if (fe->ops.tuner_ops.sleep) {
+		dprintk("Calling tuner sleep\n");
 		ret = fe->ops.tuner_ops.sleep(fe);
-
-	if (fe->ops.sleep)
+	}
+	if (fe->ops.sleep) {
+		dprintk("Calling sleep\n");
 		ret = fe->ops.sleep(fe);
-
+	}
 	return ret;
 }
 EXPORT_SYMBOL(dvb_frontend_suspend);
@@ -3634,6 +3644,7 @@ static void dvb_frontend_invoke_release(struct dvb_frontend *fe,
 	if (release) {
 		release(fe);
 #ifdef CONFIG_MEDIA_ATTACH
+		dprintk("fe=%p DETACH release=%p\n", fe, release);
 		dvb_detach(release);
 #endif
 	}

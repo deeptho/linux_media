@@ -1,7 +1,7 @@
 //SPX-License-Identifier: GPL-2.0-or-later
 /*
  * Montage Technology M88rs6060 demodulator and tuner drivers
- * some code form 
+ * some code form
  * Copyright (c) 2021 Davin zhang <Davin@tbsdtv.com> www.Turbosight.com
  *
 */
@@ -13,7 +13,7 @@
 #define MT_FE_MCLK_KHZ   96000
 
 /*
-* 
+*
 */
 
 enum m88rs6060_ts_mode {
@@ -121,7 +121,7 @@ struct m88rs6060_cfg {
 	u32 clk;
 	u16 i2c_wr_max;
 	u8 envelope_mode;	//for diseqc   default 0
-	//0x11 or 0x12 0x11 : there is only one i2c_STOP flag. 0x12 ther are two I2C_STOP flag.        
+	//0x11 or 0x12 0x11 : there is only one i2c_STOP flag. 0x12 ther are two I2C_STOP flag.
 	u8 repeater_value;
 
 	u8 num; // for ci setting;
@@ -130,9 +130,13 @@ struct m88rs6060_cfg {
 	void (*SetTimes)(struct i2c_adapter * i2c, int tuner,int times);
 	int  (*GetSpeedstatus)(struct i2c_adapter * i2c, int tuner);
 	int (*GetSpeed)(struct i2c_adapter * i2c, int tuner);
-	
+
 	void (*write_properties)(struct i2c_adapter * i2c, u8 reg, u32 buf);
 	void (*read_properties)(struct i2c_adapter * i2c, u8 reg, u32 * buf);
 };
+
+extern struct dvb_frontend* m88rs6060_attach(struct i2c_adapter *i2c,
+																			struct m88rs6060_cfg *cfg);
+extern void m88rs6060_detach(struct dvb_frontend* fe);
 
 #endif

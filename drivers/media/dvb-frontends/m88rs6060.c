@@ -9,6 +9,16 @@
 
 #include "m88rs6060_priv.h"
 
+int verbose=0;
+module_param(verbose, int, 0644);
+MODULE_PARM_DESC(verbose, "verbose debugging");
+
+#define dprintk(fmt, arg...)																					\
+	printk(KERN_DEBUG pr_fmt("%s:%d " fmt), __func__, __LINE__, ##arg)
+
+#define vprintk(fmt, arg...)																					\
+	if(verbose) printk(KERN_DEBUG pr_fmt("%s:%d " fmt),  __func__, __LINE__, ##arg)
+
 static u16 mes_log10[] = {
 	0, 3010, 4771, 6021, 6990, 7781, 8451, 9031, 9542, 10000,
 	10414, 10792, 11139, 11461, 11761, 12041, 12304, 12553, 12788, 13010,
@@ -3353,6 +3363,21 @@ static const struct i2c_device_id m88rs6060_id_table[] = {
 	{}
 };
 
+void m88rs6060_detach(struct dvb_frontend* fe)
+{
+	//noop
+}
+
+
+struct dvb_frontend* m88rs6060_attach(struct i2c_adapter *i2c,
+						struct m88rs6060_cfg *cfg)
+{
+	//noop
+	(*(cfg->fe))->ops.release = m88rs6060_detach;
+	return *(cfg->fe);
+}
+
+
 MODULE_DEVICE_TABLE(i2c, m88rs6060_id_table);
 
 static struct i2c_driver m88rs6060_driver = {
@@ -3364,7 +3389,11 @@ static struct i2c_driver m88rs6060_driver = {
 	.id_table = m88rs6060_id_table,
 };
 
+
+EXPORT_SYMBOL_GPL(m88rs6060_attach);
+
 module_i2c_driver(m88rs6060_driver);
+
 
 MODULE_AUTHOR("Davin zhang <Davin@tbsdtv.com>");
 MODULE_DESCRIPTION("Montage M88RS6060 driver");

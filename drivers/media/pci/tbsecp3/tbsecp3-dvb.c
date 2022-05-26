@@ -1336,15 +1336,8 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 		strlcpy(info.type, "m88rs6060", I2C_NAME_SIZE);
 		info.addr = 0x69;
 		info.platform_data = &m88rs6060_config;
-		request_module(info.type);
 		client_demod = i2c_new_client_device(i2c, &info);
-		if (client_demod == NULL ||
-					client_demod->dev.driver == NULL)
-				goto frontend_atach_fail;
-		if (!try_module_get(client_demod->dev.driver->owner)) {
-				i2c_unregister_device(client_demod);
-					goto frontend_atach_fail;
-					}
+		dvb_attach(m88rs6060_attach, i2c, &m88rs6060_config);
 		adapter->i2c_client_demod = client_demod;
 		if (tbsecp3_attach_sec(adapter, adapter->fe) == NULL) {
 			    dev_warn(&dev->pci_dev->dev,
@@ -2363,15 +2356,15 @@ void tbsecp3_dvb_exit(struct tbsecp3_adapter *adapter)
 	}
 	dvb_net_release(&adapter->dvbnet);
 	if(dvbdemux) {
-	dvbdemux->dmx.close(&dvbdemux->dmx);
-	dvbdemux->dmx.remove_frontend(&dvbdemux->dmx, &adapter->fe_mem);
-	dvbdemux->dmx.remove_frontend(&dvbdemux->dmx, &adapter->fe_hw);
+		dvbdemux->dmx.close(&dvbdemux->dmx);
+		dvbdemux->dmx.remove_frontend(&dvbdemux->dmx, &adapter->fe_mem);
+		dvbdemux->dmx.remove_frontend(&dvbdemux->dmx, &adapter->fe_hw);
 	}
 	if(adapter) {
-	dvb_dmxdev_release(&adapter->dmxdev);
-	dvb_dmx_release(&adapter->demux);
+		dvb_dmxdev_release(&adapter->dmxdev);
+		dvb_dmx_release(&adapter->demux);
 	}
 	if(adap) {
-	dvb_unregister_adapter(adap);
+		dvb_unregister_adapter(adap);
 	}
 }
