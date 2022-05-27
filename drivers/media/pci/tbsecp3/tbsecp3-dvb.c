@@ -853,17 +853,20 @@ static int Virtual_set_voltage(struct i2c_adapter *i2c,
 {
 	return 0;
 }
-
+#if 0
 static int max_send_master_cmd(struct dvb_frontend *fe, struct dvb_diseqc_master_cmd *cmd)
 {
 	//printk("send master cmd\n");
 	return 0;
 }
+#endif
+#if 0
 static int max_send_burst(struct dvb_frontend *fe, enum fe_sec_mini_cmd burst)
 {
 	//printk("send burst: %d\n", burst);
 	return 0;
 }
+#endif
 static void RF_switch(struct i2c_adapter *i2c,u8 rf_in,u8 flag)//flag : 0: dvbs/s2 signal 1:Terrestrial and cable signal
 {
 	struct tbsecp3_i2c *i2c_adap = i2c_get_adapdata(i2c);
@@ -1057,6 +1060,7 @@ static struct stid135_cfg tbs6909x_V2_stid135_cfg = {
 	.vglna = 1,
 };
 
+#if 0
 static struct stid135_cfg tbs6916_stid135_cfg = {
 	.adr		= 0x68,
 	.clk		= 27,
@@ -1070,6 +1074,7 @@ static struct stid135_cfg tbs6916_stid135_cfg = {
 	.set_TSparam = NULL,
 	.vglna = 2,
 };
+#endif
 
 static struct stid135_cfg tbs6912_stid135_cfg = {
 	.adr		= 0x68,
@@ -1332,6 +1337,7 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 		 m88rs6060_config.num = adapter->nr;
 		 m88rs6060_config.read_properties = ecp3_spi_read;
 		 m88rs6060_config.write_properties = ecp3_spi_write;
+
 		memset(&info, 0, sizeof(struct i2c_board_info));
 		strlcpy(info.type, "m88rs6060", I2C_NAME_SIZE);
 		info.addr = 0x69;
@@ -2334,7 +2340,6 @@ void tbsecp3_dvb_exit(struct tbsecp3_adapter *adapter)
 {
 	struct dvb_adapter *adap = &adapter->dvb_adapter;
 	struct dvb_demux *dvbdemux = &adapter->demux;
-
 	if (adapter->fe) {
 		tbsecp3_ca_release(adapter);
 		dvb_unregister_frontend(adapter->fe);
