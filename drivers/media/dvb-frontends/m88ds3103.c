@@ -1697,6 +1697,7 @@ struct dvb_frontend *m88ds3103_attach(const struct m88ds3103_config *cfg,
 }
 EXPORT_SYMBOL(m88ds3103_attach);
 
+
 static const struct dvb_frontend_ops m88ds3103_ops = {
 	.delsys = {SYS_DVBS, SYS_DVBS2},
 	.info = {
