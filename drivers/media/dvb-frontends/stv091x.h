@@ -175,7 +175,7 @@ struct stv {
 	struct stv_base     *base;
 	struct dvb_frontend  fe;
 	struct stv_signal_info signal_info;
-	int                  nr;
+	int                  adapterno; //number of adapter on card, starting at 0
 	u16                  regoff;
 	u8                   i2crpt;
 	u8                   tscfgh;

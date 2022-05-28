@@ -777,7 +777,7 @@ static int wait_for_dmdlock(struct dvb_frontend *fe, bool require_data)
 	state->signal_info.demod_locked = 0;
 	state->signal_info.fec_locked = 0;
 #if 0
-//	fprintk("demod: %d", state->nr);
+//	fprintk("demod: %d", state->adapterno);
 	if(p->algorithm != ALGORITHM_WARM)
 		timeout = 1000;
 	else if (state->symbol_rate <= 1000000) /* SR <= 1Msps */
@@ -1330,7 +1330,7 @@ static int init_diseqc(struct stv *state)
 	return 0;
 }
 
-static int probe(struct stv *state)
+static int stv091x_probe(struct stv *state)
 {
 	u8 reg;
 
@@ -1429,7 +1429,7 @@ static int gate_ctrl(struct dvb_frontend *fe, int enable)
 	 reg = RSTV0910_P2_I2CRPT;
 	 break;
 	 default:
-	 reg = state->nr ? RSTV0910_P2_I2CRPT : RSTV0910_P1_I2CRPT;
+	 reg = state->adapterno ? RSTV0910_P2_I2CRPT : RSTV0910_P1_I2CRPT;
 	}
 
 	/* pr_info("stv0910: gate_ctrl %d\n", enable); */
@@ -1536,7 +1536,12 @@ static int stv091x_get_standard(struct dvb_frontend *fe)
 	return 0;
 }
 
-//return 1 if tuner frequency or bandwidth needs to be updated
+/*
+	retrieve information about modulation, frequency, symbol_rate
+	but not CNR, BER (different from stid135)
+
+	returns 1 if tuner frequency or bandwidth needs to be updated
+ */
 static bool stv091x_get_signal_info(struct dvb_frontend *fe)
 {
 	bool need_retune = false;
@@ -1832,6 +1837,9 @@ static s32 stv091x_narrow_band_signal_power_dbm(struct dvb_frontend *fe)
 	return (x-y) + (-520 - stv091x_agc1_power_gain_dbm(state)) +7991; //unit is 0.001dB
 }
 
+/*
+	read rf level, snr, signal quality, lock_status
+ */
 
 static int read_status(struct dvb_frontend *fe, enum fe_status *status)
 {
@@ -2230,7 +2238,7 @@ static int stv091x_carrier_search(struct stv *state,  s32* frequency_jump)
 	return asperity;
 }
 
-static int tune_once(struct dvb_frontend *fe, bool* need_retune);
+static int stv091x_tune_once(struct dvb_frontend *fe, bool* need_retune);
 
 /*returns true 1 if a rising edge in spectrum was found, 2 for falling edge, 0 for nothing found
  *locked_ret indicates if a asignal could be locked
@@ -2282,7 +2290,7 @@ static int scan_within_tuner_bw(struct dvb_frontend *fe, bool* locked_ret)
 			int ret;
 			int old = p->algorithm;
 			p->algorithm = ALGORITHM_BLIND;
-			ret = tune_once(fe, &need_retune);
+			ret = stv091x_tune_once(fe, &need_retune);
 			dprintk("tune_once returned stat=%d\n", ret);
 			p->algorithm = old;
 			locked= !state->signal_info.has_timedout;
@@ -2304,20 +2312,17 @@ static int scan_within_tuner_bw(struct dvb_frontend *fe, bool* locked_ret)
 }
 
 
-static int tune_once(struct dvb_frontend *fe, bool* need_retune)
+static int stv091x_tune_once(struct dvb_frontend *fe, bool* need_retune)
 {
-	struct stv *state = fe->demodulator_priv;
+	struct stv* state = fe->demodulator_priv;
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
 	struct stv_signal_info* signal_info = &state->signal_info;
 	bool locked;
 	memset(signal_info, 0, sizeof(*signal_info));
-	vprintk(
-					"[%d] delivery_system=%u modulation=%u frequency=%u symbol_rate=%u inversion=%u stream_id=%d\n",
-					state->nr+1,
+	dprintk("[%d] delivery_system=%u modulation=%u frequency=%u symbol_rate=%u inversion=%u stream_id=%d\n",
+					state->adapterno,
 					p->delivery_system, p->modulation, p->frequency,
 					p->symbol_rate, p->inversion, p->stream_id);
-	dprintk("XXXX user set stream_id=0x%x", p->stream_id);
-
 
 	state->signal_info.has_timedout=false;
 	*need_retune = 0;
@@ -2367,11 +2372,18 @@ static int tune_once(struct dvb_frontend *fe, bool* need_retune)
 	}
 
 	state->signal_info.has_timedout = !state->signal_info.has_viterbi;
-	if(locked)
-		*need_retune = stv091x_get_signal_info(fe);
+	if(locked) {
+		/*
+			retrieve information about modulation, frequency, symbol_rate
+			but not CNR, BER (different from stid135)
 
-	vprintk("[%d] set_parameters: locked=%d vit=%d sync=%d timeout=%d\n",
-					state->nr +1,
+			returns 1 if tuner frequency or bandwidth needs to be updated
+		*/
+
+		*need_retune = stv091x_get_signal_info(fe);
+	}
+		vprintk("[%d] set_parameters: locked=%d vit=%d sync=%d timeout=%d\n",
+					state->adapterno,
 					state->signal_info.has_lock,
 					state->signal_info.has_viterbi,					state->signal_info.has_sync,
 					state->signal_info.has_timedout);
@@ -2393,8 +2405,7 @@ static int stv091x_constellation_start(struct dvb_frontend *fe,
 																			 struct dtv_fe_constellation* user, int max_num_samples);
 
 static int tune(struct dvb_frontend *fe, bool re_tune,
-		unsigned int mode_flags,
-		unsigned int *delay, enum fe_status *status)
+								unsigned int mode_flags, unsigned int *delay, enum fe_status *status)
 {
 	struct stv *state = fe->demodulator_priv;
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
@@ -2417,9 +2428,7 @@ static int tune(struct dvb_frontend *fe, bool re_tune,
 		dprintk("tune called with freq=%d srate=%d => %d re_tune=%d\n", p->frequency, p->symbol_rate,
 						state->symbol_rate, re_tune);
 		stv091x_stop_task(fe);
-		r = tune_once(fe, &need_retune);
-		if (r)
-			return r;
+		stv091x_tune_once(fe, &need_retune);
 #if 0
 		/*the following does not seem to work for a DVB-S2/QPSK transponder: 28.2E 11385H.
 			This TP also has a stream_id and m_type set
@@ -2432,8 +2441,14 @@ static int tune(struct dvb_frontend *fe, bool re_tune,
 #endif
 		state->tune_time = jiffies;
 	}
+
 	stv091x_get_signal_info(fe);
+
+	/*
+		read rf level, snr, signal quality, lock_status
+	*/
 	r = read_status(fe, status);
+
 	{
 		int max_num_samples = state->symbol_rate /5 ; //we spend max 500 ms on this
 		if(max_num_samples > 1024)
@@ -2536,7 +2551,7 @@ static int wait_dis(struct stv *state, u8 flag, u8 val)
 {
 	int i;
 	u8 stat;
-	u16 offs = state->nr ? 0x40 : 0;
+	u16 offs = state->adapterno ? 0x40 : 0;
 
 	for (i = 0; i < 10; i++) {
 		stat = read_reg(state, RSTV0910_P1_DISTXSTATUS + offs);
@@ -2552,7 +2567,7 @@ static int wait_dis(struct stv *state, u8 flag, u8 val)
 static int set_tone(struct dvb_frontend *fe, enum fe_sec_tone_mode tone)
 {
 	struct stv *state = fe->demodulator_priv;
-	u16 offs = state->nr ? 0x40 : 0;
+	u16 offs = state->adapterno ? 0x40 : 0;
 
 	switch (tone) {
 	case SEC_TONE_ON:
@@ -2570,7 +2585,7 @@ static int send_master_cmd(struct dvb_frontend *fe,
 			 struct dvb_diseqc_master_cmd *cmd)
 {
 	struct stv *state = fe->demodulator_priv;
-	u16 offs = state->nr ? 0x40 : 0;
+	u16 offs = state->adapterno ? 0x40 : 0;
 	int i;
 
 	write_reg(state, RSTV0910_P1_DISTXCFG + offs, 0x06);
@@ -2592,7 +2607,7 @@ static int recv_slave_reply(struct dvb_frontend *fe,
 static int send_burst(struct dvb_frontend *fe, enum fe_sec_mini_cmd burst)
 {
 	struct stv *state = fe->demodulator_priv;
-	u16 offs = state->nr ? 0x40 : 0;
+	u16 offs = state->adapterno ? 0x40 : 0;
 	u8 value;
 
 	if (burst == SEC_MINI_A) {
@@ -2715,7 +2730,7 @@ static int stv091x_spectrum_start(struct dvb_frontend *fe,
 	state->tuner_bw = stv091x_bandwidth(ROLLOFF_AUTO, bandwidth);
 	s->scale =  FE_SCALE_DECIBEL; //in units of 0.001dB
 
-	dprintk("demod: %d: range=[%d,%d]kHz num_freq=%d resolution=%dkHz bw=%dkHz\n", state->nr,
+	dprintk("demod: %d: range=[%d,%d]kHz num_freq=%d resolution=%dkHz bw=%dkHz\n", state->adapterno,
 					start_frequency, end_frequency,
 					num_freq, resolution, bandwidth/1000);
 
@@ -2803,7 +2818,7 @@ static int stv091x_constellation_start(struct dvb_frontend *fe,
 
 
 	stv091x_stop_task(fe);
-	dprintk("demod: %d: constellation num_samples: req=%d max=%d  mode=%d\n", state->nr, user->num_samples, max_num_samples, (int)cs->constel_select);
+	dprintk("demod: %d: constellation num_samples: req=%d max=%d  mode=%d\n", state->adapterno, user->num_samples, max_num_samples, (int)cs->constel_select);
 
 	if(num_samples ==0) {
 		return -EINVAL;
@@ -2842,7 +2857,7 @@ static int stv091x_constellation_start(struct dvb_frontend *fe,
 
 static int stv091x_stop_task(struct dvb_frontend *fe)
 {
-	struct stv *state = fe->demodulator_priv;
+	struct stv* state = fe->demodulator_priv;
 	struct stv_spectrum_scan_state* ss = &state->scan_state;
 	struct stv_constellation_scan_state* cs = &state->constellation_scan_state;
 	if(ss->freq)
@@ -2884,7 +2899,7 @@ static int stv091x_constellation_get(struct dvb_frontend *fe, struct dtv_fe_cons
 	struct stv *state = fe->demodulator_priv;
 	struct stv_constellation_scan_state* cs = &state->constellation_scan_state;
 	int error = 0;
-	dprintk("demod: %d: constellation num_samples=%d/%d\n", state->nr, cs->num_samples, user->num_samples);
+	dprintk("demod: %d: constellation num_samples=%d/%d\n", state->adapterno, cs->num_samples, user->num_samples);
 	if(user->num_samples > cs->num_samples)
 		user->num_samples = cs->num_samples;
 	if(cs->samples) {
@@ -2952,12 +2967,14 @@ static struct stv_base *match_base(struct i2c_adapter *i2c, u8 adr)
 	return NULL;
 }
 
+/*
+	adapterno is the index of the adapter on a card, starting at 0
+ */
 struct dvb_frontend *stv091x_attach(struct i2c_adapter *i2c,
-				 struct stv091x_cfg *cfg,
-				 int nr)
+																		struct stv091x_cfg *cfg, int adapterno)
 {
-	struct stv *state;
-	struct stv_base *base;
+	struct stv* state;
+	struct stv_base* base;
 
 	state = kzalloc(sizeof(struct stv), GFP_KERNEL);
 	if (!state)
@@ -2966,8 +2983,8 @@ struct dvb_frontend *stv091x_attach(struct i2c_adapter *i2c,
 	state->tscfgh = 0x20 | (cfg->parallel ? 0 : 0x40);
 	state->tsgeneral = (cfg->parallel == 2) ? 0x02 : 0x00;
 	state->i2crpt = 0x0A | ((cfg->rptlvl & 0x07) << 4);
-	state->nr = nr;
-	state->regoff = state->nr ? 0 : 0x200;
+	state->adapterno = adapterno;
+	state->regoff = state->adapterno ? 0 : 0x200;
 	state->search_range_hz = 16000000;
 	state->DEMOD = 0x10; /* Inversion : Auto with reset to 0 */
 	state->ReceiveMode = Mode_None;
@@ -2994,7 +3011,7 @@ struct dvb_frontend *stv091x_attach(struct i2c_adapter *i2c,
 		mutex_init(&base->i2c_lock);
 		mutex_init(&base->reg_lock);
 		state->base = base;
-		if (probe(state) < 0) {
+		if (stv091x_probe(state) < 0) {
 			kfree(base);
 			goto fail;
 		}
@@ -3002,7 +3019,7 @@ struct dvb_frontend *stv091x_attach(struct i2c_adapter *i2c,
 	}
 	state->fe.ops = stv091x_ops;
 	state->fe.demodulator_priv = state;
-	state->nr = nr;
+	state->adapterno = adapterno;
 
 	return &state->fe;
 
