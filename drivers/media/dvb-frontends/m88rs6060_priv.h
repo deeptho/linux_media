@@ -23,22 +23,56 @@
 /*set frequency offset to tuner when symbol rate <5000KSs*/
 #define FREQ_OFFSET_AT_SMALL_SYM_RATE_KHz  3000
 
-struct m88rs6060_dev {
+
+struct m88rs6060_spectrum_scan_state {
+	bool spectrum_present;
+	bool scan_in_progress;
+
+	s32* freq;
+	s32* spectrum;
+	int spectrum_len;
+
+};
+
+struct m88rs6060_constellation_scan_state {
+	bool constallation_present;
+	bool in_progress;
+
+	struct dtv_fe_constellation_sample* samples;
+	int num_samples;
+	int samples_len;
+	int constel_select;
+};
+
+
+struct m88rs6060_isi_struct_t
+{
+	u32 isi_bitset[8]; //bitset; 1 bit indicates corresponding ISI is in use
+};
+typedef  struct m88rs6060_isi_struct_t  m88rs6060_isi_struct;
+
+
+struct m88rs6060_state {
 	struct i2c_client *demod_client;	//demod
 	struct i2c_client *tuner_client;
 	struct regmap *regmap;	//demod
 	enum fe_status fe_status;
 	struct dvb_frontend fe;
 	struct m88rs6060_cfg config;
+	int adapterno; //number of adapter on card, starting at 0
 
 	bool TsClockChecked;  //clock retio
-	bool warm;		// for the init and download fw
+	//bool warm;		// for the init and download fw
 	s32 mclk;		/*main mclk */
 
 	u32 dvbv3_ber;		/* for old DVBv3 API read_ber */
 	u32 frequecy;    //khz
 	u64 post_bit_error;
 	u64 post_bit_count;
+
+	bool satellite_scan;
+	s32 scan_next_frequency;
+	s32 scan_end_frequency;
 
 	void (*write_properties)(struct i2c_adapter * i2c, u8 reg, u32 buf);
 	void (*read_properties)(struct i2c_adapter * i2c, u8 reg, u32 * buf);
@@ -47,7 +81,15 @@ struct m88rs6060_dev {
 	u32 plla_freq;
 	u32 pllb_freq;
 	bool newTP;
-
+	bool        has_signal;   /*tuning has finished*/
+	bool        has_carrier;  /*Some signal was found*/
+	bool        has_viterbi;
+	bool        has_sync;
+	bool        has_timedout;
+	bool        has_lock;
+	m88rs6060_isi_struct isi_list;
+	struct m88rs6060_spectrum_scan_state scan_state;
+	struct m88rs6060_constellation_scan_state constellation_scan_state;
 };
 
 struct m88rs6060_reg_val {
