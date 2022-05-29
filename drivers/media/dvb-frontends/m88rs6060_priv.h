@@ -55,7 +55,7 @@ typedef  struct m88rs6060_isi_struct_t  m88rs6060_isi_struct;
 struct m88rs6060_state {
 	struct i2c_client *demod_client;	//demod
 	struct i2c_client *tuner_client;
-	struct regmap *regmap;	//demod
+	struct regmap* demod_regmap;	//demod
 	enum fe_status fe_status;
 	struct dvb_frontend fe;
 	struct m88rs6060_cfg config;
@@ -66,7 +66,7 @@ struct m88rs6060_state {
 	s32 mclk;		/*main mclk */
 
 	u32 dvbv3_ber;		/* for old DVBv3 API read_ber */
-	u32 frequecy;    //khz
+	u32 frequency;    //khz
 	u64 post_bit_error;
 	u64 post_bit_count;
 
@@ -81,6 +81,8 @@ struct m88rs6060_state {
 	u32 plla_freq;
 	u32 pllb_freq;
 	bool newTP;
+	bool fec_locked;
+	bool demod_locked;
 	bool        has_signal;   /*tuning has finished*/
 	bool        has_carrier;  /*Some signal was found*/
 	bool        has_viterbi;
