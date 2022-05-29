@@ -1837,24 +1837,10 @@ static s32 stv091x_narrow_band_signal_power_dbm(struct dvb_frontend *fe)
 	return (x-y) + (-520 - stv091x_agc1_power_gain_dbm(state)) +7991; //unit is 0.001dB
 }
 
-/*
-	read rf level, snr, signal quality, lock_status
- */
-
-static int read_status(struct dvb_frontend *fe, enum fe_status *status)
+static void init_signal_quality(struct dvb_frontend* fe, struct dtv_frontend_properties *p)
 {
-	struct stv *state = fe->demodulator_priv;
-	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
-	u8 DmdState = 0;
-	u8 DStatus = 0;
-	enum ReceiveMode CurReceiveMode = Mode_None;
-	u32 FECLock = 0;
-	s32 snr;
-	u32 n, d;
-	s32 signal_strength = stv091x_signal_power_dbm(fe); //unit=0.001dB
-
-	/*pr_warn("%s: agc = %d iq_power = %d Padc = %d\n", __func__, agc, iq_power, Padc);*/
-
+	s32 signal_strength; //unit=0.001dB
+	signal_strength = stv091x_signal_power_dbm(fe); //unit=0.001dB
 	p->cnr.len = p->post_bit_error.len = p->post_bit_count.len = 1;
 	p->cnr.stat[0].scale = FE_SCALE_NOT_AVAILABLE;
 	p->post_bit_error.stat[0].scale = FE_SCALE_NOT_AVAILABLE;
@@ -1866,6 +1852,23 @@ static int read_status(struct dvb_frontend *fe, enum fe_status *status)
 
 	p->strength.stat[1].scale = FE_SCALE_RELATIVE;
 	p->strength.stat[1].uvalue = (100 + signal_strength/1000) * 656; //todo: check range
+}
+
+/*
+	read rf level, snr, signal quality, lock_status
+ */
+static int stv091x_read_status(struct dvb_frontend* fe, enum fe_status *status)
+{
+	struct stv *state = fe->demodulator_priv;
+	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
+	u8 DmdState = 0;
+	u8 DStatus = 0;
+	enum ReceiveMode CurReceiveMode = Mode_None;
+	u32 FECLock = 0;
+	s32 snr;
+	u32 n, d;
+
+	init_signal_quality(fe, p);
 
 	//todo: if not locked, and signal is too low FE_HAS_SIGNAL should be removed
 	*status = FE_HAS_SIGNAL;
@@ -1893,7 +1896,7 @@ static int read_status(struct dvb_frontend *fe, enum fe_status *status)
 		state->ReceiveMode = CurReceiveMode;
 		state->DemodLockTime = jiffies;
 		state->FirstTimeLock = 1;
-		GetSignalParameters(state);
+		GetSignalParameters(state); //modcode, pilots, fectype, rolloff TODO: already done in get_signal_info
 		TrackingOptimization(state);
 		write_reg(state, RSTV0910_P2_TSCFGH + state->regoff,
 			 state->tscfgh);
@@ -2382,11 +2385,9 @@ static int stv091x_tune_once(struct dvb_frontend *fe, bool* need_retune)
 
 		*need_retune = stv091x_get_signal_info(fe);
 	}
-		vprintk("[%d] set_parameters: locked=%d vit=%d sync=%d timeout=%d\n",
-					state->adapterno,
-					state->signal_info.has_lock,
-					state->signal_info.has_viterbi,					state->signal_info.has_sync,
-					state->signal_info.has_timedout);
+		vprintk("[%d] locked=%d vit=%d sync=%d timeout=%d\n",
+					state->adapterno, state->signal_info.has_lock,
+					state->signal_info.has_viterbi,	state->signal_info.has_sync, state->signal_info.has_timedout);
 
 	state->DemodLockTime += TUNING_DELAY;
 
@@ -2404,7 +2405,7 @@ static int stv091x_tune_once(struct dvb_frontend *fe, bool* need_retune)
 static int stv091x_constellation_start(struct dvb_frontend *fe,
 																			 struct dtv_fe_constellation* user, int max_num_samples);
 
-static int tune(struct dvb_frontend *fe, bool re_tune,
+static int stv091x_tune(struct dvb_frontend *fe, bool re_tune,
 								unsigned int mode_flags, unsigned int *delay, enum fe_status *status)
 {
 	struct stv *state = fe->demodulator_priv;
@@ -2432,7 +2433,7 @@ static int tune(struct dvb_frontend *fe, bool re_tune,
 #if 0
 		/*the following does not seem to work for a DVB-S2/QPSK transponder: 28.2E 11385H.
 			This TP also has a stream_id and m_type set
-			In this case read_status seems to fail; something extra is needed.
+			In this case stv091x_read_status seems to fail; something extra is needed.
 		 */
 		if(need_retune) {
 			dprintk("re setting frequency, symbol rate and bandwidth\n");
@@ -2441,13 +2442,13 @@ static int tune(struct dvb_frontend *fe, bool re_tune,
 #endif
 		state->tune_time = jiffies;
 	}
-
+#if 0 //already done in 	stv091x_tune_once
 	stv091x_get_signal_info(fe);
-
+#endif
 	/*
-		read rf level, snr, signal quality, lock_status
+			read rf level, snr, signal quality, lock_status
 	*/
-	r = read_status(fe, status);
+	r = stv091x_read_status(fe, status);
 
 	{
 		int max_num_samples = state->symbol_rate /5 ; //we spend max 500 ms on this
@@ -2936,14 +2937,14 @@ static struct dvb_frontend_ops stv091x_ops = {
 	.i2c_gate_ctrl = gate_ctrl,
 	.get_frontend_algo = get_algo,
 	.get_frontend = get_frontend,
-	.tune = tune,
+	.tune = stv091x_tune,
 	.set_tone			= set_tone,
 
 	.diseqc_send_master_cmd		= send_master_cmd,
 	.diseqc_send_burst		= send_burst,
 	.diseqc_recv_slave_reply	= recv_slave_reply,
 
-	.read_status			= read_status,
+	.read_status			= stv091x_read_status,
 	.read_signal_strength		= read_signal_strength,
 	.read_snr			= read_snr,
 	.read_ber			= read_ber,
