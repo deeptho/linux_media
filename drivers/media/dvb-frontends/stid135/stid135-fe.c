@@ -1048,9 +1048,16 @@ static int stid135_tune_(struct dvb_frontend* fe, bool re_tune,
 
 	if(re_tune) {
 		vprintk("[%d] RETUNE: GET SIGNAL\n", state->nr+1);
+		/*
+			 retrieve information about modulation, frequency, symbol_rate
+			 and CNR, BER
+		*/
 		fe_stid135_get_signal_info(state,  &state->signal_info, 0);
 	}
-
+	/*
+		get lock status
+		get rf level, CNR, BER
+	 */
 	r = stid135_read_status_(fe, status);
 
 	vprintk("[%d] setting timedout=%d\n", state->nr+1, !state->signal_info.has_viterbi);
@@ -1212,14 +1219,16 @@ static int stid135_sleep(struct dvb_frontend* fe)
 		return 0;
 
 	dev_dbg(&state->base->i2c->dev, "%s: tuner %d\n", __func__, state->rf_in);
-	dprintk("Starting to sleep");
+	dprintk("sleep called");
 	mutex_lock(&state->base->status_lock);
 	BUG_ON((state->rf_in<0 || state->rf_in>=4));
 	BUG_ON(state->base->tuner_use_count[state->rf_in]==0);
 	if(state->base->tuner_use_count[state->rf_in]>0)
 		state->base->tuner_use_count[state->rf_in]--;
-	if(state->base->tuner_use_count[state->rf_in]==0)
+	if(state->base->tuner_use_count[state->rf_in]==0) {
+		dprintk("Calling TunerStandby 0\n");
 		err = FE_STiD135_TunerStandby(p_params->handle_demod, state->rf_in + 1, 0);
+	}
 	mutex_unlock(&state->base->status_lock);
 
 	if (err != FE_LLA_NO_ERROR)
@@ -1962,6 +1971,7 @@ static int stid135_module_init(void)
 
 static void stid135_module_exit(void)
 {
+	dprintk("module exit\n");
 	return;
 }
 

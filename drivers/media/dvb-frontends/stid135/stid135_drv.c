@@ -3479,7 +3479,7 @@ static fe_lla_error_t estimate_band_power_demod_not_locked(struct stv* state,
 	error |= ChipGetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC1REF(Demod), &reg_value);
 	agc1ref = (u8)reg_value;
 
-	//measured wide band amplititude (power at output of analugue amplifier)
+	//measured wide band amplititude (power at output of analogue amplifier)
 	error |= ChipGetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC1IQIN1(Demod), &reg_value);
 	agciqin1 = (u8)reg_value;
 	error |= ChipGetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC1IQIN0(Demod), &reg_value);
@@ -3749,27 +3749,27 @@ fe_lla_error_t fe_stid135_get_signal_info(struct stv* state,
 				error = FE_LLA_I2C_ERROR;
 			 dprintk("here\n");
 	} else {
-			{
-				bool has_carrier, has_sync, has_viterbi;
-				error |= fe_stid135_get_lock_status(state, &has_carrier, &has_viterbi, &has_sync);
-				dprintk("[%d] Called fe_stid135_get_lock_status: carrier=%d sync=%d\n", state->nr+1, has_carrier, has_sync);
-				//pInfo->has_sync = has_sync;
-				//pInfo->has_carrier = has_carrier;
+		{
+			bool has_carrier, has_sync, has_viterbi;
+			error |= fe_stid135_get_lock_status(state, &has_carrier, &has_viterbi, &has_sync);
+			dprintk("[%d] Called fe_stid135_get_lock_status: carrier=%d sync=%d\n", state->nr+1, has_carrier, has_sync);
+			//pInfo->has_sync = has_sync;
+			//pInfo->has_carrier = has_carrier;
+		}
+		/* transponder_frequency = tuner +  demod carrier
+			 frequency */
+		pInfo->frequency = pParams->lo_frequency / 1000;
+		dprintk("[%d] freq=%d\n", state->nr+1, pInfo->frequency);
+		/* On auxiliary demod, frequency found is not true, we have to pick it on master demod  */
+		/* On auxiliary demod, SR found is not true, we have to pick it on master demod  */
+		if(Demod == FE_SAT_DEMOD_2) {
+			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG2_MODE_HAUTDEBIT(Demod), &(fld_value[0]));
+			if(fld_value[0] == 3) {
+				error |= FE_STiD135_GetCarrierFrequencyOffset_(state->base->ip.handle_demod, FE_SAT_DEMOD_1, pParams->master_clock, &carrier_frequency);
+				carrier_frequency /= 1000;
+				error |= FE_STiD135_GetSymbolRate_(state->base->ip.handle_demod, FE_SAT_DEMOD_1, pParams->master_clock, &(pInfo->symbol_rate));
+				error |= FE_STiD135_TimingGetOffset_(state->base->ip.handle_demod, FE_SAT_DEMOD_1, pInfo->symbol_rate,  &symbolRateOffset);
 			}
-			/* transponder_frequency = tuner +  demod carrier
-			frequency */
-			pInfo->frequency = pParams->lo_frequency / 1000;
-			dprintk("[%d] freq=%d\n", state->nr+1, pInfo->frequency);
-			/* On auxiliary demod, frequency found is not true, we have to pick it on master demod  */
-			/* On auxiliary demod, SR found is not true, we have to pick it on master demod  */
-			if(Demod == FE_SAT_DEMOD_2) {
-				error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG2_MODE_HAUTDEBIT(Demod), &(fld_value[0]));
-				if(fld_value[0] == 3) {
-					error |= FE_STiD135_GetCarrierFrequencyOffset_(state->base->ip.handle_demod, FE_SAT_DEMOD_1, pParams->master_clock, &carrier_frequency);
-					carrier_frequency /= 1000;
-					error |= FE_STiD135_GetSymbolRate_(state->base->ip.handle_demod, FE_SAT_DEMOD_1, pParams->master_clock, &(pInfo->symbol_rate));
-					error |= FE_STiD135_TimingGetOffset_(state->base->ip.handle_demod, FE_SAT_DEMOD_1, pInfo->symbol_rate,  &symbolRateOffset);
-				}
 			}
 			if(Demod == FE_SAT_DEMOD_4) {
 				error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG2_MODE_HAUTDEBIT(Demod), &(fld_value[0]));
@@ -11835,6 +11835,7 @@ fe_lla_error_t fe_stid135_enable_constel_display(struct stv* state, u8 measuring
 			switch(demod) {
 				case FE_SAT_DEMOD_1:
 					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_C8CODEW_PATH_CTRL_GEN_TBUSSEL_TBUS_SELECT(1), 0);
+					//which demodulator (master demod?)
 					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_C8CODEW_TOP_CTRL_TSTOUT_TS, 0);
 				break;
 				case FE_SAT_DEMOD_2:
@@ -12030,7 +12031,7 @@ fe_lla_error_t fe_stid135_set_vtm(struct stv* state,
 			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_VITERBI_VITSCALE(demod), 0x04); // Prevents Viterbi block from locking
 			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_VITERBI_VTH78(demod), 0x00);
 			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_VITERBI_PRVIT(demod), 0x60);
-
+			//select intersymol output
 			error |= fe_stid135_enable_constel_display(state, 5);
 
 			// Program carrier offset
