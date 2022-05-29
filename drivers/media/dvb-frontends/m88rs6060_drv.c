@@ -2653,7 +2653,7 @@ static const struct dvb_frontend_ops m88rs6060_ops = {
 	},
 
 	.init = m88rs6060_init,
-	.release = m88rs6060_detach,
+	//.release = m88rs6060_detach,
 	.tune = m88rs6060_tune,
 
 	.read_status = m88rs6060_read_status,
