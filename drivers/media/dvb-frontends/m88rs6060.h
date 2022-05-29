@@ -109,7 +109,7 @@ enum MT_FE_LOCK_STATE {
 };
 
 struct m88rs6060_cfg {
-	struct dvb_frontend **fe;
+	struct dvb_frontend** fe;
 	u8 demod_adr;
 	u8 tuner_adr;
 	enum m88rs6060_ts_mode ts_mode;	// 1:serial 2: parallel 3:common
@@ -126,6 +126,7 @@ struct m88rs6060_cfg {
 
 	u8 num; // for ci setting;
 	bool HAS_CI; // for 6910se ci
+
 	void (*SetSpeedstatus)(struct i2c_adapter * i2c, int tuner);
 	void (*SetTimes)(struct i2c_adapter * i2c, int tuner,int times);
 	int  (*GetSpeedstatus)(struct i2c_adapter * i2c, int tuner);
@@ -135,8 +136,7 @@ struct m88rs6060_cfg {
 	void (*read_properties)(struct i2c_adapter * i2c, u8 reg, u32 * buf);
 };
 
-extern struct dvb_frontend* m88rs6060_attach(struct i2c_adapter *i2c,
-																			struct m88rs6060_cfg *cfg);
+extern struct dvb_frontend* m88rs6060_attach(struct i2c_adapter *i2c, struct i2c_board_info* board_info, int adapterno);
 extern void m88rs6060_detach(struct dvb_frontend* fe);
 
 #endif

@@ -25,7 +25,6 @@
 
 #ifndef _SI5351_PRIV_H_
 #define _SI5351_PRIV_H_
-struct m88rs6060_dev;
 
 //for si5351
 /* Define definitions */
@@ -222,12 +221,12 @@ struct Si5351IntStatus
 };
 //
 
-void si5351_init(struct m88rs6060_dev *dev);
+void si5351_init(struct m88rs6060_state *dev);
 
-void si5351_set_freq(struct m88rs6060_dev *dev,u32 freq, u32 pll_freq, enum si5351_clock clk);
+void si5351_set_freq(struct m88rs6060_state *dev,u32 freq, u32 pll_freq, enum si5351_clock clk);
 
-void si5351_drive_strength(struct m88rs6060_dev *dev, enum si5351_clock clk, enum si5351_drive drive);
+void si5351_drive_strength(struct m88rs6060_state *dev, enum si5351_clock clk, enum si5351_drive drive);
 
-void si5351_clock_enable(struct m88rs6060_dev *dev,enum si5351_clock clk, u8 enable);
+void si5351_clock_enable(struct m88rs6060_state *dev,enum si5351_clock clk, u8 enable);
 
 #endif // _SI5351_PRIV_H_

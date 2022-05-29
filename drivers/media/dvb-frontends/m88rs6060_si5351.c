@@ -27,7 +27,7 @@
 #include "si5351_priv.h"
 
 //for CI - clock generator
-static int si5351_write(struct m88rs6060_dev *dev,u8 reg,u8 data)
+static int si5351_write(struct m88rs6060_state *dev,u8 reg,u8 data)
 {
 	struct i2c_client *client = dev->demod_client;
 	u8 buf[] = { reg, data };
@@ -46,7 +46,7 @@ static int si5351_write(struct m88rs6060_dev *dev,u8 reg,u8 data)
 	return 0;
 }
 
-static int si5351_write_bulk(struct m88rs6060_dev *dev,u8 reg, u8 len,u8*data)
+static int si5351_write_bulk(struct m88rs6060_state *dev,u8 reg, u8 len,u8*data)
 
 {
 	struct i2c_client *client = dev->demod_client;
@@ -68,7 +68,7 @@ static int si5351_write_bulk(struct m88rs6060_dev *dev,u8 reg, u8 len,u8*data)
 	 return 0;
 }
 
-static u8 si5351_read(struct m88rs6060_dev *dev,u8 reg,u8 *data)
+static u8 si5351_read(struct m88rs6060_state *dev,u8 reg,u8 *data)
 
 {
 	struct i2c_client *client = dev->demod_client;
@@ -221,7 +221,7 @@ static u32 pll_calc(u32 freq, struct Si5351RegSet *reg, int correction)
  * target_pll - Which PLL to set
  *     (use the si5351_pll enum)
  */
-void si5351_set_pll(struct m88rs6060_dev *dev,u32 pll_freq, enum si5351_pll target_pll)
+void si5351_set_pll(struct m88rs6060_state *dev,u32 pll_freq, enum si5351_pll target_pll)
 {
 
 	struct Si5351RegSet pll_reg;
@@ -284,7 +284,7 @@ void si5351_set_pll(struct m88rs6060_dev *dev,u32 pll_freq, enum si5351_pll targ
  *   (use the si5351_clock enum)
  * enable - Set to 1 to enable, 0 to disable
  */
-void si5351_clock_enable(struct m88rs6060_dev *dev,enum si5351_clock clk, u8 enable)
+void si5351_clock_enable(struct m88rs6060_state *dev,enum si5351_clock clk, u8 enable)
 {
 
 	u8 reg_val;
@@ -317,7 +317,7 @@ void si5351_clock_enable(struct m88rs6060_dev *dev,enum si5351_clock clk, u8 ena
  * drive - Desired drive level
  *   (use the si5351_drive enum)
  */
-void si5351_drive_strength(struct m88rs6060_dev *dev, enum si5351_clock clk, enum si5351_drive drive)
+void si5351_drive_strength(struct m88rs6060_state *dev, enum si5351_clock clk, enum si5351_drive drive)
 {
 	u8 reg_val;
 
@@ -484,7 +484,7 @@ static u32 multisynth_recalc(u32 freq, u32 pll_freq, struct Si5351RegSet *reg)
 	return freq;
 }
 
-static void si5351_set_ms_source(struct m88rs6060_dev *dev, enum si5351_clock clk,  enum si5351_pll pll)
+static void si5351_set_ms_source(struct m88rs6060_state *dev, enum si5351_clock clk,  enum si5351_pll pll)
 {
 	u8 reg_val = 0x0c;
 	u8 reg_val2;
@@ -506,13 +506,13 @@ static void si5351_set_ms_source(struct m88rs6060_dev *dev, enum si5351_clock cl
 
 }
 
-void si5351_init(struct m88rs6060_dev *dev)
+void si5351_init(struct m88rs6060_state *dev)
 {
 	si5351_write(dev,SI5351_CRYSTAL_LOAD, SI5351_CRYSTAL_LOAD_10PF);
 	return ;
 }
 
-void si5351_set_freq(struct m88rs6060_dev *dev,u32 freq, u32 pll_freq, enum si5351_clock clk)
+void si5351_set_freq(struct m88rs6060_state *dev,u32 freq, u32 pll_freq, enum si5351_clock clk)
 {
 	struct Si5351RegSet ms_reg;
 	struct Si5351RegSet pll_reg;

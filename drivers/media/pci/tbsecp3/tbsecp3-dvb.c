@@ -1342,9 +1342,9 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 		strlcpy(info.type, "m88rs6060", I2C_NAME_SIZE);
 		info.addr = 0x69;
 		info.platform_data = &m88rs6060_config;
-		client_demod = i2c_new_client_device(i2c, &info);
-		dvb_attach(m88rs6060_attach, i2c, &m88rs6060_config);
-		adapter->i2c_client_demod = client_demod;
+		//client_demod = i2c_new_client_device(i2c, &info);
+		dvb_attach(m88rs6060_attach, i2c, &info, adapter->nr);
+		//adapter->i2c_client_demod = client_demod;
 		if (tbsecp3_attach_sec(adapter, adapter->fe) == NULL) {
 			    dev_warn(&dev->pci_dev->dev,
 			    			    "error attaching lnb control on adapter %d\n",
