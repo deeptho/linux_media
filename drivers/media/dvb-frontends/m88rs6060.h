@@ -136,7 +136,7 @@ struct m88rs6060_cfg {
 	void (*read_properties)(struct i2c_adapter * i2c, u8 reg, u32 * buf);
 };
 
-extern struct dvb_frontend* m88rs6060_attach(struct i2c_adapter *i2c, struct i2c_board_info* board_info, int adapterno);
+extern struct i2c_client*  m88rs6060_attach(struct i2c_adapter *i2c, struct i2c_board_info* board_info, int adapterno);
 extern void m88rs6060_detach(struct dvb_frontend* fe);
 
 #endif

@@ -2784,19 +2784,20 @@ static const struct i2c_device_id m88rs6060_id_table[] = {
 
 void m88rs6060_detach(struct dvb_frontend* fe)
 {
-	//noop
+	struct m88rs6060_state* state = fe->demodulator_priv;
+	struct i2c_client *client = state->demod_client;
+	dprintk("Called fe=%p client=%p\n", fe, client);
+	state->fe.ops.release = NULL;
 }
-
 
 
 /*
 	adapterno is the index of the adapter on a card, starting at 0
  */
-
-struct dvb_frontend* m88rs6060_attach(struct i2c_adapter* i2c, struct i2c_board_info* board_info, int adapterno)
+struct i2c_client* m88rs6060_attach(struct i2c_adapter* i2c, struct i2c_board_info* board_info, int adapterno)
 {
 	struct m88rs6060_state* state;
-	struct i2c_client *client;
+	struct i2c_client* client;
 	int ret;
 	unsigned tmp;
 
@@ -2891,42 +2892,21 @@ struct dvb_frontend* m88rs6060_attach(struct i2c_adapter* i2c, struct i2c_board_
 		si5351_set_freq(state,62500000,0,SI5351_CLK0);
 	 }
 
-	return NULL;
+	return client;
 
  err_client_1_i2c_unregister_device:
 	i2c_unregister_device(state->tuner_client);
  err_regmap_0_regmap_exit:
-	regmap_exit(state->regmap);
+	regmap_exit(state->demod_regmap);
  err_kfree:
 	kfree(state);
 
 	dev_warn(&client->dev, "probe failed = %d\n", ret);
-	return *(cfg->fe);
+	return NULL;
 
 }
 
-
-#if 0
-MODULE_DEVICE_TABLE(i2c, m88rs6060_id_table);
-
-static struct i2c_driver m88rs6060_driver = {
-	.driver = {
-		   .name = "m88rs6060",
-		   },
-	.probe = m88rs6060_probe,
-	.remove = m88rs6060_remove,
-	.id_table = m88rs6060_id_table,
-};
-#endif
-
-
 EXPORT_SYMBOL_GPL(m88rs6060_attach);
-//EXPORT_SYMBOL_GPL(m88rs6060_detach);
-
-
-//module_i2c_driver(m88rs6060_driver);
-
-
 MODULE_AUTHOR("Davin zhang <Davin@tbsdtv.com>");
 MODULE_DESCRIPTION("Montage M88RS6060 driver");
 MODULE_LICENSE("GPL");
