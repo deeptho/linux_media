@@ -1394,8 +1394,35 @@ static void m88rs6060_get_total_carrier_offset(struct m88rs6060_state* state, s3
 	//nval_2 is a correction
 	*carrier_offset_KHz = (nval_1 - nval_2) * state->mclk / (1 << 16);
 	dprintk("Carrier offset =%dkHz %dkHz freq=%d => %d\n", 	(nval_1) * state->mclk / (1 << 16),
-					*carrier_offset_KHz, state->frequency, state->frequency+ *carrier_offset_KHz);
+					*carrier_offset_KHz, state->tuned_frequency, state->tuned_frequency + *carrier_offset_KHz);
 }
+
+
+void m88rs6060_set_symbol_rate(struct m88rs6060_state* state, u32 symbol_rate_KSs) {
+	u32 tmp = ((symbol_rate_KSs << 15) + (state->mclk / 4)) / (state->mclk / 2);
+	regmap_write(state->demod_regmap, 0x61, (u8) (tmp & 0xff));
+	regmap_write(state->demod_regmap, 0x62, (u8) ((tmp >> 8) & 0xff));
+}
+
+static void m88rs6060_get_symbol_rate(struct m88rs6060_state* state, u32* sym_rate_KSs)
+{
+	u16	tmp;
+	u32	sym_rate_tmp;
+	s32	val_0x6d, val_0x6e;
+
+
+	regmap_read(state->demod_regmap, 0x6d, &val_0x6d);
+ 	regmap_read(state->demod_regmap, 0x6e, &val_0x6e);
+
+	tmp = (u16)((val_0x6e << 8) | val_0x6d);
+
+
+	sym_rate_tmp = tmp * state->mclk;
+	sym_rate_tmp /= (1 << 16);
+	dprintk("Symbolrate = %d => %d\n", *sym_rate_KSs, sym_rate_tmp*1000);
+	*sym_rate_KSs = sym_rate_tmp*1000;
+}
+
 
 /*
 	 retrieve information about modulation, frequency, symbol_rate
@@ -1416,21 +1443,9 @@ static bool m88rs6060_get_signal_info(struct dvb_frontend *fe)
 	s32 carrier_offset_KHz;
 	m88rs6060_get_channel_info(state, &info);
 	m88rs6060_get_total_carrier_offset(state, &carrier_offset_KHz);
+	p->frequency = state->tuned_frequency - carrier_offset_KHz;
+	m88rs6060_get_symbol_rate(state, &p->symbol_rate);
 #ifdef TODO
-	read_regs(state, RSTV0910_P2_CFR2, regs, 2);
-	carrier_frequency_offset = (s16)((regs[0]<<8) | regs[1]);
-	carrier_frequency_offset *= ((state->base->mclk>>16) / 1000);
-	state->signal_info.frequency = state->tuner_frequency + carrier_frequency_offset;
-	dprintk("freq: %d/%d/%d offset %d", p->frequency,
-					state->tuner_frequency,
-					state->signal_info.frequency, carrier_frequency_offset);
-	if (carrier_frequency_offset > 1000 || carrier_frequency_offset< -1000)
-		need_retune = true;
-
-	stv091x_symbol_rate(state, &state->symbol_rate, false);
-	p->symbol_rate = state->symbol_rate;
-	p->frequency = state->signal_info.frequency;
-
 	stv091x_get_standard(fe);
 
 	p->delivery_system = state->signal_info.standard;
@@ -1471,6 +1486,7 @@ static bool m88rs6060_get_signal_info(struct dvb_frontend *fe)
 #endif
 		return need_retune;
 }
+
 
 static int m88rs6060_tune_once(struct dvb_frontend *fe)
 {
@@ -1550,7 +1566,7 @@ static int m88rs6060_tune_once(struct dvb_frontend *fe)
 
 	//set tuner pll accordding to desired frequency
 	freq_MHz = (realFreq + 500) / 1000;
-	state->frequency = freq_MHz*1000;
+	state->tuned_frequency = freq_MHz*1000;
 	ret = rs6060_set_pll_freq(state, freq_MHz);
 	if (ret)
 		goto err;
@@ -1573,6 +1589,7 @@ static int m88rs6060_tune_once(struct dvb_frontend *fe)
 	if (ret)
 		goto err;
 
+	//Set High symbol rate mode
 	if ((symbol_rate_KSs > 47100) && (symbol_rate_KSs < 47500)) {
 		regmap_write(state->demod_regmap, 0xe6, 0x00);
 		regmap_write(state->demod_regmap, 0xe7, 0x03);
@@ -1600,10 +1617,8 @@ static int m88rs6060_tune_once(struct dvb_frontend *fe)
 	regmap_write(state->demod_regmap, 0xc4, 0x8);
 	regmap_write(state->demod_regmap, 0xc7, 0x0);
 
-	u32tmp = ((symbol_rate_KSs << 15) + (state->mclk / 4)) / (state->mclk / 2);
-
-	regmap_write(state->demod_regmap, 0x61, (u8) (u32tmp & 0xff));
-	regmap_write(state->demod_regmap, 0x62, (u8) ((u32tmp >> 8) & 0xff));
+	//set symbol rate
+	m88rs6060_set_symbol_rate(state, symbol_rate_KSs);
 
 	regmap_read(state->demod_regmap, 0x76, &tmp);
 	regmap_write(state->demod_regmap, 0x76, 0x30);
@@ -1854,7 +1869,7 @@ static int rs6060_select_xm(struct m88rs6060_state* state, u32 *xm_KHz)
 		{
 			continue;
 		}
-		offset_KHz[i] = (state->frequency % xm_list_KHz[xm_line][i]);
+		offset_KHz[i] = (state->tuned_frequency % xm_list_KHz[xm_line][i]);
 		if(offset_KHz[i] > (xm_list_KHz[xm_line][i] / 2))
 			offset_KHz[i] = xm_list_KHz[xm_line][i] - offset_KHz[i];
 		if(offset_KHz[i] > symbol_rate)

@@ -66,7 +66,7 @@ struct m88rs6060_state {
 	s32 mclk;		/*main mclk */
 
 	u32 dvbv3_ber;		/* for old DVBv3 API read_ber */
-	u32 frequency;    //khz
+	u32 tuned_frequency;    //khz
 	u64 post_bit_error;
 	u64 post_bit_count;
 
