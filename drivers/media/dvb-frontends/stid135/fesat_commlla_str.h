@@ -331,14 +331,11 @@ struct fe_sat_signal_info {
 	///existing data
 	bool        has_signal;   /*tuning has finished*/
 	bool        has_carrier;  /*Some signal was found*/
-	bool        has_viterbi;
-	bool        has_sync;
+	bool        has_viterbi;  /*fec or viterbi locked*/
+	bool        has_sync;     /*dvbs packets detected*/
 	bool        has_timedout;
-	bool        has_lock;
-#if 0 //NEW
-	//BOOL        timedout;
-	BOOL 				locked;		/* Transponder locked					*/
-#endif
+	bool        has_timing_lock; /*timing loop locked*/
+	bool        has_lock;       /* fully locked*/
 	u32 				frequency;	/* Transponder frequency (in KHz)			*/
 	u32 				symbol_rate;	/* Transponder symbol rate  (in Mbds)			*/
 

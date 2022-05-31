@@ -1088,7 +1088,7 @@ fe_lla_error_t fe_stid135_set_carrier_frequency_init_(struct fe_stid135_internal
 	FVCO/4/12=6.2GHz/4/12=130MHz */
 
 		si_register = ((frequency_hz/PLL_FVCO_FREQUENCY)*cfr_factor)/100;
-		dprintk("XXX CFR_INIT set to %d\n", si_register );
+		dprintk("CFR_INIT set to %d\n", si_register );
 		error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_CFRINIT2_CFR_INIT(Demod),
 															 ((u8)(si_register >> 16)));
 		error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_CFRINIT1_CFR_INIT(Demod),
@@ -1195,7 +1195,7 @@ fe_lla_error_t fe_stid135_set_carrier_frequency_init(struct stv* state, s32 freq
 		 FVCO/4/12=6.2GHz/4/12=130MHz */
 	vprintk("[%d] setting frequency=%dkHz\n", state->nr+1, frequency_hz/1000);
 	si_register = ((frequency_hz/PLL_FVCO_FREQUENCY)*cfr_factor)/100;
-	dprintk("XXX CFR_INIT set to %d\n", si_register );
+	dprintk("CFR_INIT set to %d\n", si_register );
 	error |= ChipSetOneRegister(hChip, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRINIT2(state->nr+1),
 															((u8)(si_register >> 16)));
 	error |= ChipSetOneRegister(hChip, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRINIT1(state->nr+1),
@@ -1688,7 +1688,7 @@ fe_lla_error_t fe_stid135_get_lock_status(struct stv* state, bool*carrier_lock, 
 	struct fe_stid135_internal_param *pParams;
 	enum fe_sat_search_state demodState;
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
-	s32 fld_value[4];
+	s32 fld_value[5];
 	int error1;
 	if(carrier_lock)
 		*carrier_lock = false;
@@ -1717,21 +1717,32 @@ fe_lla_error_t fe_stid135_get_lock_status(struct stv* state, bool*carrier_lock, 
 			state->signal_info.has_sync = false;
 		break;
 		case FE_SAT_DVBS2_FOUND:
+			state->signal_info.has_carrier = 	true;
+
 			error |= (error1=ChipGetField(state->base->ip.handle_demod,
 																		FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS_LOCK_DEFINITIF(state->nr+1), &(fld_value[0])));
+			state->signal_info.has_lock = fld_value[0];
+
 			error |= (error1=ChipGetField(state->base->ip.handle_demod,
 																		FLD_FC8CODEW_DVBSX_PKTDELIN_PDELSTATUS1_PKTDELIN_LOCK(state->nr+1), &(fld_value[1])));
+			state->signal_info.has_viterbi = fld_value[0] & fld_value[1];
 
 			//TODO: stv091x does not check TSFIFO_LINEOK
 			//fld_value[2]==0 means that packets with errors have been received
 			error |= (error1=ChipGetField(state->base->ip.handle_demod,
 																		FLD_FC8CODEW_DVBSX_HWARE_TSSTATUS_TSFIFO_LINEOK(state->nr+1), &(fld_value[2])));
+
+			state->signal_info.has_sync = fld_value[0] & fld_value[1] & fld_value[2];
+#if 0			//only for dvb-s1?
 			error |= ChipGetField(state->base->ip.handle_demod,
 													FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS_CAR_LOCK(state->nr+1),
-													&(fld_value[3]));
-			state->signal_info.has_carrier = 	fld_value[3];
-			state->signal_info.has_viterbi = fld_value[0] & fld_value[1];
-			state->signal_info.has_sync = fld_value[0] & fld_value[1] & fld_value[2];
+														&(fld_value[3]));
+#endif
+			error |= ChipGetField(state->base->ip.handle_demod,
+													FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS_TMGLOCK_QUALITY(state->nr+1),
+													&(fld_value[4]));
+			state->signal_info.has_timing_lock =  fld_value[4]&2;
+
 			if(carrier_lock)
 				*carrier_lock =  state->signal_info.has_carrier;
 			if(has_viterbi)
@@ -1746,15 +1757,20 @@ fe_lla_error_t fe_stid135_get_lock_status(struct stv* state, bool*carrier_lock, 
 		break;
 
 		case FE_SAT_DVBS_FOUND:
+			state->signal_info.has_carrier = 	true;
 			error |= (error1=ChipGetField(state->base->ip.handle_demod,
 																		FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS_LOCK_DEFINITIF(state->nr+1), &(fld_value[0])));
-
 			if(error1)
 				dprintk("error=%d\n", error1);
+			state->signal_info.has_lock = fld_value[0];
+
 			error |= (error1=ChipGetField(state->base->ip.handle_demod,
 																		FLD_FC8CODEW_DVBSX_VITERBI_VSTATUSVIT_LOCKEDVIT(state->nr+1), &(fld_value[1])));
 			if(error1)
 				dprintk("error=%d\n", error1);
+
+			state->signal_info.has_viterbi = fld_value[0] & fld_value[1];
+
 
 			//TODO: stv091x does not check TSFIFO_LINEOK
 			//fld_value[2]==0 means that packets with errors have been received
@@ -1762,11 +1778,20 @@ fe_lla_error_t fe_stid135_get_lock_status(struct stv* state, bool*carrier_lock, 
 																		FLD_FC8CODEW_DVBSX_HWARE_TSSTATUS_TSFIFO_LINEOK(state->nr+1), &(fld_value[2])));
 			if(error1)
 				dprintk("error=%d\n", error1);
+
+			state->signal_info.has_sync = fld_value[0] & fld_value[1] & fld_value[2];
+
+#if 0
 			ChipGetField(state->base->ip.handle_demod,
 									 FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS_CAR_LOCK(state->nr+1), &(fld_value[3]));
-			state->signal_info.has_carrier = fld_value[3];
-			state->signal_info.has_viterbi = fld_value[0] & fld_value[1];
-			state->signal_info.has_sync = fld_value[0] & fld_value[1] & fld_value[2];
+			state->signal_info.has_carrier = fld_value[3];//dvbs only carrier lock
+#endif
+
+			error |= ChipGetField(state->base->ip.handle_demod,
+													FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS_TMGLOCK_QUALITY(state->nr+1),
+													&(fld_value[4]));
+			state->signal_info.has_timing_lock =  fld_value[4]&2;
+
 			if(carrier_lock)
 				*carrier_lock = state->signal_info.has_carrier;
 			if(has_viterbi)
@@ -12374,7 +12399,7 @@ fe_lla_error_t get_current_llr(struct stv* state, s32 *current_llr)
 
 	bool        has_signal; Has found something above the noise level.
                           always set to 1 after tuning; should depend on signal level
-	bool        has_carrier; Has found a signal.
+	bool        has_carrier; Has found a dvb signal.
                  DMDSTATE_HEADER_MODE indicates DVBS1 or DVBS2  and DSTATUS_LOCK_DEFINITIF is set (fe_stid135_get_lock_status,
 								 FE_STiD135_GetDemodLock)
 								 DMDSTATE_HEADER_MODE indicates DVBS1 or DVBS2 irrespective of  DSTATUS_LOCK_DEFINITIF (FE_STiD135_GetFECLock),
@@ -12400,4 +12425,58 @@ fe_lla_error_t get_current_llr(struct stv* state, s32 *current_llr)
 	bool        demod_locked;
 	             DSTATUS_LOCK_DEFINITIF is set (FE_STiD135_GetDemodLock)
                Could be associated with has_signal?
+
+
+The transport streams are available on the banks of pins PIO3, PIO4, PIO5, PIO6 and PIO7
+using the Alternative functions 1, 2, 3 or 4. However, the bank of PIO3 is also shared with
+the FSK UART bus when using Alternative function 1.
+
+ while running:
+REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1000                  = 0x00000100
+PIO1_3: general purpose
+PIO1_2: alternative function 1
+PIO1_1: general purpose
+PIO1_0: general purpose
+
+
+736
+
+REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1001                  = 0x00333333
+PIO4_5:  Alternative function 3
+PIO4_4:  Alternative function 3
+PIO4_3:  Alternative function 3
+PIO4_2:  Alternative function 3
+PIO4_1:  Alternative function 3
+PIO4_0:  Alternative function 3
+
+cannot be set to alternative function 5!
+
+
+REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1002                  = 0x00333333
+PIO5_5:  Alternative function 3
+PIO5_4:  Alternative function 3
+PIO5_3:  Alternative function 3
+PIO5_2:  Alternative function 3
+PIO5_1:  Alternative function 3
+PIO5_0:  Alternative function 3
+can be set to alternative function 5!
+
+
+REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1003                  = 0x00000000
+REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1040                  = 0x003f3f04
+REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1050                  = 0x00000000
+REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1055                  = 0x00000000
+REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1060                  = 0x00000000
+REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1100                  = 0x00000000
+REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1101                  = 0x00000000
+REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1102                  = 0x00000000
+REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1103                  = 0x00000000
+REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1104                  = 0x00000000
+REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1105                  = 0x00000000
+REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1106                  = 0x00000000
+REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1107                  = 0x00000000
+REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1108                  = 0x00000205
+REG_
+
+
  */

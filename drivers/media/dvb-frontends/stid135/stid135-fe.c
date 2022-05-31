@@ -370,7 +370,7 @@ static bool pls_search_list(struct dvb_frontend* fe)
 				signal_info->isi = isi;
 				//p->matype = matype_info;
 				p->stream_id = 	(state->mis_mode? (isi&0xff):0xff) | (pls_code & ~0xff);
-				dprintk("XXXX mis_mode=%d isi=0x%x pls_code=0x%x stream_id=0x%x",
+				dprintk("mis_mode=%d isi=0x%x pls_code=0x%x stream_id=0x%x",
 								state->mis_mode, isi, pls_code, p->stream_id);
 				dprintk("SET stream_id=0x%x isi=0x%x\n",p->stream_id, isi);
 				break;
@@ -449,7 +449,7 @@ static bool pls_search_range(struct dvb_frontend* fe)
 			dprintk("selecting stream_id=%d\n", isi);
 			signal_info->isi = isi;
 			p->stream_id = 	(state->mis_mode? (isi&0xff):0xff) | (pls_code & ~0xff);
-			dprintk("XXXX mis_mode=%d isi=0x%x pls_code=0x%x stream_id=0x%x",
+			dprintk("mis_mode=%d isi=0x%x pls_code=0x%x stream_id=0x%x",
 								state->mis_mode, isi, pls_code, p->stream_id);
 
 		  //p->matype = matype_info;
@@ -483,7 +483,7 @@ static int stid135_set_parameters(struct dvb_frontend* fe)
 			"delivery_system=%u modulation=%u frequency=%u symbol_rate=%u inversion=%u stream_id=%d\n",
 			p->delivery_system, p->modulation, p->frequency,
 					p->symbol_rate, p->inversion, p->stream_id);
-	dprintk("XXXX user set stream_id=0x%x", p->stream_id);
+	dprintk("user set stream_id=0x%x", p->stream_id);
 
 	if(blindscan_always) {
 		p->algorithm = ALGORITHM_WARM;
@@ -718,7 +718,7 @@ static int stid135_set_parameters(struct dvb_frontend* fe)
 		state->signal_info.pls_code = ((p->stream_id >> 8)  & 0x3FFFF);
 	}
 
-	dprintk("XXXX set state->signal_info pls_mode=0x%x pls_code=0x%x stream_id=0%x",
+	dprintk("set state->signal_info pls_mode=0x%x pls_code=0x%x stream_id=0%x",
 					state->signal_info.pls_mode, state->signal_info.pls_code, p->stream_id);
 
 	if(	state->signal_info.pls_code ==0)
@@ -897,7 +897,7 @@ static int stid135_get_frontend(struct dvb_frontend* fe, struct dtv_frontend_pro
 									(state->signal_info.pls_mode << 26) |
 									((state->signal_info.pls_code &0x3FFFF)<<8)
 									);
-	dprintk("XXXX set stream_id mis=%d pls_mode=0x%x pls_code=0x%x stream_id=0%x",
+	dprintk("set stream_id mis=%d pls_mode=0x%x pls_code=0x%x stream_id=0%x",
 					state->mis_mode,
 					state->signal_info.pls_mode, state->signal_info.pls_code, p->stream_id);
 
