@@ -2924,11 +2924,8 @@ static struct dvb_frontend_ops stv091x_ops = {
 		.frequency_max_hz 	= 2150 * MHz,
 		.symbol_rate_min	= 100000,
 		.symbol_rate_max	= 70000000,
-		.caps			= FE_CAN_INVERSION_AUTO |
-					 FE_CAN_FEC_AUTO |
-					 FE_CAN_QPSK |
-					 FE_CAN_2G_MODULATION |
-		       FE_CAN_MULTISTREAM,
+		.caps			= FE_CAN_INVERSION_AUTO | FE_CAN_FEC_AUTO |
+		FE_CAN_QPSK | FE_CAN_2G_MODULATION | FE_CAN_MULTISTREAM,
 		.extended_caps = FE_CAN_SPECTRUMSCAN	| FE_CAN_IQ | FE_CAN_BLINDSEARCH
 	},
 	.init				= init,

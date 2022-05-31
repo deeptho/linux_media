@@ -273,8 +273,7 @@ enum fe_sec_mini_cmd {
  * @FE_HAS_SYNC:	Synchronization bytes was found.
  * @FE_HAS_LOCK:	Digital TV were locked and everything is working.
  * @FE_TIMEDOUT:	Fo lock within the last about 2 seconds.
- * @FE_REINIT:		Frontend was reinitialized, application is recommended
- *			to reset DiSEqC, tone and parameters.
+ * @FE_HAS_TIMING_LOCK:		TIming loop has locked
  * @FE_IDLE:		Frontend has gone idle
  *
  */
@@ -286,7 +285,7 @@ enum fe_status {
 	FE_HAS_SYNC		= 0x08,
 	FE_HAS_LOCK		= 0x10,
 	FE_TIMEDOUT		= 0x20,
-	FE_REINIT		= 0x40,
+	FE_HAS_TIMING_LOCK		= 0x40,
 	FE_IDLE		= 0x80,
 };
 
