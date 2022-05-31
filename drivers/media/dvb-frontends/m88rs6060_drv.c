@@ -1355,7 +1355,6 @@ static int m88rs6060_get_channel_info(struct m88rs6060_state *dev,
 		p_info->iPlsCode = 0;
 		p_info->iFrameLength = 0;
 	}
-
 	return 0;
 }
 
@@ -1442,31 +1441,16 @@ static bool m88rs6060_get_signal_info(struct dvb_frontend *fe)
 	struct MT_FE_CHAN_INFO_DVBS2 info;
 	s32 carrier_offset_KHz;
 	m88rs6060_get_channel_info(state, &info);
+	p->modulation = info.mod_mode;
+	p->rolloff = info.roll_off;
+	p->fec_inner = info.code_rate;
+	p->pilot = info.is_pilot_on;
+
 	m88rs6060_get_total_carrier_offset(state, &carrier_offset_KHz);
 	p->frequency = state->tuned_frequency - carrier_offset_KHz;
 	m88rs6060_get_symbol_rate(state, &p->symbol_rate);
+	dprintk("delsys =%d\n", p->delivery_system);
 #ifdef TODO
-	stv091x_get_standard(fe);
-
-	p->delivery_system = state->signal_info.standard;
-
-	regs[0] = read_reg(state, RSTV0910_P2_TMGOBS);
-	rolloff_status = (regs[0]>>6);
-	switch(rolloff_status) {
-		case 0x03:
-			rolloff = 115;
-			break;
-		case 0x02:
-			rolloff = 120;
-			break;
-		case 0x01:
-			rolloff = 125;
-			break;
-		case 0x00:
-		default:
-			rolloff = 135;
-			break;
-		}
 	dprintk("mis_mode=%d isi=%d pls_mode=%d pls_code=%d\n",
 					state->mis_mode, state->signal_info.isi, state->signal_info.pls_mode,
 					state->signal_info.pls_code);
