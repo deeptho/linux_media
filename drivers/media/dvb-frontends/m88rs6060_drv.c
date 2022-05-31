@@ -2863,7 +2863,7 @@ static int m88rs6060_ready(struct m88rs6060_state *dev)
 }
 
 
-
+#if 0
 static int m88rs6060_remove(struct i2c_client *client)
 {
 	struct m88rs6060_state *dev = i2c_get_clientdata(client);
@@ -2884,6 +2884,7 @@ static int m88rs6060_remove(struct i2c_client *client)
 	dprintk("returning");
 	return 0;
 }
+#endif
 
 static const struct i2c_device_id m88rs6060_id_table[] = {
 	{"m88rs6060", 0},
