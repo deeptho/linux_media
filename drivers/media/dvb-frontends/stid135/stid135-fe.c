@@ -931,6 +931,8 @@ static int stid135_read_status_(struct dvb_frontend* fe, enum fe_status *status)
 		*status |= FE_HAS_VITERBI|FE_HAS_LOCK;
 	if(state->signal_info.has_sync)
 		*status |= FE_HAS_SYNC|FE_HAS_LOCK;
+	if(state->signal_info.has_timing_lock)
+		*status |= FE_HAS_TIMING_LOCK;
 	//dprintk("set *status=0x%x\n", *status);
 	if (err != FE_LLA_NO_ERROR) {
 		dev_err(&state->base->i2c->dev, "fe_stid135_get_lock_status error\n");
