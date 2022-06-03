@@ -1,5 +1,5 @@
 /*
- * (c) deeptho@gmail.com 2021
+ * (c) deeptho@gmail.com 2019-2022
  *
  * Copyright notice:
  *
@@ -113,8 +113,16 @@ static void running_sum(s32* pout, s32* psig, int n)
 }
 
 
-static s32 windows[]={2, 4, 6, 8, 10, 12, 14, 16, 20, 24, 28, 32, 40, 48, 56, 64, 72, 80, 88, 96, 112, 128, 144, 160, 176, 192, 208, 224, 240, 256, 288, 230, 352, 384, 416, 448, 480,  512, 576, 640, 704, 768, 832, 896, 960, 1024, 2048};
-
+static s32 windows[] = {2,	 4,		6,
+	8,	10,	 12,	14,
+	16,	18, 20,	 22, 24, 26, 28, 30,
+	32,	36, 40,	 44, 48,	52, 56, 60,
+	64, 72,	 80,	88,	 96,	104, 112, 120,
+	128, 144, 160, 176, 192, 208, 224, 240,
+	256,	 288, 320, 352, 384, 416, 448, 480,
+	512,  576, 640, 704, 768, 832, 896, 960,
+	1024, 1152, 1280, 1408, 1536, 1664, 1792, 1920,
+	2048};
 
 static int check_candidate_tp(struct spectrum_scan_state_t* ss,
 															struct scan_internal_t* si)
@@ -174,8 +182,6 @@ static int check_candidate_tp(struct spectrum_scan_state_t* ss,
 	return 0;
 }
 
-
-
 /*
 	candidate right edges of transponder
 	w is window size
@@ -197,9 +203,9 @@ static void falling_kernel(struct spectrum_scan_state_t* ss,
 	if(delta==0)
 		delta=1;
 	for(i=w2; i < n-delta; ++i) {
-		s32 power = (si->rs[i]-si->rs[i -w2])/w2;
+		s32 power = (si->rs[i]-si->rs[i -w2])/w2; //average strength
 		s32 right = ss->spectrum[i + delta];
-		if (power -right > ss->threshold)
+		if (power - right > ss->threshold)
 			count++;
 		else
 			count =0;
@@ -236,9 +242,9 @@ static void rising_kernel(struct spectrum_scan_state_t* ss,
 	int i;
 	if(delta==0)
 		delta =1;
-	for(i=n-w2-1; i >=delta; --i) {
+	for(i = n - w2 - 1; i >=delta; --i) {
 		s32 power = (si->rs[i + w2]- si->rs[i])/w2;
-		s32 left = ss->spectrum[i-delta];
+		s32 left = ss->spectrum[i - delta];
 		if (power - left > ss->threshold)
 			count++;
 		else
@@ -262,15 +268,15 @@ static void stid135_spectral_init_level(struct spectrum_scan_state_t* ss,
 	si->start_idx =  (si->w*16)/200;
 	if (si->start_idx==0)
 		si->start_idx++;
-	si->end_idx = ss->spectrum_len - (si->w*16)/200;
+	si->end_idx = ss->spectrum_len - (si->w * 16)/200;
 	if (si->end_idx== ss->spectrum_len)
 		si->end_idx--;
 	si->current_idx = si->start_idx;
 	si->last_peak.idx = -1;
 	si->last_rise_idx = -1;
 	si->last_fall_idx = -1;
-	memset(si->peak_marks, 0, sizeof(si->peak_marks[0])*ss->spectrum_len);
-	running_sum(si->rs , ss->spectrum, ss->spectrum_len);
+	memset(si->peak_marks, 0, sizeof(si->peak_marks[0]) * ss->spectrum_len);
+	running_sum(si->rs, ss->spectrum, ss->spectrum_len);
 	falling_kernel(ss, si);
 	rising_kernel(ss, si);
 	//fix_kernel(si->peak_marks, ss->spectrum, ss->spectrum_len, ss->w, ss->threshold, ss->mincount);
