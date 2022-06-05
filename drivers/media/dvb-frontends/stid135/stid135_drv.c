@@ -12304,13 +12304,49 @@ STCHIP_Error_t stvvglna_term(STCHIP_Info_t* hChip)
 	return error;
 }
 
+
+fe_lla_error_t get_raw_bit_rate(struct stv* state, s32 *raw_bit_rate)
+{
+	s32 fld_value[2];
+	struct fe_stid135_internal_param * pParams = &state->base->ip;
+	// Bit rate = Mclk * tsfifo_bitrate / 16384
+
+	ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSBITRATE1_TSFIFO_BITRATE(state->nr+1), &(fld_value[0]));
+	ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSBITRATE0_TSFIFO_BITRATE(state->nr+1), &(fld_value[1]));
+
+	*raw_bit_rate = ((fld_value[0]) << 8) + (fld_value[1]);
+	FE_STiD135_GetMclkFreq(pParams, (u32*)&(fld_value[0]));
+	*raw_bit_rate = (s32)(((fld_value[0])/16384)) * *raw_bit_rate;
+	vprintk("[%d] Bit rate = %d Mbits/s\n", state->nr+1, *raw_bit_rate/1000000);
+
+	return FE_LLA_NO_ERROR;
+}
+
+static int bits_per_sample(int modcode) {
+	if (modcode >= FE_SAT_DVBS1_QPSK_12 ) {
+		if(modcode <= FE_SAT_DVBS1_QPSK_78)
+			return 2; //qpsk
+	} else if(modcode <=  FE_SAT_32APSK_910 ) {
+		if(modcode <= FE_SAT_QPSK_910)
+			return 2; //qpsk
+		if(modcode <= FE_SAT_8PSK_910 )
+			return 3; //psk8
+		if(modcode <=  FE_SAT_16APSK_910)
+			return 4; //16APSK
+		if(modcode <=  FE_SAT_32APSK_910)
+			return 5; //32APSK
+	} else {
+		return 3; //todo: dvbsx codes
+	}
+	return 3; //default
+}
+
 fe_lla_error_t get_current_llr(struct stv* state, s32 *current_llr)
 {
 	s32 max_llr_allowed, raw_bit_rate;
 	s32 fld_value[2];
 	struct fe_stid135_internal_param * pParams = &state->base->ip;
 	// Bit rate = Mclk * tsfifo_bitrate / 16384
-
 	ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSBITRATE1_TSFIFO_BITRATE(state->nr+1), &(fld_value[0]));
 	ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSBITRATE0_TSFIFO_BITRATE(state->nr+1), &(fld_value[1]));
 
@@ -12319,15 +12355,27 @@ fe_lla_error_t get_current_llr(struct stv* state, s32 *current_llr)
 	raw_bit_rate = (s32)(((fld_value[0])/16384)) * raw_bit_rate;
 	vprintk("[%d] Bit rate = %d Mbits/s\n", state->nr+1, raw_bit_rate/1000000);
 	*current_llr = 0;
+
+
 	// LLR = TS bitrate * 1 / PR
+
 	if(state->signal_info.modcode != 0) {
 		if(state->signal_info.standard == FE_SAT_DVBS2_STANDARD) {
+			bool vcm = !((state->signal_info.matype >> 4) & 1);
+			int b = bits_per_sample(state->signal_info.modcode);
+			int tmp = (state->signal_info.symbol_rate * b);
+			dprintk("LLR sr=%d vcm=%d bps=%d raw_bit_rate=%d/%d \n", state->signal_info.symbol_rate, vcm, b, raw_bit_rate/1000, tmp/1000);
 			if(state->signal_info.modcode < sizeof(dvbs2_modcode_for_llr_x100)/sizeof(dvbs2_modcode_for_llr_x100[0])
 				 && (state->signal_info.modcode>=0) //just in case...
 				 )
 				*current_llr = (raw_bit_rate / 100) * dvbs2_modcode_for_llr_x100[state->signal_info.modcode];
 			else {
 				dprintk("[%d] Encountered unknown modcode for DVBS2: %d", state->nr+1, state->signal_info.modcode);
+			}
+			if (*current_llr < tmp) {
+				//prevent freezes on RAI multistreams. The approach works but is not sufficient as modulation may vary
+				dprintk("Increasing LLR from %d to %d\n", *current_llr, tmp);
+				*current_llr = tmp;
 			}
 		}
 		if(state->signal_info.standard == FE_SAT_DVBS1_STANDARD) {
@@ -12340,12 +12388,15 @@ fe_lla_error_t get_current_llr(struct stv* state, s32 *current_llr)
 			}
 		}
 		if(*current_llr != 0)
-			dprintk("[%d] Current LLR  = %d MLLR/s\n", state->nr+1, *current_llr/1000000);
+			dprintk("[%d] Current LLR  = %d MLLR/s raw_bit_rate=%d modcode=%d dvbs1=%d\n", state->nr+1, *current_llr/1000000,
+							raw_bit_rate,  state->signal_info.modcode, state->signal_info.standard == FE_SAT_DVBS1_STANDARD );
 		else
 			dprintk("[%d] LLR unknown\n", state->nr+1);
 
-
-		if((*current_llr/1000)<80000)
+		bool vcm = !((state->signal_info.matype >> 4) & 1);
+		if(false && vcm) //todo
+			fe_stid135_set_maxllr_rate(state, 250); //disable limits; test above (rai multistreams) could still be wrong in case multiple modcodes
+		else if((*current_llr/1000)<80000)
 			fe_stid135_set_maxllr_rate(state, 90);
 		else if(((*current_llr/1000)>80000)&&((*current_llr/1000)<113000))
 			fe_stid135_set_maxllr_rate(state, 129);

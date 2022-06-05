@@ -4,7 +4,7 @@
  * Copyright (C) CrazyCat <crazycat69@narod.ru>
  *
  * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
+ * modify it under the terms of the GNU Geeneral Public License
  * version 2 only, as published by the Free Software Foundation.
  *
  *

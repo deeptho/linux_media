@@ -718,6 +718,7 @@ STCHIP_Error_t stvvglna_set_standby(STCHIP_Info_t* hChip, U8 StandbyOn);
 STCHIP_Error_t stvvglna_get_status(STCHIP_Info_t* hChip, U8 *Status);
 STCHIP_Error_t stvvglna_get_gain(STCHIP_Info_t* hChip,S32 *Gain);
 STCHIP_Error_t stvvglna_term(STCHIP_Info_t* hChip);
+fe_lla_error_t get_raw_bit_rate(struct stv* state, s32* raw_bit_rate);
 fe_lla_error_t get_current_llr(struct stv* state, s32 *current_llr);
 fe_lla_error_t  set_pls_mode_code(struct stv *state, u8 pls_mode, u32 pls_code);
 fe_lla_error_t FE_STiD135_GetFECLock(struct stv* state, u32 TimeOut, BOOL* lock_bool_p);

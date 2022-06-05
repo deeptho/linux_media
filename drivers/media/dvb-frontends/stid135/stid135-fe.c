@@ -572,12 +572,12 @@ static int stid135_set_parameters(struct dvb_frontend* fe)
 	search_params.tuner_index_jump	= 0; // ok with narrow band signal
 	//the following is in Mhz despite what the name suggests
 	err = FE_STiD135_GetLoFreqHz(&state->base->ip, &(search_params.lo_frequency));
-	vprintk("[%d] lo_frequency = %d\n", state->nr+1, search_params.lo_frequency);
-	search_params.lo_frequency *= 1000000;
+	vprintk("[%d] lo_frequency = %d\n", state->nr+1, search_params.lo_frequency); //1 550 000kHz
+	search_params.lo_frequency *= 1000000; ///in Hz
 	if(search_params.search_algo == FE_SAT_BLIND_SEARCH ||
 		 search_params.search_algo == FE_SAT_NEXT) {
 		//search_params.frequency =		950000000 ;
-		vprintk("[%d[ BLIND: set freq=%d lo=%d\n",
+		vprintk("[%d] BLIND: set freq=%d lo=%d\n",
 						state->nr+1,
 						search_params.frequency,	search_params.lo_frequency  );
 	}
@@ -897,12 +897,11 @@ static int stid135_get_frontend(struct dvb_frontend* fe, struct dtv_frontend_pro
 									(state->signal_info.pls_mode << 26) |
 									((state->signal_info.pls_code &0x3FFFF)<<8)
 									);
-	dprintk("set stream_id mis=%d pls_mode=0x%x pls_code=0x%x stream_id=0%x",
+	dprintk("read stream_id mis=%d pls_mode=0x%x pls_code=0x%x stream_id=0%x",
 					state->mis_mode,
 					state->signal_info.pls_mode, state->signal_info.pls_code, p->stream_id);
 
-
-	dprintk("SET stream_id=0x%x isi=0x%x\n",p->stream_id, state->signal_info.isi);
+	dprintk("READ stream_id=0x%x isi=0x%x\n",p->stream_id, state->signal_info.isi);
 	return 0;
 }
 
@@ -961,6 +960,8 @@ static int stid135_read_status_(struct dvb_frontend* fe, enum fe_status *status)
 		return 0;
 	}
 
+	get_raw_bit_rate(state, &p->bit_rate);
+	dprintk("NOW: raw_bit_rate=%d\n", p->bit_rate);
 
 	/* demod has lock */
 
@@ -1398,14 +1399,14 @@ static int stid135_get_spectrum_scan_sweep(struct dvb_frontend* fe,
 					start_frequency, end_frequency,
 					ss->spectrum_len, resolution, bandwidth/1000,
 					pParams->master_clock);
-
+#if 0
 	error |= (error1=FE_STiD135_GetLoFreqHz(pParams, &lo_frequency));
 	if(error1) {
 		dprintk("Failed: err=%d\n", error1);
 		goto __onerror;
 	}
 	lo_frequency *=  1000000; //now in Hz
-
+#endif
 
 
 	//warm start
