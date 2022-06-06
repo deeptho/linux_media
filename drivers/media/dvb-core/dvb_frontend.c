@@ -1483,7 +1483,7 @@ static int dtv_property_process_get(struct dvb_frontend *fe,
 		tvp->u.data = c->frequency;
 		break;
 	case DTV_BITRATE:
-		tvp->u.data = c->bitrate;
+		tvp->u.data = c->bit_rate;
 		break;
 	case DTV_SCAN_START_FREQUENCY:
 		tvp->u.data = c->scan_start_frequency;
