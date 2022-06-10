@@ -1576,6 +1576,10 @@ static bool m88rs6060_get_signal_info(struct dvb_frontend *fe)
 	struct MT_FE_CHAN_INFO_DVBS2 info;
 	s32 carrier_offset_KHz;
 	m88rs6060_get_channel_info(state, &info);
+	p->delivery_system = (info.type == MtFeType_DvbS2) ? SYS_DVBS2 :
+		(info.type == MtFeType_DvbS2X) ? SYS_DVBS2 : //TODO
+		(info.type == MtFeType_DvbS) ? SYS_DVBS2 :
+		SYS_DVBS;
 	p->modulation = info.mod_mode;
 	p->rolloff = info.roll_off;
 	p->fec_inner = info.code_rate;
