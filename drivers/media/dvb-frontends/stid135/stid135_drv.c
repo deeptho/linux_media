@@ -3783,7 +3783,7 @@ fe_lla_error_t fe_stid135_get_signal_info(struct stv* state,
 		}
 		/* transponder_frequency = tuner +  demod carrier
 			 frequency */
-		pInfo->frequency = pParams->lo_frequency / 1000;
+		pInfo->frequency = pParams->lo_frequency / 1000; //allways a dummy value (1.5Ghz)?
 		dprintk("[%d] freq=%d\n", state->nr+1, pInfo->frequency);
 		/* On auxiliary demod, frequency found is not true, we have to pick it on master demod  */
 		/* On auxiliary demod, SR found is not true, we have to pick it on master demod  */

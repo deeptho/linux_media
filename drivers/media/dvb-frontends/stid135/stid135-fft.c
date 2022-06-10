@@ -292,7 +292,7 @@ fe_lla_error_t fe_stid135_init_fft(struct stv*state, int fft_mode, s32 Reg[60])
 	//Store the result
 	error |= ChipSetRegisters(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_THRESHOLD(path),1);
 
-#if 1 //LATEST
+#if 1
 	//do not treat overflow specially
 	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEBUG1_DISABLE_RESCALE(path), 0);
 	//do not remove mean value to disable DC coefficient
@@ -758,14 +758,13 @@ int get_spectrum_scan_fft(struct dvb_frontend *fe)
 	u32* temp_freq = NULL;
 	s32* temp_rf_level = NULL;
 	s32 Reg[60];
-
+	s32 last_avg =0, current_avg =0, correction =0, correction_total = 0;
 
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	fe_lla_error_t error1 = FE_LLA_NO_ERROR;
 
 	u32 idx=0;
 	int i;
-	s32 discont, left=0, right=0;
 	int mode;
 	s32 start_frequency = p->scan_start_frequency;
 	s32 end_frequency = p->scan_end_frequency;
@@ -815,19 +814,16 @@ int get_spectrum_scan_fft(struct dvb_frontend *fe)
 		ss->range = ss->frequency_step * ss->fft_size; //in kHz
 	}
 
-	ss->spectrum_len = (end_frequency-start_frequency + ss->frequency_step-1)
-		/ss->frequency_step;
-
-
+	ss->spectrum_len = (end_frequency-start_frequency + ss->frequency_step-1)/ss->frequency_step;
 	useable_samples2 = ((ss->fft_size*6)/10+1)/2;
 	lost_samples2 = ss->fft_size/2 - useable_samples2;
 
 
 
-	dprintk("demod: %d: tuner:%d range=[%d,%d]kHz resolution=%dkHz num_freq=%d range=%dkHz lost=%d useable=%d\n",
+	dprintk("demod: %d: tuner:%d range=[%d,%d]kHz resolution=%dkHz fft_size=%d num_freq=%d range=%dkHz lost=%d useable=%d\n",
 					state->nr, state->rf_in,
-					start_frequency, end_frequency, ss->frequency_step,
-					ss->spectrum_len, ss->range, lost_samples2, useable_samples2);
+					start_frequency, end_frequency, ss->frequency_step, ss->fft_size,
+					ss->spectrum_len, ss->range, lost_samples2*2, useable_samples2*2);
 
 	ss->freq = kzalloc(ss->spectrum_len * (sizeof(ss->freq[0])), GFP_KERNEL);
 	//ss->candidates = kzalloc(ss->spectrum_len * (sizeof(ss->candidates[0])), GFP_KERNEL); //much too big
@@ -850,6 +846,7 @@ int get_spectrum_scan_fft(struct dvb_frontend *fe)
 	}
 
 	for(idx=0; idx < ss->spectrum_len;) {
+		//the offset useable_samples2 ensures that the first usable index is aligned with start_frequency
 		s32 center_freq = start_frequency + (idx + useable_samples2)* ss->frequency_step;
 		if (kthread_should_stop() || dvb_frontend_task_should_stop(fe)) {
 			//@todo:  should this be moved into  stid135_get_spectrum_scan_fft_one_band?
@@ -865,29 +862,26 @@ int get_spectrum_scan_fft(struct dvb_frontend *fe)
 			goto _end;
 		}
 
-		i=lost_samples2;
-		left = temp_rf_level[i];
-		discont = (left-right);
-
-		//implement triangular weight for window overlap
-		if(idx>= useable_samples2)
-			for(i=1; i< useable_samples2; i++) {
-				s32 correction = ((discont* (useable_samples2+1-i))/(2*useable_samples2));
-				ss->spectrum[idx-i]+= correction;
-				//if(s->rf_band)
-				//	s->rf_band[idx]+= correction;
-			}
-
+		current_avg =0;
+		for(i=lost_samples2-5 ; i < lost_samples2+5 ; ++i)
+			current_avg += temp_rf_level[i];
+		current_avg /= 10;
+		correction = (idx==0) ? 0  : -(current_avg - last_avg);
 		for(i= lost_samples2; i< ss->fft_size-lost_samples2 && idx < ss->spectrum_len; ++idx, i++ ) {
-			s32 correction = (i<lost_samples2+useable_samples2 &&right!=0) ?
-				-(discont*(useable_samples2-i+lost_samples2))/(2*useable_samples2) :0;
 			ss->freq[idx]= temp_freq[i];
-			ss->spectrum[idx] += temp_rf_level[i]+correction;
+			ss->spectrum[idx] = temp_rf_level[i] + correction;
 		}
-		i = ss->fft_size - lost_samples2;
-		right = temp_rf_level[i-1];
 
+		last_avg =0;
+		for(i=ss->fft_size-lost_samples2-5 ; i < ss->fft_size-lost_samples2+5 ; ++i)
+			last_avg += temp_rf_level[i] + correction;
+		last_avg /= 10;
 	}
+
+	for(i=0; i < ss->spectrum_len; ++i) {
+		ss->spectrum[i] -= (correction * (i - ss->spectrum_len/2)) / ss->spectrum_len;
+	}
+
 	ss->spectrum_present = true;
  _end:
 	dprintk("ending error=%d\n", error);
