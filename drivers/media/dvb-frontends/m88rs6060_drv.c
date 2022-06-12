@@ -1986,23 +1986,23 @@ static int m88rs6060_tune_once(struct dvb_frontend *fe, bool blind)
 				}
 			} else {
 				//dvbs
-				dprintk("XXX dvbs\n");
+				dprintk("dvbs tmp=0x%x\n", tmp);
 				state->has_carrier = 1;
-				regmap_read(state->demod_regmap, 0xd, &tmp1);
+				regmap_read(state->demod_regmap, 0x0d, &tmp1);
 				//state->has_carrier = (tmp1>>7)&1;
 
 				regmap_read(state->demod_regmap, 0xd1, &tmp2); //S_CTRL_1
 
-				state->has_timedout = (tmp2>>7)&1; //viterbi failed
 				state->has_signal = (tmp2>>3)&1; //agc lock
+				state->has_carrier = 1;
+				state->fec_locked = (tmp1 >>7) &1;
 				state->has_viterbi = (tmp2>>2)&1; //viterbi locked
+				state->has_timedout = (tmp2>>7)&1; //viterbi failed
 				state->has_sync = (tmp2>>1)^1; //dvbs1 sync bit
 				state->has_timing_lock = (tmp1>>1) & 1;
-				//descrambler_locked = (tmp2>>0)^1; //
-				//regmap_read(state->demod_regmap, 0x8, &tmp1);
-				if((tmp1 & 0x03) == 0x03) {
+				if(state->has_viterbi) {
 					state->demod_locked = true;
-					dprintk("XXX1 lock achieved tmp=0x%x tmp1=0x%x tmp2=0x%x\n", tmp, tmp1, tmp2); //tmp=0x43 tmp1=0x7 tmp2=0x0
+					dprintk("lock achieved tmp=0x%x tmp1=0x%x tmp2=0x%x\n", tmp, tmp1, tmp2);
 					is_dvbs2 = false;
 					break;
 				}
