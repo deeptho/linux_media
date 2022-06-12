@@ -1398,21 +1398,20 @@ static void m88res6060_set_ts_mode(struct m88rs6060_state *dev)
 
 }
 
-static int m88rs6060_get_channel_info(struct m88rs6060_state *dev,
-						struct MT_FE_CHAN_INFO_DVBS2*p_info)
+static int m88rs6060_get_channel_info(struct m88rs6060_state* state, struct MT_FE_CHAN_INFO_DVBS2*p_info)
 {
-	unsigned tmp,val_0x17,val_0x18,ucPLSCode;
-
-	regmap_read(dev->demod_regmap,0x08,&tmp);
+	unsigned tmp, val_0x17, val_0x18, ucPLSCode;
+	bool mis;
+	regmap_read(state->demod_regmap,0x08,&tmp);
 	if((tmp&0x08)==0x08) {    //dvbs2 signal
-		dprintk("delsys=DVBS2\n");
 		p_info->type = MtFeType_DvbS2;
-
-		regmap_write(dev->demod_regmap,0x8a,0x01);
-		regmap_read(dev->demod_regmap,0x17,&val_0x17);
+		mis = ((tmp & 0x20) != 0x20);
+		dprintk("delsys=DVBS2 matype mis=%d\n", mis);
+		regmap_write(state->demod_regmap,0x8a,0x01);
+		regmap_read(state->demod_regmap,0x17,&val_0x17);
 		p_info->is_dummy_frame = (val_0x17&0x40)?true:false;
 
-		regmap_read(dev->demod_regmap,0x18,&val_0x18);
+		regmap_read(state->demod_regmap,0x18,&val_0x18);
 		tmp = (val_0x18>>5) & 0x07;
 		switch(tmp){
 		case 1: p_info->mod_mode = MtFeModMode_8psk; break;
@@ -1425,11 +1424,11 @@ static int m88rs6060_get_channel_info(struct m88rs6060_state *dev,
 		case 0:
 		default: p_info->mod_mode = MtFeModMode_Qpsk; break;
 		}
-		dprintk("modulation=%d\n", p_info->mod_mode);
 
 		p_info->iVcmCycle = val_0x18 &0x1F;
-		regmap_read(dev->demod_regmap,0x19,&ucPLSCode);
+		regmap_read(state->demod_regmap,0x19,&ucPLSCode);
 		p_info->iPlsCode = ucPLSCode;
+
 		p_info->type = mPLSInfoTable[ucPLSCode].mDvbType;
 
 		if(mPLSInfoTable[ucPLSCode].bValid){
@@ -1454,13 +1453,14 @@ static int m88rs6060_get_channel_info(struct m88rs6060_state *dev,
 			matype[5] = sis/mis
 			matype[6:7]: gfp/gcs/gse/ts
 		*/
-		dprintk("matype???=%d/%d cycle=%d\n", p_info->iPlsCode, val_0x18, p_info->iVcmCycle);
+		//todo: add ccm/acm
+		dprintk("modulation=%d iVcmCycle=%d type=%d\n", p_info->mod_mode, p_info->iVcmCycle, p_info->type);
 		dprintk("code_rate=%d\n", p_info->code_rate);
-		regmap_read(dev->demod_regmap,0x89,&tmp);
+		regmap_read(state->demod_regmap,0x89,&tmp);
 		p_info->is_spectrum_inv =
 			((tmp&0x80)!=0)? MtFeSpectrum_Inversion: MtFeSpectrum_Normal;
 		dprintk("inversion=%d\n", p_info->is_spectrum_inv);
-		regmap_read(dev->demod_regmap,0x76,&tmp);
+		regmap_read(state->demod_regmap,0x76,&tmp);
 		tmp &=0x03;
 		if(p_info->type == MtFeType_DvbS2X){  //dvbs2x
 			switch(tmp){
@@ -1485,7 +1485,7 @@ static int m88rs6060_get_channel_info(struct m88rs6060_state *dev,
 		p_info->type = MtFeType_DvbS;
 		p_info->mod_mode = MtFeModMode_Qpsk;
 
-		regmap_read(dev->demod_regmap,0xe6,&tmp);
+		regmap_read(state->demod_regmap,0xe6,&tmp);
 		tmp= (u8)tmp>>5;
 		switch(tmp){
 			case 0 : p_info->code_rate = MtFeCodeRate_7_8;break;
@@ -1497,7 +1497,7 @@ static int m88rs6060_get_channel_info(struct m88rs6060_state *dev,
 		}
 		dprintk("code_rate=%d\n", p_info->code_rate);
 		p_info->is_pilot_on = false;
-		regmap_read(dev->demod_regmap,0xe0,&tmp);
+		regmap_read(state->demod_regmap,0xe0,&tmp);
 		p_info->is_spectrum_inv =
 			((tmp&0x40)!=0)? MtFeSpectrum_Inversion: MtFeSpectrum_Normal;
 		dprintk("inversion=%d\n", p_info->is_spectrum_inv);
@@ -1508,6 +1508,9 @@ static int m88rs6060_get_channel_info(struct m88rs6060_state *dev,
 		p_info->iPlsCode = 0;
 		p_info->iFrameLength = 0;
 	}
+
+	dprintk("matype=0x%x/0x%x/0x%x cycle=%d\n", p_info->matype, p_info->iPlsCode, val_0x18, p_info->iVcmCycle);
+
 	return 0;
 }
 
@@ -1615,7 +1618,7 @@ static bool m88rs6060_get_signal_info(struct dvb_frontend *fe)
 	p->rolloff = info.roll_off;
 	p->fec_inner = info.code_rate;
 	p->pilot = info.is_pilot_on;
-
+	p->matype = info.matype;
 	m88rs6060_get_total_carrier_offset(state, &carrier_offset_KHz);
 	p->frequency = state->tuned_frequency - carrier_offset_KHz;
 	m88rs6060_get_symbol_rate(state, &p->symbol_rate);
