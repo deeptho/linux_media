@@ -1830,12 +1830,6 @@ static int m88rs6060_tune_once(struct dvb_frontend *fe, bool blind)
 	symbol_rate_KSs = p->symbol_rate / 1000;
 	realFreq = p->frequency;
 
-#if 0 //already done below
-	/* global reset */
-	ret = regmap_multi_reg_write(state->demod_regmap, reset_buf, 2);
-	if (ret)
-		goto err;
-#endif
 	m88rs6060_global_reset(state);
 	m88rs6060_clear_stream(state);
 
@@ -1873,19 +1867,6 @@ static int m88rs6060_tune_once(struct dvb_frontend *fe, bool blind)
 
 	regmap_read(state->demod_regmap, 0x08, &tmp); //read current version of register
 
-	dprintk("XXX read tmp=0x%x blind=%d\n", tmp, blind);
-	//if(blind) {
-	//	tmp &= 0x3f; //disable blindscan; clear reserved bit 6; set dvbs1 mode
-	//}
-#if 0
-	if(blind && sym_rate_KSs <= 5000)
-		{
-			handle->dmd_set_reg(handle, 0xc0, 0x04);
-			handle->dmd_set_reg(handle, 0x8a, 0x09);
-			handle->dmd_set_reg(handle, 0x8b, 0x22);
-			handle->dmd_set_reg(handle, 0x8c, 0x88);
-		}
-#endif
 	if(blind) {
 			tmp = (tmp & 0x3b) ;
 			regmap_write(state->demod_regmap, 0x08, tmp);//disable blindscan; clear reserved bit 6; set dvbs1 mode
