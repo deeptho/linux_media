@@ -1624,7 +1624,18 @@ static bool m88rs6060_get_signal_info(struct dvb_frontend *fe)
 	p->frequency = state->tuned_frequency - carrier_offset_KHz;
 	m88rs6060_get_symbol_rate(state, &p->symbol_rate);
 	dprintk("delsys =%d\n", p->delivery_system);
-		return need_retune;
+	if (state->detected_pls_code >=0) {
+		if (!state->pls_active)
+			state->detected_pls_code = 1;
+		p->stream_id = (((state->active_stream_id >=0) ? (state->active_stream_id &0xff) :0xff) |
+										(0 << 26) | //PLS mode: root
+										((state->detected_pls_code &0x3FFFF)<<8)
+										);
+		dprintk("Returning p->stream_id=0x%x active_stream_id=%d\n", p->stream_id, state->active_stream_id);
+	} else { //not blind; keep what we have
+
+	}
+	return need_retune;
 }
 
 
@@ -1822,7 +1833,9 @@ static int m88rs6060_tune_once(struct dvb_frontend *fe, bool blind)
 					p->symbol_rate, p->inversion, p->stream_id);
 
 	state->has_timedout=false;
-
+	state->detected_pls_code  = -1;
+	state-> pls_active = false;
+	state->active_stream_id = -1;
 	symbol_rate_KSs = p->symbol_rate / 1000;
 	realFreq = p->frequency;
 
@@ -1936,12 +1949,12 @@ static int m88rs6060_tune_once(struct dvb_frontend *fe, bool blind)
 			pls[0] = pls_code & 0xff;
 			pls[1] = (pls_code >> 8) & 0xff;
 			pls[2] = (pls_code >> 16) & 3;
+			state->detected_pls_code = -1;
 		}
-
 		dev_dbg(&client->dev, "isi = %d", isi);
 		dev_dbg(&client->dev, "pls mode %d, code %d\n", pls_mode, pls_code);
 		dev_dbg(&client->dev, "pls buf =%*ph \n", 3, pls);
-
+		dprintk("Write: PLS: 0x%x 0x%x 0x%x\n", pls[0], pls[1], pls[2]);
 		ret = regmap_bulk_write(state->demod_regmap, 0x22, pls, 3);
 	}
 
@@ -1949,13 +1962,73 @@ static int m88rs6060_tune_once(struct dvb_frontend *fe, bool blind)
 		//adjust agc
 		m88rs6060_adjust_tuner_agc(state, true);
 	}
+
 	state->demod_locked = false;
 	state->has_timedout = false;
 	//wait_for_dmdlock
 
 	if (blind) {
 		for (i = 0; i < 150; i++) {
-			regmap_read(state->demod_regmap, 0x8, &tmp);
+			regmap_read(state->demod_regmap, 0xbe, &tmp); //?? if pls detection is ready
+			dprintk("reg[0xbe] = 0x%x\n", tmp);
+			if(tmp == 0xfe) { //?? if pls detection is ready
+				u32 tmp1;
+				int iCnt;
+				u32 tmp3;
+				regmap_write(state->demod_regmap, 0xae, 0x4f);
+				regmap_write(state->demod_regmap, 0x7f, 0xc4);
+				regmap_write(state->demod_regmap, 0x24, 0xc0); //ANA_4: clock related?
+
+				regmap_read(state->demod_regmap, 0xca, &tmp3); //?? set spectral inversion of something on
+				tmp3 |= 0x04;
+				regmap_write(state->demod_regmap, 0xca, tmp3); //?? set spectral inversion of something on
+
+				m88rs6060_soft_reset(state);
+
+				iCnt = 0;
+
+				do
+				{
+					iCnt ++;
+					if(iCnt > 1000)
+					{
+						dprintk("PlS timedout\n");
+						return -1;
+					}
+
+					regmap_read(state->demod_regmap, 0x24, &tmp1);  //ANA_4: clock related?
+
+					msleep(1);
+				} while((tmp1 & 0x08) == 0x00);
+				dprintk("PLS locked iCnt=%d\n", iCnt);
+
+				regmap_write(state->demod_regmap, 0xae, 0x09);
+				regmap_write(state->demod_regmap, 0x7f, 0x04);
+
+				regmap_read(state->demod_regmap, 0xca, &tmp3); ////?? set spectral inversion of something off
+				tmp3 &= ~0x04;
+				regmap_write(state->demod_regmap, 0xca, tmp3); //?? set spectral inversion of something off
+
+				//read and rewrite pls code
+				regmap_bulk_read(state->demod_regmap, 0x22, &state->detected_pls_code, 3);
+				dprintk("PLS: before 0x%x\n", state->detected_pls_code);
+				state->detected_pls_code &= 0x03ffff;
+				dprintk("PLS: after 0x%x\n", state->detected_pls_code);
+				regmap_bulk_write(state->demod_regmap, 0x22, &state->detected_pls_code, 3);
+				//end of read and rewrite pls code
+				state->pls_active = true;
+				dprintk("Read: PLS: 0x%x\n", state->detected_pls_code);
+
+				m88rs6060_soft_reset(state);
+				for(iCnt=0 ; iCnt <50 ; ++iCnt) {
+					regmap_read(state->demod_regmap, 0x08, &tmp);
+					if(tmp& 0x8)
+						break;
+				}
+				if(iCnt == 50) {
+					dprintk("tmp=0x%x\n", tmp);
+				}
+			}
 
 			regmap_read(state->demod_regmap, 0x08, &tmp);
 			regmap_read(state->demod_regmap, 0x0d, &tmp1); //get all lock bits
@@ -1980,6 +2053,15 @@ static int m88rs6060_tune_once(struct dvb_frontend *fe, bool blind)
 					regmap_read(state->demod_regmap, 0x89, &tmp); //read spectral inversion
 					regmap_read(state->demod_regmap, 0xca, &tmp1);
 					tmp &= 0x80; //spectrum inverted = tmp!=0
+					regmap_write(state->demod_regmap, 0xca,
+											 (u8) ((tmp1 & 0xf7) | (tmp >> 4) | 0x02));
+					regmap_read(state->demod_regmap, 0xbe, &tmp3); //?? if pls detection is ready
+					if(tmp3 != 0xfe) { //?? if pls detection is (not?) ready
+						dprintk("No pls yet\n");
+						msleep(50);
+						continue;
+					}
+
 					break;
 				}
 			} else {
