@@ -222,4 +222,5 @@ int m88rs6060_set_carrier_offset(struct m88rs6060_state* state, s32 carrier_offs
 int m88rs6060_get_spectrum_scan_fft(struct dvb_frontend *fe,
 																		unsigned int *delay, enum fe_status *status);
 int m88rs6060_get_gain(struct m88rs6060_state *dev, u32 freq_MHz, s32 * p_gain);
+bool m88rs6060_wait_for_analog_agc_lock(struct m88rs6060_state* state);
 #endif

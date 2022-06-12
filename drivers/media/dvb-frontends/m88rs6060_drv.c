@@ -577,6 +577,28 @@ static void m88rs6060_calc_PLS_gold_code(u8 * pNormalCode, u32 PLSGoldCode)
 	return;
 }
 
+
+bool m88rs6060_wait_for_analog_agc_lock(struct m88rs6060_state* state) {
+	int i;
+	unsigned tmp;
+	bool locked=false;
+	for (i=0; i < 50 ; ++i) {
+		regmap_read(state->demod_regmap, 0x0d, &tmp); //lock bits; bits 4..6 are reserved
+		locked = ((tmp & 0x01) == 0x01) ? true : false;
+		msleep(10);
+		if(locked)
+			break;
+		if(kthread_should_stop() || dvb_frontend_task_should_stop(&state->fe))
+			break;
+	}
+
+	if(i == 0) {
+		dprintk("Could not lock agc\n");
+	}
+	return locked;
+}
+
+
 int m88rs6060_get_gain(struct m88rs6060_state *dev, u32 freq_MHz, s32 * p_gain)
 {
 	u32 Total_Gain = 8000;
