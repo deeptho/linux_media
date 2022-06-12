@@ -1967,11 +1967,15 @@ static int m88rs6060_tune_once(struct dvb_frontend *fe, bool blind)
 	if (blind) {
 		for (i = 0; i < 150; i++) {
 			regmap_read(state->demod_regmap, 0x8, &tmp);
+
+			regmap_read(state->demod_regmap, 0x08, &tmp);
+			regmap_read(state->demod_regmap, 0x0d, &tmp1); //get all lock bits
+
 			if (tmp & 0x08) { // reserved bit 3 indicates dvbs2 (1) or dvbs1 (0)
 				//dvbs2
-				dprintk("XXX dvbs2\n");
+				dprintk("dvbs2 tmp=0x%x\n", tmp);
 				state->has_carrier = 1;
-				regmap_read(state->demod_regmap, 0xd, &tmp1); //get all lock bits
+				//regmap_read(state->demod_regmap, 0x0d, &tmp1); //get all lock bits
 				state->fec_locked = (tmp1 >>7) &1;
 				state->has_viterbi = state->fec_locked;
 				state->has_sync = state->fec_locked && (tmp1 >>3) &1;
@@ -1979,16 +1983,21 @@ static int m88rs6060_tune_once(struct dvb_frontend *fe, bool blind)
 				state->has_timing_lock = (tmp1>>1) & 1;
 				state->has_signal = (tmp1 & 1); //analog agc lock
 				if((tmp1 & 0x0f) == 0x0f) {
+					u32 tmp3;
 					state->demod_locked = true;
-					dprintk("XXX2 lock achieved tmp=0x%x tmp1=0x%x\n", tmp, tmp1); //tmp=0x43 tmp1=0x0f
+					dprintk("lock achieved tmp=0x%x tmp1=0x%x\n", tmp, tmp1);
 					is_dvbs2 = true;
+
+					regmap_read(state->demod_regmap, 0x89, &tmp); //read spectral inversion
+					regmap_read(state->demod_regmap, 0xca, &tmp1);
+					tmp &= 0x80; //spectrum inverted = tmp!=0
 					break;
 				}
 			} else {
 				//dvbs
 				dprintk("dvbs tmp=0x%x\n", tmp);
 				state->has_carrier = 1;
-				regmap_read(state->demod_regmap, 0x0d, &tmp1);
+				//regmap_read(state->demod_regmap, 0x0d, &tmp1);
 				//state->has_carrier = (tmp1>>7)&1;
 
 				regmap_read(state->demod_regmap, 0xd1, &tmp2); //S_CTRL_1
@@ -2009,22 +2018,21 @@ static int m88rs6060_tune_once(struct dvb_frontend *fe, bool blind)
 			}
 			msleep(20);
 		}
-	} else {
+	} else { //!blind
 		for (i = 0; i < 150; i++) {
-			regmap_read(state->demod_regmap, 0x8, &tmp);
-			regmap_read(state->demod_regmap, 0xd, &tmp1); //get all lock bits
+			regmap_read(state->demod_regmap, 0x08, &tmp);
 			state->fec_locked = (tmp1 & 0x80); //only valid for dvbs2
 			state->has_viterbi = (tmp1 & 0x80);
 			state->has_carrier = (tmp1 >> 2)&1; //only dvbs1 mode
 			state->has_sync = (tmp1 & 0x08) && //header locked; only dvbs2
 				(tmp1 & 0x04); //timing locked
-			state->has_signal = (tmp1&0x1); //anaolog agc locked
+			state->has_signal = (tmp1&0x1); //analog agc locked
 			if ((tmp1 == 0x8f) //fully locked dvbs2
 					|| (tmp1 == 0xf7) //fully locked dvbs1 //TODO: only check the last three bits, should be 7
 					) {
 				state->demod_locked = true;
 				regmap_read(state->demod_regmap, 0xd1, &tmp2); //S_CTRL_1
-				dprintk("XXX lock achieved tmp=0x%x tmp1=0x%x tmp2=0x%x\n", tmp, tmp1, tmp2);
+				dprintk("lock achieved tmp=0x%x tmp1=0x%x tmp2=0x%x\n", tmp, tmp1, tmp2);
 				is_dvbs2 = (tmp1==0x8f);
 			break;
 			}
@@ -2039,16 +2047,8 @@ static int m88rs6060_tune_once(struct dvb_frontend *fe, bool blind)
 	*/
 	if(state->has_lock)
 		p->delivery_system = is_dvbs2 ? SYS_DVBS2 : SYS_DVBS;
-	dprintk("XXX tmp1=%d lock=%d i=%d delsys=%d\n", tmp1, state->has_lock, i, p->delivery_system );
+	dprintk("tmp1=%d lock=%d i=%d delsys=%d\n", tmp1, state->has_lock, i, p->delivery_system );
 	if (is_dvbs2) { //locked dvbs2
-		regmap_read(state->demod_regmap, 0x89, &tmp); //read spectral inversion
-		regmap_read(state->demod_regmap, 0xca, &tmp1);
-		tmp &= 0x80; //spectrum inverted = tmp!=0
-		regmap_write(state->demod_regmap, 0xca,
-			     (u8) ((tmp1 & 0xf7) | (tmp >> 4) | 0x02));
-		regmap_write(state->demod_regmap, 0xfa, 0x00);
-		regmap_write(state->demod_regmap, 0xf0, 0x00);
-		regmap_write(state->demod_regmap, 0xf0, 0x03);
 
 		m88rs6060_isi_scan(state);
 		memcpy(p->isi_bitset,state->isi_list.isi_bitset, sizeof(p->isi_bitset));
@@ -2422,7 +2422,7 @@ static int m88rs6060_get_matype(struct m88rs6060_state* state, u8* matype)
 	regmap_read(state->demod_regmap, 0x08, &tmp);
 	if((tmp & 0x08) == 0x00)	{// DVB-S // reserved bit 3 indicates dvbs2 (1) or dvbs1 (0)
 		//return -1;
-		dprintk("this is dvbs? tmp=0x%x\n", tmp); //reg 0x08: 0x47 -> 0x03
+		dprintk("this is dvbs? tmp=0x%x\n", tmp);
 	}
 
 	regmap_write(state->demod_regmap, 0xE6, 0x00); //clear register containing code_rate
@@ -2475,11 +2475,13 @@ static int m88rs6060_read_status(struct dvb_frontend *fe, enum fe_status *status
 		ret = regmap_read(state->demod_regmap, 0xd1, &tmp2);  //get lock bits; bits 4..6 are reserved
 		if (ret)
 			goto err;
-		state->has_carrier = 1;
-		state->has_timedout = (tmp2>>7)&1; //viterbi failed
 		state->has_signal = (tmp2>>3)&1; //agc lock
+		state->has_carrier = 1;
+		state->fec_locked = (tmp1 >>7) &1;
 		state->has_viterbi = (tmp2>>2)&1; //viterbi locked
+		state->has_timedout = (tmp2>>7)&1; //viterbi failed
 		state->has_sync = (tmp2>>1)^1; //dvbs1 sync bit
+		state->has_timing_lock = (tmp1>>1) & 1;
 		*status = FE_HAS_SIGNAL;
 		if (state->has_carrier)
 			*status |= FE_HAS_CARRIER;
@@ -2494,13 +2496,13 @@ static int m88rs6060_read_status(struct dvb_frontend *fe, enum fe_status *status
 
 		break;
 	case SYS_DVBS2:
-		ret = regmap_read(state->demod_regmap, 0x0d, &tmp1); //get lock bits; bits 4..6 are reserved
-		if (ret)
-			goto err;
+		//ret = regmap_read(state->demod_regmap, 0x0d, &tmp1); //get lock bits; bits 4..6 are reserved
+		//if (ret)
+		//	goto err;
+		regmap_read(state->demod_regmap, 0x0d, &tmp1); //get all lock bits
 
 		state->has_signal = (tmp2>>3)&1; //agc lock
 		state->has_carrier = 1;
-		regmap_read(state->demod_regmap, 0xd, &tmp1); //get all lock bits
 		state->fec_locked = (tmp1 >>7) &1;
 		state->has_viterbi = state->fec_locked;
 		state->has_sync = state->fec_locked && (tmp1 >>3) &1;
