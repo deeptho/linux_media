@@ -1812,13 +1812,9 @@ static int m88rs6060_tune_once(struct dvb_frontend *fe, bool blind)
 	u32 realFreq, freq_MHz;
 	s16 lpf_offset_KHz = 0;
 	u32 target_mclk = 144000;
-	s32 s32tmp;
 	u32 pls_mode, pls_code;
 	u8 pls[] = { 0x1, 0, 0 }, isi;
-	u8 buf[2];
-	int i = 0, j = 0;
-	unsigned tsid[16];
-	bool mis = false;
+	int i = 0;
 	bool is_dvbs2 = false;
 	dprintk("[%d] delivery_system=%u modulation=%u frequency=%u symbol_rate=%u inversion=%u stream_id=%d\n",
 					state->adapterno,
@@ -1865,15 +1861,14 @@ static int m88rs6060_tune_once(struct dvb_frontend *fe, bool blind)
 	if(m88rs6060_set_demod(state, symbol_rate_KSs, blind ))
 		goto err;
 
-	regmap_read(state->demod_regmap, 0x08, &tmp); //read current version of register
+	regmap_read(state->demod_regmap, 0x08, &tmp); //read modulation
 
+	dprintk("read tmp=0x%x blind=%d\n", tmp, blind);
 	if(blind) {
 			tmp = (tmp & 0x3b) ;
 			regmap_write(state->demod_regmap, 0x08, tmp);//disable blindscan; clear reserved bit 6; set dvbs1 mode
 			regmap_write(state->demod_regmap, 0xe0, 0xf8);/*make viterbi decoder try all fecs; do not invert spectrum; do not
 																							 rotate iq*/
-		//regmap_write(state->demod_regmap, 0xb2, 0x00); //start microcontroller
-		//msleep(70);
 	} else {
 		switch (p->delivery_system) {
 		case SYS_DVBS:
@@ -1893,17 +1888,18 @@ static int m88rs6060_tune_once(struct dvb_frontend *fe, bool blind)
 		}
 	}
 
-//	regmap_write(state->demod_regmap, 0x08, 3);
-//	regmap_write(state->demod_regmap, 0xe0, 0xf8);
-
+	if(blind) {
+		if( symbol_rate_KSs <= 5000) {
+			regmap_write(state->demod_regmap, 0xc0, 0x04);
+			regmap_write(state->demod_regmap, 0x8a, 0x09);
+			regmap_write(state->demod_regmap, 0x8b, 0x22);
+			regmap_write(state->demod_regmap, 0x8c, 0x88);
+		}
+	}
 	ret = m88rs6060_set_carrier_offset(state, lpf_offset_KHz);
 
-	if (ret)
-		goto err;
-
 	if(!blind) {
-	//????
-	ret = regmap_write(state->demod_regmap, 0x00, 0x00);
+		ret = regmap_write(state->demod_regmap, 0x00, 0x00);
 	if (ret)
 		goto err;
 	}
@@ -1916,13 +1912,6 @@ static int m88rs6060_tune_once(struct dvb_frontend *fe, bool blind)
 		msleep(70);
 	}
 
-//	ret = regmap_write(state->demod_regmap, 0xfe, 0xe1);
-//	if (ret)
-//		goto err;
-
-//	ret = regmap_write(state->demod_regmap, 0xea, 0x4);
-	//if (ret)
-//		goto err;
 	if(! blind) {
 		if (p->stream_id != NO_STREAM_ID_FILTER) {
 			isi = p->stream_id & 0xff;
@@ -1933,7 +1922,7 @@ static int m88rs6060_tune_once(struct dvb_frontend *fe, bool blind)
 		} else {
 			isi = 0;
 			pls_mode = 0;
-		pls_code = 1;
+			pls_code = 1;
 		}
 
 		if (p->scrambling_sequence_index) {
@@ -2049,7 +2038,6 @@ static int m88rs6060_tune_once(struct dvb_frontend *fe, bool blind)
 		p->delivery_system = is_dvbs2 ? SYS_DVBS2 : SYS_DVBS;
 	dprintk("tmp1=%d lock=%d i=%d delsys=%d\n", tmp1, state->has_lock, i, p->delivery_system );
 	if (is_dvbs2) { //locked dvbs2
-
 		m88rs6060_isi_scan(state);
 		memcpy(p->isi_bitset,state->isi_list.isi_bitset, sizeof(p->isi_bitset));
 		m88rs6060_select_stream(state, isi);
@@ -2461,12 +2449,13 @@ static int m88rs6060_read_status(struct dvb_frontend *fe, enum fe_status *status
 	unsigned int tmp1, tmp2;
 	u8 buf[3];
 	u16 temp;
+	u8 matype;
 	dev_dbg(&client->dev, "%s\n", __func__);
 	init_signal_quality(fe, p);
 
 	//todo: if not locked, and signal is too low FE_HAS_SIGNAL should be removed
 	*status = FE_HAS_SIGNAL;
-
+	dprintk("roll_off=0x%x\n", p->rolloff);
 	switch (p->delivery_system) {
 	case SYS_DVBS:
 		ret = regmap_read(state->demod_regmap, 0x0d, &tmp1);  //get lock bits; bits 4..6 are reserved
@@ -3075,16 +3064,11 @@ static int m88rs6060_tune(struct dvb_frontend *fe, bool re_tune,
 	state->satellite_scan = false;
 
 	if (re_tune) {
-		dprintk("XXX tune called with freq=%d srate=%d re_tune=%d blind=%d algo=%d\n", p->frequency, p->symbol_rate, re_tune, blind, p->algorithm);
+		dprintk("tune called with freq=%d srate=%d re_tune=%d blind=%d algo=%d\n", p->frequency, p->symbol_rate, re_tune, blind, p->algorithm);
 		m88rs6060_stop_task(fe);
 		m88rs6060_tune_once(fe, blind);
-#ifdef TODO
-		state->tune_time = jiffies;
-#endif
 	}
-#if 0 //already done in 	m88rs6060_tune_once
-	m88rs6060_get_signal_info(fe);
-#endif
+
 	/*
 		read rf level, snr, signal quality, lock_status
 	*/
@@ -3357,30 +3341,6 @@ static int m88rs6060_ready(struct m88rs6060_state *dev)
 	return ret;
 
 }
-
-
-#if 0
-static int m88rs6060_remove(struct i2c_client *client)
-{
-	struct m88rs6060_state *dev = i2c_get_clientdata(client);
-	dev_dbg(&client->dev, "\n");
-	dprintk("client=%p tuner_client=%p id=?? dev=%p dev->fe=%p tuner_client=%p\n", client,
-					dev->tuner_client,
-					dev, (dev ? &dev->fe : 0),  (dev ? &dev->tuner_client : 0));
-	dprintk("dev=%p remove\n", &client->dev);
-	if(dev->tuner_client)
-	   i2c_unregister_device(dev->tuner_client);
-
-	dev->fe.ops.release = NULL;
-	dev->fe.demodulator_priv = NULL;
-
-	kfree(dev);
-	dprintk("Clearing client data");
-	i2c_set_clientdata(client, 0);
-	dprintk("returning");
-	return 0;
-}
-#endif
 
 static const struct i2c_device_id m88rs6060_id_table[] = {
 	{"m88rs6060", 0},
