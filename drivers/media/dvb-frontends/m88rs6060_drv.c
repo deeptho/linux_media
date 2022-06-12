@@ -1266,7 +1266,7 @@ static int rs6060_set_bb(struct m88rs6060_state *dev, u32 symbol_rate_KSs, s32 l
 
 	f3dB = symbol_rate_KSs * 9 / 14 + 2000; //bw approx 1.3 * symbolrate
 	f3dB += lpf_offset_KHz;
-	f3dB = clamp_val(f3dB, 6000U, 43000U);
+	f3dB = clamp_val(f3dB, 100U, /*43000U*/ 60000U);
 	reg40 = f3dB / 1000;
 
 	return rs6060_set_tuner_reg(dev, 0x40, reg40);
