@@ -1523,6 +1523,7 @@ int m88rs6060_set_carrier_offset(struct m88rs6060_state* state, s32 carrier_offs
 	tmp = carrier_offset_KHz * 0x10000;
 
 	tmp = (2 * tmp + state->mclk) / (2 * state->mclk);
+
 	buf[0] = tmp & 0xff;
 	buf[1] = (tmp >> 8) & 0xff;
 	ret = regmap_bulk_write(state->demod_regmap, 0x5e, buf, 2);
@@ -1623,24 +1624,6 @@ static bool m88rs6060_get_signal_info(struct dvb_frontend *fe)
 	p->frequency = state->tuned_frequency - carrier_offset_KHz;
 	m88rs6060_get_symbol_rate(state, &p->symbol_rate);
 	dprintk("delsys =%d\n", p->delivery_system);
-#ifdef TODO
-	dprintk("mis_mode=%d isi=%d pls_mode=%d pls_code=%d\n",
-					state->mis_mode, state->signal_info.isi, state->signal_info.pls_mode,
-					state->signal_info.pls_code);
-	p->stream_id = ((state->mis_mode ? (state->signal_info.isi &0xff) :0xff) |
-									(state->signal_info.pls_mode << 26) |
-									((state->signal_info.pls_code &0x3FFFF)<<8)
-									);
-
-		bandwidth_hz = (state->symbol_rate * rolloff) / 100;
-
-		if (state->tuner_bw > bandwidth_hz || state->tuner_bw < (bandwidth_hz*8)/10)
-			need_retune = true; // ask tuner to change its bandwidth, except duting blind scan
-
-		dprintk("SR: %d, BW: %d => %d need_retune=%d\n", state->symbol_rate, state->tuner_bw, bandwidth_hz, need_retune);
-		stv091x_isi_scan(fe);
-		return need_retune;
-#endif
 		return need_retune;
 }
 
@@ -1728,6 +1711,53 @@ static int m88rs6060_set_demod(struct m88rs6060_state* state, u32 symbol_rate_KS
 		regmap_write(state->demod_regmap, 0x24, pls[2]);
 	}
 	return 0;
+}
+
+static void m88rs6060_isi_scan(struct m88rs6060_state* state)
+{
+	u32 tmp;
+	u8 i;
+	int newcount=0;
+	int count= 1;
+	int totcount = 500;
+	while(count>0 &&totcount-->=0)  {
+		newcount = 0;
+		regmap_write(state->demod_regmap, 0xfa, 0x00);
+		regmap_write(state->demod_regmap, 0xf0, 0x00);
+		regmap_write(state->demod_regmap, 0xf0, 0x03);
+		msleep(1);
+		//read number of streams detected
+		regmap_read(state->demod_regmap, 0xf1, &tmp);
+		tmp &= 0x1f;
+		dprintk("ISI cnt = %d \n", tmp);
+		for (i = 0; i < tmp; i++) {
+			u32 stream_id;
+			uint32_t mask;
+			u8 j;
+			regmap_write(state->demod_regmap, 0xf2, j); //write the index of an ISI slot to read out
+			regmap_read(state->demod_regmap, 0xf3, &stream_id); //read ISI at slot
+
+			j = stream_id /32;
+			mask = ((uint32_t)1)<< (stream_id%32);
+			if(!(state->isi_list.isi_bitset[j] & mask)) {
+				newcount++;
+				dprintk("new ISI = %d\n", stream_id);
+			}
+			state->isi_list.isi_bitset[j] |= mask;
+		}
+		if(newcount>0)
+			count=50;
+		else
+			count --;
+		if(kthread_should_stop() || dvb_frontend_task_should_stop(&state->fe))
+			return;
+	}
+
+	if(state->isi_list.isi_bitset[0]&0x1) {
+		dprintk("skipping stream_id=0\n");
+		state->isi_list.isi_bitset[0] &= ~0x1;
+	}
+
 }
 
 static int m88rs6060_tune_once(struct dvb_frontend *fe, bool blind)
@@ -1998,27 +2028,12 @@ static int m88rs6060_tune_once(struct dvb_frontend *fe, bool blind)
 		regmap_write(state->demod_regmap, 0xf0, 0x00);
 		regmap_write(state->demod_regmap, 0xf0, 0x03);
 
-		msleep(20);
-		regmap_read(state->demod_regmap, 0xf1, &tmp1);
-		tmp1 &= 0x1f;
-		dev_dbg(&client->dev, "ISI cnt = %d \n", tmp1);
-		for (j = 0; j < tmp1; j++) {
-			regmap_write(state->demod_regmap, 0xf2, j); //write the index of an ISI slot to read out
-			regmap_read(state->demod_regmap, 0xf3, &tsid[j]); //read ISI at slot
-			dev_dbg(&client->dev, "ISI = %d \n", tsid[j]);
-		}
-		for (j = 0; j < tmp1; j++)
-			if (tsid[j] == isi) {
-				mis = true;
-				break;
-			}
-
-		if (mis)
-			regmap_write(state->demod_regmap, 0xf5, isi);
-		else
-			regmap_write(state->demod_regmap, 0xf5, tsid[0]);
+		m88rs6060_isi_scan(state);
+		memcpy(p->isi_bitset,state->isi_list.isi_bitset, sizeof(p->isi_bitset));
+#if 0 //todo
+		m88rs6060_select_stream(state, isi);
+#endif
 	}
-
 	state->TsClockChecked = true;
 
 	if(state->config.HAS_CI)
@@ -2379,6 +2394,41 @@ static void init_signal_quality(struct dvb_frontend* fe,	struct dtv_frontend_pro
 
 }
 
+static int m88rs6060_get_matype(struct m88rs6060_state* state, u8* matype)
+{
+	u32 tmp;
+	int i;
+	*matype = 0;
+	regmap_read(state->demod_regmap, 0x08, &tmp);
+	if((tmp & 0x08) == 0x00)	{// DVB-S // reserved bit 3 indicates dvbs2 (1) or dvbs1 (0)
+		//return -1;
+		dprintk("this is dvbs? tmp=0x%x\n", tmp); //reg 0x08: 0x47 -> 0x03
+	}
+
+	regmap_write(state->demod_regmap, 0xE6, 0x00); //clear register containing code_rate
+	regmap_write(state->demod_regmap, 0xE8, 0x00);
+	regmap_write(state->demod_regmap, 0xE8, 0x01);
+
+
+	for(i=0; i < 100; ++i)  {
+	 	regmap_read(state->demod_regmap, 0xE8, &tmp);
+
+		if((tmp & 0x10) == 0x10) {
+			break;
+		}
+
+		msleep(1);
+	}
+
+	if(i != 100) {
+		regmap_read(state->demod_regmap, 0xE9, &tmp);
+		dprintk("delsys=DVBS2 matype reg[0xe9]=%d i=%d\n", tmp, i);
+		*matype = tmp;
+	}
+
+	return 0;
+}
+
 /*
 	read rf level, snr, signal quality, lock_status
  */
@@ -2437,6 +2487,11 @@ static int m88rs6060_read_status(struct dvb_frontend *fe, enum fe_status *status
 		state->has_signal = (tmp1>>2) & 1;  //carrier lock ; //only dvbs1 ?
 		state->has_timing_lock = (tmp1>>1) & 1;
 		state->has_signal = (tmp1 & 1); //analog agc lock
+
+		if(m88rs6060_get_matype(state, &p_info->matype)<0)
+			dprintk("No matype\n");
+
+		memcpy(p->isi_bitset,state->isi_list.isi_bitset, sizeof(p->isi_bitset));
 		*status = FE_HAS_SIGNAL;
 		if (state->has_carrier)
 			*status |= FE_HAS_CARRIER;

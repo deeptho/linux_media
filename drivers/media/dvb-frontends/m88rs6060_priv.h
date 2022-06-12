@@ -190,6 +190,7 @@ struct MT_FE_CHAN_INFO_DVBS2 {
 	enum MT_FE_ROLL_OFF roll_off;
 	enum MT_FE_CODE_RATE code_rate;
 	bool is_pilot_on;
+	u8 matype;
 	enum MT_FE_SPECTRUM_MODE is_spectrum_inv;
 	bool is_dummy_frame;
 	s8 iVcmCycle;
