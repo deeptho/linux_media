@@ -2,7 +2,7 @@
 
 stid135-objs := stid135-fe.o \
 	        stid135-fft.o \
-	        stid135-scan.o \
+	        neumo-scan.o \
 		chip.o \
 		stfe_utilities.o \
 		oxford_anafe_func.o \

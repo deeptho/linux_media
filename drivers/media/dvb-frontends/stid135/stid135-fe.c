@@ -1367,7 +1367,7 @@ static int stid135_get_spectrum_scan_sweep(struct dvb_frontend* fe,
 																						 unsigned int *delay,  enum fe_status *status)
 {
 	struct stv *state = fe->demodulator_priv;
-	struct spectrum_scan_state_t* ss = &state->scan_state;
+	struct spectrum_scan_state* ss = &state->spectrum_scan_state;
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
 	struct fe_stid135_internal_param * pParams = (struct fe_stid135_internal_param *) &state->base->ip;
 	s32 lo_frequency;
@@ -1520,7 +1520,7 @@ static int stid135_get_spectrum_scan_sweep(struct dvb_frontend* fe,
 static int stid135_stop_task(struct dvb_frontend* fe)
 {
 	struct stv *state = fe->demodulator_priv;
-	struct spectrum_scan_state_t* ss = &state->scan_state;
+	struct spectrum_scan_state* ss = &state->spectrum_scan_state;
 	struct constellation_scan_state* cs = &state->constellation_scan_state;
 	mutex_lock(&state->base->status_lock);
 	if(ss->freq)
@@ -1543,7 +1543,7 @@ static int stid135_spectrum_start(struct dvb_frontend* fe,
 																	unsigned int *delay, enum fe_status *status)
 {
 	struct stv *state = fe->demodulator_priv;
-	struct spectrum_scan_state_t* ss = &state->scan_state;
+	struct spectrum_scan_state* ss = &state->spectrum_scan_state;
 	int ret=0;
 	fe_lla_error_t err = FE_LLA_NO_ERROR;
 	stid135_stop_task(fe);
@@ -1574,22 +1574,22 @@ int stid135_spectrum_get(struct dvb_frontend* fe, struct dtv_fe_spectrum* user)
 	struct stv *state = fe->demodulator_priv;
 	int error=0;
 	mutex_lock(&state->base->status_lock);
-	if (user->num_freq> state->scan_state.spectrum_len)
-		user->num_freq = state->scan_state.spectrum_len;
-	if (user->num_candidates > state->scan_state.num_candidates)
-		user->num_candidates = state->scan_state.num_candidates;
-	if(state->scan_state.freq && state->scan_state.spectrum) {
+	if (user->num_freq> state->spectrum_scan_state.spectrum_len)
+		user->num_freq = state->spectrum_scan_state.spectrum_len;
+	if (user->num_candidates > state->spectrum_scan_state.num_candidates)
+		user->num_candidates = state->spectrum_scan_state.num_candidates;
+	if(state->spectrum_scan_state.freq && state->spectrum_scan_state.spectrum) {
 		if(user->freq && user->num_freq > 0 &&
-			 copy_to_user((void __user*) user->freq, state->scan_state.freq, user->num_freq * sizeof(__u32))) {
+			 copy_to_user((void __user*) user->freq, state->spectrum_scan_state.freq, user->num_freq * sizeof(__u32))) {
 			error = -EFAULT;
 		}
 		if(user->rf_level && user->num_freq > 0 &&
-			 copy_to_user((void __user*) user->rf_level, state->scan_state.spectrum, user->num_freq * sizeof(__s32))) {
+			 copy_to_user((void __user*) user->rf_level, state->spectrum_scan_state.spectrum, user->num_freq * sizeof(__s32))) {
 			error = -EFAULT;
 		}
 		if(user->candidates && user->num_candidates >0 &&
 			 copy_to_user((void __user*) user->candidates,
-										 state->scan_state.candidates,
+										 state->spectrum_scan_state.candidates,
 										 user->num_candidates * sizeof(struct spectral_peak_t))) {
 			error = -EFAULT;
 		}
@@ -1622,7 +1622,7 @@ static int stid135_scan_sat(struct dvb_frontend* fe, bool init,
 	bool found=false;
 	s32 minfreq=0;
 	if(init) {
-		if(state->scan_state.scan_in_progress) {
+		if(state->spectrum_scan_state.scan_in_progress) {
 			stid135_stop_task(fe); //cleanup older scan
 		}
 		mutex_lock(&state->base->status_lock);
@@ -1633,7 +1633,7 @@ static int stid135_scan_sat(struct dvb_frontend* fe, bool init,
 			return -1; //
 		}
 	} else {
-		if(!state->scan_state.scan_in_progress) {
+		if(!state->spectrum_scan_state.scan_in_progress) {
 			dprintk("Error: Called with init==false, but scan was  not yet started\n");
 			mutex_lock(&state->base->status_lock);
 			ret = stid135_spectral_scan_start(fe);
@@ -1642,8 +1642,8 @@ static int stid135_scan_sat(struct dvb_frontend* fe, bool init,
 				return -1; //
 			}
 		}
-		minfreq= state->scan_state.next_frequency;
-		dprintk("SCAN SAT next_freq=%dkHz\n", state->scan_state.next_frequency);
+		minfreq= state->spectrum_scan_state.next_frequency;
+		dprintk("SCAN SAT next_freq=%dkHz\n", state->spectrum_scan_state.next_frequency);
 	}
 	dprintk("SCAN SAT delsys=%d\n", p->delivery_system);
 	while(!found) {
@@ -1703,14 +1703,14 @@ static int stid135_scan_sat(struct dvb_frontend* fe, bool init,
 		}
 		found = !(*status & FE_TIMEDOUT) && (*status &FE_HAS_LOCK);
 		if(found) {
-			state->scan_state.next_frequency = p->frequency + (p->symbol_rate*135)/200000;
+			state->spectrum_scan_state.next_frequency = p->frequency + (p->symbol_rate*135)/200000;
 			dprintk("BLINDSCAN: GOOD freq=%dkHz SR=%d kS/s returned status=%d next=%dkHz\n", p->frequency, p->symbol_rate/1000, *status,
-							state->scan_state.next_frequency /1000);
-			state->scan_state.num_good++;
+							state->spectrum_scan_state.next_frequency /1000);
+			state->spectrum_scan_state.num_good++;
 		}
 		else {
 			dprintk("BLINDSCAN: BAD freq=%dkHz SR=%d kS/s returned status=%d\n", p->frequency, p->symbol_rate/1000, *status);
-			state->scan_state.num_bad++;
+			state->spectrum_scan_state.num_bad++;
 		}
 	}
 	mutex_unlock(&state->base->status_lock);

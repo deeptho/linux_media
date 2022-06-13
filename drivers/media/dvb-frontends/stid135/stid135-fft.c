@@ -750,7 +750,7 @@ int get_spectrum_scan_fft(struct dvb_frontend *fe)
 {
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
 	struct stv *state = fe->demodulator_priv;
-	struct spectrum_scan_state_t* ss = &state->scan_state;
+	struct spectrum_scan_state* ss = &state->spectrum_scan_state;
 
 	u32 table_size = 8192;
 	s32 max_range= 60000;//96800;
@@ -758,7 +758,7 @@ int get_spectrum_scan_fft(struct dvb_frontend *fe)
 	u32* temp_freq = NULL;
 	s32* temp_rf_level = NULL;
 	s32 Reg[60];
-	s32 last_avg =0, current_avg =0, correction =0, correction_total = 0;
+	s32 last_avg =0, current_avg =0, correction =0;
 
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	fe_lla_error_t error1 = FE_LLA_NO_ERROR;
@@ -835,7 +835,7 @@ int get_spectrum_scan_fft(struct dvb_frontend *fe)
 		error = -ENOMEM;
 		goto _end;
 	}
-	print_spectrum_scan_state(&state->scan_state);
+	print_spectrum_scan_state(&state->spectrum_scan_state);
 	error = fe_stid135_init_fft(state, mode, Reg);
 
 	error |= estimate_band_power_demod_for_fft(state, state->rf_in+1, &pbandx1000, &double_correction);
@@ -910,7 +910,7 @@ int get_spectrum_scan_fft(struct dvb_frontend *fe)
 int stid135_spectral_scan_start(struct dvb_frontend *fe)
 {
 	struct stv *state = fe->demodulator_priv;
-	struct spectrum_scan_state_t* ss = &state->scan_state;
+	struct spectrum_scan_state* ss = &state->spectrum_scan_state;
 	//	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	ss->scan_in_progress =true;
@@ -923,8 +923,8 @@ int stid135_spectral_scan_start(struct dvb_frontend *fe)
 		dprintk("No spectrum\n");
 		return -ENOMEM;
 	}
-	dprintk("Calling stid135_scan_spectrum\n");
-	return stid135_scan_spectrum(ss);
+	dprintk("Calling neumo_scan_spectrum\n");
+	return neumo_scan_spectrum(ss);
 }
 
 
@@ -932,7 +932,7 @@ int stid135_spectral_scan_next(struct dvb_frontend *fe,
 															 s32 *frequency_ret, s32* symbolrate_ret)
 {
 	struct stv *state = fe->demodulator_priv;
-	struct spectrum_scan_state_t* ss = &state->scan_state;
+	struct spectrum_scan_state* ss = &state->spectrum_scan_state;
 
 	if(ss->current_idx < ss->num_candidates) {
 		struct spectral_peak_t * peak =
@@ -949,7 +949,7 @@ int stid135_spectral_scan_next(struct dvb_frontend *fe,
 
 
 
-void print_spectrum_scan_state_(struct spectrum_scan_state_t* ss,
+void print_spectrum_scan_state_(struct spectrum_scan_state* ss,
 																const char* func, int line)
 {
 	printk(KERN_DEBUG

@@ -20,14 +20,14 @@
  */
 #include <linux/sort.h>
 #include <media/dvb_frontend.h>
-#include "stid135-scan.h"
+#include "neumo-scan.h"
 
-extern int stid135_verbose;
+static int verbose=false;
 #define dprintk(fmt, arg...)																					\
 	printk(KERN_DEBUG pr_fmt("%s:%d " fmt),  __func__, __LINE__, ##arg)
 
 #define vprintk(fmt, arg...)																					\
-	if(stid135_verbose) printk(KERN_DEBUG pr_fmt("%s:%d " fmt),  __func__, __LINE__, ##arg)
+	if(verbose) printk(KERN_DEBUG pr_fmt("%s:%d " fmt),  __func__, __LINE__, ##arg)
 
 
 
@@ -70,7 +70,7 @@ enum slope_t {
 	RISING=2
 };
 
-
+#if 0
 static s32 max_(s32*a, int n)
 {
 	int i;
@@ -80,7 +80,10 @@ static s32 max_(s32*a, int n)
 			ret=a[i];
 	return ret;
 }
+#endif
 
+
+#if 0
 static void clean_(s32*psig, s32*pres, int n)
 {
 	int i;
@@ -101,6 +104,7 @@ static void clean_(s32*psig, s32*pres, int n)
 		}
 	}
 }
+#endif
 
 static void running_sum(s32* pout, s32* psig, int n)
 {
@@ -124,7 +128,7 @@ static s32 windows[] = {2,	 4,		6,
 	1024, 1152, 1280, 1408, 1536, 1664, 1792, 1920,
 	2048};
 
-static int check_candidate_tp(struct spectrum_scan_state_t* ss,
+static int check_candidate_tp(struct spectrum_scan_state* ss,
 															struct scan_internal_t* si)
 {
 	int i;
@@ -145,16 +149,10 @@ static int check_candidate_tp(struct spectrum_scan_state_t* ss,
 				//vprintk("Rejecting peak because it contains other peaks\n");
 				return -1;
 			} else {
-#if 0
-				vprintk("Overwriting peak because it contains other peaks\n");
-				*old = *cand;
-				return -1;
-#else
 				memmove(&si->peaks[i] , &si->peaks[i+1], sizeof(si->peaks[0]) * si->num_peaks-i-1);
 				--i;
 				si->num_peaks--;
 				continue;
-#endif
 			}
 		}
 
@@ -163,16 +161,10 @@ static int check_candidate_tp(struct spectrum_scan_state_t* ss,
 			 (cand->fall_idx >= old->rise_idx &&  cand->fall_idx <= old->fall_idx)
 			) {
 			if( cand->level - old->level >= ss->threshold2) {
-#if 0
-				vprintk("Rejecting peak because it contains other peaks\n");
-				*old = *cand;
-				return -1;
-#else
 				memmove(&si->peaks[i] , &si->peaks[i+1], sizeof(si->peaks[0]) * si->num_peaks-i-1);
 				si->num_peaks--;
 				--i;
 				continue;
-#endif
 			} else {
 				//vprintk("Overwriting peak because it contains other peaks\n");
 				return -1;
@@ -191,7 +183,7 @@ static int check_candidate_tp(struct spectrum_scan_state_t* ss,
                  \
                   --
 */
-static void falling_kernel(struct spectrum_scan_state_t* ss,
+static void falling_kernel(struct spectrum_scan_state* ss,
 													 struct scan_internal_t* si)
 {
 	int count=0;
@@ -230,7 +222,7 @@ static void falling_kernel(struct spectrum_scan_state_t* ss,
 -----/  |
 
 */
-static void rising_kernel(struct spectrum_scan_state_t* ss,
+static void rising_kernel(struct spectrum_scan_state* ss,
 													struct scan_internal_t* si)
 {
 
@@ -262,7 +254,7 @@ static void rising_kernel(struct spectrum_scan_state_t* ss,
 }
 
 
-static void stid135_spectral_init_level(struct spectrum_scan_state_t* ss,
+static void spectral_init_level(struct spectrum_scan_state* ss,
 																				struct scan_internal_t* si)
 {
 	si->start_idx =  (si->w*16)/200;
@@ -282,10 +274,9 @@ static void stid135_spectral_init_level(struct spectrum_scan_state_t* ss,
 	//fix_kernel(si->peak_marks, ss->spectrum, ss->spectrum_len, ss->w, ss->threshold, ss->mincount);
 	}
 
-static int stid135_spectral_scan_start(struct spectrum_scan_state_t* ss,
+static int spectral_scan_start(struct spectrum_scan_state* ss,
 																			 struct scan_internal_t* si)
 {
-	int i;
 	dprintk("Starting spectrum scan\n");
 	si->max_num_peaks = 1024;
 	ss->scan_in_progress =true;
@@ -319,11 +310,11 @@ static int stid135_spectral_scan_start(struct spectrum_scan_state_t* ss,
 		return -ENOMEM;
 	}
 	BUG_ON(ss->candidates); //this will be allocated later
-	stid135_spectral_init_level(ss, si);
+	spectral_init_level(ss, si);
 	return 0;
 }
 
-static int stid135_spectral_scan_end(struct spectrum_scan_state_t* ss,
+static int spectral_scan_end(struct spectrum_scan_state* ss,
 																			 struct scan_internal_t* si)
 {
 	int i;
@@ -361,8 +352,8 @@ static int stid135_spectral_scan_end(struct spectrum_scan_state_t* ss,
 }
 
 
-
-static s32 peak_snr(struct spectrum_scan_state_t* ss,
+#if 0
+static s32 peak_snr(struct spectrum_scan_state* ss,
 										struct scan_internal_t* si)
 {
 	s32 mean=0;
@@ -396,10 +387,10 @@ static s32 peak_snr(struct spectrum_scan_state_t* ss,
 		min1= min2;
 	return mean - min1;
 }
-
+#endif
 
 //returns index of a peak in the spectrum
-static int next_candidate_this_level(struct spectrum_scan_state_t* ss,
+static int next_candidate_this_level(struct spectrum_scan_state* ss,
 																		 struct scan_internal_t* si)
 {
 	s32 snr;
@@ -462,7 +453,7 @@ static int next_candidate_this_level(struct spectrum_scan_state_t* ss,
 }
 
 
-static int next_candidate_tp(struct spectrum_scan_state_t* ss,
+static int next_candidate_tp(struct spectrum_scan_state* ss,
 														 struct scan_internal_t* si)
 {
 	int ret;
@@ -471,7 +462,7 @@ static int next_candidate_tp(struct spectrum_scan_state_t* ss,
 			if(++si->window_idx >=  sizeof(windows)/sizeof(windows[0]))
 				return -1; //all windows done
 			si->w = windows[si->window_idx]; //switch to next window size
-			stid135_spectral_init_level(ss, si);
+			spectral_init_level(ss, si);
 		}
 		ret= next_candidate_this_level(ss, si);
 		if(ret<0)
@@ -488,7 +479,7 @@ static int next_candidate_tp(struct spectrum_scan_state_t* ss,
 
 
 
-static int stid135_spectral_scan_next(struct spectrum_scan_state_t* ss,
+static int spectral_scan_next(struct spectrum_scan_state* ss,
 																			struct scan_internal_t* si,
 																			s32 *frequency_ret, s32* snr_ret)
 {
@@ -522,7 +513,7 @@ static int cmp_fn(const void *pa, const void *pb) {
 /*
 	spectrum is stored in ss on input
  */
-int stid135_scan_spectrum(struct spectrum_scan_state_t* ss)
+int neumo_scan_spectrum(struct spectrum_scan_state* ss)
 {
 	int ret= 0;
 	s32 frequency;
@@ -535,13 +526,13 @@ int stid135_scan_spectrum(struct spectrum_scan_state_t* ss)
 	ss->mincount = 1;
 	ss->threshold = 3000;
 	ss->threshold2 = 3000;
-	ret = stid135_spectral_scan_start(ss, &si);
+	ret = spectral_scan_start(ss, &si);
 	if(ret<0) {
 		dprintk("Error starting spectrum scan\n");
 		return ret;
 	}
 	while(ret>=0) {
-		ret = stid135_spectral_scan_next (ss, &si, &frequency, &snr);
+		ret = spectral_scan_next (ss, &si, &frequency, &snr);
 		dprintk("FREQ=%d BW=%d SNR=%ddB\n", frequency, si.last_peak.bw, snr);
 		if(ret>=0) {
 			si.peaks[si.num_peaks++] = si.last_peak;
@@ -549,5 +540,5 @@ int stid135_scan_spectrum(struct spectrum_scan_state_t* ss)
 		}
 	}
 	sort(&si.peaks[0], si.num_peaks, sizeof(si.peaks[0]), cmp_fn, NULL);
-	return stid135_spectral_scan_end(ss, &si);
+	return spectral_scan_end(ss, &si);
 }

@@ -44,7 +44,7 @@
 #include "fesat_pro_advance.h"
 #include "oxford_anafe_func.h"
 #include "stid135_initLLA_cut2.h"
-#include "stid135-scan.h"
+#include "neumo-scan.h"
 #include <media/dvb_frontend.h>
 /* ========================================================== */
 // Typedefs - proprietary, non generic
@@ -336,17 +336,6 @@ struct stv_base {
 	int vglna;
 };
 
-
-struct constellation_scan_state {
-	bool constallation_present;
-	bool in_progress;
-
-	struct dtv_fe_constellation_sample* samples;
-	int num_samples;
-	int samples_len;
-	int constel_select;
-};
-
 /*
 	state per adapter
  */
@@ -393,7 +382,7 @@ struct stv {
 	BOOL	mis_mode; /* Memorisation of MIS mode */
 	struct modcod_data	mc_flt[NB_SAT_MODCOD]; //This must be per adapter, not per chip
 
-	struct spectrum_scan_state_t scan_state;
+	struct spectrum_scan_state spectrum_scan_state;
 	struct constellation_scan_state constellation_scan_state;
 };
 
@@ -732,7 +721,7 @@ int stid135_spectral_scan_next(struct dvb_frontend *fe,
 int get_spectrum_scan_fft(struct dvb_frontend *fe);
 
 
-void print_spectrum_scan_state_(struct spectrum_scan_state_t*ss,
+void print_spectrum_scan_state_(struct spectrum_scan_state*ss,
 																const char* func, int line);
 #define print_spectrum_scan_state(ss)		\
 	print_spectrum_scan_state_(ss, __func__, __LINE__)
