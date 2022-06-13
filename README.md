@@ -5,6 +5,7 @@ It contains patches for the following drivers
 * stv091x: tbs5927
 * tas2101 (incomplete): tbs5990, tbs6904
 * si2183 based cards: tbs6504
+* m88ds3103: pctv 461e v1(B6H9)/Hauppauge wintv-nova-s2 v1.4(B9H9) 
 
 to support blindscan, to fix bugs and to make improvements.
 

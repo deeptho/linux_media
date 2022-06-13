@@ -766,7 +766,7 @@ restart:
 					if (fe->ops.scan)
 						fe->ops.scan(fe, fepriv->state & FESTATE_SCAN_NEXT , &fepriv->delay, &s);
 					fepriv->state = FESTATE_IDLE;
-				}	 else if (fepriv->state & FESTATE_GETTING_SPECTRUM) {
+				} else if (fepriv->state & FESTATE_GETTING_SPECTRUM) {
 					dev_dbg(fe->dvb->device, "%s: Spectrum requested, DTV_SPECTRUM\n", __func__);
 					dprintk("starting spectrum scan\n");
 					if (fe->ops.spectrum_start)
@@ -797,7 +797,31 @@ restart:
 				break;
 			case DVBFE_ALGO_SW:
 				dev_dbg(fe->dvb->device, "%s: Frontend ALGO = DVBFE_ALGO_SW\n", __func__);
-				dvb_frontend_swzigzag(fe);
+
+				if (fepriv->state & FESTATE_SCANNING) {
+					dev_dbg(fe->dvb->device, "%s: Sscan requested, FESTATE_SCANNING\n", __func__);
+					if (fe->ops.scan)
+						fe->ops.scan(fe, fepriv->state & FESTATE_SCAN_NEXT , &fepriv->delay, &s);
+					fepriv->state = FESTATE_IDLE;
+				} else if (fepriv->state & FESTATE_GETTING_SPECTRUM) {
+					dev_dbg(fe->dvb->device, "%s: Spectrum requested, DTV_SPECTRUM\n", __func__);
+					dprintk("starting spectrum scan\n");
+					if (fe->ops.spectrum_start)
+						fe->ops.spectrum_start(fe,  &fepriv->spectrum, &fepriv->delay, &s);
+					dprintk("spectrum scan ended s=0x%x\n", s);
+					fepriv->state = FESTATE_IDLE;
+				} else {
+					dvb_frontend_swzigzag(fe);
+					fe->ops.read_status(fe, &s);
+				}
+				if ((s != fepriv->status && !(fepriv->tune_mode_flags & FE_TUNE_MODE_ONESHOT))
+						|| (fepriv->heartbeat_interval>0)) {
+					//dprintk("Adding event val=0x%x\n", s);
+					dev_dbg(fe->dvb->device, "%s: state changed, adding current state\n", __func__);
+					dvb_frontend_add_event(fe, s);
+					fepriv->status = s;
+				}
+				atomic_set(&fe->algo_state.task_should_stop, false);
 				break;
 			case DVBFE_ALGO_CUSTOM:
 				dev_dbg(fe->dvb->device, "%s: Frontend ALGO = DVBFE_ALGO_CUSTOM, state=%d\n", __func__, fepriv->state);
@@ -991,6 +1015,7 @@ static void dvb_frontend_get_frequency_limits(struct dvb_frontend *fe,
 
 	/* If the standard is for satellite, convert frequencies to kHz */
 	switch (c->delivery_system) {
+	case SYS_AUTO:
 	case SYS_DVBS:
 	case SYS_DVBS2:
 	case SYS_TURBO:
@@ -1016,6 +1041,7 @@ static u32 dvb_frontend_get_stepsize(struct dvb_frontend *fe)
 	u32 step = max(fe_step, tuner_step);
 
 	switch (c->delivery_system) {
+	case SYS_AUTO:
 	case SYS_DVBS:
 	case SYS_DVBS2:
 	case SYS_TURBO:
@@ -1054,6 +1080,7 @@ static int dvb_frontend_check_parameters(struct dvb_frontend *fe)
 
 		/* range check: symbol rate */
 		switch (c->delivery_system) {
+		case SYS_AUTO:
 		case SYS_DVBS:
 		case SYS_DVBS2:
 		case SYS_TURBO:
@@ -1127,6 +1154,7 @@ static int dvb_frontend_clear_cache(struct dvb_frontend *fe)
 	c->scrambling_sequence_index = 0;/* default sequence */
 
 	switch (c->delivery_system) {
+	case SYS_AUTO:
 	case SYS_DVBS:
 	case SYS_DVBS2:
 	case SYS_TURBO:
@@ -2636,6 +2664,7 @@ static int dtv_set_frontend(struct dvb_frontend *fe)
 	case SYS_ISDBS:
 		rolloff = 135;
 		break;
+	case SYS_AUTO:
 	case SYS_DVBS2:
 		switch (c->rolloff) {
 		case ROLLOFF_20:
@@ -2675,6 +2704,7 @@ static int dtv_set_frontend(struct dvb_frontend *fe)
 	} else {
 		/* default values */
 		switch (c->delivery_system) {
+		case SYS_AUTO:
 		case SYS_DVBS:
 		case SYS_DVBS2:
 		case SYS_ISDBS:
@@ -2750,6 +2780,7 @@ static int dtv_get_pls_search_list(struct dvb_frontend *fe, struct dtv_pls_searc
 static int dtv_set_pls_search_list(struct dvb_frontend *fe, struct dtv_pls_search_list* user)
 {
 	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
+	int i;
 	c->pls_search_codes_len = sizeof(c->pls_search_codes)/sizeof(c->pls_search_codes[0]);
 	if(user->num_codes < c->pls_search_codes_len)
 		c->pls_search_codes_len = user->num_codes;
@@ -2761,7 +2792,7 @@ static int dtv_set_pls_search_list(struct dvb_frontend *fe, struct dtv_pls_searc
 		dprintk("ERROR: len=%d/%d codes=%p", c->pls_search_codes_len, user->num_codes, user->codes);
 		return -EFAULT;
 	}
-	int i;
+
 	dprintk("PLS: %d codes:\n", c->pls_search_codes_len);
 	for(i=0;i< c->pls_search_codes_len;++i)
 		dprintk("code=0x%x\n", c->pls_search_codes[i]);

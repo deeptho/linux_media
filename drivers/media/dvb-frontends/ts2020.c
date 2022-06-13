@@ -157,7 +157,7 @@ static int ts2020_tuner_gate_ctrl(struct dvb_frontend *fe, u8 offset)
 	ret |= regmap_write(priv->regmap, 0x51, 0x1f);
 	ret |= regmap_write(priv->regmap, 0x50, offset);
 	ret |= regmap_write(priv->regmap, 0x50, 0x00);
-	msleep(20);
+
 	return ret;
 }
 
@@ -189,7 +189,6 @@ static int ts2020_set_params(struct dvb_frontend *fe)
 {
 	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
 	struct ts2020_priv *priv = fe->tuner_priv;
-	int ret;
 	unsigned int utmp;
 	u32 f3db, gdiv28;
 	u16 u16tmp, value, lpf_coeff;
@@ -225,12 +224,12 @@ static int ts2020_set_params(struct dvb_frontend *fe)
 	if (priv->tuner == TS2020_M88TS2020) {
 		lpf_coeff = 2766;
 		reg10 |= 0x01;
-		ret = regmap_write(priv->regmap, 0x10, reg10);
+		regmap_write(priv->regmap, 0x10, reg10);
 	} else {
 		lpf_coeff = 3200;
 		reg10 |= 0x0b;
-		ret = regmap_write(priv->regmap, 0x10, reg10);
-		ret |= regmap_write(priv->regmap, 0x11, 0x40);
+		regmap_write(priv->regmap, 0x10, reg10);
+		regmap_write(priv->regmap, 0x11, 0x40);
 	}
 
 	u16tmp = pll_n - 1024;
@@ -238,40 +237,54 @@ static int ts2020_set_params(struct dvb_frontend *fe)
 	buf[1] = (u16tmp >> 0) & 0xff;
 	buf[2] = div_ref - 8;
 
-	ret |= regmap_write(priv->regmap, 0x01, buf[0]);
-	ret |= regmap_write(priv->regmap, 0x02, buf[1]);
-	ret |= regmap_write(priv->regmap, 0x03, buf[2]);
+	regmap_write(priv->regmap, 0x01, buf[0]);
+	regmap_write(priv->regmap, 0x02, buf[1]);
+	regmap_write(priv->regmap, 0x03, buf[2]);
 
-	ret |= ts2020_tuner_gate_ctrl(fe, 0x10);
-	if (ret < 0)
-		return -ENODEV;
+	ts2020_tuner_gate_ctrl(fe, 0x10);
 
-	ret |= ts2020_tuner_gate_ctrl(fe, 0x08);
+	if (priv->tuner == TS2020_M88TS2022) {
+		regmap_read(priv->regmap, 0x10, &utmp);
+		if (frequency_khz < 1103000 || frequency_khz > 1710000) {
+			regmap_write(priv->regmap, 0x10, utmp | 0x80);
+			regmap_write(priv->regmap, 0x11, 0x6f);
+			ts2020_tuner_gate_ctrl(fe, 0x10);
+		}
+
+		if ((frequency_khz >= 1103000 && frequency_khz < 1220000) ||
+			(frequency_khz > 1710000 && frequency_khz < 1745000)) {
+			regmap_write(priv->regmap, 0x10, utmp & 0xfd);
+		}
+	}
+
+	ts2020_tuner_gate_ctrl(fe, 0x08);
+
+	if (priv->tuner == TS2020_M88TS2022) {
+		regmap_read(priv->regmap, 0x3c, &utmp)
+		if (utmp == 0)
+			ts2020_tuner_gate_ctrl(fe, 0x08);
+	}
 
 	/* Tuner RF */
 	if (priv->tuner == TS2020_M88TS2020)
-		ret |= ts2020_set_tuner_rf(fe);
+		ts2020_set_tuner_rf(fe);
 
 	gdiv28 = (TS2020_XTAL_FREQ / 1000 * 1694 + 500) / 1000;
-	ret |= regmap_write(priv->regmap, 0x04, gdiv28 & 0xff);
-	ret |= ts2020_tuner_gate_ctrl(fe, 0x04);
-	if (ret < 0)
-		return -ENODEV;
+	regmap_write(priv->regmap, 0x04, gdiv28 & 0xff);
+	ts2020_tuner_gate_ctrl(fe, 0x04);
 
 	if (priv->tuner == TS2020_M88TS2022) {
-		ret = regmap_write(priv->regmap, 0x25, 0x00);
-		ret |= regmap_write(priv->regmap, 0x27, 0x70);
-		ret |= regmap_write(priv->regmap, 0x41, 0x09);
-		ret |= regmap_write(priv->regmap, 0x08, 0x0b);
-		if (ret < 0)
-			return -ENODEV;
+		regmap_write(priv->regmap, 0x25, 0x00);
+		regmap_write(priv->regmap, 0x27, 0x70);
+		regmap_write(priv->regmap, 0x41, 0x09);
+		regmap_write(priv->regmap, 0x08, 0x0b);
 	}
 
 	regmap_read(priv->regmap, 0x26, &utmp);
 	value = utmp;
 
 	f3db = (c->bandwidth_hz / 1000 / 2) + 2000;
-	f3db += FREQ_OFFSET_LOW_SYM_RATE; /* FIXME: ~always too wide filter */
+	f3db += (c->symbol_rate < 5000000) ? FREQ_OFFSET_LOW_SYM_RATE : 0;
 	f3db = clamp(f3db, 7000U, 40000U);
 
 	gdiv28 = gdiv28 * 207 / (value * 2 + 151);
@@ -299,16 +312,20 @@ static int ts2020_set_params(struct dvb_frontend *fe)
 	if (lpf_mxdiv > mlpf_max)
 		lpf_mxdiv = mlpf_max;
 
-	ret = regmap_write(priv->regmap, 0x04, lpf_mxdiv);
-	ret |= regmap_write(priv->regmap, 0x06, nlpf);
+	regmap_write(priv->regmap, 0x04, lpf_mxdiv);
+	regmap_write(priv->regmap, 0x06, nlpf);
 
-	ret |= ts2020_tuner_gate_ctrl(fe, 0x04);
+	ts2020_tuner_gate_ctrl(fe, 0x04);
 
-	ret |= ts2020_tuner_gate_ctrl(fe, 0x01);
+	ts2020_tuner_gate_ctrl(fe, 0x01);
 
-	msleep(80);
+	if (priv->tuner == TS2020_M88TS2022) {
+		regmap_read(priv->regmap, 0x21, &utmp)
+		if (utmp == 0)
+			ts2020_tuner_gate_ctrl(fe, 0x01);
+	}
 
-	return (ret < 0) ? -EINVAL : 0;
+	return 0;
 }
 
 static int ts2020_get_frequency(struct dvb_frontend *fe, u32 *frequency)
@@ -441,7 +458,7 @@ static void ts2020_stat_work(struct work_struct *work)
 	c->strength.stat[0].scale = FE_SCALE_DECIBEL;
 
 	if (!priv->dont_poll)
-		schedule_delayed_work(&priv->stat_work, msecs_to_jiffies(2000));
+		schedule_delayed_work(&priv->stat_work, msecs_to_jiffies(1000));
 	return;
 err:
 	dev_dbg(&client->dev, "failed=%d\n", ret);
@@ -489,8 +506,8 @@ static int ts2020_read_signal_strength(struct dvb_frontend *fe,
 static const struct dvb_tuner_ops ts2020_tuner_ops = {
 	.info = {
 		.name = "TS2020",
-		.frequency_min_hz =  950 * MHz,
-		.frequency_max_hz = 2150 * MHz
+		.frequency_min_hz =  290 * MHz,
+		.frequency_max_hz = 2350 * MHz
 	},
 	.init = ts2020_init,
 	.release = ts2020_release,

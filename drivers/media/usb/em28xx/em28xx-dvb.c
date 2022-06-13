@@ -1178,7 +1178,7 @@ static int em28178_dvb_init_pctv_461e(struct em28xx *dev)
 	m88ds3103_pdata.clk = 27000000;
 	m88ds3103_pdata.i2c_wr_max = 33;
 	m88ds3103_pdata.ts_mode = M88DS3103_TS_PARALLEL;
-	m88ds3103_pdata.ts_clk = 16000;
+	m88ds3103_pdata.ts_clk = 20000; /* BUG: TS breaks at 24000 */
 	m88ds3103_pdata.ts_clk_pol = 1;
 	m88ds3103_pdata.agc = 0x99;
 
@@ -1208,6 +1208,8 @@ static int em28178_dvb_init_pctv_461e(struct em28xx *dev)
 
 	/* attach SEC */
 	a8293_pdata.dvb_frontend = dvb->fe[0];
+	/* 461e has a tendency to have vIN undervoltage troubles. Slew mitigates this. */
+	a8293_pdata.volt_slew_nanos_per_mv = 20;
 	dvb->i2c_client_sec = dvb_module_probe("a8293", NULL,
 					       &dev->i2c_adap[dev->def_i2c_bus],
 					       0x08, &a8293_pdata);
