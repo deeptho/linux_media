@@ -41,5 +41,5 @@ git checkout master
 
 make dir DIR=../media
 make distclean
-./install.h
+./install.sh
 ```
