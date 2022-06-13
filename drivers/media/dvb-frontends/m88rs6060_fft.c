@@ -268,7 +268,6 @@ int m88rs6060_get_spectrum_scan_fft(struct dvb_frontend *fe,
 		//the offset useable_samples2 ensures that the first usable index is aligned with start_frequency
 		s32 center_freq = start_frequency + (idx + useable_samples2)* ss->frequency_step;
 		if (kthread_should_stop() || dvb_frontend_task_should_stop(fe)) {
-			//@todo:  should this be moved into  stid135_get_spectrum_scan_fft_one_band?
 			dprintk("exiting on should stop\n");
 			break;
 		}

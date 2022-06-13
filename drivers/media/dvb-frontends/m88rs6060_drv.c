@@ -3264,7 +3264,10 @@ static int m88rs6060_spectrum_start(struct dvb_frontend* fe,
 		s->num_freq = ss->spectrum_len;
 		break;
 	}
-	return -1;
+	if(ret)
+		return ret;
+	dprintk("Calling neumo_scan_spectrum\n");
+	return neumo_scan_spectrum(ss);
 }
 
 static int m88rs6060_spectrum_get(struct dvb_frontend* fe, struct dtv_fe_spectrum* user)
@@ -3300,6 +3303,153 @@ static int m88rs6060_spectrum_get(struct dvb_frontend* fe, struct dtv_fe_spectru
 	return error;
 }
 
+
+/*
+	returns -1 when done or when error
+	0 on success
+ */
+
+int m88rs6060_spectral_scan_start(struct dvb_frontend *fe, unsigned int *delay,  enum fe_status *status)
+{
+	struct m88rs6060_state* state = fe->demodulator_priv;
+	struct spectrum_scan_state* ss = &state->spectrum_scan_state;
+	//	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
+	int error = 0;
+	ss->scan_in_progress =true;
+	ss->current_idx = 0;
+	error = m88rs6060_get_spectrum_scan_fft(fe, delay, status);
+	if(error)
+		return error;
+
+	if (!ss->spectrum) {
+		dprintk("No spectrum\n");
+		return -ENOMEM;
+	}
+	dprintk("Calling neumo_scan_spectrum\n");
+	return neumo_scan_spectrum(ss);
+}
+
+
+static int m88rs6060_spectral_scan_next(struct dvb_frontend *fe,
+																				s32 *frequency_ret, s32* symbolrate_ret)
+{
+	struct m88rs6060_state* state = fe->demodulator_priv;
+	struct spectrum_scan_state* ss = &state->spectrum_scan_state;
+
+	if(ss->current_idx < ss->num_candidates) {
+		struct spectral_peak_t * peak =
+			&ss->candidates[ss->current_idx++];
+		*frequency_ret = peak->freq;
+		*symbolrate_ret = peak->symbol_rate;
+		dprintk("Next frequency to scan: %d/%d freq=%dkHz symbol_rate=%dkHz\n", ss->current_idx -1,
+						ss->num_candidates, *frequency_ret, *symbolrate_ret/1000);
+		return 0;
+	} else {
+		dprintk("Current subband fully scanned %d frequencies\n", ss->num_candidates);
+	}
+	return -1;
+}
+
+
+static int m88rs6060_scan_sat(struct dvb_frontend* fe, bool init,
+														unsigned int *delay,  enum fe_status *status)
+{
+ 	int error = -1;
+	struct m88rs6060_state* state = fe->demodulator_priv;
+	struct spectrum_scan_state* ss = &state->spectrum_scan_state;
+	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
+	enum fe_status old;
+	int ret=0;
+	bool found=false;
+	s32 minfreq=0;
+	const bool blind=true;
+	if(init) {
+		if(state->spectrum_scan_state.scan_in_progress) {
+			m88rs6060_stop_task(fe); //cleanup older scan
+		}
+		ret = m88rs6060_spectral_scan_start(fe, delay, status);
+		if(ret<0) {
+			dprintk("Could not start spectral scan\n");
+			return -1;
+		}
+	} else {
+		if(!state->spectrum_scan_state.scan_in_progress) {
+			dprintk("Error: Called with init==false, but scan was  not yet started\n");
+			ret = m88rs6060_spectral_scan_start(fe, delay, status);
+			if(ret<0) {
+				dprintk("Could not start spectral scan\n");
+				return -1;
+			}
+		}
+		minfreq= state->spectrum_scan_state.next_frequency;
+		dprintk("SCAN SAT next_freq=%dkHz\n", state->spectrum_scan_state.next_frequency);
+	}
+	dprintk("SCAN SAT delsys=%d\n", p->delivery_system);
+	while(!found) {
+		if (kthread_should_stop() || dvb_frontend_task_should_stop(fe)) {
+			dprintk("exiting on should stop\n");
+			break;
+		}
+		*status = 0;
+		ret = m88rs6060_spectral_scan_next(fe,  &p->frequency, &p->symbol_rate);
+		if(ret<0) {
+			dprintk("reached end of scan range\n");
+			*status =  FE_TIMEDOUT;
+			return error;
+		}
+		if (p->frequency < p->scan_start_frequency) {
+			dprintk("implementation error: %d < %d\n",p->frequency, p->scan_start_frequency);
+		}
+		if (p->frequency > p->scan_end_frequency) {
+			dprintk("implementation error: %d < %d\n",p->frequency, p->scan_end_frequency);
+		}
+		if(p->frequency < minfreq) {
+			dprintk("Next freq %dkHz still in current tp (ends at %dkHz)\n", p->frequency, minfreq);
+			continue;
+		}
+
+		p->algorithm = ALGORITHM_BLIND; //ALGORITHM_SEARCH_NEXT;
+
+		p->scan_fft_size = ss->fft_size;
+		/*
+			A large search range seems to be ok in all cases
+		*/
+		p->search_range = (p->scan_fft_size * p->scan_resolution*1000);
+
+		p->symbol_rate = p->symbol_rate==0? 1000000: p->symbol_rate;
+		p->stream_id = -1;
+		dprintk("FREQ=%d search_range=%dkHz fft=%d res=%dkHz srate=%dkS/s\n",
+						p->frequency, p->search_range/1000,
+						p->scan_fft_size, p->scan_resolution, p->symbol_rate/1000);
+		ret = m88rs6060_tune_once(fe, blind);
+		m88rs6060_read_status(fe, status);
+		old = *status;
+#if 0
+		{
+			m88rs6060_get_signal_info(state,  &state->signal_info, 0);
+			memcpy(p->isi_bitset, state->signal_info.isi_list.isi_bitset, sizeof(p->isi_bitset));
+			p->matype =  state->signal_info.matype;
+			p->frequency = state->signal_info.frequency;
+			p->symbol_rate = state->signal_info.symbol_rate;
+		}
+#endif
+		found = !(*status & FE_TIMEDOUT) && (*status &FE_HAS_LOCK);
+		if(found) {
+			state->spectrum_scan_state.next_frequency = p->frequency + (p->symbol_rate*135)/200000;
+			dprintk("BLINDSCAN: GOOD freq=%dkHz SR=%d kS/s returned status=%d next=%dkHz\n", p->frequency, p->symbol_rate/1000, *status,
+							state->spectrum_scan_state.next_frequency /1000);
+			state->spectrum_scan_state.num_good++;
+		}
+		else {
+			dprintk("BLINDSCAN: BAD freq=%dkHz SR=%d kS/s returned status=%d\n", p->frequency, p->symbol_rate/1000, *status);
+			state->spectrum_scan_state.num_bad++;
+		}
+	}
+	return ret;
+}
+
+
+
 static const struct dvb_frontend_ops m88rs6060_ops = {
 	.delsys = {SYS_DVBS, SYS_DVBS2, SYS_AUTO},
 	.info = {
@@ -3310,7 +3460,8 @@ static const struct dvb_frontend_ops m88rs6060_ops = {
 		 .symbol_rate_max = 45000000,
 		 .caps			= FE_CAN_INVERSION_AUTO | FE_CAN_FEC_AUTO | FE_CAN_QPSK |
 		 FE_CAN_RECOVER	| FE_CAN_2G_MODULATION | FE_CAN_MULTISTREAM,
-		 .extended_caps = FE_CAN_SPECTRUMSCAN	| /* FE_CAN_IQ | */ FE_CAN_BLINDSEARCH
+		 .extended_caps = FE_CAN_SPECTRUMSCAN	|FE_CAN_HR_SPECTRUMSCAN
+		 | /* FE_CAN_IQ | */ FE_CAN_BLINDSEARCH
 	},
 
 	.tuner_ops = {
@@ -3326,7 +3477,6 @@ static const struct dvb_frontend_ops m88rs6060_ops = {
 #endif
 	.release = m88rs6060_detach,
 	.tune = m88rs6060_tune,
-
 	.read_status = m88rs6060_read_status,
 	.read_ber = m88rs6060_read_ber,
 	.read_signal_strength = m88rs6060_read_signal_strength,
@@ -3339,10 +3489,9 @@ static const struct dvb_frontend_ops m88rs6060_ops = {
 	.spi_read = m88rs6060_spi_read,
 	.spi_write = m88rs6060_spi_write,
 	.stop_task =  m88rs6060_stop_task,
+	.scan =  m88rs6060_scan_sat,
 	.spectrum_start = m88rs6060_spectrum_start,
 	.spectrum_get = m88rs6060_spectrum_get,
-
-
 };
 
 static int m88rs6060_ready(struct m88rs6060_state *dev)
