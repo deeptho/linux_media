@@ -5605,7 +5605,7 @@ static fe_lla_error_t fe_stid135_read_hw_matype_(STCHIP_Info_t* hChip,
 	fe_lla_error_t ret;
 	enum fe_stid135_demod Demod = state->nr+1;
 	ret = fe_stid135_read_hw_matype_(hChip, Demod, matype, isi_read);
-	dprintk("matype=0x%x isi_read=0x%x\n", *matype, *isi_read);
+	vprintk("matype=0x%x isi_read=0x%x\n", *matype, *isi_read);
 	return ret;
 }
 

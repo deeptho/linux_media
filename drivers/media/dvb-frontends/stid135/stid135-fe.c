@@ -625,9 +625,7 @@ static int stid135_set_parameters(struct dvb_frontend* fe)
 		}
 	} else {
 		state->signal_info.has_lock=true;
-#if 1
 	set_stream_index(state, p->stream_id);
-#endif
 	}
 
 	//state->DemodLockTime += TUNING_DELAY;
