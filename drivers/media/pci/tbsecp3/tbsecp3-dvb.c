@@ -1320,7 +1320,7 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 			 m88rs6060_config.GetSpeed = GetTSSpeed;
 			 m88rs6060_config.SetTimes= Set_TSsamplingtimes;
 
-		 }else{
+		 } else {
 			 m88rs6060_config.ts_mode = MtFeTsOutMode_Parallel;
 			 m88rs6060_config.ts_pinswitch = 1;
 			 m88rs6060_config.HAS_CI = 0;
@@ -1358,8 +1358,8 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 		if(dev->info->board_id == TBSECP3_BOARD_TBS6910SE){
 			tbsecp3_ca_init(adapter, adapter->nr);
 		}
-		 break;
-	   case TBSECP3_BOARD_TBS6508:
+		break;
+	case TBSECP3_BOARD_TBS6508:
 		/* attach demod */
 		memset(&si2183_config, 0, sizeof(si2183_config));
 		si2183_config.i2c_adapter = &i2c;
@@ -2346,8 +2346,11 @@ void tbsecp3_dvb_exit(struct tbsecp3_adapter *adapter)
 	struct dvb_demux *dvbdemux = &adapter->demux;
 	if (adapter->fe) {
 		tbsecp3_ca_release(adapter);
+		dprintk("Calling  dvb_unregister_frontend\n");
 		dvb_unregister_frontend(adapter->fe);
+		dprintk("Calling  tbsecp3_release_sec\n");
 		tbsecp3_release_sec(adapter->fe);
+		dprintk("Calling dvb_frontend_detach\n");
 		dvb_frontend_detach(adapter->fe);
 		adapter->fe = NULL;
 		if (adapter->fe2 != NULL) {
@@ -2363,17 +2366,21 @@ void tbsecp3_dvb_exit(struct tbsecp3_adapter *adapter)
 		}
 
 	}
+	dprintk("Calling dvb_net_release\n");
 	dvb_net_release(&adapter->dvbnet);
 	if(dvbdemux) {
+		dprintk("Calling close\n");
 		dvbdemux->dmx.close(&dvbdemux->dmx);
 		dvbdemux->dmx.remove_frontend(&dvbdemux->dmx, &adapter->fe_mem);
 		dvbdemux->dmx.remove_frontend(&dvbdemux->dmx, &adapter->fe_hw);
 	}
 	if(adapter) {
+		dprintk("Calling dvb_dmx_release\n");
 		dvb_dmxdev_release(&adapter->dmxdev);
 		dvb_dmx_release(&adapter->demux);
 	}
 	if(adap) {
+		dprintk("Calling dvb_unregister_adapter\n");
 		dvb_unregister_adapter(adap);
 	}
 }
