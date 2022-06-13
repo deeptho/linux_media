@@ -1426,7 +1426,7 @@ static int m88ds3103_fft_scan(struct dvb_frontend *fe)
 
 		freq = c->frequency + s_value * (96000 / 512);
 
-		if (freq < 700000)
+		if (freq < 290000)
 			return 0;
 
 		if ((sym > 50000000) || (sym < 800000))
@@ -1518,8 +1518,8 @@ static int m88ds3103_blindscan(struct dvb_frontend *fe, bool init, unsigned int 
 			if (tmpfreq == 0)
 				c->frequency += 36000;
 		
-			if (c->frequency >= 2150000)
-				c->frequency = 2150000;
+			if (c->frequency >= 2350000)
+				c->frequency = 2350000;
 		}
 	}
 
