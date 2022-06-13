@@ -1,8 +1,9 @@
 /*
  * Montage Technology M88rs6060 demodulator and tuner drivers
- * some code form m88ds3103
+ * some code for m88ds3103
  * Copyright (c) 2021 Davin zhang <Davin@tbsdtv.com> www.Turbosight.com
  *
+ * blindscan extensions
  * Copyright (C) 2022 Deep Thought <deeptho@gmail.com>: blindscan, spectrum, constellation code
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -733,7 +734,7 @@ int m88rs6060_get_rf_level(struct m88rs6060_state* state, u32 freq_MHz, s32 * p_
 	return ret;
 }
 
-static void rs6060_wakeup(struct m88rs6060_state *dev)
+static void m88rs6060_wakeup(struct m88rs6060_state *dev)
 {
 	rs6060_set_tuner_reg(dev, 0x10, 0xfb);
 	rs6060_set_tuner_reg(dev, 0x11, 0x1);
@@ -743,13 +744,19 @@ static void rs6060_wakeup(struct m88rs6060_state *dev)
 	return;
 }
 
-static void rs6060_sleep(struct m88rs6060_state* state)
+static void m88rs6060_sleep(struct m88rs6060_state* state)
 {
 	rs6060_set_tuner_reg(state, 0x7, 0x6d);
 	rs6060_set_tuner_reg(state, 0x10, 0x00);
 	rs6060_set_tuner_reg(state, 0x11, 0x7d);
 	msleep(10);
-	return;
+}
+
+static int m88rs6060_sleep_(struct dvb_frontend *fe)
+{
+	struct m88rs6060_state* state = fe->demodulator_priv;
+	m88rs6060_sleep(state);
+	return 0;
 }
 
 static void m88rs6060_soft_reset(struct m88rs6060_state* state)
@@ -770,7 +777,7 @@ static void m88rs6060_hard_reset(struct m88rs6060_state* state)
 	rs6060_set_tuner_reg(state, 0x4, 0x0);
 
 	msleep(1);
-	rs6060_wakeup(state);
+	m88rs6060_wakeup(state);
 
 
 	regmap_read(state->demod_regmap, 0x08, &val);
@@ -1316,7 +1323,7 @@ static void rs6060_init(struct m88rs6060_state *dev)
 	rs6060_set_tuner_reg(dev, 0x15, 0x6c);
 	rs6060_set_tuner_reg(dev, 0x2b, 0x1e);
 
-	rs6060_wakeup(dev);
+	m88rs6060_wakeup(dev);
 
 	rs6060_set_tuner_reg(dev, 0x24, 0x4);
 	rs6060_set_tuner_reg(dev, 0x6e, 0x39);
@@ -3314,6 +3321,9 @@ static const struct dvb_frontend_ops m88rs6060_ops = {
 	},
 
 	.init = m88rs6060_init,
+#if 0
+	.sleep  = m88rs6060_sleep_,
+#endif
 	.release = m88rs6060_detach,
 	.tune = m88rs6060_tune,
 
