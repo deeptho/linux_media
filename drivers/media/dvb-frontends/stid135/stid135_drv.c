@@ -3933,7 +3933,8 @@ fe_lla_error_t fe_stid135_get_signal_info(struct stv* state,
 					 (pParams->demod_search_algo[Demod-1] == FE_SAT_BLIND_SEARCH ||
 					 pParams->demod_search_algo[Demod-1] == FE_SAT_NEXT)*/) {
 					fe_lla_error_t error1 = FE_LLA_NO_ERROR;
-					error1 =fe_stid135_isi_scan(state, &pInfo->isi_list);
+					memset(&state->signal_info.isi_list.isi_bitset[0], 0, sizeof(state->signal_info.isi_list.isi_bitset));
+					error1 = fe_stid135_isi_scan(state, &state->signal_info.isi_list);
 					dprintk("MIS DETECTION: error=%d\n", error1);
 				} else {
 					u8 isi_read;
@@ -5601,8 +5602,11 @@ static fe_lla_error_t fe_stid135_read_hw_matype_(STCHIP_Info_t* hChip,
  fe_lla_error_t fe_stid135_read_hw_matype(struct stv* state, u8 *matype, u8 *isi_read)
 {
 	STCHIP_Info_t* hChip = state->base->ip.handle_demod;
+	fe_lla_error_t ret;
 	enum fe_stid135_demod Demod = state->nr+1;
-	return fe_stid135_read_hw_matype_(hChip, Demod, matype, isi_read);
+	ret = fe_stid135_read_hw_matype_(hChip, Demod, matype, isi_read);
+	dprintk("matype=0x%x isi_read=0x%x\n", *matype, *isi_read);
+	return ret;
 }
 
 
@@ -10381,8 +10385,6 @@ fe_lla_error_t fe_stid135_isi_scan(struct stv* state, struct fe_sat_isi_struct_t
 			error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL0_ISIOBS_MODE(demod), 0);
 			ChipWaitOrAbort(state->base->ip.handle_demod,100);
 
-			memset(&p_isi_struct->isi_bitset[0], 0, sizeof(p_isi_struct->isi_bitset));
-
 			/* Get Current ISI and store in struct */
 			for (i=0; i < 40; i++) {
 				uint32_t mask;
@@ -10390,7 +10392,10 @@ fe_lla_error_t fe_stid135_isi_scan(struct stv* state, struct fe_sat_isi_struct_t
 				error |= fe_stid135_read_hw_matype(state, &matype, &CurrentISI);
 				j = CurrentISI/32;
 				mask = ((uint32_t)1)<< (CurrentISI%32);
-				p_isi_struct->isi_bitset[j] |= mask;
+				if( ! (p_isi_struct->isi_bitset[j] & mask)) {
+					dprintk("Found new ISI=%d\n",  CurrentISI);
+				}
+					p_isi_struct->isi_bitset[j] |= mask;
 #if 1
 				if(CurrentISI == state->signal_info.isi) {
 				state->signal_info.matype = matype;

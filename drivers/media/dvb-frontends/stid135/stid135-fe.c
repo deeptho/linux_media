@@ -997,7 +997,9 @@ static int stid135_read_status_(struct dvb_frontend* fe, enum fe_status *status)
 	if (err != FE_LLA_NO_ERROR)
 		dev_warn(&state->base->i2c->dev, "%s: fe_stid135_filter_forbidden_modcodes error %d !\n", __func__, err);
 
-
+	//update isi list
+	err = fe_stid135_isi_scan(state, &state->signal_info.isi_list);
+	memcpy(p->isi_bitset, state->signal_info.isi_list.isi_bitset, sizeof(p->isi_bitset));
 	//for the tbs6912 ts setting
 	if((state->base->set_TSparam)&&(state->newTP)) {
 		speed = state->base->set_TSparam(state->base->i2c,state->nr/2,4,0);
@@ -1055,6 +1057,7 @@ static int stid135_tune_(struct dvb_frontend* fe, bool re_tune,
 			 retrieve information about modulation, frequency, symbol_rate
 			 and CNR, BER
 		*/
+		memset(&state->signal_info.isi_list.isi_bitset[0], 0, sizeof(state->signal_info.isi_list.isi_bitset));
 		fe_stid135_get_signal_info(state,  &state->signal_info, 0);
 	}
 	/*
