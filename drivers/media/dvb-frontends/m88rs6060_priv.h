@@ -48,6 +48,9 @@ struct m88rs6060_state {
 	bool TsClockChecked;  //clock retio
 	//bool warm;		// for the init and download fw
 	s32 mclk;		/*main mclk */
+	u32 detected_pls_code;
+	bool pls_active;
+	s32 active_stream_id;
 
 	s32 active_stream_id;
 	u32 dvbv3_ber;		/* for old DVBv3 API read_ber */
