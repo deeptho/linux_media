@@ -211,7 +211,6 @@ int m88rs6060_get_spectrum_scan_fft(struct dvb_frontend *fe,
 	struct spectrum_scan_state* ss = &state->spectrum_scan_state;
 	int error=0;
 	u32 table_size = FFT_N;
-
 	u32* temp_freq = NULL;
 	s32* temp_rf_level = NULL;
 	s32 last_avg =0, current_avg =0, correction = 0;
@@ -221,6 +220,11 @@ int m88rs6060_get_spectrum_scan_fft(struct dvb_frontend *fe,
 	s32 end_frequency = p->scan_end_frequency;
 	s32 useable_samples2;
 	s32 lost_samples2;
+	s32 min_correction[2];
+	s32 max_correction[2];
+	s32 sum_len;
+	s32 sum_correction;
+
 	ss->spectrum_present = false;
 	if(p->scan_end_frequency < p->scan_start_frequency) {
 		vprintk("FULLY DONE\n");
@@ -263,6 +267,14 @@ int m88rs6060_get_spectrum_scan_fft(struct dvb_frontend *fe,
 	}
 
 	rs6060_set_default_mclk(state);
+
+	min_correction[0] = 0x7fffffff;
+	min_correction[1] = 0x7fffffff;
+	max_correction[0] = 0x80000000;
+	max_correction[1] = 0x80000000;
+	sum_correction =0;
+	sum_len =0;
+
 	for(idx=0; idx < ss->spectrum_len;) {
 		s32 iFreqKHz;
 		//the offset useable_samples2 ensures that the first usable index is aligned with start_frequency
@@ -304,23 +316,45 @@ int m88rs6060_get_spectrum_scan_fft(struct dvb_frontend *fe,
 			current_avg += temp_rf_level[i];
 		current_avg /= 10;
 		correction = (idx==0) ? 0  : -(current_avg - last_avg);
-
 		for(i= lost_samples2; i< ss->fft_size-lost_samples2 && idx < ss->spectrum_len; ++idx, i++ ) {
 			ss->freq[idx]= temp_freq[i];
 			ss->spectrum[idx] = temp_rf_level[i] + correction;
 		}
 
+		if (correction < min_correction[0]) {
+			min_correction[1] = min_correction[0];
+			min_correction[0] = correction;
+		} else if (correction < min_correction[1]) {
+			min_correction[1] = correction;
+		}
+
+
+		if (correction > max_correction[0]) {
+			max_correction[1] = max_correction[0];
+			max_correction[0] = correction;
+		} else  if (correction > max_correction[1]) {
+			max_correction[1] = correction;
+		}
+		sum_correction += correction;
+		sum_len ++;
+
 		last_avg =0;
+
 		for(i=ss->fft_size-lost_samples2-5 ; i < ss->fft_size-lost_samples2+5 ; ++i)
 			last_avg += temp_rf_level[i] + correction;
 		last_avg /= 10;
 
 	}
 
-	for(i=0; i < ss->spectrum_len; ++i) {
-		ss->spectrum[i] -= (correction * (i - ss->spectrum_len/2)) / ss->spectrum_len;
-	}
+	if(sum_len > 4) {
+		sum_correction  -= min_correction[0] + min_correction[1] + max_correction[0] + max_correction[1];
 
+		correction = sum_correction / (sum_len-4);
+		dprintk("Applying correction %d\n", correction);
+		for(i=0; i < ss->spectrum_len; ++i) {
+			ss->spectrum[i] -= correction;
+		}
+	}
 	ss->spectrum_present = true;
  _end:
 	dprintk("ending error=%d\n", error);
