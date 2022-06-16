@@ -1829,7 +1829,7 @@ static int m88rs6060_get_matype(struct m88rs6060_state* state, u8* matype)
 	int i;
 	*matype = 0;
 	regmap_read(state->demod_regmap, 0x08, &tmp);
-	if((tmp & 0x08) == 0x00)	{// DVB-S // reserved bit 3 indicates dvbs2 (1) or dvbs1 (0)
+	if((tmp & 0x08) == 0x00)	{// DVB-S // reserved bit 3 indicates dvbs2 (1) or dvbs1 (0) ??
 		//return -1;
 		dprintk("this is dvbs? tmp=0x%x\n", tmp);
 	}
@@ -1918,6 +1918,61 @@ static int m88rs6060_wait_for_demod_lock_non_blind(struct m88rs6060_state* state
 
 
 /*
+	Returns 0 if pls code was found; -1 on timeout
+ */
+static int m88rs6060_find_pls(struct m88rs6060_state * state)
+{
+	u32 tmp1;
+	u32 tmp3;
+	s32 count;
+	regmap_write(state->demod_regmap, 0xae, 0x4f);
+	regmap_write(state->demod_regmap, 0x7f, 0xc4);
+	regmap_write(state->demod_regmap, 0x24, 0xc0); //ANA_4: clock related?
+
+	regmap_read(state->demod_regmap, 0xca, &tmp3); //?? set spectral inversion of something on
+	tmp3 |= 0x04;
+	regmap_write(state->demod_regmap, 0xca, tmp3); //?? set spectral inversion of something on
+
+	m88rs6060_soft_reset(state);
+
+	count = 0;
+
+	do {
+		count ++;
+		if(count > 1000)
+			{
+				dprintk("PlS timedout\n");
+				return -1;
+			}
+
+		regmap_read(state->demod_regmap, 0x24, &tmp1);  //ANA_4: clock related?
+
+		msleep(1);
+	} while((tmp1 & 0x08) == 0x00);
+	dprintk("PLS locked count=%d\n", count);
+
+
+	regmap_write(state->demod_regmap, 0xae, 0x09);
+	regmap_write(state->demod_regmap, 0x7f, 0x04);
+
+	regmap_read(state->demod_regmap, 0xca, &tmp3); ////?? set spectral inversion of something off
+	tmp3 &= ~0x04;
+	regmap_write(state->demod_regmap, 0xca, tmp3); //?? set spectral inversion of something off
+
+	//read and rewrite pls code
+	regmap_bulk_read(state->demod_regmap, 0x22, &state->detected_pls_code, 3);
+	dprintk("PLS: before 0x%x\n", state->detected_pls_code);
+	state->detected_pls_code &= 0x03ffff;
+	dprintk("PLS: after 0x%x\n", state->detected_pls_code);
+	regmap_bulk_write(state->demod_regmap, 0x22, &state->detected_pls_code, 3);
+	//end of read and rewrite pls code
+	state->pls_active = true;
+	dprintk("Read: PLS: 0x%x\n", state->detected_pls_code);
+	m88rs6060_soft_reset(state);
+	return 0;
+}
+
+/*
 	returns 0 on lock, -1 otherwise
  */
 static int m88rs6060_wait_for_demod_lock_blind(struct m88rs6060_state* state)
@@ -1930,56 +1985,13 @@ static int m88rs6060_wait_for_demod_lock_blind(struct m88rs6060_state* state)
 	for (i = 0; i < 150; i++) {
 		regmap_read(state->demod_regmap, 0xbe, &tmp); //?? if pls detection is ready
 		dprintk("reg[0xbe] = 0x%x i=%d\n", tmp, i);
-		if(!pls_lock && tmp == 0xfe) { //?? if pls detection is ready
-			u32 tmp1;
-			u32 tmp3;
-			regmap_write(state->demod_regmap, 0xae, 0x4f);
-			regmap_write(state->demod_regmap, 0x7f, 0xc4);
-			regmap_write(state->demod_regmap, 0x24, 0xc0); //ANA_4: clock related?
-
-			regmap_read(state->demod_regmap, 0xca, &tmp3); //?? set spectral inversion of something on
-			tmp3 |= 0x04;
-			regmap_write(state->demod_regmap, 0xca, tmp3); //?? set spectral inversion of something on
-
-			m88rs6060_soft_reset(state);
-
-			iCnt = 0;
-
-			do {
-				iCnt ++;
-				if(iCnt > 1000)
-					{
-						dprintk("PlS timedout\n");
-						return -1;
-					}
-
-				regmap_read(state->demod_regmap, 0x24, &tmp1);  //ANA_4: clock related?
-
-				msleep(1);
-			} while((tmp1 & 0x08) == 0x00);
-			dprintk("PLS locked iCnt=%d\n", iCnt);
-
-
-			regmap_write(state->demod_regmap, 0xae, 0x09);
-			regmap_write(state->demod_regmap, 0x7f, 0x04);
-
-			regmap_read(state->demod_regmap, 0xca, &tmp3); ////?? set spectral inversion of something off
-			tmp3 &= ~0x04;
-			regmap_write(state->demod_regmap, 0xca, tmp3); //?? set spectral inversion of something off
-
-			//read and rewrite pls code
-			regmap_bulk_read(state->demod_regmap, 0x22, &state->detected_pls_code, 3);
-			dprintk("PLS: before 0x%x\n", state->detected_pls_code);
-			state->detected_pls_code &= 0x03ffff;
-			dprintk("PLS: after 0x%x\n", state->detected_pls_code);
-			regmap_bulk_write(state->demod_regmap, 0x22, &state->detected_pls_code, 3);
-			//end of read and rewrite pls code
-			state->pls_active = true;
-			dprintk("Read: PLS: 0x%x\n", state->detected_pls_code);
+		if(!pls_lock && tmp == 0xfe) { //if pls presence has been detected
+			if( m88rs6060_find_pls(state) < 0)
+				return -1; //could not find pls
 			pls_lock = true;
-			m88rs6060_soft_reset(state);
-		} //LATEST
+		}
 
+		//detect DVBS 2  reliably ??
 		for(iCnt=0 ; iCnt <50 ; ++iCnt) {
 			regmap_read(state->demod_regmap, 0x08, &tmp);
 			if(tmp& 0x8)
@@ -1988,7 +2000,6 @@ static int m88rs6060_wait_for_demod_lock_blind(struct m88rs6060_state* state)
 		if(iCnt == 50) {
 				dprintk("tmp=0x%x\n", tmp);
 		}
-
 
 		regmap_read(state->demod_regmap, 0x08, &tmp);
 		regmap_read(state->demod_regmap, 0x0d, &tmp1); //get all lock bits

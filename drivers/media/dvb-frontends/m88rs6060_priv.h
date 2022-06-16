@@ -1,6 +1,7 @@
 #ifndef _M88RS6060_PRIV_H_
 #define _M88RS6060_PRIV_H_
 #include <media/dvb_frontend.h>
+#include <linux/dvb/frontend.h>
 #include <neumo-scan.h>
 
 #include <linux/regmap.h>
