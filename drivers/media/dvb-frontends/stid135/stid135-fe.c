@@ -990,9 +990,11 @@ static int stid135_read_status_(struct dvb_frontend* fe, enum fe_status *status)
 	if (p->cnr.stat[1].uvalue > 0xffff)
 		p->cnr.stat[1].uvalue = 0xffff;
 
-	p->post_bit_error.len = 1;
-	p->post_bit_error.stat[0].scale = FE_SCALE_COUNTER;
-	p->post_bit_error.stat[0].uvalue = state->signal_info.ber;
+	p->pre_bit_error.len = 1;
+	p->pre_bit_error.stat[0].scale = FE_SCALE_COUNTER;
+	p->pre_bit_error.stat[0].uvalue = state->signal_info.ber;
+	p->pre_bit_count.stat[0].scale = FE_SCALE_COUNTER;
+	p->pre_bit_count.stat[0].uvalue = 1e7;
 
 	if (err != FE_LLA_NO_ERROR)
 		dev_warn(&state->base->i2c->dev, "%s: fe_stid135_filter_forbidden_modcodes error %d !\n", __func__, err);
