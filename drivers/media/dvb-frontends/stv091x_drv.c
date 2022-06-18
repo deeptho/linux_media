@@ -1841,10 +1841,10 @@ static void init_signal_quality(struct dvb_frontend* fe, struct dtv_frontend_pro
 {
 	s32 signal_strength; //unit=0.001dB
 	signal_strength = stv091x_signal_power_dbm(fe); //unit=0.001dB
-	p->cnr.len = p->post_bit_error.len = p->post_bit_count.len = 1;
+	p->cnr.len = p->pre_bit_error.len = p->pre_bit_count.len = 1;
 	p->cnr.stat[0].scale = FE_SCALE_NOT_AVAILABLE;
-	p->post_bit_error.stat[0].scale = FE_SCALE_NOT_AVAILABLE;
-	p->post_bit_count.stat[0].scale = FE_SCALE_NOT_AVAILABLE;
+	p->pre_bit_error.stat[0].scale = FE_SCALE_NOT_AVAILABLE;
+	p->pre_bit_count.stat[0].scale = FE_SCALE_NOT_AVAILABLE;
 
 	p->strength.len = 2;
 	p->strength.stat[0].scale = FE_SCALE_DECIBEL;
@@ -1990,12 +1990,12 @@ static int stv091x_read_status(struct dvb_frontend* fe, enum fe_status *status)
 	if (GetBitErrorRate(state, &n, &d))
 		return -EIO;
 
-	p->post_bit_error.len = 1;
-	p->post_bit_error.stat[0].scale = FE_SCALE_COUNTER;
-	p->post_bit_error.stat[0].uvalue = n;
-	p->post_bit_count.len = 1;
-	p->post_bit_count.stat[0].scale = FE_SCALE_COUNTER;
-	p->post_bit_count.stat[0].uvalue = d;
+	p->pre_bit_error.len = 1;
+	p->pre_bit_error.stat[0].scale = FE_SCALE_COUNTER;
+	p->pre_bit_error.stat[0].uvalue = n;
+	p->pre_bit_count.len = 1;
+	p->pre_bit_count.stat[0].scale = FE_SCALE_COUNTER;
+	p->pre_bit_count.stat[0].uvalue = d;
 
 	return 0;
 }
@@ -2667,9 +2667,9 @@ static int read_ber(struct dvb_frontend *fe, u32 *ber)
 {
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
 
-	if ( p->post_bit_error.stat[0].scale == FE_SCALE_COUNTER &&
-		p->post_bit_count.stat[0].scale == FE_SCALE_COUNTER )
-	 *ber = (u32)p->post_bit_count.stat[0].uvalue ? (u32)p->post_bit_error.stat[0].uvalue / (u32)p->post_bit_count.stat[0].uvalue : 0;
+	if ( p->pre_bit_error.stat[0].scale == FE_SCALE_COUNTER &&
+		p->pre_bit_count.stat[0].scale == FE_SCALE_COUNTER )
+	 *ber = (u32)p->pre_bit_count.stat[0].uvalue ? (u32)p->pre_bit_error.stat[0].uvalue / (u32)p->pre_bit_count.stat[0].uvalue : 0;
 
 	return 0;
 }
