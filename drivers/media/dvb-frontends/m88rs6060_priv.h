@@ -2,6 +2,7 @@
 #define _M88RS6060_PRIV_H_
 #include <media/dvb_frontend.h>
 #include <linux/dvb/frontend.h>
+#include <linux/timekeeping.h>
 #include <neumo-scan.h>
 
 #include <linux/regmap.h>
@@ -62,7 +63,6 @@ struct m88rs6060_state {
 	u64 last_pre_bit_error;
 	u64 last_pre_bit_count;
 	ktime_t last_per_time;
-
 	bool satellite_scan;
 	s32 scan_next_frequency;
 	s32 scan_end_frequency;

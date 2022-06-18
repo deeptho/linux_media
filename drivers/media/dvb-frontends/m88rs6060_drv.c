@@ -2681,6 +2681,136 @@ static void init_signal_quality(struct dvb_frontend* fe,	struct dtv_frontend_pro
 
 }
 
+static u32 get_code_rate_fac(enum fe_code_rate code_rate)
+{
+	u32 code_rate_fac = 1;
+	switch (code_rate) {
+	case MtFeCodeRate_1_4:	code_rate_fac = 16008 - 80;	break;
+	case MtFeCodeRate_1_3:	code_rate_fac = 21408 - 80;	break;
+	case MtFeCodeRate_2_5:	code_rate_fac = 25728 - 80;	break;
+	case MtFeCodeRate_1_2:	code_rate_fac = 32208 - 80;	break;
+	case MtFeCodeRate_3_5:	code_rate_fac = 38688 - 80;	break;
+	case MtFeCodeRate_2_3:	code_rate_fac = 43040 - 80;	break;
+	case MtFeCodeRate_3_4:	code_rate_fac = 48408 - 80;	break;
+	case MtFeCodeRate_4_5:	code_rate_fac = 51648 - 80;	break;
+	case MtFeCodeRate_5_6:	code_rate_fac = 53840 - 80;	break;
+	case MtFeCodeRate_8_9:	code_rate_fac = 57472 - 80;	break;
+	case MtFeCodeRate_9_10:	code_rate_fac = 58192 - 80;	break;
+	case MtFeCodeRate_5_9:		code_rate_fac = 64800 * 5 / 9 - 192 - 80;	break;
+	case MtFeCodeRate_7_9:		code_rate_fac = 64800 * 7 / 9 - 192 - 80;	break;
+	case MtFeCodeRate_4_15:		code_rate_fac = 64800 * 4 / 15 - 192 - 80;	break;
+	case MtFeCodeRate_7_15:		code_rate_fac = 64800 * 7 / 15 - 192 - 80;	break;
+	case MtFeCodeRate_8_15:		code_rate_fac = 64800 * 8 / 15 - 192 - 80;	break;
+	case MtFeCodeRate_11_15:	code_rate_fac = 64800 * 11 / 15 - 192 - 80;	break;
+	case MtFeCodeRate_13_18:	code_rate_fac = 64800 * 13 / 18 - 192 - 80;	break;
+	case MtFeCodeRate_9_20:		code_rate_fac = 64800 * 9 / 20 - 192 - 80;	break;
+	case MtFeCodeRate_11_20:	code_rate_fac = 64800 * 11 / 20 - 192 - 80;	break;
+	case MtFeCodeRate_23_36:	code_rate_fac = 64800 * 23 / 36 - 192 - 80;	break;
+	case MtFeCodeRate_25_36:	code_rate_fac = 64800 * 25 / 36 - 192 - 80;	break;
+	case MtFeCodeRate_11_45:	code_rate_fac = 64800 * 11 / 45 - 192 - 80;	break;
+	case MtFeCodeRate_13_45:	code_rate_fac = 64800 * 13 / 45 - 192 - 80;	break;
+	case MtFeCodeRate_14_45:	code_rate_fac = 64800 * 14 / 45 - 192 - 80;	break;
+	case MtFeCodeRate_26_45:	code_rate_fac = 64800 * 26 / 45 - 192 - 80;	break;
+	case MtFeCodeRate_28_45:	code_rate_fac = 64800 * 28 / 45 - 192 - 80;	break;
+	case MtFeCodeRate_29_45:	code_rate_fac = 64800 * 29 / 45 - 192 - 80;	break;
+	case MtFeCodeRate_31_45:	code_rate_fac = 64800 * 31 / 45 - 192 - 80;	break;
+	case MtFeCodeRate_32_45:	code_rate_fac = 64800 * 32 / 45 - 192 - 80;	break;
+	case MtFeCodeRate_77_90:	code_rate_fac = 64800 * 77 / 90 - 192 - 80;	break;
+	default:	break;
+	}
+	return code_rate_fac;
+}
+
+static void m88rs6060_scale_per(struct m88rs6060_state* state)
+{
+	ktime_t now = ktime_get_coarse();
+	ktime_t delta = ktime_sub(now, state->last_per_time);
+	if (delta > NSEC_PER_SEC) {
+#if 1
+		state->last_pre_bit_error  =  (state->last_pre_bit_count ==0)
+			? 0: //iniatialisation
+			state->pre_bit_error;
+		state->last_pre_bit_count  = state->pre_bit_count;
+		state->pre_bit_count = 0;
+		state->pre_bit_error = 0;
+		state->last_per_time = now;
+#else
+		/*
+			make effect of older errors die out at a rate of (1-1/4)**t where t is the age in seconds
+		 */
+		state->pre_bit_count -= (state->pre_bit_count>>2);
+		state->pre_bit_error -= (state->pre_bit_error>>2);
+		state->last_per_time = now;
+#endif
+	}
+}
+
+/*Get number of pre FEC bit erors error and total number of bits received for DVBS2
+	and a similar metric for dvbS1
+ */
+static int m88rs6060_get_per(struct m88rs6060_state* state, struct dtv_frontend_properties* p)
+{
+	u32 tmp1;
+	u32	code_rate_fac = 0, ldpc_frame_count;
+	u8 buf[3];
+	u32 pre_err_packets, pre_total_packets;
+
+	dprintk("pre_bit_count=%lld/%lld\n", state->pre_bit_error, state->pre_bit_count);
+
+	if(state->detected_delivery_system == SYS_DVBS) {	// DVB-S
+		regmap_read(state->demod_regmap, 0xd5, &tmp1);
+
+		if((tmp1 & 0x80) == 0) { //or: !(tmp1 & 0x10)?
+			regmap_bulk_read(state->demod_regmap, 0xd6, buf, 2); //BER for DVBS1, else PER
+
+			pre_err_packets =  buf[1] << 8 | buf[0] << 0;
+			//restart measurement?
+			regmap_write(state->demod_regmap, 0xd5, 0x82);
+		}
+
+
+		pre_total_packets = 8388608 / 16; //0x800000/16
+		state->pre_bit_error += pre_err_packets; // <<8;
+		state->pre_bit_count += pre_total_packets;
+		state->dvbv3_ber = pre_err_packets;
+
+	} else if(state->detected_delivery_system == SYS_DVBS2 ||
+						state->detected_delivery_system == SYS_DVBS2X ) {	// DVB-S2 //reserved bit 3 indicates dvbs2 (1) or dvbs1 (0)
+		code_rate_fac = get_code_rate_fac(p->fec_inner);
+
+		regmap_bulk_read(state->demod_regmap, 0xd5, buf, 3);
+		ldpc_frame_count =  buf[2] << 16 | buf[1] << 8 | buf[0] << 0;
+
+		if (ldpc_frame_count > 4000) { //enough data
+			regmap_bulk_read(state->demod_regmap, 0xf7, buf, 2);
+			pre_err_packets = buf[1] << 8 | buf[0] << 0;  //number of error packets before ldpc
+			pre_total_packets = (code_rate_fac * (u64)  ldpc_frame_count) / (188 * 8);
+
+			state->pre_bit_error += pre_err_packets; // <<8;
+			state->pre_bit_count += pre_total_packets;
+			state->dvbv3_ber = pre_err_packets;
+
+			/* restart measurement */
+			regmap_read(state->demod_regmap, 0xd1, &tmp1); //clear ldpc frame counter and ldpc error counter
+			tmp1 = tmp1 | 0x01;
+			regmap_write(state->demod_regmap, 0xd1, tmp1);
+
+			regmap_write(state->demod_regmap, 0xf9, 0x01);//clear User Packet Length CRC error counter
+			regmap_write(state->demod_regmap, 0xf9, 0x00);
+
+			tmp1 = tmp1 & 0xfe;
+			regmap_write(state->demod_regmap, 0xd1, tmp1); /*restart ldpc error counter? Needed? Perhaps
+																											 value needs reset, because clearing is done on 0->1
+																											 transition?*/
+
+		}
+	} else {
+		return -1; //no delivery system found yet
+	}
+	m88rs6060_scale_per(state);
+	return 0;
+}
+
 
 /*
 	read rf level, snr, signal quality, lock_status
@@ -2875,88 +3005,21 @@ static int m88rs6060_read_status(struct dvb_frontend* fe, enum fe_status* status
 
 	/* BER */
 	if (state->fe_status & FE_HAS_LOCK) {
-		unsigned int tmp1, post_bit_error, post_bit_count;
+		if(m88rs6060_get_per(state, p)>=0) { // p only used to read fec_inner
+			//TODO: these values should reall be stored in pre_bit_error
+			p->pre_bit_error.stat[0].scale = FE_SCALE_COUNTER;
+			p->pre_bit_error.stat[0].uvalue = state->last_pre_bit_error;
 
-		switch (p->delivery_system) {
-		case SYS_DVBS:
-			//deepthought: to check -> confusion with dvbs2?
-			ret = regmap_read(state->demod_regmap, 0xd5, &tmp1);
-			if (ret)
-				goto done;
-
-			/* measurement ready? */
-			if (!(tmp1 & 0x10)) {
-				ret =
-				    regmap_bulk_read(state->demod_regmap, 0xd6, buf, 2);
-				if (ret)
-					goto done;
-
-				post_bit_error = buf[1] << 8 | buf[0] << 0;
-				post_bit_count = 0x800000;
-				state->pre_bit_error += post_bit_error;
-				state->pre_bit_count += post_bit_count;
-				state->dvbv3_ber = post_bit_error;
-
-				/* restart measurement */
-				ret = regmap_write(state->demod_regmap, 0xd5, 0x82);
-				if (ret)
-					goto done;
-			}
-			break;
-		case SYS_DVBS2:
-			ret = regmap_bulk_read(state->demod_regmap, 0xd5, buf, 3);
-			if (ret)
-				goto done;
-			//dev_info(&client->dev,"buf =%*ph\n",3,buf);
-			tmp1 = buf[2] << 16 | buf[1] << 8 | buf[0] << 0;
-
-			/* enough data? */
-			if (tmp1 > 4000) {
-				ret =
-				    regmap_bulk_read(state->demod_regmap, 0xf7, buf, 2);
-				if (ret)
-					goto done;
-
-				post_bit_error = buf[1] << 8 | buf[0] << 0;
-				post_bit_count = 32 * tmp1;	/* TODO: FEC */
-				state->pre_bit_error += post_bit_error;
-				state->pre_bit_count += post_bit_count;
-				state->dvbv3_ber = post_bit_error;
-
-				/* restart measurement */
-				ret = regmap_write(state->demod_regmap, 0xd1, 0x01);
-				if (ret)
-					goto done;
-
-				ret = regmap_write(state->demod_regmap, 0xf9, 0x01);
-				if (ret)
-					goto done;
-
-				ret = regmap_write(state->demod_regmap, 0xf9, 0x00);
-				if (ret)
-					goto done;
-
-				ret = regmap_write(state->demod_regmap, 0xd1, 0x00);
-				if (ret)
-					goto done;
-			}
-			break;
-		default:
-			dev_dbg(&client->dev, "invalid delivery_system\n");
-			ret = -EINVAL;
-			goto done;
+			p->pre_bit_count.stat[0].scale = FE_SCALE_COUNTER;
+			p->pre_bit_count.stat[0].uvalue = state->last_pre_bit_count;
+		} else {
+			p->pre_bit_error.stat[0].scale = FE_SCALE_NOT_AVAILABLE;
+			p->pre_bit_count.stat[0].scale = FE_SCALE_NOT_AVAILABLE;
 		}
-
-		p->post_bit_error.stat[0].scale = FE_SCALE_COUNTER;
-		p->post_bit_error.stat[0].uvalue = state->pre_bit_error;
-
-		p->post_bit_count.stat[0].scale = FE_SCALE_COUNTER;
-		p->post_bit_count.stat[0].uvalue = state->pre_bit_count;
 	} else {
 		p->post_bit_error.stat[0].scale = FE_SCALE_NOT_AVAILABLE;
 		p->post_bit_count.stat[0].scale = FE_SCALE_NOT_AVAILABLE;
 	}
-
 	p->post_bit_error.len = 1;
 	p->post_bit_count.len = 1;
 
