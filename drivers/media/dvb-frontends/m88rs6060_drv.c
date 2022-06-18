@@ -1405,7 +1405,7 @@ static void m88res6060_set_ts_mode(struct m88rs6060_state *dev)
 
 }
 
-static int m88rs6060_get_channel_info(struct m88rs6060_state* state, struct MT_FE_CHAN_INFO_DVBS2*p_info)
+static int m88rs6060_get_channel_info_(struct m88rs6060_state* state, struct MT_FE_CHAN_INFO_DVBS2*p_info)
 {
 	unsigned tmp, val_0x17, val_0x18, ucPLSCode;
 	bool mis;
@@ -1516,11 +1516,62 @@ static int m88rs6060_get_channel_info(struct m88rs6060_state* state, struct MT_F
 		p_info->iFrameLength = 0;
 	}
 
-	dprintk("matype=0x%x/0x%x/0x%x cycle=%d\n", p_info->matype, p_info->iPlsCode, val_0x18, p_info->iVcmCycle);
+	return 0;
+}
+
+static int m88rs6060_get_matype(struct m88rs6060_state* state, u32* matype)
+{
+	u32 tmp;
+	int i;
+	*matype = 0;
+	regmap_read(state->demod_regmap, 0x08, &tmp);
+	if((tmp & 0x08) == 0x00)	{// DVB-S // reserved bit 3 indicates dvbs2 (1) or dvbs1 (0) ??
+		//return -1;
+		dprintk("this is dvbs? tmp=0x%x\n", tmp);
+	}
+
+	regmap_write(state->demod_regmap, 0xe6, 0x00); //clear register containing code_rate
+	regmap_write(state->demod_regmap, 0xe8, 0x00);
+	regmap_write(state->demod_regmap, 0xe8, 0x01);
+
+
+	for(i=0; i < 100; ++i)  {
+	 	regmap_read(state->demod_regmap, 0xe8, &tmp);
+
+		if((tmp & 0x10) == 0x10) {
+			break;
+		}
+
+		msleep(1);
+	}
+
+	if(i != 100) {
+		regmap_read(state->demod_regmap, 0xe9, &tmp);
+		dprintk("delsys=DVBS2 matype reg[0xe9]=%d i=%d\n", tmp, i);
+		*matype = tmp;
+	}
 
 	return 0;
 }
 
+static int m88rs6060_get_channel_info(struct m88rs6060_state* state, struct dtv_frontend_properties* p)
+{
+	struct MT_FE_CHAN_INFO_DVBS2 info;
+	bool ret = m88rs6060_get_channel_info_(state, &info);
+	p->delivery_system = (info.type == MtFeType_DvbS2) ? SYS_DVBS2 :
+		(info.type == MtFeType_DvbS2X) ? SYS_DVBS2 : //TODO
+		(info.type == MtFeType_DvbS) ? SYS_DVBS2 :
+		SYS_DVBS;
+	p->modulation = info.mod_mode;
+	p->rolloff = info.roll_off;
+	p->fec_inner = info.code_rate;
+	p->pilot = info.is_pilot_on;
+	if(m88rs6060_get_matype(state, &p->matype)<0)
+		dprintk("No matype\n");
+
+	dprintk("matype=0x%x/0x%x cycle=%d\n", p->matype, info.iPlsCode, info.iVcmCycle);
+	return ret;
+}
 
 int m88rs6060_set_carrier_offset(struct m88rs6060_state* state, s32 carrier_offset_khz)
 {
@@ -1584,7 +1635,7 @@ void m88rs6060_set_symbol_rate(struct m88rs6060_state* state, u32 symbol_rate_ks
 	regmap_write(state->demod_regmap, 0x62, (u8) ((tmp >> 8) & 0xff));
 }
 
-static void m88rs6060_get_symbol_rate(struct m88rs6060_state* state, u32* sym_rate_KSs)
+static void m88rs6060_get_symbol_rate(struct m88rs6060_state* state, u32* sym_rate_kss)
 {
 	u16	tmp;
 	u32	sym_rate_tmp;
@@ -1615,20 +1666,10 @@ static bool m88rs6060_get_signal_info(struct dvb_frontend *fe)
 	bool need_retune = false;
 	struct dtv_frontend_properties* p = &fe->dtv_property_cache;
 	struct m88rs6060_state* state = fe->demodulator_priv;
-	struct MT_FE_CHAN_INFO_DVBS2 info;
-	s32 carrier_offset_KHz;
-	m88rs6060_get_channel_info(state, &info);
-	p->delivery_system = (info.type == MtFeType_DvbS2) ? SYS_DVBS2 :
-		(info.type == MtFeType_DvbS2X) ? SYS_DVBS2 : //TODO
-		(info.type == MtFeType_DvbS) ? SYS_DVBS2 :
-		SYS_DVBS;
-	p->modulation = info.mod_mode;
-	p->rolloff = info.roll_off;
-	p->fec_inner = info.code_rate;
-	p->pilot = info.is_pilot_on;
-	p->matype = info.matype;
-	m88rs6060_get_total_carrier_offset(state, &carrier_offset_KHz);
-	p->frequency = state->tuned_frequency - carrier_offset_KHz;
+	s32 carrier_offset_khz;
+	m88rs6060_get_channel_info(state, p);
+	m88rs6060_get_total_carrier_offset(state, &carrier_offset_khz);
+	p->frequency = state->tuned_frequency - carrier_offset_khz;
 	m88rs6060_get_symbol_rate(state, &p->symbol_rate);
 	dprintk("delsys =%d\n", p->delivery_system);
 	if (state->detected_pls_code >=0) {
@@ -1821,41 +1862,6 @@ static void m88rs6060_select_stream(struct m88rs6060_state* state, u8 stream_id)
 		}
 
 	}
-}
-
-static int m88rs6060_get_matype(struct m88rs6060_state* state, u8* matype)
-{
-	u32 tmp;
-	int i;
-	*matype = 0;
-	regmap_read(state->demod_regmap, 0x08, &tmp);
-	if((tmp & 0x08) == 0x00)	{// DVB-S // reserved bit 3 indicates dvbs2 (1) or dvbs1 (0) ??
-		//return -1;
-		dprintk("this is dvbs? tmp=0x%x\n", tmp);
-	}
-
-	regmap_write(state->demod_regmap, 0xE6, 0x00); //clear register containing code_rate
-	regmap_write(state->demod_regmap, 0xE8, 0x00);
-	regmap_write(state->demod_regmap, 0xE8, 0x01);
-
-
-	for(i=0; i < 100; ++i)  {
-	 	regmap_read(state->demod_regmap, 0xE8, &tmp);
-
-		if((tmp & 0x10) == 0x10) {
-			break;
-		}
-
-		msleep(1);
-	}
-
-	if(i != 100) {
-		regmap_read(state->demod_regmap, 0xE9, &tmp);
-		dprintk("delsys=DVBS2 matype reg[0xe9]=%d i=%d\n", tmp, i);
-		*matype = tmp;
-	}
-
-	return 0;
 }
 
 
@@ -2725,13 +2731,8 @@ static int m88rs6060_read_status(struct dvb_frontend* fe, enum fe_status* status
 		state->has_timing_lock = (tmp1>>1) & 1;
 		state->has_signal = (tmp1 & 1); //analog agc lock
 		state->demod_locked = tmp1 == 0x8f;
-		{ u8 matype;
-		if(m88rs6060_get_matype(state, &matype)<0)
+		if(m88rs6060_get_matype(state, &p->matype)<0)
 			dprintk("No matype\n");
-		else
-			p->matype = matype;
-		}
-
 		break;
 	default:
 		dev_dbg(&client->dev, "invalid delivery_system\n");
@@ -2892,8 +2893,8 @@ static int m88rs6060_read_status(struct dvb_frontend* fe, enum fe_status* status
 
 				post_bit_error = buf[1] << 8 | buf[0] << 0;
 				post_bit_count = 0x800000;
-				state->post_bit_error += post_bit_error;
-				state->post_bit_count += post_bit_count;
+				state->pre_bit_error += post_bit_error;
+				state->pre_bit_count += post_bit_count;
 				state->dvbv3_ber = post_bit_error;
 
 				/* restart measurement */
@@ -2918,8 +2919,8 @@ static int m88rs6060_read_status(struct dvb_frontend* fe, enum fe_status* status
 
 				post_bit_error = buf[1] << 8 | buf[0] << 0;
 				post_bit_count = 32 * tmp1;	/* TODO: FEC */
-				state->post_bit_error += post_bit_error;
-				state->post_bit_count += post_bit_count;
+				state->pre_bit_error += post_bit_error;
+				state->pre_bit_count += post_bit_count;
 				state->dvbv3_ber = post_bit_error;
 
 				/* restart measurement */
@@ -2947,10 +2948,10 @@ static int m88rs6060_read_status(struct dvb_frontend* fe, enum fe_status* status
 		}
 
 		p->post_bit_error.stat[0].scale = FE_SCALE_COUNTER;
-		p->post_bit_error.stat[0].uvalue = state->post_bit_error;
+		p->post_bit_error.stat[0].uvalue = state->pre_bit_error;
 
 		p->post_bit_count.stat[0].scale = FE_SCALE_COUNTER;
-		p->post_bit_count.stat[0].uvalue = state->post_bit_count;
+		p->post_bit_count.stat[0].uvalue = state->pre_bit_count;
 	} else {
 		p->post_bit_error.stat[0].scale = FE_SCALE_NOT_AVAILABLE;
 		p->post_bit_count.stat[0].scale = FE_SCALE_NOT_AVAILABLE;
@@ -3565,15 +3566,6 @@ static int m88rs6060_scan_sat(struct dvb_frontend* fe, bool init,
 		ret = m88rs6060_tune_once(fe, blind);
 		m88rs6060_read_status(fe, status);
 		old = *status;
-#if 0
-		{
-			m88rs6060_get_signal_info(state,  &state->signal_info, 0);
-			memcpy(p->isi_bitset, state->signal_info.isi_list.isi_bitset, sizeof(p->isi_bitset));
-			p->matype =  state->signal_info.matype;
-			p->frequency = state->signal_info.frequency;
-			p->symbol_rate = state->signal_info.symbol_rate;
-		}
-#endif
 		found = !(*status & FE_TIMEDOUT) && (*status &FE_HAS_LOCK);
 		if(found) {
 			state->spectrum_scan_state.next_frequency = p->frequency + (p->symbol_rate*135)/200000;
