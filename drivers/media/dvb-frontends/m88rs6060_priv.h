@@ -205,12 +205,12 @@ struct MT_FE_CHAN_INFO_DVBS2 {
 	s8 iFrameLength;	/*0: Normal; 1: Short; 2: Medium */
 };
 
-void rs6060_tuner_select_mclk(struct m88rs6060_state *dev, u32 freq_mhz, u32 symbol_rate, bool blind);
-void rs6060_set_mclk_according_to_symbol_rate(struct m88rs6060_state* state, u32 freq_mhz, u32 symbol_rate_kSs, u32 mclk, bool blind);
-void rs6060_set_default_mclk(struct m88rs6060_state* state);
-void rs6060_select_mclk(struct m88rs6060_state *dev, u32 freq_mhz, u32 symbol_rate, bool blind);
-void rs6060_set_ts_mclk(struct m88rs6060_state *dev, u32 mclk);
-int rs6060_set_tuner(struct m88rs6060_state* state, u32 tuner_freq_mhz, u32 symbol_rate_kss, s32 lpf_offset_khz);
+void m88rs6060_tuner_select_mclk(struct m88rs6060_state *dev, u32 freq_mhz, u32 symbol_rate, bool blind);
+void m88rs6060_set_mclk_according_to_symbol_rate(struct m88rs6060_state* state, u32 freq_mhz, u32 symbol_rate_kSs, u32 mclk, bool blind);
+void m88rs6060_set_default_mclk(struct m88rs6060_state* state);
+void m88rs6060_select_mclk(struct m88rs6060_state *dev, u32 freq_mhz, u32 symbol_rate, bool blind);
+void m88rs6060_set_ts_mclk(struct m88rs6060_state *dev, u32 mclk);
+int m88rs6060_set_tuner(struct m88rs6060_state* state, u32 tuner_freq_mhz, u32 symbol_rate_kss, s32 lpf_offset_khz);
 int m88rs6060_set_carrier_offset(struct m88rs6060_state* state, s32 carrier_offset_khz);
 int m88rs6060_get_spectrum_scan_fft(struct dvb_frontend *fe,
 																		unsigned int *delay, enum fe_status *status);

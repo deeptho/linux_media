@@ -324,93 +324,93 @@ static  struct MT_FE_PLS_INFO mPLSInfoTable[] =
 	 {0xFF, 	  FALSE,  MtFeType_DvbS2X,	  MtFeModMode_Undef,	  MtFeCodeRate_Undef,	  TRUE,   FALSE,		 0}
  };
 
-static int rs6060_set_tuner_reg(struct m88rs6060_state *dev, u8 reg, u8 data)
+static int m88rs6060_set_tuner_reg(struct m88rs6060_state* state, u8 reg, u8 data)
 {
-	struct i2c_client *client = dev->demod_client;
+	struct i2c_client *client = state->demod_client;
 	u8 buf[] = { reg, data };
 	u8 val;
 	int ret;
 	struct i2c_msg msg = {
-		.addr = dev->config.tuner_adr,.flags = 0,.buf = buf,.len = 2
+		.addr = state->config.tuner_adr,.flags = 0,.buf = buf,.len = 2
 	};
 
 	val = 0x11;
-	ret = regmap_write(dev->demod_regmap, 0x03, val);
+	ret = regmap_write(state->demod_regmap, 0x03, val);
 	if (ret)
 		dev_dbg(&client->dev, "fail=%d\n", ret);
 
-	ret = i2c_transfer(dev->tuner_client->adapter, &msg, 1);
+	ret = i2c_transfer(state->tuner_client->adapter, &msg, 1);
 	if (ret != 1) {
 		dev_err(&client->dev,
 			"0x%02x (ret=%i, reg=0x%02x, value=0x%02x)\n",
-			dev->config.tuner_adr, ret, reg, data);
+			state->config.tuner_adr, ret, reg, data);
 		return -EREMOTEIO;
 	}
 
 	dev_dbg(&client->dev, "0x%02x reg 0x%02x, value 0x%02x\n",
-		dev->config.tuner_adr, reg, data);
+		state->config.tuner_adr, reg, data);
 
 	return 0;
 }
 
-static int rs6060_get_tuner_reg(struct m88rs6060_state *dev, u8 reg)
+static int m88rs6060_get_tuner_reg(struct m88rs6060_state* state, u8 reg)
 {
 
-	struct i2c_client *client = dev->demod_client;
+	struct i2c_client *client = state->demod_client;
 	int ret;
 	unsigned val;
 	u8 b0[] = { reg };
 	u8 b1[] = { 0 };
 	struct i2c_msg msg[] = {
 		{
-		 .addr = dev->config.tuner_adr,
+		 .addr = state->config.tuner_adr,
 		 .flags = 0,
 		 .buf = b0,
 		 .len = 1},
 		{
-		 .addr = dev->config.tuner_adr,
+		 .addr = state->config.tuner_adr,
 		 .flags = I2C_M_RD,
 		 .buf = b1,
 		 .len = 1}
 	};
 
-	val = dev->config.repeater_value;
-	ret = regmap_write(dev->demod_regmap, 0x03, val);
+	val = state->config.repeater_value;
+	ret = regmap_write(state->demod_regmap, 0x03, val);
 	if (ret)
 		dev_dbg(&client->dev, "fail=%d\n", ret);
 
-	ret = i2c_transfer(dev->tuner_client->adapter, msg, 2);
+	ret = i2c_transfer(state->tuner_client->adapter, msg, 2);
 	if (ret != 2) {
 		dev_err(&client->dev, "0x%02x (ret=%d, reg=0x%02x)\n",
-			dev->config.tuner_adr, ret, reg);
+			state->config.tuner_adr, ret, reg);
 		return -EREMOTEIO;
 	}
 
 	dev_dbg(&client->dev, "0x%02x reg 0x%02x, value 0x%02x\n",
-		dev->config.tuner_adr, reg, b1[0]);
+		state->config.tuner_adr, reg, b1[0]);
 
 	return b1[0];
 }
 
-static int m88rs6060_fireware_download(struct m88rs6060_state *dev, u8 reg,
+static int m88rs6060_fireware_download(struct m88rs6060_state* state, u8 reg,
 				       const u8 * data, int len)
 {
-	struct i2c_client *client = dev->demod_client;
+	struct i2c_client *client = state->demod_client;
 	int ret;
     u8 buf[70];
     struct i2c_msg msg = {
-		.addr = dev->config.demod_adr,.flags = 0,.buf = buf,.len =
+		.addr = state->config.demod_adr,.flags = 0,.buf = buf,.len =
 		    len + 1
 	};
 
     buf[0] = reg;
 	memcpy(&buf[1], data, len);
 
-	ret = i2c_transfer(dev->demod_client->adapter, &msg, 1);
+	ret = i2c_transfer(state->demod_client->adapter, &msg, 1);
 	if (ret != 1) {
 		dev_err(&client->dev,
 			"0x%02x (ret=%i, reg=0x%02x)\n",
-			dev->config.tuner_adr, ret, reg);
+			state->config.tuner_adr, ret, reg);
 		return -EREMOTEIO;
 	}
 
@@ -619,19 +619,19 @@ int m88rs6060_get_gain(struct m88rs6060_state *dev, u32 freq_mhz, s32 * p_gain)
 	u32 IFGS[12] = { 0, 0, 232, 268, 266, 289, 295, 290, 291, 298, 304, 304 };
 	u32 BBGS[13] = { 0, 296, 297, 295, 298, 302, 293, 292, 286, 294, 278, 298, 267 };
 
-	reg5a = rs6060_get_tuner_reg(dev, 0x5A);
+	reg5a = m88rs6060_get_tuner_reg(dev, 0x5A);
 	RF_GC = reg5a & 0x0f;
 
-	reg5f = rs6060_get_tuner_reg(dev, 0x5F);
+	reg5f = m88rs6060_get_tuner_reg(dev, 0x5F);
 	IF_GC = reg5f & 0x0f;
 
-	reg3f = rs6060_get_tuner_reg(dev, 0x3F); //PWM
+	reg3f = m88rs6060_get_tuner_reg(dev, 0x3F); //PWM
 	TIA_GC = (reg3f >> 4) & 0x07;
 
-	reg77 = rs6060_get_tuner_reg(dev, 0x77);
+	reg77 = m88rs6060_get_tuner_reg(dev, 0x77);
 	BB_GC = (reg77 >> 4) & 0x0f;
 
-	reg76 = rs6060_get_tuner_reg(dev, 0x76); //
+	reg76 = m88rs6060_get_tuner_reg(dev, 0x76); //
 	PGA2_GC = reg76 & 0x3f;
 	PGA2_cri = PGA2_GC >> 2;
 	PGA2_crf = PGA2_GC & 0x03;
@@ -727,7 +727,7 @@ int m88rs6060_get_rf_level(struct m88rs6060_state* state, u32 freq_mhz, s32 * p_
 
 	int ret = m88rs6060_get_gain(state, freq_mhz, p_gain);
 
-	reg96 = rs6060_get_tuner_reg(state, 0x96);
+	reg96 = m88rs6060_get_tuner_reg(state, 0x96);
 	bb_power = bb_list_dBm[(reg96 >> 4) & 0x0f][reg96 & 0x0f];
 
 	*p_gain -= bb_power;
@@ -736,9 +736,9 @@ int m88rs6060_get_rf_level(struct m88rs6060_state* state, u32 freq_mhz, s32 * p_
 
 static void m88rs6060_wakeup(struct m88rs6060_state *dev)
 {
-	rs6060_set_tuner_reg(dev, 0x10, 0xfb);
-	rs6060_set_tuner_reg(dev, 0x11, 0x1);
-	rs6060_set_tuner_reg(dev, 0x7, 0x7d);
+	m88rs6060_set_tuner_reg(dev, 0x10, 0xfb);
+	m88rs6060_set_tuner_reg(dev, 0x11, 0x1);
+	m88rs6060_set_tuner_reg(dev, 0x7, 0x7d);
 	msleep(10);
 
 	return;
@@ -746,9 +746,9 @@ static void m88rs6060_wakeup(struct m88rs6060_state *dev)
 
 static void m88rs6060_sleep(struct m88rs6060_state* state)
 {
-	rs6060_set_tuner_reg(state, 0x7, 0x6d);
-	rs6060_set_tuner_reg(state, 0x10, 0x00);
-	rs6060_set_tuner_reg(state, 0x11, 0x7d);
+	m88rs6060_set_tuner_reg(state, 0x7, 0x6d);
+	m88rs6060_set_tuner_reg(state, 0x10, 0x00);
+	m88rs6060_set_tuner_reg(state, 0x11, 0x7d);
 	msleep(10);
 }
 
@@ -773,8 +773,8 @@ static void m88rs6060_hard_reset(struct m88rs6060_state* state)
 {
 	unsigned val;
 
-	rs6060_set_tuner_reg(state, 0x4, 0x1);
-	rs6060_set_tuner_reg(state, 0x4, 0x0);
+	m88rs6060_set_tuner_reg(state, 0x4, 0x1);
+	m88rs6060_set_tuner_reg(state, 0x4, 0x0);
 
 	msleep(1);
 	m88rs6060_wakeup(state);
@@ -817,24 +817,24 @@ static int m88rs6060_clear_stream(struct m88rs6060_state* state)
 	return 0;
 }
 
-void rs6060_tuner_set_default_mclk(struct m88rs6060_state* state)
+void m88rs6060_tuner_set_default_mclk(struct m88rs6060_state* state)
 {
 	u8 reg15, reg16;
 	reg16 = 96;
 	state->mclk = 96000;
 
-	reg15 = rs6060_get_tuner_reg(state, 0x15);
+	reg15 = m88rs6060_get_tuner_reg(state, 0x15);
 	reg15 &= ~0x1;
-	rs6060_set_tuner_reg(state, 0x15, reg15);
-	rs6060_set_tuner_reg(state, 0x16, reg16);
-	rs6060_set_tuner_reg(state, 0x17, 0xc1);
-	rs6060_set_tuner_reg(state, 0x17, 0x81);
+	m88rs6060_set_tuner_reg(state, 0x15, reg15);
+	m88rs6060_set_tuner_reg(state, 0x16, reg16);
+	m88rs6060_set_tuner_reg(state, 0x17, 0xc1);
+	m88rs6060_set_tuner_reg(state, 0x17, 0x81);
 
 	msleep(5);
 	return;
 }
 
-void rs6060_tuner_select_mclk(struct m88rs6060_state* state, u32 freq_mhz, u32 symbol_rate, bool blind)
+void m88rs6060_tuner_select_mclk(struct m88rs6060_state* state, u32 freq_mhz, u32 symbol_rate, bool blind)
 {
 	u32 adc_freq_mhz[3] = { 96, 93, 99 };
 	u8 reg16_list[3] = { 96, 92, 100 }, reg15, reg16;
@@ -864,32 +864,32 @@ void rs6060_tuner_select_mclk(struct m88rs6060_state* state, u32 freq_mhz, u32 s
 		}
 
 	}
-	reg15 = rs6060_get_tuner_reg(state, 0x15);
+	reg15 = m88rs6060_get_tuner_reg(state, 0x15);
 	reg15 &= ~0x1;
-	rs6060_set_tuner_reg(state, 0x15, reg15);
-	rs6060_set_tuner_reg(state, 0x16, reg16);
-	rs6060_set_tuner_reg(state, 0x17, 0xc1);
-	rs6060_set_tuner_reg(state, 0x17, 0x81);
+	m88rs6060_set_tuner_reg(state, 0x15, reg15);
+	m88rs6060_set_tuner_reg(state, 0x16, reg16);
+	m88rs6060_set_tuner_reg(state, 0x17, 0xc1);
+	m88rs6060_set_tuner_reg(state, 0x17, 0x81);
 
 	msleep(5);
 
 	return;
 }
 
-void rs6060_set_mclk_according_to_symbol_rate(struct m88rs6060_state* state, u32 freq_mhz, u32 symbol_rate_kss, u32 mclk, bool blind)
+void m88rs6060_set_mclk_according_to_symbol_rate(struct m88rs6060_state* state, u32 freq_mhz, u32 symbol_rate_kss, u32 mclk, bool blind)
 {
 	//something to do with setting ts clock
 	regmap_write(state->demod_regmap, 0x6, 0xe0);
-	rs6060_select_mclk(state, freq_mhz, symbol_rate_kss, blind);
-	rs6060_set_ts_mclk(state, mclk);
+	m88rs6060_select_mclk(state, freq_mhz, symbol_rate_kss, blind);
+	m88rs6060_set_ts_mclk(state, mclk);
 	regmap_write(state->demod_regmap, 0x6, 0x0);
 	msleep(10);
 }
 
 
-void rs6060_set_default_mclk(struct m88rs6060_state* state)
+void m88rs6060_set_default_mclk(struct m88rs6060_state* state)
 {
-	rs6060_tuner_set_default_mclk(state);
+	m88rs6060_tuner_set_default_mclk(state);
 	if (state->mclk == 93000)
 		regmap_write(state->demod_regmap, 0xa0, 0x42);
 	else if (state->mclk == 96000)
@@ -902,9 +902,9 @@ void rs6060_set_default_mclk(struct m88rs6060_state* state)
 		regmap_write(state->demod_regmap, 0xa0, 0x44);
 }
 
-void rs6060_select_mclk(struct m88rs6060_state* state, u32 freq_mhz, u32 symbol_rate_kss, bool blind)
+void m88rs6060_select_mclk(struct m88rs6060_state* state, u32 freq_mhz, u32 symbol_rate_kss, bool blind)
 {
-	rs6060_tuner_select_mclk(state, freq_mhz / 1000, symbol_rate_kss, blind);
+	m88rs6060_tuner_select_mclk(state, freq_mhz / 1000, symbol_rate_kss, blind);
 	if (state->mclk == 93000)
 		regmap_write(state->demod_regmap, 0xa0, 0x42);
 	else if (state->mclk == 96000)
@@ -917,18 +917,18 @@ void rs6060_select_mclk(struct m88rs6060_state* state, u32 freq_mhz, u32 symbol_
 		regmap_write(state->demod_regmap, 0xa0, 0x44);
 }
 
-void rs6060_set_ts_mclk(struct m88rs6060_state *dev, u32 mclk)
+void m88rs6060_set_ts_mclk(struct m88rs6060_state* state, u32 mclk)
 {
 	u8 reg15, reg16, reg1D, reg1E, reg1F, tmp;
 	u8 sm, f0 = 0, f1 = 0, f2 = 0, f3 = 0;
 	u16 pll_div_fb, N;
 	u32 div;
 
-	reg15 = rs6060_get_tuner_reg(dev, 0x15);
-	reg16 = rs6060_get_tuner_reg(dev, 0x16);
-	reg1D = rs6060_get_tuner_reg(dev, 0x1d);
+	reg15 = m88rs6060_get_tuner_reg(state, 0x15);
+	reg16 = m88rs6060_get_tuner_reg(state, 0x16);
+	reg1D = m88rs6060_get_tuner_reg(state, 0x1d);
 
-	if (dev->config.ts_mode != MtFeTsOutMode_Serial) {
+	if (state->config.ts_mode != MtFeTsOutMode_Serial) {
 		if (reg16 == 92) {
 			tmp = 93;
 		} else if (reg16 == 100) {
@@ -949,7 +949,7 @@ void rs6060_set_ts_mclk(struct m88rs6060_state *dev, u32 mclk)
 	div = 9000 * pll_div_fb * 4;
 	div /= mclk;
 
-	if (dev->config.ts_mode == MtFeTsOutMode_Serial) {
+	if (state->config.ts_mode == MtFeTsOutMode_Serial) {
 		if (div <= 32) {
 			N = 2;
 
@@ -1053,14 +1053,14 @@ void rs6060_set_ts_mclk(struct m88rs6060_state *dev, u32 mclk)
 	reg1E = ((f3 << 4) + f2) & 0xff;
 	reg1F = ((f1 << 4) + f0) & 0xff;
 
-	rs6060_set_tuner_reg(dev, 0x1d, reg1D);
-	rs6060_set_tuner_reg(dev, 0x1e, reg1E);
-	rs6060_set_tuner_reg(dev, 0x1f, reg1F);
+	m88rs6060_set_tuner_reg(state, 0x1d, reg1D);
+	m88rs6060_set_tuner_reg(state, 0x1e, reg1E);
+	m88rs6060_set_tuner_reg(state, 0x1f, reg1F);
 	msleep(1);
 
 }
 
-static int rs6060_get_ts_mclk(struct m88rs6060_state *dev,u32*mclk )
+static int m88rs6060_get_ts_mclk(struct m88rs6060_state* state,u32*mclk )
 {
 	u8 reg15, reg16, reg1D, reg1E, reg1F;
 	u8 sm, f0, f1, f2, f3;
@@ -1070,11 +1070,11 @@ static int rs6060_get_ts_mclk(struct m88rs6060_state *dev,u32*mclk )
 
 	*mclk = MT_FE_MCLK_KHZ;
 
-	reg15 = rs6060_get_tuner_reg(dev, 0x15);
-	reg16 = rs6060_get_tuner_reg(dev, 0x16);
-	reg1D = rs6060_get_tuner_reg(dev, 0x1d);
-	reg1E = rs6060_get_tuner_reg(dev, 0x1e);
-	reg1F = rs6060_get_tuner_reg(dev, 0x1f);
+	reg15 = m88rs6060_get_tuner_reg(state, 0x15);
+	reg16 = m88rs6060_get_tuner_reg(state, 0x16);
+	reg1D = m88rs6060_get_tuner_reg(state, 0x1d);
+	reg1E = m88rs6060_get_tuner_reg(state, 0x1e);
+	reg1F = m88rs6060_get_tuner_reg(state, 0x1f);
 
 	MCLK_khz = 9000;
 	pll_div_fb = reg15 & 0x01;
@@ -1119,7 +1119,7 @@ static int rs6060_get_ts_mclk(struct m88rs6060_state *dev,u32*mclk )
 
 }
 
-static int rs6060_set_pll_freq(struct m88rs6060_state *dev, u32 tuner_freq_mhz)
+static int m88rs6060_set_pll_freq(struct m88rs6060_state* state, u32 tuner_freq_mhz)
 {
 	u32 freq_khz, ulNDiv1, ulNDiv2;
 	u8 refDiv1, refDiv2, ucLoDiv1, ucLomod1, ucLoDiv2, ucLomod2, div1m,
@@ -1127,22 +1127,22 @@ static int rs6060_set_pll_freq(struct m88rs6060_state *dev, u32 tuner_freq_mhz)
 	u8 reg27, reg29;
 	u8 tmp;
 
-	freq_khz = dev->config.clk / 1000;	/*tuner cycle */ //27000000;
+	freq_khz = state->config.clk / 1000;	/*tuner cycle */ //27000000;
 	if (freq_khz == 27000) {
 
 		div1m = 19;
 		div1p5m = 10;
-		rs6060_set_tuner_reg(dev, 0x41, 0x82);
+		m88rs6060_set_tuner_reg(state, 0x41, 0x82);
 	} else if (freq_khz == 24000) {
 		div1m = 16;
 		div1p5m = 8;
-		rs6060_set_tuner_reg(dev, 0x41, 0x8a);
+		m88rs6060_set_tuner_reg(state, 0x41, 0x8a);
 
 	} else {
 
 		div1m = 19;
 		div1p5m = 10;
-		rs6060_set_tuner_reg(dev, 0x41, 0x82);
+		m88rs6060_set_tuner_reg(state, 0x41, 0x82);
 
 	}
 	if (tuner_freq_mhz >= 1550) {
@@ -1231,31 +1231,31 @@ static int rs6060_set_pll_freq(struct m88rs6060_state *dev, u32 tuner_freq_mhz)
 
 	reg27 = (((ulNDiv1 >> 8) & 0x0F) + ucLomod1) & 0x7F;
 
-	rs6060_set_tuner_reg(dev, 0x27, reg27);
-	rs6060_set_tuner_reg(dev, 0x28, (u8) (ulNDiv1 & 0xff));
+	m88rs6060_set_tuner_reg(state, 0x27, reg27);
+	m88rs6060_set_tuner_reg(state, 0x28, (u8) (ulNDiv1 & 0xff));
 
 	reg29 = (((ulNDiv2 >> 8) & 0x0F) + ucLomod2) & 0x7f;
 
-	rs6060_set_tuner_reg(dev, 0x29, reg29);
-	rs6060_set_tuner_reg(dev, 0x2a, (u8) (ulNDiv2 & 0xff));
+	m88rs6060_set_tuner_reg(state, 0x29, reg29);
+	m88rs6060_set_tuner_reg(state, 0x2a, (u8) (ulNDiv2 & 0xff));
 
 	refDiv1 = refDiv1 & 0x1F;
-	rs6060_set_tuner_reg(dev, 0x36, refDiv1);
+	m88rs6060_set_tuner_reg(state, 0x36, refDiv1);
 
-	rs6060_set_tuner_reg(dev, 0x39, refDiv2);
+	m88rs6060_set_tuner_reg(state, 0x39, refDiv2);
 
-	tmp = rs6060_get_tuner_reg(dev, 0x3d);
+	tmp = m88rs6060_get_tuner_reg(state, 0x3d);
 	if (lodiv_en_opt_div2 == 1)
 		tmp |= 0x80;
 	else
 		tmp &= 0x7F;
 
-	rs6060_set_tuner_reg(dev, 0x3d, tmp);
+	m88rs6060_set_tuner_reg(state, 0x3d, tmp);
 
 	if (refDiv1 == 19) {
-		rs6060_set_tuner_reg(dev, 0x2c, 0x02);
+		m88rs6060_set_tuner_reg(state, 0x2c, 0x02);
 	} else {
-		rs6060_set_tuner_reg(dev, 0x2c, 0x00);
+		m88rs6060_set_tuner_reg(state, 0x2c, 0x00);
 	}
 
 	return 0;
@@ -1266,7 +1266,7 @@ static int rs6060_set_pll_freq(struct m88rs6060_state *dev, u32 tuner_freq_mhz)
 	but add lpf_offset_khz
 	for symbol rates below 5MS/s also add, 3Ms/s which is a frequency offset applied
  */
-static int rs6060_set_bb(struct m88rs6060_state *dev, u32 symbol_rate_kss, s32 lpf_offset_khz)
+static int m88rs6060_set_bb(struct m88rs6060_state* state, u32 symbol_rate_kss, s32 lpf_offset_khz)
 {
 	u32 f3dB;
 	u8 reg40;
@@ -1276,26 +1276,26 @@ static int rs6060_set_bb(struct m88rs6060_state *dev, u32 symbol_rate_kss, s32 l
 	f3dB = clamp_val(f3dB, 100U, /*43000U*/ 60000U);
 	reg40 = f3dB / 1000;
 
-	return rs6060_set_tuner_reg(dev, 0x40, reg40);
+	return m88rs6060_set_tuner_reg(state, 0x40, reg40);
 
 }
 
 
 static int m88rs6060_adjust_tuner_agc(struct m88rs6060_state* state, bool high) {
 	if(high) {
-		rs6060_set_tuner_reg(state, 0x5b, 0xcc);
-		rs6060_set_tuner_reg(state, 0x5c, 0xf4);
-		rs6060_set_tuner_reg(state, 0x60, 0xcb);
+		m88rs6060_set_tuner_reg(state, 0x5b, 0xcc);
+		m88rs6060_set_tuner_reg(state, 0x5c, 0xf4);
+		m88rs6060_set_tuner_reg(state, 0x60, 0xcb);
 	} else {
-		rs6060_set_tuner_reg(state, 0x5b, 0x4c);
-		rs6060_set_tuner_reg(state, 0x5c, 0x54);
-		rs6060_set_tuner_reg(state, 0x60, 0x4b);
+		m88rs6060_set_tuner_reg(state, 0x5b, 0x4c);
+		m88rs6060_set_tuner_reg(state, 0x5c, 0x54);
+		m88rs6060_set_tuner_reg(state, 0x60, 0x4b);
 	}
 	return 0;
 }
 
 
-int rs6060_set_tuner(struct m88rs6060_state* state, u32 tuner_freq_mhz, u32 symbol_rate_kss, s32 lpf_offset_khz)
+int m88rs6060_set_tuner(struct m88rs6060_state* state, u32 tuner_freq_mhz, u32 symbol_rate_kss, s32 lpf_offset_khz)
 {
 	int ret;
 	//lower the  AGC value?
@@ -1303,58 +1303,58 @@ int rs6060_set_tuner(struct m88rs6060_state* state, u32 tuner_freq_mhz, u32 symb
 
 	//set tuner pll according to desired frequency
 	state->tuned_frequency = tuner_freq_mhz*1000;
-	ret = rs6060_set_pll_freq(state, tuner_freq_mhz);
+	ret = m88rs6060_set_pll_freq(state, tuner_freq_mhz);
 	if (ret)
 		return ret;
-	ret = rs6060_set_bb(state, symbol_rate_kss, lpf_offset_khz);
+	ret = m88rs6060_set_bb(state, symbol_rate_kss, lpf_offset_khz);
 
 	if (ret)
 		return ret;
 
-	rs6060_set_tuner_reg(state, 0x00, 0x1);
-	rs6060_set_tuner_reg(state, 0x00, 0x0);
+	m88rs6060_set_tuner_reg(state, 0x00, 0x1);
+	m88rs6060_set_tuner_reg(state, 0x00, 0x0);
 	//end set frequency and symbol_rate
 	return 0;
 }
 
 
-static void rs6060_init(struct m88rs6060_state *dev)
+static void m88rs6060_tuner_init(struct m88rs6060_state* state)
 {
-	rs6060_set_tuner_reg(dev, 0x15, 0x6c);
-	rs6060_set_tuner_reg(dev, 0x2b, 0x1e);
+	m88rs6060_set_tuner_reg(state, 0x15, 0x6c);
+	m88rs6060_set_tuner_reg(state, 0x2b, 0x1e);
 
-	m88rs6060_wakeup(dev);
+	m88rs6060_wakeup(state);
 
-	rs6060_set_tuner_reg(dev, 0x24, 0x04);
-	rs6060_set_tuner_reg(dev, 0x6e, 0x39);
-	rs6060_set_tuner_reg(dev, 0x83, 0x01);
+	m88rs6060_set_tuner_reg(state, 0x24, 0x04);
+	m88rs6060_set_tuner_reg(state, 0x6e, 0x39);
+	m88rs6060_set_tuner_reg(state, 0x83, 0x01);
 
-	rs6060_set_tuner_reg(dev, 0x70, 0x90);
-	rs6060_set_tuner_reg(dev, 0x71, 0xf0);
-	rs6060_set_tuner_reg(dev, 0x72, 0xb6);
-	rs6060_set_tuner_reg(dev, 0x73, 0xeb);
-	rs6060_set_tuner_reg(dev, 0x74, 0x6f);
-	rs6060_set_tuner_reg(dev, 0x75, 0xfc);
+	m88rs6060_set_tuner_reg(state, 0x70, 0x90);
+	m88rs6060_set_tuner_reg(state, 0x71, 0xf0);
+	m88rs6060_set_tuner_reg(state, 0x72, 0xb6);
+	m88rs6060_set_tuner_reg(state, 0x73, 0xeb);
+	m88rs6060_set_tuner_reg(state, 0x74, 0x6f);
+	m88rs6060_set_tuner_reg(state, 0x75, 0xfc);
 
 	return;
 }
 
-static void m88res6060_set_ts_mode(struct m88rs6060_state *dev)
+static void m88res6060_set_ts_mode(struct m88rs6060_state* state)
 {
 	unsigned tmp, val = 0;
-	regmap_read(dev->demod_regmap, 0x0b, &val);
+	regmap_read(state->demod_regmap, 0x0b, &val);
 	val &= ~0x1;
-	regmap_write(dev->demod_regmap, 0x0b, val);
+	regmap_write(state->demod_regmap, 0x0b, val);
 
-	regmap_read(dev->demod_regmap, 0xfd, &tmp);
-	if (dev->config.ts_mode == MtFeTsOutMode_Parallel) {
+	regmap_read(state->demod_regmap, 0xfd, &tmp);
+	if (state->config.ts_mode == MtFeTsOutMode_Parallel) {
 		tmp &= ~0x01;
 		tmp &= ~0x04;
 
-		regmap_write(dev->demod_regmap, 0xfa, 0x01);
-		regmap_write(dev->demod_regmap, 0xf1, 0x60);
-		regmap_write(dev->demod_regmap, 0xfa, 0x00);
-	} else if (dev->config.ts_mode == MtFeTsOutMode_Serial) {
+		regmap_write(state->demod_regmap, 0xfa, 0x01);
+		regmap_write(state->demod_regmap, 0xf1, 0x60);
+		regmap_write(state->demod_regmap, 0xfa, 0x00);
+	} else if (state->config.ts_mode == MtFeTsOutMode_Serial) {
 
 		tmp &= ~0x01;
 		tmp |= 0x04;
@@ -1362,18 +1362,18 @@ static void m88res6060_set_ts_mode(struct m88rs6060_state *dev)
 		tmp |= 0x01;
 		tmp &= ~0x04;
 
-		regmap_write(dev->demod_regmap, 0xfa, 0x01);
-		regmap_write(dev->demod_regmap, 0xf1, 0x60);
-		regmap_write(dev->demod_regmap, 0xfa, 0x00);
+		regmap_write(state->demod_regmap, 0xfa, 0x01);
+		regmap_write(state->demod_regmap, 0xf1, 0x60);
+		regmap_write(state->demod_regmap, 0xfa, 0x00);
 	}
 
 	tmp &= ~0xb8;
 	tmp |= 0x42;
 	tmp |= 0x80;
-	regmap_write(dev->demod_regmap, 0xfd, tmp);
+	regmap_write(state->demod_regmap, 0xfd, tmp);
 
 	val = 0;
-	if (dev->config.ts_mode != MtFeTsOutMode_Serial) {
+	if (state->config.ts_mode != MtFeTsOutMode_Serial) {
 		tmp = MT_FE_ENHANCE_TS_PIN_LEVEL_PARALLEL_CI;
 
 		val |= tmp & 0x03;
@@ -1384,21 +1384,21 @@ static void m88res6060_set_ts_mode(struct m88rs6060_state *dev)
 		val = 0x00;
 	}
 
-	regmap_write(dev->demod_regmap, 0x0a, val);
+	regmap_write(state->demod_regmap, 0x0a, val);
 
-	regmap_read(dev->demod_regmap, 0x0b, &tmp);
-	if (dev->config.ts_pinswitch) {
+	regmap_read(state->demod_regmap, 0x0b, &tmp);
+	if (state->config.ts_pinswitch) {
 		tmp |= 0x20;
 	} else {
 		tmp &= ~0x20;
 	}
 	tmp |= 0x1;
 	printk("tmp = 0x%x \n",tmp);
-	regmap_write(dev->demod_regmap, 0x0b, tmp);
-	regmap_read(dev->demod_regmap, 0x0c, &tmp);
-	regmap_write(dev->demod_regmap, 0xf4, 0x01);
+	regmap_write(state->demod_regmap, 0x0b, tmp);
+	regmap_read(state->demod_regmap, 0x0c, &tmp);
+	regmap_write(state->demod_regmap, 0xf4, 0x01);
 	tmp &= ~0x80;
-	regmap_write(dev->demod_regmap, 0x0c, tmp);
+	regmap_write(state->demod_regmap, 0x0c, tmp);
 
 
 	return;
@@ -2161,11 +2161,11 @@ static int m88rs6060_tune_once(struct dvb_frontend *fe, bool blind)
 		realFreq = p->frequency + 3000;
 	}
 
-	rs6060_set_mclk_according_to_symbol_rate(state, realFreq / 1000, symbol_rate_kss, target_mclk, blind);
+	m88rs6060_set_mclk_according_to_symbol_rate(state, realFreq / 1000, symbol_rate_kss, target_mclk, blind);
 
 	// set frequency and symbol_rate
 	freq_mhz = (realFreq + 500) / 1000;
-	ret = rs6060_set_tuner(state, freq_mhz, symbol_rate_kss, lpf_offset_khz);
+	ret = m88rs6060_set_tuner(state, freq_mhz, symbol_rate_kss, lpf_offset_khz);
 	if (ret)
 		goto err;
 
@@ -2348,8 +2348,8 @@ static int m88rs6060_tune_once(struct dvb_frontend *fe, bool blind)
 
 static int m88rs6060_init(struct dvb_frontend *fe)
 {
-	struct m88rs6060_state *dev = fe->demodulator_priv;
-	struct i2c_client *client = dev->demod_client;
+	struct m88rs6060_state* state = fe->demodulator_priv;
+	struct i2c_client *client = state->demod_client;
 	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
 
 	c->cnr.len = 1;
@@ -2365,18 +2365,18 @@ static int m88rs6060_init(struct dvb_frontend *fe)
 
 }
 
-static int m88rs6060_get_sym_rate(struct m88rs6060_state *dev,
+static int m88rs6060_get_sym_rate(struct m88rs6060_state* state,
 						u32 *sym_rate_kss)
 {
 	u16 tmp;
 	u32 sym_rate_tmp;
 	unsigned val_0x6d,val_0x6e;
 
-	regmap_read(dev->demod_regmap,0x6d,&val_0x6d);
-	regmap_read(dev->demod_regmap,0x6e,&val_0x6e);
+	regmap_read(state->demod_regmap,0x6d,&val_0x6d);
+	regmap_read(state->demod_regmap,0x6e,&val_0x6e);
 
 	tmp = (u16)((val_0x6e<<8)|val_0x6d);
-	sym_rate_tmp = tmp*dev->mclk;
+	sym_rate_tmp = tmp*state->mclk;
 	sym_rate_tmp /= (1<<16);
 	*sym_rate_kss = sym_rate_tmp;
 
@@ -2386,7 +2386,7 @@ static int m88rs6060_get_sym_rate(struct m88rs6060_state *dev,
 
 
 
-static int rs6060_select_xm(struct m88rs6060_state* state, u32 *xm_khz)
+static int m88rs6060_select_xm(struct m88rs6060_state* state, u32 *xm_khz)
 {
 	u32 symbol_rate = 0;
 	u8 reg16;
@@ -2411,7 +2411,7 @@ static int rs6060_select_xm(struct m88rs6060_state* state, u32 *xm_khz)
 	symbol_rate *= 110;
 	symbol_rate /= 100;
 
-	reg16 = rs6060_get_tuner_reg(state, 0x16);
+	reg16 = m88rs6060_get_tuner_reg(state, 0x16);
 
 	if(reg16 == 92){
 		xm_line = 1;
@@ -2521,20 +2521,20 @@ static int m88rs6060_set_clock_ratio(struct m88rs6060_state* state, struct dtv_f
 			default:					input_datarate = locked_sym_rate_kss * mod_fac*2/8/3;		break;
 
 		}
-		rs6060_get_ts_mclk(state,&Mclk_khz);
+		m88rs6060_get_ts_mclk(state,&Mclk_khz);
 		if(state->config.ts_mode==MtFeTsOutMode_Serial){
 			u32 target_mclk = Mclk_khz;
 			input_datarate*=8;
 
 		//	target_mclk = input_datarate;
-				rs6060_select_xm(state,&target_mclk);
+				m88rs6060_select_xm(state,&target_mclk);
 			if(target_mclk != Mclk_khz){
 				regmap_write(state->demod_regmap,0x06,0xe0);
-				rs6060_set_ts_mclk(state,target_mclk);
+				m88rs6060_set_ts_mclk(state,target_mclk);
 				regmap_write(state->demod_regmap,0x06,0x00);
 			}
 
-			rs6060_get_ts_mclk(state,&iSerialMclkHz);
+			m88rs6060_get_ts_mclk(state,&iSerialMclkHz);
 			if(iSerialMclkHz>116000)
 				regmap_write(state->demod_regmap,0x0a,0x01);
 			else
@@ -2602,21 +2602,21 @@ static int m88rs6060_set_clock_ratio(struct m88rs6060_state* state, struct dtv_f
 		default:		input_datarate = locked_sym_rate_kss * mod_fac*3/4/8;		break;
 
 	  }
-		rs6060_get_ts_mclk(state,&Mclk_khz);
+		m88rs6060_get_ts_mclk(state,&Mclk_khz);
 
 		if(state->config.ts_mode==MtFeTsOutMode_Serial){
 			u32 target_mclk = Mclk_khz;
 			input_datarate*=8;
 
-		//	target_mclk = input_datarate;
-				rs6060_select_xm(state,&target_mclk);
+			//	target_mclk = input_datarate;
+				m88rs6060_select_xm(state,&target_mclk);
 			if(target_mclk != Mclk_khz){
 				regmap_write(state->demod_regmap,0x06,0xe0);
-				rs6060_set_ts_mclk(state,target_mclk);
+				m88rs6060_set_ts_mclk(state,target_mclk);
 				regmap_write(state->demod_regmap,0x06,0x00);
 			}
 
-			rs6060_get_ts_mclk(state,&iSerialMclkHz);
+			m88rs6060_get_ts_mclk(state,&iSerialMclkHz);
 			if(iSerialMclkHz>116000)
 				regmap_write(state->demod_regmap,0x0a,0x01);
 			else
@@ -3073,8 +3073,8 @@ static int m88rs6060_read_signal_strength(struct dvb_frontend *fe,
 static int m88rs6060_set_voltage(struct dvb_frontend*fe,
 								enum fe_sec_voltage voltage)
 {
-	struct m88rs6060_state *dev = fe->demodulator_priv;
-	struct i2c_client *client = dev->demod_client;
+	struct m88rs6060_state* state = fe->demodulator_priv;
+	struct i2c_client *client = state->demod_client;
 	int ret;
 	u8 utmp;
 	bool voltage_sel, lnb_power;
@@ -3095,7 +3095,7 @@ static int m88rs6060_set_voltage(struct dvb_frontend*fe,
 			break;
 	}
 	utmp = lnb_power << 1 | voltage_sel << 0;
-	ret = m88rs6060_update_bits(dev, 0xa2, 0x03, utmp);
+	ret = m88rs6060_update_bits(state, 0xa2, 0x03, utmp);
 	if (ret)
 		goto err;
 
@@ -3109,8 +3109,8 @@ err:
 static int m88rs6060_set_tone(struct dvb_frontend *fe,
 			      enum fe_sec_tone_mode fe_sec_tone_mode)
 {
-	struct m88rs6060_state *dev = fe->demodulator_priv;
-	struct i2c_client *client = dev->demod_client;
+	struct m88rs6060_state* state = fe->demodulator_priv;
+	struct i2c_client *client = state->demod_client;
 	int ret;
 	unsigned int utmp, tone, reg_a1_mask;
 
@@ -3131,13 +3131,13 @@ static int m88rs6060_set_tone(struct dvb_frontend *fe,
 		goto err;
 	}
 
-	utmp = tone << 7 | dev->config.envelope_mode << 5;
-	ret = m88rs6060_update_bits(dev, 0xa2, 0xe0, utmp);
+	utmp = tone << 7 | state->config.envelope_mode << 5;
+	ret = m88rs6060_update_bits(state, 0xa2, 0xe0, utmp);
 	if (ret)
 		goto err;
 
 	utmp = 1 << 2;
-	ret = m88rs6060_update_bits(dev, 0xa1, reg_a1_mask, utmp);
+	ret = m88rs6060_update_bits(state, 0xa1, reg_a1_mask, utmp);
 	if (ret)
 		goto err;
 
@@ -3150,8 +3150,8 @@ static int m88rs6060_set_tone(struct dvb_frontend *fe,
 static int m88rs6060_diseqc_send_master_cmd(struct dvb_frontend *fe, struct dvb_diseqc_master_cmd
 					    *diseqc_cmd)
 {
-	struct m88rs6060_state *dev = fe->demodulator_priv;
-	struct i2c_client *client = dev->demod_client;
+	struct m88rs6060_state* state = fe->demodulator_priv;
+	struct i2c_client *client = state->demod_client;
 	int ret;
 	unsigned int utmp;
 	unsigned long timeout;
@@ -3163,17 +3163,17 @@ static int m88rs6060_diseqc_send_master_cmd(struct dvb_frontend *fe, struct dvb_
 		goto err;
 	}
 
-	utmp = dev->config.envelope_mode << 5;
-	ret = m88rs6060_update_bits(dev, 0xa2, 0xe0, utmp);
+	utmp = state->config.envelope_mode << 5;
+	ret = m88rs6060_update_bits(state, 0xa2, 0xe0, utmp);
 	if (ret)
 		goto err;
 
-	ret = regmap_bulk_write(dev->demod_regmap, 0xa3, diseqc_cmd->msg,
+	ret = regmap_bulk_write(state->demod_regmap, 0xa3, diseqc_cmd->msg,
 				diseqc_cmd->msg_len);
 	if (ret)
 		goto err;
 
-	ret = regmap_write(dev->demod_regmap, 0xa1,
+	ret = regmap_write(state->demod_regmap, 0xa1,
 			   (diseqc_cmd->msg_len - 1) << 3 | 0x07);
 	if (ret)
 		goto err;
@@ -3187,7 +3187,7 @@ static int m88rs6060_diseqc_send_master_cmd(struct dvb_frontend *fe, struct dvb_
 	usleep_range(utmp - 4000, utmp);
 
 	for (utmp = 1; !time_after(jiffies, timeout) && utmp;) {
-		ret = regmap_read(dev->demod_regmap, 0xa1, &utmp);
+		ret = regmap_read(state->demod_regmap, 0xa1, &utmp);
 		if (ret)
 			goto err;
 		utmp = (utmp >> 6) & 0x1;
@@ -3200,12 +3200,12 @@ static int m88rs6060_diseqc_send_master_cmd(struct dvb_frontend *fe, struct dvb_
 	} else {
 		dev_dbg(&client->dev, "diseqc tx timeout\n");
 
-		ret = m88rs6060_update_bits(dev, 0xa1, 0xc0, 0x40);
+		ret = m88rs6060_update_bits(state, 0xa1, 0xc0, 0x40);
 		if (ret)
 			goto err;
 	}
 
-	ret = m88rs6060_update_bits(dev, 0xa2, 0xc0, 0x80);
+	ret = m88rs6060_update_bits(state, 0xa2, 0xc0, 0x80);
 	if (ret)
 		goto err;
 
@@ -3223,16 +3223,16 @@ static int m88rs6060_diseqc_send_master_cmd(struct dvb_frontend *fe, struct dvb_
 static int m88rs6060_diseqc_send_burst(struct dvb_frontend *fe,
 				       enum fe_sec_mini_cmd fe_sec_mini_cmd)
 {
-	struct m88rs6060_state *dev = fe->demodulator_priv;
-	struct i2c_client *client = dev->demod_client;
+	struct m88rs6060_state* state = fe->demodulator_priv;
+	struct i2c_client *client = state->demod_client;
 	int ret;
 	unsigned int utmp, burst;
 	unsigned long timeout;
 
 	dev_dbg(&client->dev, "fe_sec_mini_cmd=%d\n", fe_sec_mini_cmd);
 
-	utmp = dev->config.envelope_mode << 5;
-	ret = m88rs6060_update_bits(dev, 0xa2, 0xe0, utmp);
+	utmp = state->config.envelope_mode << 5;
+	ret = m88rs6060_update_bits(state, 0xa2, 0xe0, utmp);
 	if (ret)
 		goto err;
 
@@ -3249,7 +3249,7 @@ static int m88rs6060_diseqc_send_burst(struct dvb_frontend *fe,
 		goto err;
 	}
 
-	ret = regmap_write(dev->demod_regmap, 0xa1, burst);
+	ret = regmap_write(state->demod_regmap, 0xa1, burst);
 	if (ret)
 		goto err;
 
@@ -3261,7 +3261,7 @@ static int m88rs6060_diseqc_send_burst(struct dvb_frontend *fe,
 	usleep_range(8500, 12500);
 
 	for (utmp = 1; !time_after(jiffies, timeout) && utmp;) {
-		ret = regmap_read(dev->demod_regmap, 0xa1, &utmp);
+		ret = regmap_read(state->demod_regmap, 0xa1, &utmp);
 		if (ret)
 			goto err;
 		utmp = (utmp >> 6) & 0x1;
@@ -3274,12 +3274,12 @@ static int m88rs6060_diseqc_send_burst(struct dvb_frontend *fe,
 	} else {
 		dev_dbg(&client->dev, "diseqc tx timeout\n");
 
-		ret = m88rs6060_update_bits(dev, 0xa1, 0xc0, 0x40);
+		ret = m88rs6060_update_bits(state, 0xa1, 0xc0, 0x40);
 		if (ret)
 			goto err;
 	}
 
-	ret = m88rs6060_update_bits(dev, 0xa2, 0xc0, 0x80);
+	ret = m88rs6060_update_bits(state, 0xa2, 0xc0, 0x80);
 	if (ret)
 		goto err;
 
@@ -3297,11 +3297,11 @@ static int m88rs6060_diseqc_send_burst(struct dvb_frontend *fe,
 static void m88rs6060_spi_read(struct dvb_frontend *fe,
 			       struct ecp3_info *ecp3inf)
 {
-	struct m88rs6060_state *dev = fe->demodulator_priv;
-	struct i2c_client *client = dev->demod_client;
+	struct m88rs6060_state* state = fe->demodulator_priv;
+	struct i2c_client *client = state->demod_client;
 
-	if (dev->read_properties)
-		dev->read_properties(client->adapter, ecp3inf->reg,
+	if (state->read_properties)
+		state->read_properties(client->adapter, ecp3inf->reg,
 				     &(ecp3inf->data));
 
 	return;
@@ -3310,11 +3310,11 @@ static void m88rs6060_spi_read(struct dvb_frontend *fe,
 static void m88rs6060_spi_write(struct dvb_frontend *fe,
 				struct ecp3_info *ecp3inf)
 {
-	struct m88rs6060_state *dev = fe->demodulator_priv;
-	struct i2c_client *client = dev->demod_client;
+	struct m88rs6060_state* state = fe->demodulator_priv;
+	struct i2c_client *client = state->demod_client;
 
-	if (dev->write_properties)
-		dev->write_properties(client->adapter, ecp3inf->reg,
+	if (state->write_properties)
+		state->write_properties(client->adapter, ecp3inf->reg,
 				      ecp3inf->data);
 	return;
 }
@@ -3439,7 +3439,7 @@ static int m88rs6060_get_spectrum_scan_sweep(struct dvb_frontend* fe,
 		if(i==0) {
 			m88rs6060_set_demod(state, resolution, false);
 		}
-		rs6060_set_tuner(state, frequency / 1000, 2000, 3000);
+		m88rs6060_set_tuner(state, frequency / 1000, 2000, 3000);
 		m88rs6060_set_carrier_offset(state, frequency - (frequency/1000)*1000);
 		msleep(10);//m88rs6060_wait_for_analog_agc_lock(state);
 		m88rs6060_get_rf_level(state, frequency / 1000, &pch_rf);
@@ -3690,9 +3690,9 @@ static const struct dvb_frontend_ops m88rs6060_ops = {
 	.spectrum_get = m88rs6060_spectrum_get,
 };
 
-static int m88rs6060_ready(struct m88rs6060_state *dev)
+static int m88rs6060_ready(struct m88rs6060_state* state)
 {
-	struct i2c_client *client = dev->demod_client;
+	struct i2c_client *client = state->demod_client;
 	int ret, len, rem;
 	const struct firmware *firmware;
 	const char *name = M88RS6060_FIRMWARE;
@@ -3701,19 +3701,19 @@ static int m88rs6060_ready(struct m88rs6060_state *dev)
 	dev_dbg(&client->dev, "%s", __func__);
 
 	//rest the harware and wake up the demod and tuner;
-	m88rs6060_hard_reset(dev);
-	rs6060_init(dev);
+	m88rs6060_hard_reset(state);
+	m88rs6060_tuner_init(state);
 
-	ret = regmap_write(dev->demod_regmap, 0x07, 0xe0);	//global reset ,diseqc and fec reset
+	ret = regmap_write(state->demod_regmap, 0x07, 0xe0);	//global reset ,diseqc and fec reset
 	if (ret)
 		goto err;
-	ret = regmap_write(dev->demod_regmap, 0x07, 0x00);
+	ret = regmap_write(state->demod_regmap, 0x07, 0x00);
 	if (ret)
 		goto err;
 
 	/* cold state - try to download firmware */
 	dev_info(&client->dev, "found a '%s' in cold state\n",
-		 dev->fe.ops.info.name);
+		 state->fe.ops.info.name);
 
 	/* request the firmware, this will block and timeout */
 	ret = request_firmware(&firmware, name, &client->dev);
@@ -3724,7 +3724,7 @@ static int m88rs6060_ready(struct m88rs6060_state *dev)
 
 	dev_info(&client->dev, "downloading firmware from file '%s'\n", name);
 
-	ret = regmap_write(dev->demod_regmap, 0xb2, 0x01);
+	ret = regmap_write(state->demod_regmap, 0xb2, 0x01);
 	if (ret)
 		goto err_release_firmware;
 
@@ -3732,9 +3732,9 @@ static int m88rs6060_ready(struct m88rs6060_state *dev)
 		 firmware->size, firmware->data[0], firmware->data[1],
 		 firmware->data[2]);
 
-	for (rem = firmware->size; rem > 0; rem -= (dev->config.i2c_wr_max - 1)) {
-		len = min(dev->config.i2c_wr_max - 1, rem);
-		ret = m88rs6060_fireware_download(dev, 0xb0,
+	for (rem = firmware->size; rem > 0; rem -= (state->config.i2c_wr_max - 1)) {
+		len = min(state->config.i2c_wr_max - 1, rem);
+		ret = m88rs6060_fireware_download(state, 0xb0,
 						  &firmware->data[firmware->size - rem],
 						  len);
 		if (ret) {
@@ -3745,13 +3745,13 @@ static int m88rs6060_ready(struct m88rs6060_state *dev)
 		}
 	}
 
-	ret = regmap_write(dev->demod_regmap, 0xb2, 0x00);
+	ret = regmap_write(state->demod_regmap, 0xb2, 0x00);
 	if (ret)
 		goto err_release_firmware;
 
 	release_firmware(firmware);
 
-	ret = regmap_read(dev->demod_regmap, 0xb9, &val);
+	ret = regmap_read(state->demod_regmap, 0xb9, &val);
 	if (ret)
 		goto err;
 
@@ -3762,13 +3762,13 @@ static int m88rs6060_ready(struct m88rs6060_state *dev)
 	}
 
 	dev_info(&client->dev, "found a '%s' in warm state\n",
-		 dev->fe.ops.info.name);
+		 state->fe.ops.info.name);
 	dev_info(&client->dev, "firmware version:%X\n", val);
 	msleep(5);
-	m88res6060_set_ts_mode(dev);
+	m88res6060_set_ts_mode(state);
 
-	regmap_read(dev->demod_regmap, 0x4d, &val);
-	regmap_write(dev->demod_regmap, 0x4d, val & 0xfd); //clear bit 1: spectral inversion
+	regmap_read(state->demod_regmap, 0x4d, &val);
+	regmap_write(state->demod_regmap, 0x4d, val & 0xfd); //clear bit 1: spectral inversion
 
 	return 0;
  err_release_firmware:

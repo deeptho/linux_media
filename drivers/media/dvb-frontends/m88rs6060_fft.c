@@ -265,7 +265,7 @@ int m88rs6060_get_spectrum_scan_fft(struct dvb_frontend *fe,
 		goto _end;
 	}
 
-	rs6060_set_default_mclk(state);
+	m88rs6060_set_default_mclk(state);
 
 	min_correction[0] = 0x7fffffff;
 	min_correction[1] = 0x7fffffff;
@@ -283,22 +283,13 @@ int m88rs6060_get_spectrum_scan_fft(struct dvb_frontend *fe,
 			break;
 		}
 		dprintk("SPEC: center_freq=%d\n", center_freq);
-		m88rs6060_init_fft(state, center_freq); //_mt_fe_dmd_rs6060_bs_set_reg_psd(handle);
+		m88rs6060_init_fft(state, center_freq);
 		iFreqKHz = (center_freq + 500) / 1000 * 1000;
 
 		msleep(10);
 
+		m88rs6060_set_tuner(state, iFreqKHz / 1000, BLINDSCAN_SYMRATE_KSS, 0);
 
-		/*
-			set frequency of tuner (uint of 1Mhz)
-			rs6060_set_bb(state, ss->range, 0);
-		 */
-		rs6060_set_tuner(state, iFreqKHz / 1000, BLINDSCAN_SYMRATE_KSS, 0);
-
-		/*
-			mt_fe_tn_get_offset(handle) always returns 0
-		*/
-		//_mt_fe_dmd_rs6060_set_carrier_offset(handle, mt_fe_tn_get_offset(handle));
 		m88rs6060_set_carrier_offset(state, iFreqKHz - (iFreqKHz/ 1000)*1000);
 
 		error = m88rs6060_get_spectrum_scan_fft_one_band(state,	iFreqKHz, ss->range,
