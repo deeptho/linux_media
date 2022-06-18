@@ -52,7 +52,6 @@ struct m88rs6060_state {
 	bool pls_active;
 	s32 active_stream_id;
 
-	s32 active_stream_id;
 	u32 dvbv3_ber;		/* for old DVBv3 API read_ber */
 	u32 tuned_frequency;    //khz
 	u64 post_bit_error;
@@ -199,7 +198,6 @@ struct MT_FE_CHAN_INFO_DVBS2 {
 	bool is_dummy_frame;
 	s8 iVcmCycle;
 	s8 iFrameLength;	/*0: Normal; 1: Short; 2: Medium */
-	u8 matype;
 };
 
 void rs6060_tuner_select_mclk(struct m88rs6060_state *dev, u32 freq_MHz, u32 symbol_rate, bool bBs);
