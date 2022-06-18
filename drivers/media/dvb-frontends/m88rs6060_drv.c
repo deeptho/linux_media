@@ -1940,11 +1940,47 @@ static int m88rs6060_tune_once(struct dvb_frontend *fe, bool blind)
 		msleep(70);
 	}
 
-	if(! blind) {
+	if(!blind) {
 		if (p->stream_id != NO_STREAM_ID_FILTER) {
 			isi = p->stream_id & 0xff;
 			pls_mode = (p->stream_id >> 26) & 3;
 			pls_code = (p->stream_id >> 8) & 0x3ffff;
+			if (!pls_mode && !pls_code)
+				pls_code = 1;
+		} else {
+			isi = 0;
+			pls_mode = 0;
+			pls_code = 1;
+		}
+
+		if (p->scrambling_sequence_index) {
+			pls_mode = 1;
+			pls_code = p->scrambling_sequence_index;
+		}
+
+		if (pls_mode)
+			m88rs6060_calc_PLS_gold_code(pls, pls_code);
+		else {
+			pls[0] = pls_code & 0xff;
+			pls[1] = (pls_code >> 8) & 0xff;
+			pls[2] = (pls_code >> 16) & 3;
+			state->detected_pls_code = -1;
+		}
+		dev_dbg(&client->dev, "isi = %d", isi);
+		dev_dbg(&client->dev, "pls mode %d, code %d\n", pls_mode, pls_code);
+		dev_dbg(&client->dev, "pls buf =%*ph \n", 3, pls);
+		dprintk("Write: PLS: 0x%x 0x%x 0x%x\n", pls[0], pls[1], pls[2]);
+		ret = regmap_bulk_write(state->demod_regmap, 0x22, pls, 3);
+	} else if(1)	{ //blind
+		if (p->stream_id != NO_STREAM_ID_FILTER) {
+			isi = p->stream_id & 0xff;
+#if 0
+			pls_mode = (p->stream_id >> 26) & 3;
+			pls_code = (p->stream_id >> 8) & 0x3ffff;
+#else
+			pls_mode = 0;
+			pls_code = 1;
+#endif
 			if (!pls_mode && !pls_code)
 				pls_code = 1;
 		} else {
@@ -1984,10 +2020,11 @@ static int m88rs6060_tune_once(struct dvb_frontend *fe, bool blind)
 	//wait_for_dmdlock
 
 	if (blind) {
+		bool pls_lock = false;
 		for (i = 0; i < 150; i++) {
 			regmap_read(state->demod_regmap, 0xbe, &tmp); //?? if pls detection is ready
-			dprintk("reg[0xbe] = 0x%x\n", tmp);
-			if(tmp == 0xfe) { //?? if pls detection is ready
+			dprintk("reg[0xbe] = 0x%x i=%d\n", tmp, i);
+			if(!pls_lock && tmp == 0xfe) { //?? if pls detection is ready
 				u32 tmp1;
 				int iCnt;
 				u32 tmp3;
@@ -2003,14 +2040,13 @@ static int m88rs6060_tune_once(struct dvb_frontend *fe, bool blind)
 
 				iCnt = 0;
 
-				do
-				{
+				do {
 					iCnt ++;
 					if(iCnt > 1000)
-					{
-						dprintk("PlS timedout\n");
-						return -1;
-					}
+						{
+							dprintk("PlS timedout\n");
+								return -1;
+						}
 
 					regmap_read(state->demod_regmap, 0x24, &tmp1);  //ANA_4: clock related?
 
@@ -2034,7 +2070,7 @@ static int m88rs6060_tune_once(struct dvb_frontend *fe, bool blind)
 				//end of read and rewrite pls code
 				state->pls_active = true;
 				dprintk("Read: PLS: 0x%x\n", state->detected_pls_code);
-
+				pls_lock = true;
 				m88rs6060_soft_reset(state);
 				for(iCnt=0 ; iCnt <50 ; ++iCnt) {
 					regmap_read(state->demod_regmap, 0x08, &tmp);
@@ -2051,7 +2087,7 @@ static int m88rs6060_tune_once(struct dvb_frontend *fe, bool blind)
 
 			if (tmp & 0x08) { // reserved bit 3 indicates dvbs2 (1) or dvbs1 (0)
 				//dvbs2
-				dprintk("dvbs2 tmp=0x%x\n", tmp);
+				dprintk("dvbs2 tmp=0x%x tmp1=0x%x\n", tmp, tmp1);
 				state->has_carrier = 1;
 				//regmap_read(state->demod_regmap, 0x0d, &tmp1); //get all lock bits
 				state->fec_locked = (tmp1 & 0x80);
@@ -2061,6 +2097,7 @@ static int m88rs6060_tune_once(struct dvb_frontend *fe, bool blind)
 					(tmp1 & 0x02); //timing locked
 				state->has_signal = (tmp1 & 0x1);  //analog agc locked
 				state->has_timing_lock = (tmp1 & 0x2);
+				if(!pls_lock && (tmp1 & 0x0f) == 0x0f) {
 					u32 tmp3;
 					dprintk("ready to read pls tmp=0x%x tmp1=0x%x\n", tmp, tmp1);
 					is_dvbs2 = true;
@@ -2076,9 +2113,25 @@ static int m88rs6060_tune_once(struct dvb_frontend *fe, bool blind)
 						msleep(50);
 						continue;
 					}
+					dprintk("pls found tmp=0x%x tmp1=0x%x\n", tmp, tmp1);
+				}
+#if 1
+				if(tmp1 == 0x8f) {
+					//dvbs2 fully locked
+							state->demod_locked = true;
+							dprintk("succeeded to fully lock i=%d: tmp=0x%x tmp1=0x%x fec=%d vit=%d car=%d sync=%d sign=%d\n",
+									i, tmp, tmp1,
+											state->fec_locked, state->has_viterbi, state->has_carrier, state->has_sync, state->has_signal);
+							break;
+				} else
 
-					break;
-				} else {
+#endif
+					{
+						dprintk("succeeded to PLS lock i=%d: tmp=0x%x tmp1=0x%x fec=%d vit=%d car=%d sync=%d sign=%d\n", i,
+										tmp, tmp1,
+										state->fec_locked, state->has_viterbi, state->has_carrier, state->has_sync, state->has_signal);
+					}
+			}  else {
 				//dvbs
 				dprintk("dvbs tmp=0x%x\n", tmp);
 				state->has_carrier = 1;
@@ -2118,6 +2171,7 @@ static int m88rs6060_tune_once(struct dvb_frontend *fe, bool blind)
 	} else { //!blind
 		for (i = 0; i < 150; i++) {
 			regmap_read(state->demod_regmap, 0x08, &tmp);
+			regmap_read(state->demod_regmap, 0x0d, &tmp1); //get all lock bits
 			state->fec_locked = (tmp1 & 0x80); //only valid for dvbs2
 			state->has_viterbi = (tmp1 & 0x80);
 			state->has_carrier = (tmp1 >> 2)&1; //only dvbs1 mode
@@ -2150,13 +2204,14 @@ static int m88rs6060_tune_once(struct dvb_frontend *fe, bool blind)
 		something to do with spectral inversion?
 		set isi
 	*/
-	if(state->has_lock)
+	if(state->has_lock) {
 		p->delivery_system = is_dvbs2 ? SYS_DVBS2 : SYS_DVBS;
-	dprintk("tmp1=%d lock=%d i=%d delsys=%d\n", tmp1, state->has_lock, i, p->delivery_system );
-	if (is_dvbs2) { //locked dvbs2
-		m88rs6060_isi_scan(state);
-		memcpy(p->isi_bitset,state->isi_list.isi_bitset, sizeof(p->isi_bitset));
-		m88rs6060_select_stream(state, isi);
+		dprintk("tmp1=%d lock=%d i=%d delsys=%d\n", tmp1, state->has_lock, i, p->delivery_system );
+		if (is_dvbs2) { //locked dvbs2
+			m88rs6060_isi_scan(state);
+			memcpy(p->isi_bitset,state->isi_list.isi_bitset, sizeof(p->isi_bitset));
+			m88rs6060_select_stream(state, isi);
+		}
 	}
 	state->TsClockChecked = true;
 
@@ -2969,8 +3024,7 @@ static int m88rs6060_diseqc_send_master_cmd(struct dvb_frontend *fe, struct dvb_
 	unsigned int utmp;
 	unsigned long timeout;
 
-	dev_dbg(&client->dev, "msg=%*ph\n",
-		diseqc_cmd->msg_len, diseqc_cmd->msg);
+	dprintk("msg=%*ph\n", diseqc_cmd->msg_len, diseqc_cmd->msg);
 
 	if (diseqc_cmd->msg_len < 3 || diseqc_cmd->msg_len > 6) {
 		ret = -EINVAL;
@@ -3181,7 +3235,7 @@ static int m88rs6060_tune(struct dvb_frontend *fe, bool re_tune,
 		read rf level, snr, signal quality, lock_status
 	*/
 	r = m88rs6060_read_status(fe, status);
-
+	dprintk("called m88rs6060_read_status r=%d status=0x%x\n", r, *status);
 #ifdef TODO
 	{
 		int max_num_samples = state->symbol_rate /5 ; //we spend max 500 ms on this
