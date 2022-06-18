@@ -2185,7 +2185,7 @@ static int m88rs6060_tune_once(struct dvb_frontend *fe, bool blind)
 		tmp = (tmp & 0x3b) ;
 		regmap_write(state->demod_regmap, 0x08, tmp);//disable blindscan; clear reserved bit 6; set dvbs1 mode
 		regmap_write(state->demod_regmap, 0xe0, 0xf8);/*make viterbi decoder try all fecs; do not invert spectrum; do not
-																							 rotate iq*/
+																										rotate iq*/
 	} else {
 		switch (p->delivery_system) {
 		case SYS_DVBS:
@@ -2326,7 +2326,7 @@ static int m88rs6060_tune_once(struct dvb_frontend *fe, bool blind)
 
 	if(state->config.HAS_CI)
 		state->newTP = true;
-if(state->has_lock) {
+	if(state->has_lock) {
 		/*
 			retrieve information about modulation, frequency, symbol_rate
 			but not CNR, BER (different from stid135)
@@ -2337,8 +2337,8 @@ if(state->has_lock) {
 		m88rs6060_get_signal_info(fe);
 	}
 
-		vprintk("[%d] locked=%d vit=%d sync=%d timeout=%d\n",
-						state->adapterno, state->has_lock, state->has_viterbi, state->has_sync, state->has_timedout);
+	vprintk("[%d] locked=%d vit=%d sync=%d timeout=%d\n",
+					state->adapterno, state->has_lock, state->has_viterbi, state->has_sync, state->has_timedout);
 	return 0;
 
  err:
