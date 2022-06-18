@@ -1796,6 +1796,10 @@ static void m88rs6060_select_stream(struct m88rs6060_state* state, u8 stream_id)
 	bool found = false;
 	uint32_t mask;
 	u8 j;
+	if(!state->is_mis) {
+		state->active_stream_id =  -1;
+		return;
+	}
 	j = stream_id /32;
 	mask = ((uint32_t)1)<< (stream_id%32);
 	found =  mask & 	state->isi_list.isi_bitset[j];
@@ -1864,29 +1868,231 @@ static bool m88rs6060_detect_mis(struct m88rs6060_state* state)
 	return false;
 }
 
-static int m88rs6060_tune_once(struct dvb_frontend *fe, bool blind)
+/*
+	returns 0 on lock, -1 otherwise
+ */
+static int m88rs6060_wait_for_demod_lock_non_blind(struct m88rs6060_state* state)
 {
-	struct m88rs6060_state* state = fe->demodulator_priv;
-	struct i2c_client *client = state->demod_client;
-	struct dtv_frontend_properties* p = &fe->dtv_property_cache;
-	int ret;
-	u32 symbol_rate_KSs;
 	unsigned tmp, tmp1, tmp2;
-	u32 realFreq, freq_MHz;
-	s16 lpf_offset_KHz = 0;
-	u32 target_mclk = 144000;
-	u32 pls_mode, pls_code;
-	u8 pls[] = { 0x1, 0, 0 }, isi;
-	int i = 0;
+	int i;
 	bool is_dvbs2 = false;
-	dprintk("[%d] delivery_system=%u modulation=%u frequency=%u symbol_rate=%u inversion=%u stream_id=%d\n",
-					state->adapterno,
-					p->delivery_system, p->modulation, p->frequency,
-					p->symbol_rate, p->inversion, p->stream_id);
+
+	for (i = 0; i < 150; i++) {
+		regmap_read(state->demod_regmap, 0x08, &tmp);
+		regmap_read(state->demod_regmap, 0x0d, &tmp1); //get all lock bits
+		state->fec_locked = (tmp1 & 0x80); //only valid for dvbs2
+		state->has_viterbi = (tmp1 & 0x80);
+			state->has_carrier = (tmp1 >> 2)&1; //only dvbs1 mode
+			state->has_sync = (tmp1 & 0x08) && //header locked; only dvbs2
+				(tmp1 & 0x02); //timing locked
+			state->has_signal = (tmp1&0x1); //analog agc locked
+			state->has_timing_lock = (tmp1 & 0x2);
+			if ((tmp1 == 0x8f) //fully locked dvbs2
+					|| (tmp1 == 0xf7) //fully locked dvbs1 //TODO: only check the last three bits, should be 7
+					) {
+				state->demod_locked = true;
+				regmap_read(state->demod_regmap, 0xd1, &tmp2); //S_CTRL_1
+				dprintk("lock achieved tmp=0x%x tmp1=0x%x tmp2=0x%x\n", tmp, tmp1, tmp2);
+				is_dvbs2 = (tmp1==0x8f);
+				break;
+			}
+			msleep(20);
+	}
+	if(i==150)
+		dprintk("Failed to lock: tmp=0x%x tmp1=0x%x fec=%d vit=%d car=%d sync=%d sign=%d\n", tmp, tmp1,
+						state->fec_locked, state->has_viterbi, state->has_carrier, state->has_sync, state->has_signal);
+	else
+		dprintk("succeeded to lock: tmp=0x%x tmp1=0x%x fec=%d vit=%d car=%d sync=%d sign=%d\n", tmp, tmp1,
+						state->fec_locked, state->has_viterbi, state->has_carrier, state->has_sync, state->has_signal);
+
+	state->has_lock = state->demod_locked;
+	state->has_timedout = (i==150);
+	dprintk("timedout=%d\n", state->has_timedout);
+	if(state->has_lock) {
+		state->detected_delivery_system = is_dvbs2 ? SYS_DVBS2 : SYS_DVBS;
+		dprintk("tmp1=%d lock=%d i=%d delsys=%d\n", tmp1, state->has_lock, i, state->detected_delivery_system );
+	} else
+		state->detected_delivery_system = SYS_UNDEFINED;
+	return state->has_lock ? 0 : -1;
+}
+
+
+/*
+	returns 0 on lock, -1 otherwise
+ */
+static int m88rs6060_wait_for_demod_lock_blind(struct m88rs6060_state* state)
+{
+	bool pls_lock = false;
+	unsigned tmp, tmp1, tmp2;
+	int i;
+	int iCnt;
+
+	for (i = 0; i < 150; i++) {
+		regmap_read(state->demod_regmap, 0xbe, &tmp); //?? if pls detection is ready
+		dprintk("reg[0xbe] = 0x%x i=%d\n", tmp, i);
+		if(!pls_lock && tmp == 0xfe) { //?? if pls detection is ready
+			u32 tmp1;
+			u32 tmp3;
+			regmap_write(state->demod_regmap, 0xae, 0x4f);
+			regmap_write(state->demod_regmap, 0x7f, 0xc4);
+			regmap_write(state->demod_regmap, 0x24, 0xc0); //ANA_4: clock related?
+
+			regmap_read(state->demod_regmap, 0xca, &tmp3); //?? set spectral inversion of something on
+			tmp3 |= 0x04;
+			regmap_write(state->demod_regmap, 0xca, tmp3); //?? set spectral inversion of something on
+
+			m88rs6060_soft_reset(state);
+
+			iCnt = 0;
+
+			do {
+				iCnt ++;
+				if(iCnt > 1000)
+					{
+						dprintk("PlS timedout\n");
+						return -1;
+					}
+
+				regmap_read(state->demod_regmap, 0x24, &tmp1);  //ANA_4: clock related?
+
+				msleep(1);
+			} while((tmp1 & 0x08) == 0x00);
+			dprintk("PLS locked iCnt=%d\n", iCnt);
+
+
+			regmap_write(state->demod_regmap, 0xae, 0x09);
+			regmap_write(state->demod_regmap, 0x7f, 0x04);
+
+			regmap_read(state->demod_regmap, 0xca, &tmp3); ////?? set spectral inversion of something off
+			tmp3 &= ~0x04;
+			regmap_write(state->demod_regmap, 0xca, tmp3); //?? set spectral inversion of something off
+
+			//read and rewrite pls code
+			regmap_bulk_read(state->demod_regmap, 0x22, &state->detected_pls_code, 3);
+			dprintk("PLS: before 0x%x\n", state->detected_pls_code);
+			state->detected_pls_code &= 0x03ffff;
+			dprintk("PLS: after 0x%x\n", state->detected_pls_code);
+			regmap_bulk_write(state->demod_regmap, 0x22, &state->detected_pls_code, 3);
+			//end of read and rewrite pls code
+			state->pls_active = true;
+			dprintk("Read: PLS: 0x%x\n", state->detected_pls_code);
+			pls_lock = true;
+			m88rs6060_soft_reset(state);
+		} //LATEST
+
+		for(iCnt=0 ; iCnt <50 ; ++iCnt) {
+			regmap_read(state->demod_regmap, 0x08, &tmp);
+			if(tmp& 0x8)
+				break;
+		}
+		if(iCnt == 50) {
+				dprintk("tmp=0x%x\n", tmp);
+		}
+
+
+		regmap_read(state->demod_regmap, 0x08, &tmp);
+		regmap_read(state->demod_regmap, 0x0d, &tmp1); //get all lock bits
+
+		if (tmp & 0x08) { // reserved bit 3 indicates dvbs2 (1) or dvbs1 (0)
+			//dvbs2
+			state->has_carrier = 1;
+			//regmap_read(state->demod_regmap, 0x0d, &tmp1); //get all lock bits
+			state->fec_locked = (tmp1 & 0x80);
+			state->has_viterbi = state->fec_locked;
+			state->has_carrier = (tmp1 >> 2)&1; //only dvbs1 mode
+			state->has_sync = state->fec_locked && (tmp1 & 0x08 ) && //header locked only dvbs2
+				(tmp1 & 0x02); //timing locked
+			state->has_signal = (tmp1 & 0x1);  //analog agc locked
+			state->has_timing_lock = (tmp1 & 0x2);
+			state->is_mis = m88rs6060_detect_mis(state);
+			dprintk("dvbs2 tmp=0x%x tmp1=0x%x mis=%d\n", tmp, tmp1, state->is_mis);
+			state->detected_delivery_system = SYS_DVBS2;
+
+			if(state->is_mis && !pls_lock && (tmp1 & 0x0f) == 0x0f) {
+				u32 tmp3;
+				dprintk("ready to read pls tmp=0x%x tmp1=0x%x\n", tmp, tmp1);
+				//state->detected_delivery_system = SYS_DVBS2;
+				regmap_read(state->demod_regmap, 0x89, &tmp); //read spectral inversion
+				regmap_read(state->demod_regmap, 0xca, &tmp1);
+				tmp &= 0x80; //spectrum inverted = tmp!=0
+				regmap_write(state->demod_regmap, 0xca,
+										 (u8) ((tmp1 & 0xf7) | (tmp >> 4) | 0x02));
+				regmap_read(state->demod_regmap, 0xbe, &tmp3); //?? if pls detection is ready
+				if(tmp3 != 0xfe) { //?? if pls detection is (not?) ready
+					dprintk("No pls yet tmp3=0x%x\n", tmp3);
+					msleep(50);
+					continue;
+				}
+				dprintk("pls found tmp=0x%x tmp1=0x%x\n", tmp, tmp1);
+			} else if(tmp1 == 0x8f) {
+				//dvbs2 fully locked
+				state->demod_locked = true;
+				dprintk("succeeded to fully lock i=%d: tmp=0x%x tmp1=0x%x fec=%d vit=%d car=%d sync=%d sign=%d mis=%d\n",
+								i, tmp, tmp1, state->fec_locked, state->has_viterbi, state->has_carrier, state->has_sync,
+								state->has_signal, state->is_mis);
+				break;
+			}
+
+			{
+				dprintk("succeeded to PLS lock i=%d: tmp=0x%x tmp1=0x%x fec=%d vit=%d car=%d sync=%d sign=%d\n", i,
+								tmp, tmp1,
+								state->fec_locked, state->has_viterbi, state->has_carrier, state->has_sync, state->has_signal);
+			}
+		}  else {
+			//dvbs
+			dprintk("dvbs tmp=0x%x\n", tmp);
+			state->has_carrier = 1;
+			//regmap_read(state->demod_regmap, 0x0d, &tmp1);
+			//state->has_carrier = (tmp1>>7)&1;
+
+			regmap_read(state->demod_regmap, 0xd1, &tmp2); //S_CTRL_1
+
+			state->has_signal = (tmp2>>3)&1; //agc lock
+			state->has_carrier = 1;
+			state->fec_locked = (tmp1 >>7) &1;
+			state->has_viterbi = (tmp2>>2)&1; //viterbi locked
+			state->has_timedout = (tmp2>>7)&1; //viterbi failed
+			state->has_sync = state->fec_locked;
+			state->has_timing_lock = (tmp1>>1) & 1;
+			if(state->has_viterbi) {
+				state->demod_locked = true;
+				dprintk("lock achieved tmp=0x%x tmp1=0x%x tmp2=0x%x\n", tmp, tmp1, tmp2);
+				state->detected_delivery_system = SYS_DVBS;
+				break;
+			}
+		}
+		msleep(20);
+	}
+	if( i==150) {
+		dprintk("FAILED to lock i=%d: tmp=0x%x tmp1=0x%x fec=%d vit=%d car=%d sync=%d sign=%d\n", i,
+						tmp, tmp1,
+						state->fec_locked, state->has_viterbi, state->has_carrier, state->has_sync, state->has_signal);
+		state->has_timedout = 1;
+
+	} else {
+		dprintk("succeeded to lock i=%d: tmp=0x%x tmp1=0x%x fec=%d vit=%d car=%d sync=%d sign=%d\n", i,
+						tmp, tmp1,
+						state->fec_locked, state->has_viterbi, state->has_carrier, state->has_sync, state->has_signal);
+	}
+
+	state->has_lock = state->demod_locked;
+	state->has_timedout = (i==150);
+	dprintk("timedout=%d\n", state->has_timedout);
+	if(state->has_lock) {
+		dprintk("tmp1=%d lock=%d i=%d delsys=%d\n", tmp1, state->has_lock, i, state->detected_delivery_system );
+	} else
+		state->detected_delivery_system = SYS_UNDEFINED;
+	return state->has_lock ? 0 : -1;
+}
+
+static void clear_tune_state(struct m88rs6060_state* state)
+{
 	memset(&state->isi_list, 0, sizeof(state->isi_list));
+	state->detected_delivery_system = SYS_UNDEFINED;
 	state->has_timedout=false;
 	state->detected_pls_code  = -1;
-	state-> pls_active = false;
+	state->pls_active = false;
+	state->is_mis = false;
 	state->active_stream_id = -1;
 	state->demod_locked = false;
 	state->has_carrier = false;
@@ -1895,6 +2101,27 @@ static int m88rs6060_tune_once(struct dvb_frontend *fe, bool blind)
 	state->has_sync = false;
 	state->has_signal = false;
 	state->has_timing_lock = false;
+}
+
+static int m88rs6060_tune_once(struct dvb_frontend *fe, bool blind)
+{
+	struct m88rs6060_state* state = fe->demodulator_priv;
+	struct i2c_client *client = state->demod_client;
+	struct dtv_frontend_properties* p = &fe->dtv_property_cache;
+	int ret;
+	u32 symbol_rate_KSs;
+	unsigned tmp, tmp1;
+	u32 realFreq, freq_MHz;
+	s16 lpf_offset_KHz = 0;
+	u32 target_mclk = 144000;
+	u32 pls_mode, pls_code;
+	u8 pls[] = { 0x1, 0, 0 }, isi;
+	int i = 0;
+	dprintk("[%d] delivery_system=%u modulation=%u frequency=%u symbol_rate=%u inversion=%u stream_id=%d\n",
+					state->adapterno,
+					p->delivery_system, p->modulation, p->frequency,
+					p->symbol_rate, p->inversion, p->stream_id);
+	clear_tune_state(state);
 
 	symbol_rate_KSs = p->symbol_rate / 1000;
 	realFreq = p->frequency;
@@ -1903,15 +2130,19 @@ static int m88rs6060_tune_once(struct dvb_frontend *fe, bool blind)
 	m88rs6060_clear_stream(state);
 
 	regmap_read(state->demod_regmap, 0xb2, &tmp);
+#if 0
 	if(blind) {
-		regmap_write(state->demod_regmap, 0xb2, 0x01); //reset microcontroller
+		regmap_write(state->demod_regmap, 0xb2, 0x01); //reset microcontroller and stop
 		regmap_write(state->demod_regmap, 0x00, 0x00); //chip id
 	} else {
+#endif
 		if (tmp == 0x01) {
 			regmap_write(state->demod_regmap, 0x00, 0x0);
-			regmap_write(state->demod_regmap, 0xb2, 0x0);
+			regmap_write(state->demod_regmap, 0xb2, 0x0); //start microntroller after reset
 		}
+#if 0
 	}
+#endif
 	if (p->symbol_rate < 5000000) {
 		lpf_offset_KHz = 3000;
 		realFreq = p->frequency + 3000;
@@ -2029,7 +2260,7 @@ static int m88rs6060_tune_once(struct dvb_frontend *fe, bool blind)
 			if (!pls_mode && !pls_code)
 				pls_code = 1;
 		} else {
-			isi = 0;
+			isi = -1;
 			pls_mode = 0;
 			pls_code = 1;
 		}
@@ -2065,199 +2296,24 @@ static int m88rs6060_tune_once(struct dvb_frontend *fe, bool blind)
 	//wait_for_dmdlock
 
 	if (blind) {
-		bool pls_lock = false;
-		for (i = 0; i < 150; i++) {
-			regmap_read(state->demod_regmap, 0xbe, &tmp); //?? if pls detection is ready
-			dprintk("reg[0xbe] = 0x%x i=%d\n", tmp, i);
-			if(!pls_lock && tmp == 0xfe) { //?? if pls detection is ready
-				u32 tmp1;
-				int iCnt;
-				u32 tmp3;
-				regmap_write(state->demod_regmap, 0xae, 0x4f);
-				regmap_write(state->demod_regmap, 0x7f, 0xc4);
-				regmap_write(state->demod_regmap, 0x24, 0xc0); //ANA_4: clock related?
-
-				regmap_read(state->demod_regmap, 0xca, &tmp3); //?? set spectral inversion of something on
-				tmp3 |= 0x04;
-				regmap_write(state->demod_regmap, 0xca, tmp3); //?? set spectral inversion of something on
-
-				m88rs6060_soft_reset(state);
-
-				iCnt = 0;
-
-				do {
-					iCnt ++;
-					if(iCnt > 1000)
-						{
-							dprintk("PlS timedout\n");
-								return -1;
-						}
-
-					regmap_read(state->demod_regmap, 0x24, &tmp1);  //ANA_4: clock related?
-
-					msleep(1);
-				} while((tmp1 & 0x08) == 0x00);
-				dprintk("PLS locked iCnt=%d\n", iCnt);
-
-				regmap_write(state->demod_regmap, 0xae, 0x09);
-				regmap_write(state->demod_regmap, 0x7f, 0x04);
-
-				regmap_read(state->demod_regmap, 0xca, &tmp3); ////?? set spectral inversion of something off
-				tmp3 &= ~0x04;
-				regmap_write(state->demod_regmap, 0xca, tmp3); //?? set spectral inversion of something off
-
-				//read and rewrite pls code
-				regmap_bulk_read(state->demod_regmap, 0x22, &state->detected_pls_code, 3);
-				dprintk("PLS: before 0x%x\n", state->detected_pls_code);
-				state->detected_pls_code &= 0x03ffff;
-				dprintk("PLS: after 0x%x\n", state->detected_pls_code);
-				regmap_bulk_write(state->demod_regmap, 0x22, &state->detected_pls_code, 3);
-				//end of read and rewrite pls code
-				state->pls_active = true;
-				dprintk("Read: PLS: 0x%x\n", state->detected_pls_code);
-				pls_lock = true;
-				m88rs6060_soft_reset(state);
-				for(iCnt=0 ; iCnt <50 ; ++iCnt) {
-					regmap_read(state->demod_regmap, 0x08, &tmp);
-					if(tmp& 0x8)
-						break;
-				}
-				if(iCnt == 50) {
-					dprintk("tmp=0x%x\n", tmp);
-				}
-			}
-
-			regmap_read(state->demod_regmap, 0x08, &tmp);
-			regmap_read(state->demod_regmap, 0x0d, &tmp1); //get all lock bits
-
-			if (tmp & 0x08) { // reserved bit 3 indicates dvbs2 (1) or dvbs1 (0)
-				//dvbs2
-				dprintk("dvbs2 tmp=0x%x tmp1=0x%x\n", tmp, tmp1);
-				state->has_carrier = 1;
-				//regmap_read(state->demod_regmap, 0x0d, &tmp1); //get all lock bits
-				state->fec_locked = (tmp1 & 0x80);
-				state->has_viterbi = state->fec_locked;
-				state->has_carrier = (tmp1 >> 2)&1; //only dvbs1 mode
-				state->has_sync = state->fec_locked && (tmp1 & 0x08 ) && //header locked only dvbs2
-					(tmp1 & 0x02); //timing locked
-				state->has_signal = (tmp1 & 0x1);  //analog agc locked
-				state->has_timing_lock = (tmp1 & 0x2);
-				if(!pls_lock && (tmp1 & 0x0f) == 0x0f) {
-					u32 tmp3;
-					dprintk("ready to read pls tmp=0x%x tmp1=0x%x\n", tmp, tmp1);
-					is_dvbs2 = true;
-
-					regmap_read(state->demod_regmap, 0x89, &tmp); //read spectral inversion
-					regmap_read(state->demod_regmap, 0xca, &tmp1);
-					tmp &= 0x80; //spectrum inverted = tmp!=0
-					regmap_write(state->demod_regmap, 0xca,
-											 (u8) ((tmp1 & 0xf7) | (tmp >> 4) | 0x02));
-					regmap_read(state->demod_regmap, 0xbe, &tmp3); //?? if pls detection is ready
-					if(tmp3 != 0xfe) { //?? if pls detection is (not?) ready
-						dprintk("No pls yet\n");
-						msleep(50);
-						continue;
-					}
-					dprintk("pls found tmp=0x%x tmp1=0x%x\n", tmp, tmp1);
-				}
-#if 1
-				if(tmp1 == 0x8f) {
-					//dvbs2 fully locked
-							state->demod_locked = true;
-							dprintk("succeeded to fully lock i=%d: tmp=0x%x tmp1=0x%x fec=%d vit=%d car=%d sync=%d sign=%d\n",
-									i, tmp, tmp1,
-											state->fec_locked, state->has_viterbi, state->has_carrier, state->has_sync, state->has_signal);
-							break;
-				} else
-
-#endif
-					{
-						dprintk("succeeded to PLS lock i=%d: tmp=0x%x tmp1=0x%x fec=%d vit=%d car=%d sync=%d sign=%d\n", i,
-										tmp, tmp1,
-										state->fec_locked, state->has_viterbi, state->has_carrier, state->has_sync, state->has_signal);
-					}
-			}  else {
-				//dvbs
-				dprintk("dvbs tmp=0x%x\n", tmp);
-				state->has_carrier = 1;
-				//regmap_read(state->demod_regmap, 0x0d, &tmp1);
-				//state->has_carrier = (tmp1>>7)&1;
-
-				regmap_read(state->demod_regmap, 0xd1, &tmp2); //S_CTRL_1
-
-				state->has_signal = (tmp2>>3)&1; //agc lock
-				state->has_carrier = 1;
-				state->fec_locked = (tmp1 >>7) &1;
-				state->has_viterbi = (tmp2>>2)&1; //viterbi locked
-				state->has_timedout = (tmp2>>7)&1; //viterbi failed
-				state->has_sync = state->fec_locked;
-				state->has_timing_lock = (tmp1>>1) & 1;
-				if(state->has_viterbi) {
-					state->demod_locked = true;
-					dprintk("lock achieved tmp=0x%x tmp1=0x%x tmp2=0x%x\n", tmp, tmp1, tmp2);
-					is_dvbs2 = false;
-					break;
-				}
-			}
-		}
-		msleep(20);
-		if( i==150) {
-			dprintk("FAILED to lock i=%d: tmp=0x%x tmp1=0x%x fec=%d vit=%d car=%d sync=%d sign=%d\n", i,
-						tmp, tmp1,
-							state->fec_locked, state->has_viterbi, state->has_carrier, state->has_sync, state->has_signal);
-			state->has_timedout = 1;
-
-		} else {
-			dprintk("succeeded to lock i=%d: tmp=0x%x tmp1=0x%x fec=%d vit=%d car=%d sync=%d sign=%d\n", i,
-							tmp, tmp1,
-							state->fec_locked, state->has_viterbi, state->has_carrier, state->has_sync, state->has_signal);
-
-		}
+		m88rs6060_wait_for_demod_lock_blind(state);
 	} else { //!blind
-		for (i = 0; i < 150; i++) {
-			regmap_read(state->demod_regmap, 0x08, &tmp);
-			regmap_read(state->demod_regmap, 0x0d, &tmp1); //get all lock bits
-			state->fec_locked = (tmp1 & 0x80); //only valid for dvbs2
-			state->has_viterbi = (tmp1 & 0x80);
-			state->has_carrier = (tmp1 >> 2)&1; //only dvbs1 mode
-			state->has_sync = (tmp1 & 0x08) && //header locked; only dvbs2
-				(tmp1 & 0x02); //timing locked
-			state->has_signal = (tmp1&0x1); //analog agc locked
-			state->has_timing_lock = (tmp1 & 0x2);
-			if ((tmp1 == 0x8f) //fully locked dvbs2
-					|| (tmp1 == 0xf7) //fully locked dvbs1 //TODO: only check the last three bits, should be 7
-					) {
-				state->demod_locked = true;
-				regmap_read(state->demod_regmap, 0xd1, &tmp2); //S_CTRL_1
-				dprintk("lock achieved tmp=0x%x tmp1=0x%x tmp2=0x%x\n", tmp, tmp1, tmp2);
-				is_dvbs2 = (tmp1==0x8f);
-				break;
-			}
-			msleep(20);
-		}
-		if(i==150)
-			dprintk("Failed to lock: tmp=0x%x tmp1=0x%x fec=%d vit=%d car=%d sync=%d sign=%d\n", tmp, tmp1,
-							state->fec_locked, state->has_viterbi, state->has_carrier, state->has_sync, state->has_signal);
-		else
-			dprintk("succeeded to lock: tmp=0x%x tmp1=0x%x fec=%d vit=%d car=%d sync=%d sign=%d\n", tmp, tmp1,
-							state->fec_locked, state->has_viterbi, state->has_carrier, state->has_sync, state->has_signal);
+		m88rs6060_wait_for_demod_lock_non_blind(state);
+		/*perform some actions after dvbs2 lock
+			something to do with spectral inversion?
+			set isi
+		*/
 	}
-	state->has_lock = state->demod_locked;
-	state->has_timedout = (i==150);
-	dprintk("timedout=%d\n", state->has_timedout);
-	/*perform some actions after dvbs2 lock
-		something to do with spectral inversion?
-		set isi
-	*/
 	if(state->has_lock) {
-		p->delivery_system = is_dvbs2 ? SYS_DVBS2 : SYS_DVBS;
+		p->delivery_system = state->detected_delivery_system;;
 		dprintk("tmp1=%d lock=%d i=%d delsys=%d\n", tmp1, state->has_lock, i, p->delivery_system );
-		if (is_dvbs2) { //locked dvbs2
+		if (state->detected_delivery_system == SYS_DVBS2) { //locked dvbs2
 			m88rs6060_isi_scan(state);
 			memcpy(p->isi_bitset,state->isi_list.isi_bitset, sizeof(p->isi_bitset));
 			m88rs6060_select_stream(state, isi);
 		}
 	}
+
 	state->TsClockChecked = true;
 
 	if(state->config.HAS_CI)
