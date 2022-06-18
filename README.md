@@ -5,8 +5,22 @@ It contains patches for the following drivers
 * stv091x: tbs5927
 * tas2101 (incomplete): tbs5990, tbs6904
 * si2183 based cards: tbs6504
-
+* m88rs60606 based cards: tbs6902SE and tbs2904SE. On these cards there is not IQ-scan (constellation display)
 to support blindscan, to fix bugs and to make improvements.
+
+# Changes in release-0.9.0
+
+* Blindscan and spectrum upport for montage m88rs60606 based cards: tbs6902SE and tbs2904SE.
+* Support m883s6060 module unloading
+* stid135: BER is now reported properly othrough the PRE instead of POST error counters
+* improved correction of discontinuities in spectrum due to small errors in RF level
+* stid135: detected multi-stream IDs are now accumalated internally
+* Added DTV_BIT_RATE readout via dvbapi
+* stid135: improper estimation of required  llr rate, causing rai multistream on 5.0W to not tune sometimes
+  (green blocks in picture)
+* stid135: changed default spectral resolution: slightly slower scan, but more narrow-band muxes found
+* Add support for timing lock flag
+* stv091x: return more correct data about currently tuned mux (instead of returning what user requested)
 
 
 # Known problems
