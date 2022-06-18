@@ -1,6 +1,7 @@
 #ifndef _M88RS6060_PRIV_H_
 #define _M88RS6060_PRIV_H_
 #include <media/dvb_frontend.h>
+#include <neumo-scan.h>
 
 #include <linux/regmap.h>
 #include <linux/firmware.h>
@@ -23,26 +24,8 @@
 /*set frequency offset to tuner when symbol rate <5000KSs*/
 #define FREQ_OFFSET_AT_SMALL_SYM_RATE_KHz  3000
 
+extern int verbose;
 
-struct m88rs6060_spectrum_scan_state {
-	bool spectrum_present;
-	bool scan_in_progress;
-
-	s32* freq;
-	s32* spectrum;
-	int spectrum_len;
-
-};
-
-struct m88rs6060_constellation_scan_state {
-	bool constallation_present;
-	bool in_progress;
-
-	struct dtv_fe_constellation_sample* samples;
-	int num_samples;
-	int samples_len;
-	int constel_select;
-};
 
 
 struct m88rs6060_isi_struct_t
@@ -53,6 +36,7 @@ typedef  struct m88rs6060_isi_struct_t  m88rs6060_isi_struct;
 
 
 struct m88rs6060_state {
+	int nr;
 	struct i2c_client *demod_client;	//demod
 	struct i2c_client *tuner_client;
 	struct regmap* demod_regmap;	//demod
@@ -91,8 +75,8 @@ struct m88rs6060_state {
 	bool        has_timedout;
 	bool        has_lock;
 	m88rs6060_isi_struct isi_list;
-	struct m88rs6060_spectrum_scan_state scan_state;
-	struct m88rs6060_constellation_scan_state constellation_scan_state;
+	struct spectrum_scan_state spectrum_scan_state;
+	struct constellation_scan_state constellation_scan_state;
 };
 
 struct m88rs6060_reg_val {

@@ -2955,8 +2955,8 @@ static void m88rs6060_spi_write(struct dvb_frontend *fe,
 static int m88rs6060_stop_task(struct dvb_frontend *fe)
 {
 	struct m88rs6060_state* state = fe->demodulator_priv;
-	struct m88rs6060_spectrum_scan_state* ss = &state->scan_state;
-	struct m88rs6060_constellation_scan_state* cs = &state->constellation_scan_state;
+	struct spectrum_scan_state* ss = &state->spectrum_scan_state;
+	struct constellation_scan_state* cs = &state->constellation_scan_state;
 	if(ss->freq)
 		kfree(ss->freq);
 	if(ss->spectrum)
@@ -3032,6 +3032,116 @@ static enum dvbfe_algo m88rs6060_get_algo(struct dvb_frontend *fe)
 }
 
 
+static int m88rs6060_get_spectrum_scan_sweep(struct dvb_frontend* fe,
+																						 unsigned int *delay,  enum fe_status *status)
+{
+	struct m88rs6060_state* state = fe->demodulator_priv;
+	struct spectrum_scan_state* ss = &state->spectrum_scan_state;
+	struct dtv_frontend_properties* p = &fe->dtv_property_cache;
+	s32 pch_rf;
+	int i = 0;
+	u32 start_frequency = p->scan_start_frequency;
+	u32 end_frequency = p->scan_end_frequency;
+	//u32 bandwidth = end_frequency-start_frequency; //in kHz
+
+	uint32_t frequency;
+	uint32_t resolution =  (p->scan_resolution>0) ? p->scan_resolution : 500; //in kHz
+	ss->spectrum_len = (end_frequency - start_frequency + resolution-1)/resolution;
+	ss->freq = kzalloc(ss->spectrum_len * (sizeof(ss->freq[0])), GFP_KERNEL);
+	ss->spectrum = kzalloc(ss->spectrum_len * (sizeof(ss->spectrum[0])), GFP_KERNEL);
+	if (!ss->freq || !ss->spectrum) {
+		return  -ENOMEM;
+	}
+	ss->spectrum_present = true;
+	dprintk("demod: %d: range=[%d,%d]kHz num_freq=%d resolution=%dkHz\n", state->nr,
+					start_frequency, end_frequency, ss->spectrum_len, resolution);
+
+		//global reset
+	regmap_write(state->demod_regmap, 0x7, 0x80);
+	regmap_write(state->demod_regmap, 0x7, 0x00);
+	msleep(2);
+	m88rs6060_clear_stream(state);
+	msleep(2);
+
+	regmap_write(state->demod_regmap, 0xb2, 0x01); //reset microcontroller
+	regmap_write(state->demod_regmap, 0x00, 0x00); //chip id
+
+
+	for (i = 0; i < ss->spectrum_len; i++) {
+		if ((i% 20==19) &&  (kthread_should_stop() || dvb_frontend_task_should_stop(fe))) {
+			dprintk("exiting on should stop\n");
+			break;
+		}
+		ss->freq[i]= start_frequency +i*resolution;
+		frequency = ss->freq[i];
+		if(i==0) {
+			m88rs6060_set_demod(state, resolution, false);
+		}
+		rs6060_set_tuner(state, frequency / 1000, 2000, 3000);
+		m88rs6060_set_carrier_offset(state, frequency - (frequency/1000)*1000);
+		msleep(10);//m88rs6060_wait_for_analog_agc_lock(state);
+		m88rs6060_get_rf_level(state, frequency / 1000, &pch_rf);
+		ss->spectrum[i] = -10*pch_rf;
+	}
+	*status =  FE_HAS_SIGNAL|FE_HAS_CARRIER|FE_HAS_VITERBI|FE_HAS_SYNC|FE_HAS_LOCK;
+	return 0;
+}
+
+static int m88rs6060_spectrum_start(struct dvb_frontend* fe,
+																		struct dtv_fe_spectrum* s,
+																		unsigned int *delay, enum fe_status *status)
+{
+	struct m88rs6060_state* state = fe->demodulator_priv;
+	struct spectrum_scan_state* ss = &state->spectrum_scan_state;
+	int ret=0;
+	m88rs6060_stop_task(fe);
+
+	s->scale =  FE_SCALE_DECIBEL; //in units of 0.001dB
+	switch(s->spectrum_method) {
+	case SPECTRUM_METHOD_SWEEP:
+	default:
+		ret = m88rs6060_get_spectrum_scan_sweep(fe, delay, status);
+		break;
+	case SPECTRUM_METHOD_FFT:
+		ret = m88rs6060_get_spectrum_scan_fft(fe, delay, status);
+		s->num_freq = ss->spectrum_len;
+		break;
+	}
+	return -1;
+}
+
+static int m88rs6060_spectrum_get(struct dvb_frontend* fe, struct dtv_fe_spectrum* user)
+{
+	struct m88rs6060_state* state = fe->demodulator_priv;
+	int error=0;
+	dprintk("num_freq=%d/%d num_cand=%d/%d freq=%p/%p rf=%p/%p\n",
+					user->num_freq , state->spectrum_scan_state.spectrum_len,
+					user->num_candidates, state->spectrum_scan_state.num_candidates,
+					user->freq, state->spectrum_scan_state.freq,
+					user->rf_level, state->spectrum_scan_state.spectrum);
+	if (user->num_freq> state->spectrum_scan_state.spectrum_len)
+		user->num_freq = state->spectrum_scan_state.spectrum_len;
+	if (user->num_candidates > state->spectrum_scan_state.num_candidates)
+		user->num_candidates = state->spectrum_scan_state.num_candidates;
+	if(state->spectrum_scan_state.freq && state->spectrum_scan_state.spectrum) {
+		if(user->freq && user->num_freq > 0 &&
+			 copy_to_user((void __user*) user->freq, state->spectrum_scan_state.freq, user->num_freq * sizeof(__u32))) {
+			error = -EFAULT;
+		}
+		if(user->rf_level && user->num_freq > 0 &&
+			 copy_to_user((void __user*) user->rf_level, state->spectrum_scan_state.spectrum, user->num_freq * sizeof(__s32))) {
+			error = -EFAULT;
+		}
+		if(user->candidates && user->num_candidates >0 &&
+			 copy_to_user((void __user*) user->candidates,
+										 state->spectrum_scan_state.candidates,
+										 user->num_candidates * sizeof(struct spectral_peak_t))) {
+			error = -EFAULT;
+		}
+	} else
+		error = -EFAULT;
+	return error;
+}
 
 static const struct dvb_frontend_ops m88rs6060_ops = {
 	.delsys = {SYS_DVBS, SYS_DVBS2, SYS_AUTO},
@@ -3043,7 +3153,7 @@ static const struct dvb_frontend_ops m88rs6060_ops = {
 		 .symbol_rate_max = 45000000,
 		 .caps			= FE_CAN_INVERSION_AUTO | FE_CAN_FEC_AUTO | FE_CAN_QPSK |
 		 FE_CAN_RECOVER	| FE_CAN_2G_MODULATION | FE_CAN_MULTISTREAM,
-		 .extended_caps = /*FE_CAN_SPECTRUMSCAN	| FE_CAN_IQ | */ FE_CAN_BLINDSEARCH
+		 .extended_caps = FE_CAN_SPECTRUMSCAN	| /* FE_CAN_IQ | */ FE_CAN_BLINDSEARCH
 	},
 
 	.tuner_ops = {
@@ -3069,6 +3179,9 @@ static const struct dvb_frontend_ops m88rs6060_ops = {
 	.spi_read = m88rs6060_spi_read,
 	.spi_write = m88rs6060_spi_write,
 	.stop_task =  m88rs6060_stop_task,
+	.spectrum_start = m88rs6060_spectrum_start,
+	.spectrum_get = m88rs6060_spectrum_get,
+
 
 };
 
