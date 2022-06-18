@@ -824,7 +824,6 @@ void rs6060_tuner_set_default_mclk(struct m88rs6060_state* state)
 	rs6060_set_tuner_reg(state, 0x17, 0x81);
 
 	msleep(5);
-
 	return;
 }
 
