@@ -49,6 +49,7 @@ struct m88rs6060_state {
 	//bool warm;		// for the init and download fw
 	s32 mclk;		/*main mclk */
 
+	s32 active_stream_id;
 	u32 dvbv3_ber;		/* for old DVBv3 API read_ber */
 	u32 tuned_frequency;    //khz
 	u64 post_bit_error;

@@ -1760,6 +1760,47 @@ static void m88rs6060_isi_scan(struct m88rs6060_state* state)
 
 }
 
+static int m88rs6060_select_default_stream_id(struct m88rs6060_state* state)
+{
+	int stream_id;
+	for(stream_id = 0; stream_id <256 ; ++ stream_id) {
+			u32 mask = ((uint32_t)1)<< (stream_id%32);
+			u8 j = stream_id /32;
+			if(state->isi_list.isi_bitset[j] & mask)
+				return stream_id;
+	}
+	return -1;
+}
+
+static void m88rs6060_select_stream(struct m88rs6060_state* state, u8 stream_id)
+{
+	unsigned tsid[16];
+	bool found = false;
+	uint32_t mask;
+	u8 j;
+	j = stream_id /32;
+	mask = ((uint32_t)1)<< (stream_id%32);
+	found =  mask & 	state->isi_list.isi_bitset[j];
+	if (found) {
+		dprintk("Selecting stream_id=%d\n", stream_id);
+		regmap_write(state->demod_regmap, 0xf5, stream_id);
+		state->active_stream_id = stream_id;
+	}
+	else {
+		int selected_stream_id = m88rs6060_select_default_stream_id(state);
+		if(selected_stream_id >=0) {
+			dprintk("stream_id=%d not present in stream; selecting %d instead\n", stream_id, selected_stream_id);
+			regmap_write(state->demod_regmap, 0xf5, tsid[0]); //select first stream by default
+			state->active_stream_id =  selected_stream_id;
+		} else {
+			dprintk("stream_id=%d not present in stream; giving up\n", stream_id);
+			state->active_stream_id =  -1;
+			m88rs6060_clear_stream(state);
+		}
+
+	}
+}
+
 static int m88rs6060_tune_once(struct dvb_frontend *fe, bool blind)
 {
 	struct m88rs6060_state* state = fe->demodulator_priv;
@@ -2030,9 +2071,7 @@ static int m88rs6060_tune_once(struct dvb_frontend *fe, bool blind)
 
 		m88rs6060_isi_scan(state);
 		memcpy(p->isi_bitset,state->isi_list.isi_bitset, sizeof(p->isi_bitset));
-#if 0 //todo
 		m88rs6060_select_stream(state, isi);
-#endif
 	}
 	state->TsClockChecked = true;
 
@@ -2488,8 +2527,12 @@ static int m88rs6060_read_status(struct dvb_frontend *fe, enum fe_status *status
 		state->has_timing_lock = (tmp1>>1) & 1;
 		state->has_signal = (tmp1 & 1); //analog agc lock
 
-		if(m88rs6060_get_matype(state, &p_info->matype)<0)
+		{ u8 matype;
+		if(m88rs6060_get_matype(state, &matype)<0)
 			dprintk("No matype\n");
+		else
+			p->matype = matype;
+		}
 
 		memcpy(p->isi_bitset,state->isi_list.isi_bitset, sizeof(p->isi_bitset));
 		*status = FE_HAS_SIGNAL;
