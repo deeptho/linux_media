@@ -600,9 +600,9 @@ bool m88rs6060_wait_for_analog_agc_lock(struct m88rs6060_state* state) {
 }
 
 
-int m88rs6060_get_gain(struct m88rs6060_state *dev, u32 freq_MHz, s32 * p_gain)
+int m88rs6060_get_gain(struct m88rs6060_state *dev, u32 freq_mhz, s32 * p_gain)
 {
-	u32 Total_Gain = 8000;
+	u32 total_gain = 8000;
 	s32 delta = 0;
 
 	u8 reg5a, reg5f, reg77, reg76, reg3f;
@@ -636,13 +636,13 @@ int m88rs6060_get_gain(struct m88rs6060_state *dev, u32 freq_MHz, s32 * p_gain)
 	PGA2_cri = PGA2_GC >> 2;
 	PGA2_crf = PGA2_GC & 0x03;
 
-	if (freq_MHz >= 1750) {
+	if (freq_mhz >= 1750) {
 		RFGS[1] = 240;
 		RFGS[2] = 260;
 		IFGS[2] = 200;
 		IFGS[3] = 245;
 		IFGS[4] = 255;
-	} else if (freq_MHz >= 1350) {
+	} else if (freq_mhz >= 1350) {
 		RFGS[12] = 285;
 	} else {
 		RFGS[1] = 310;
@@ -668,25 +668,25 @@ int m88rs6060_get_gain(struct m88rs6060_state *dev, u32 freq_MHz, s32 * p_gain)
 	}
 
 	PGA2G = PGA2_cri * PGA2_cri_GS + PGA2_crf * PGA2_crf_GS;
-	Total_Gain = RFG + IFG - TIAG + BBG + PGA2G;
+	total_gain = RFG + IFG - TIAG + BBG + PGA2G;
 
-	if (freq_MHz >= 1750) {
+	if (freq_mhz >= 1750) {
 		delta = 800;
-	} else if (freq_MHz >= 1350) {
+	} else if (freq_mhz >= 1350) {
 		delta = 900;
 	} else {
 		delta = 1000;
 	}
 
-	*p_gain = Total_Gain - delta;
+	*p_gain = total_gain - delta;
 
 	return 0;
 
 }
 
-int m88rs6060_get_rf_level(struct m88rs6060_state* state, u32 freq_MHz, s32 * p_gain)
+int m88rs6060_get_rf_level(struct m88rs6060_state* state, u32 freq_mhz, s32 * p_gain)
 {
-	s32 BB_Power = 0;
+	s32 bb_power = 0;
 	u8 reg96 = 0;
 	static s32 bb_list_dBm[16][16] = {
 		{-5000, -4999, -4397, -4044, -3795, -3601, -3442, -3309, -3193,
@@ -725,12 +725,12 @@ int m88rs6060_get_rf_level(struct m88rs6060_state* state, u32 freq_MHz, s32 * p_
 	};
 
 
-	int ret = m88rs6060_get_gain(state, freq_MHz, p_gain);
+	int ret = m88rs6060_get_gain(state, freq_mhz, p_gain);
 
 	reg96 = rs6060_get_tuner_reg(state, 0x96);
-	BB_Power = bb_list_dBm[(reg96 >> 4) & 0x0f][reg96 & 0x0f];
+	bb_power = bb_list_dBm[(reg96 >> 4) & 0x0f][reg96 & 0x0f];
 
-	*p_gain -= BB_Power;
+	*p_gain -= bb_power;
 	return ret;
 }
 
@@ -834,11 +834,11 @@ void rs6060_tuner_set_default_mclk(struct m88rs6060_state* state)
 	return;
 }
 
-void rs6060_tuner_select_mclk(struct m88rs6060_state* state, u32 freq_MHz, u32 symbol_rate, bool blind)
+void rs6060_tuner_select_mclk(struct m88rs6060_state* state, u32 freq_mhz, u32 symbol_rate, bool blind)
 {
-	u32 adc_freq_MHz[3] = { 96, 93, 99 };
+	u32 adc_freq_mhz[3] = { 96, 93, 99 };
 	u8 reg16_list[3] = { 96, 92, 100 }, reg15, reg16;
-	u32 offset_MHz[3];
+	u32 offset_mhz[3];
 	u32 max_offset = 0;
 	int i = 0;
 	reg16 = 96;
@@ -849,16 +849,16 @@ void rs6060_tuner_select_mclk(struct m88rs6060_state* state, u32 freq_MHz, u32 s
 			reg16 = 100;
 		} else {
 			for (i = 0; i < 3; i++) {
-				offset_MHz[i] = freq_MHz % adc_freq_MHz[i];
+				offset_mhz[i] = freq_mhz % adc_freq_mhz[i];
 
-				if (offset_MHz[i] > (adc_freq_MHz[i] / 2))
-					offset_MHz[i] = adc_freq_MHz[i] - offset_MHz[i];
+				if (offset_mhz[i] > (adc_freq_mhz[i] / 2))
+					offset_mhz[i] = adc_freq_mhz[i] - offset_mhz[i];
 
-				if (offset_MHz[i] > max_offset) {
+				if (offset_mhz[i] > max_offset) {
 
-					max_offset = offset_MHz[i];
+					max_offset = offset_mhz[i];
 					reg16 = reg16_list[i];
-					state->mclk = adc_freq_MHz[i] * 1000;
+					state->mclk = adc_freq_mhz[i] * 1000;
 				}
 			}
 		}
@@ -876,11 +876,11 @@ void rs6060_tuner_select_mclk(struct m88rs6060_state* state, u32 freq_MHz, u32 s
 	return;
 }
 
-void rs6060_set_mclk_according_to_symbol_rate(struct m88rs6060_state* state, u32 freq_MHz, u32 symbol_rate_kSs, u32 mclk, bool blind)
+void rs6060_set_mclk_according_to_symbol_rate(struct m88rs6060_state* state, u32 freq_mhz, u32 symbol_rate_kss, u32 mclk, bool blind)
 {
 	//something to do with setting ts clock
 	regmap_write(state->demod_regmap, 0x6, 0xe0);
-	rs6060_select_mclk(state, freq_MHz, symbol_rate_kSs, blind);
+	rs6060_select_mclk(state, freq_mhz, symbol_rate_kss, blind);
 	rs6060_set_ts_mclk(state, mclk);
 	regmap_write(state->demod_regmap, 0x6, 0x0);
 	msleep(10);
@@ -902,9 +902,9 @@ void rs6060_set_default_mclk(struct m88rs6060_state* state)
 		regmap_write(state->demod_regmap, 0xa0, 0x44);
 }
 
-void rs6060_select_mclk(struct m88rs6060_state* state, u32 freq_MHz, u32 symbol_rate_kSs, bool blind)
+void rs6060_select_mclk(struct m88rs6060_state* state, u32 freq_mhz, u32 symbol_rate_kss, bool blind)
 {
-	rs6060_tuner_select_mclk(state, freq_MHz / 1000, symbol_rate_kSs, blind);
+	rs6060_tuner_select_mclk(state, freq_mhz / 1000, symbol_rate_kss, blind);
 	if (state->mclk == 93000)
 		regmap_write(state->demod_regmap, 0xa0, 0x42);
 	else if (state->mclk == 96000)
@@ -1050,8 +1050,8 @@ void rs6060_set_ts_mclk(struct m88rs6060_state *dev, u32 mclk)
 	reg1D |= sm;
 	reg1D |= 0x80;
 
-	reg1E = ((f3 << 4) + f2) & 0xFF;
-	reg1F = ((f1 << 4) + f0) & 0xFF;
+	reg1E = ((f3 << 4) + f2) & 0xff;
+	reg1F = ((f1 << 4) + f0) & 0xff;
 
 	rs6060_set_tuner_reg(dev, 0x1d, reg1D);
 	rs6060_set_tuner_reg(dev, 0x1e, reg1E);
@@ -1065,7 +1065,7 @@ static int rs6060_get_ts_mclk(struct m88rs6060_state *dev,u32*mclk )
 	u8 reg15, reg16, reg1D, reg1E, reg1F;
 	u8 sm, f0, f1, f2, f3;
 	u16 pll_div_fb, N;
-	u32 MCLK_KHz;
+	u32 MCLK_khz;
 
 
 	*mclk = MT_FE_MCLK_KHZ;
@@ -1076,12 +1076,12 @@ static int rs6060_get_ts_mclk(struct m88rs6060_state *dev,u32*mclk )
 	reg1E = rs6060_get_tuner_reg(dev, 0x1e);
 	reg1F = rs6060_get_tuner_reg(dev, 0x1f);
 
-	MCLK_KHz = 9000;
+	MCLK_khz = 9000;
 	pll_div_fb = reg15 & 0x01;
 	pll_div_fb <<= 8;
 	pll_div_fb += reg16;
 
-	MCLK_KHz *= (pll_div_fb + 32);
+	MCLK_khz *= (pll_div_fb + 32);
 
 	sm = reg1D & 0x03;
 
@@ -1110,30 +1110,30 @@ static int rs6060_get_ts_mclk(struct m88rs6060_state *dev,u32*mclk )
 			break;
 	}
 
-	MCLK_KHz *= 4;
-	MCLK_KHz /= N;
+	MCLK_khz *= 4;
+	MCLK_khz /= N;
 
-	*mclk = MCLK_KHz;
+	*mclk = MCLK_khz;
 
 	return 0;
 
 }
 
-static int rs6060_set_pll_freq(struct m88rs6060_state *dev, u32 tuner_freq_MHz)
+static int rs6060_set_pll_freq(struct m88rs6060_state *dev, u32 tuner_freq_mhz)
 {
-	u32 freq_KHz, ulNDiv1, ulNDiv2;
+	u32 freq_khz, ulNDiv1, ulNDiv2;
 	u8 refDiv1, refDiv2, ucLoDiv1, ucLomod1, ucLoDiv2, ucLomod2, div1m,
 	    div1p5m, lodiv_en_opt_div2;
 	u8 reg27, reg29;
 	u8 tmp;
 
-	freq_KHz = dev->config.clk / 1000;	/*tuner cycle */ //27000000;
-	if (freq_KHz == 27000) {
+	freq_khz = dev->config.clk / 1000;	/*tuner cycle */ //27000000;
+	if (freq_khz == 27000) {
 
 		div1m = 19;
 		div1p5m = 10;
 		rs6060_set_tuner_reg(dev, 0x41, 0x82);
-	} else if (freq_KHz == 24000) {
+	} else if (freq_khz == 24000) {
 		div1m = 16;
 		div1p5m = 8;
 		rs6060_set_tuner_reg(dev, 0x41, 0x8a);
@@ -1145,7 +1145,7 @@ static int rs6060_set_pll_freq(struct m88rs6060_state *dev, u32 tuner_freq_MHz)
 		rs6060_set_tuner_reg(dev, 0x41, 0x82);
 
 	}
-	if (tuner_freq_MHz >= 1550) {
+	if (tuner_freq_mhz >= 1550) {
 		ucLoDiv1 = 2;
 		ucLomod1 = 0;
 		refDiv1 = div1m;
@@ -1153,7 +1153,7 @@ static int rs6060_set_pll_freq(struct m88rs6060_state *dev, u32 tuner_freq_MHz)
 		ucLomod2 = 0;
 		refDiv2 = div1m;
 		lodiv_en_opt_div2 = 0;
-	} else if (tuner_freq_MHz >= 1380) {
+	} else if (tuner_freq_mhz >= 1380) {
 		ucLoDiv1 = 3;
 		ucLomod1 = 16;
 		refDiv1 = div1p5m;
@@ -1161,7 +1161,7 @@ static int rs6060_set_pll_freq(struct m88rs6060_state *dev, u32 tuner_freq_MHz)
 		ucLomod2 = 0;
 		refDiv2 = div1m;
 		lodiv_en_opt_div2 = 0;
-	} else if (tuner_freq_MHz >= 1070) {
+	} else if (tuner_freq_mhz >= 1070) {
 		ucLoDiv1 = 3;
 		ucLomod1 = 16;
 		refDiv1 = div1p5m;
@@ -1169,7 +1169,7 @@ static int rs6060_set_pll_freq(struct m88rs6060_state *dev, u32 tuner_freq_MHz)
 		ucLomod2 = 16;
 		refDiv2 = div1p5m;
 		lodiv_en_opt_div2 = 0;
-	} else if (tuner_freq_MHz >= 1000) {
+	} else if (tuner_freq_mhz >= 1000) {
 		ucLoDiv1 = 4;
 		ucLomod1 = 64;
 		refDiv1 = div1m;
@@ -1177,7 +1177,7 @@ static int rs6060_set_pll_freq(struct m88rs6060_state *dev, u32 tuner_freq_MHz)
 		ucLomod2 = 64;
 		refDiv2 = div1m;
 		lodiv_en_opt_div2 = 0;
-	} else if (tuner_freq_MHz >= 775) {
+	} else if (tuner_freq_mhz >= 775) {
 		ucLoDiv1 = 4;
 		ucLomod1 = 64;
 		refDiv1 = div1m;
@@ -1185,7 +1185,7 @@ static int rs6060_set_pll_freq(struct m88rs6060_state *dev, u32 tuner_freq_MHz)
 		ucLomod2 = 64;
 		refDiv2 = div1m;
 		lodiv_en_opt_div2 = 0;
-	} else if (tuner_freq_MHz >= 700) {
+	} else if (tuner_freq_mhz >= 700) {
 		ucLoDiv1 = 6;
 		ucLomod1 = 48;
 		refDiv1 = div1p5m;
@@ -1193,7 +1193,7 @@ static int rs6060_set_pll_freq(struct m88rs6060_state *dev, u32 tuner_freq_MHz)
 		ucLomod2 = 64;
 		refDiv2 = div1m;
 		lodiv_en_opt_div2 = 0;
-	} else if (tuner_freq_MHz >= 520) {
+	} else if (tuner_freq_mhz >= 520) {
 		ucLoDiv1 = 6;
 		ucLomod1 = 48;
 		refDiv1 = div1p5m;
@@ -1201,7 +1201,7 @@ static int rs6060_set_pll_freq(struct m88rs6060_state *dev, u32 tuner_freq_MHz)
 		ucLomod2 = 48;
 		refDiv2 = div1p5m;
 		lodiv_en_opt_div2 = 0;
-	} else if (tuner_freq_MHz >= 375) {
+	} else if (tuner_freq_mhz >= 375) {
 		ucLoDiv1 = 8;
 		ucLomod1 = 96;
 		refDiv1 = div1m;
@@ -1219,25 +1219,25 @@ static int rs6060_set_pll_freq(struct m88rs6060_state *dev, u32 tuner_freq_MHz)
 		lodiv_en_opt_div2 = 1;
 	}
 
-	/*(ucLoDiv1: 2-12 freq_KHz=27000  refDiv1+8: 18-27
+	/*(ucLoDiv1: 2-12 freq_khz=27000  refDiv1+8: 18-27
 		ucLoDiv2: 2-12 refDiv2+8: 18-27
 	 */
 	ulNDiv1 =
-	    ((tuner_freq_MHz * 1000 * ucLoDiv1) * (refDiv1 + 8) / freq_KHz -
+	    ((tuner_freq_mhz * 1000 * ucLoDiv1) * (refDiv1 + 8) / freq_khz -
 	     1024) / 2;
 	ulNDiv2 =
-	    ((tuner_freq_MHz * 1000 * ucLoDiv2) * (refDiv2 + 8) / freq_KHz -
+	    ((tuner_freq_mhz * 1000 * ucLoDiv2) * (refDiv2 + 8) / freq_khz -
 	     1024) / 2;
 
 	reg27 = (((ulNDiv1 >> 8) & 0x0F) + ucLomod1) & 0x7F;
 
 	rs6060_set_tuner_reg(dev, 0x27, reg27);
-	rs6060_set_tuner_reg(dev, 0x28, (u8) (ulNDiv1 & 0xFF));
+	rs6060_set_tuner_reg(dev, 0x28, (u8) (ulNDiv1 & 0xff));
 
 	reg29 = (((ulNDiv2 >> 8) & 0x0F) + ucLomod2) & 0x7f;
 
 	rs6060_set_tuner_reg(dev, 0x29, reg29);
-	rs6060_set_tuner_reg(dev, 0x2a, (u8) (ulNDiv2 & 0xFF));
+	rs6060_set_tuner_reg(dev, 0x2a, (u8) (ulNDiv2 & 0xff));
 
 	refDiv1 = refDiv1 & 0x1F;
 	rs6060_set_tuner_reg(dev, 0x36, refDiv1);
@@ -1263,16 +1263,16 @@ static int rs6060_set_pll_freq(struct m88rs6060_state *dev, u32 tuner_freq_MHz)
 
 /*
 	set tuner bandwith according to symbol rate, adding safety margin of 2MHz
-	but add lpf_offset_KHz
+	but add lpf_offset_khz
 	for symbol rates below 5MS/s also add, 3Ms/s which is a frequency offset applied
  */
-static int rs6060_set_bb(struct m88rs6060_state *dev, u32 symbol_rate_KSs, s32 lpf_offset_KHz)
+static int rs6060_set_bb(struct m88rs6060_state *dev, u32 symbol_rate_kss, s32 lpf_offset_khz)
 {
 	u32 f3dB;
 	u8 reg40;
 
-	f3dB = symbol_rate_KSs * 9 / 14 + 2000; //bw approx 1.3 * symbolrate
-	f3dB += lpf_offset_KHz;
+	f3dB = symbol_rate_kss * 9 / 14 + 2000; //bw approx 1.3 * symbolrate
+	f3dB += lpf_offset_khz;
 	f3dB = clamp_val(f3dB, 100U, /*43000U*/ 60000U);
 	reg40 = f3dB / 1000;
 
@@ -1295,18 +1295,18 @@ static int m88rs6060_adjust_tuner_agc(struct m88rs6060_state* state, bool high) 
 }
 
 
-int rs6060_set_tuner(struct m88rs6060_state* state, u32 tuner_freq_MHz, u32 symbol_rate_KSs, s32 lpf_offset_KHz)
+int rs6060_set_tuner(struct m88rs6060_state* state, u32 tuner_freq_mhz, u32 symbol_rate_kss, s32 lpf_offset_khz)
 {
 	int ret;
 	//lower the  AGC value?
 	m88rs6060_adjust_tuner_agc(state, false);
 
 	//set tuner pll according to desired frequency
-	state->tuned_frequency = tuner_freq_MHz*1000;
-	ret = rs6060_set_pll_freq(state, tuner_freq_MHz);
+	state->tuned_frequency = tuner_freq_mhz*1000;
+	ret = rs6060_set_pll_freq(state, tuner_freq_mhz);
 	if (ret)
 		return ret;
-	ret = rs6060_set_bb(state, symbol_rate_KSs, lpf_offset_KHz);
+	ret = rs6060_set_bb(state, symbol_rate_kss, lpf_offset_khz);
 
 	if (ret)
 		return ret;
@@ -1325,16 +1325,16 @@ static void rs6060_init(struct m88rs6060_state *dev)
 
 	m88rs6060_wakeup(dev);
 
-	rs6060_set_tuner_reg(dev, 0x24, 0x4);
+	rs6060_set_tuner_reg(dev, 0x24, 0x04);
 	rs6060_set_tuner_reg(dev, 0x6e, 0x39);
-	rs6060_set_tuner_reg(dev, 0x83, 0x1);
+	rs6060_set_tuner_reg(dev, 0x83, 0x01);
 
 	rs6060_set_tuner_reg(dev, 0x70, 0x90);
-	rs6060_set_tuner_reg(dev, 0x71, 0xF0);
-	rs6060_set_tuner_reg(dev, 0x72, 0xB6);
-	rs6060_set_tuner_reg(dev, 0x73, 0xEB);
-	rs6060_set_tuner_reg(dev, 0x74, 0x6F);
-	rs6060_set_tuner_reg(dev, 0x75, 0xFC);
+	rs6060_set_tuner_reg(dev, 0x71, 0xf0);
+	rs6060_set_tuner_reg(dev, 0x72, 0xb6);
+	rs6060_set_tuner_reg(dev, 0x73, 0xeb);
+	rs6060_set_tuner_reg(dev, 0x74, 0x6f);
+	rs6060_set_tuner_reg(dev, 0x75, 0xfc);
 
 	return;
 }
@@ -1522,12 +1522,12 @@ static int m88rs6060_get_channel_info(struct m88rs6060_state* state, struct MT_F
 }
 
 
-int m88rs6060_set_carrier_offset(struct m88rs6060_state* state, s32 carrier_offset_KHz)
+int m88rs6060_set_carrier_offset(struct m88rs6060_state* state, s32 carrier_offset_khz)
 {
 	s32 tmp;
 	u8 buf[2];
 	int ret;
-	tmp = carrier_offset_KHz * 0x10000;
+	tmp = carrier_offset_khz * 0x10000;
 
 	tmp = (2 * tmp + state->mclk) / (2 * state->mclk);
 
@@ -1537,7 +1537,7 @@ int m88rs6060_set_carrier_offset(struct m88rs6060_state* state, s32 carrier_offs
 	return ret;
 }
 
-static void m88rs6060_get_total_carrier_offset(struct m88rs6060_state* state, s32 *carrier_offset_KHz)
+static void m88rs6060_get_total_carrier_offset(struct m88rs6060_state* state, s32 *carrier_offset_khz)
 {
 	u32	tmp, val_0x5e, val_0x5f;
 	s32	val_0x5e_0x5f_1, val_0x5e_0x5f_2, nval_1, nval_2;
@@ -1571,15 +1571,15 @@ static void m88rs6060_get_total_carrier_offset(struct m88rs6060_state* state, s3
 		nval_2 = val_0x5e_0x5f_2;
 
 	//nval_2 is a correction
-	*carrier_offset_KHz = (nval_1 - nval_2) * state->mclk / (1 << 16);
+	*carrier_offset_khz = (nval_1 - nval_2) * state->mclk / (1 << 16);
 	dprintk("Carrier offset =%dkHz %dkHz freq=%d => %d nval_1=0x%x nval_2=0x%x\n", 	(nval_1) * state->mclk / (1 << 16),
-					*carrier_offset_KHz, state->tuned_frequency, state->tuned_frequency + *carrier_offset_KHz,
+					*carrier_offset_khz, state->tuned_frequency, state->tuned_frequency + *carrier_offset_khz,
 					nval_1, nval_2);
 }
 
 
-void m88rs6060_set_symbol_rate(struct m88rs6060_state* state, u32 symbol_rate_KSs) {
-	u32 tmp = ((symbol_rate_KSs << 15) + (state->mclk / 4)) / (state->mclk / 2);
+void m88rs6060_set_symbol_rate(struct m88rs6060_state* state, u32 symbol_rate_kss) {
+	u32 tmp = ((symbol_rate_kss << 15) + (state->mclk / 4)) / (state->mclk / 2);
 	regmap_write(state->demod_regmap, 0x61, (u8) (tmp & 0xff));
 	regmap_write(state->demod_regmap, 0x62, (u8) ((tmp >> 8) & 0xff));
 }
@@ -1599,8 +1599,8 @@ static void m88rs6060_get_symbol_rate(struct m88rs6060_state* state, u32* sym_ra
 
 	sym_rate_tmp = tmp * state->mclk;
 	sym_rate_tmp /= (1 << 16);
-	dprintk("Symbolrate = %d => %d\n", *sym_rate_KSs, sym_rate_tmp*1000);
-	*sym_rate_KSs = sym_rate_tmp*1000;
+	dprintk("Symbolrate = %d => %d\n", *sym_rate_kss, sym_rate_tmp*1000);
+	*sym_rate_kss = sym_rate_tmp*1000;
 }
 
 
@@ -1646,7 +1646,7 @@ static bool m88rs6060_get_signal_info(struct dvb_frontend *fe)
 }
 
 
-static int m88rs6060_set_demod(struct m88rs6060_state* state, u32 symbol_rate_KSs, bool blind)
+static int m88rs6060_set_demod(struct m88rs6060_state* state, u32 symbol_rate_kss, bool blind)
 {
 	int ret;
 	unsigned tmp, tmp1;
@@ -1669,7 +1669,7 @@ static int m88rs6060_set_demod(struct m88rs6060_state* state, u32 symbol_rate_KS
 
 	if(!blind) {
 		//Set High symbol rate mode
-		if ((symbol_rate_KSs > 47100) && (symbol_rate_KSs < 47500)) {
+		if ((symbol_rate_kss > 47100) && (symbol_rate_kss < 47500)) {
 			regmap_write(state->demod_regmap, 0xe6, 0x00);
 			regmap_write(state->demod_regmap, 0xe7, 0x03);
 		}
@@ -1694,14 +1694,14 @@ static int m88rs6060_set_demod(struct m88rs6060_state* state, u32 symbol_rate_KS
 	}
 	if(blind) {
 		tmp = 0x02;
-		if (symbol_rate_KSs <= 5000)
+		if (symbol_rate_kss <= 5000)
 			tmp1 = 0x0b;
 		else
 			tmp1 = 0x16;
 	} else {
-		if (symbol_rate_KSs <= 3000)
+		if (symbol_rate_kss <= 3000)
 			tmp = 0x20;
-		else if (symbol_rate_KSs <= 10000)
+		else if (symbol_rate_kss <= 10000)
 			tmp = 0x10;
 		else
 			tmp = 0x6;
@@ -1715,7 +1715,7 @@ static int m88rs6060_set_demod(struct m88rs6060_state* state, u32 symbol_rate_KS
 	regmap_write(state->demod_regmap, 0xc7, tmp1);
 
 	//set symbol rate
-	m88rs6060_set_symbol_rate(state, symbol_rate_KSs);
+	m88rs6060_set_symbol_rate(state, symbol_rate_kss);
 
 	if(!blind) {
 	 //set adaptive equalizer to normal (not bypassed)
@@ -1861,7 +1861,7 @@ static int m88rs6060_get_matype(struct m88rs6060_state* state, u8* matype)
 
 static bool m88rs6060_detect_mis(struct m88rs6060_state* state)
 {
-	u8 matype;
+	u32 matype;
 	if(m88rs6060_get_matype(state, &matype)>=0) {
 		return ((matype & 0x20) != 0x20);
 	}
@@ -1980,7 +1980,7 @@ static int m88rs6060_wait_for_demod_lock_blind(struct m88rs6060_state* state)
 	bool pls_lock = false;
 	unsigned tmp, tmp1, tmp2;
 	int i;
-	int iCnt;
+	int count;
 
 	for (i = 0; i < 150; i++) {
 		regmap_read(state->demod_regmap, 0xbe, &tmp); //?? if pls detection is ready
@@ -1992,12 +1992,12 @@ static int m88rs6060_wait_for_demod_lock_blind(struct m88rs6060_state* state)
 		}
 
 		//detect DVBS 2  reliably ??
-		for(iCnt=0 ; iCnt <50 ; ++iCnt) {
+		for(count=0 ; count <50 ; ++count) {
 			regmap_read(state->demod_regmap, 0x08, &tmp);
 			if(tmp& 0x8)
 				break;
 		}
-		if(iCnt == 50) {
+		if(count == 50) {
 				dprintk("tmp=0x%x\n", tmp);
 		}
 
@@ -2112,6 +2112,11 @@ static void clear_tune_state(struct m88rs6060_state* state)
 	state->has_sync = false;
 	state->has_signal = false;
 	state->has_timing_lock = false;
+	state->pre_bit_error = 0;
+	state->pre_bit_count = 0;
+	state->last_pre_bit_error = 0;
+	state->last_pre_bit_count = 0;
+	state->last_per_time = ktime_get_coarse();
 }
 
 static int m88rs6060_tune_once(struct dvb_frontend *fe, bool blind)
@@ -2120,10 +2125,10 @@ static int m88rs6060_tune_once(struct dvb_frontend *fe, bool blind)
 	struct i2c_client *client = state->demod_client;
 	struct dtv_frontend_properties* p = &fe->dtv_property_cache;
 	int ret;
-	u32 symbol_rate_KSs;
+	u32 symbol_rate_kss;
 	unsigned tmp, tmp1;
-	u32 realFreq, freq_MHz;
-	s16 lpf_offset_KHz = 0;
+	u32 realFreq, freq_mhz;
+	s16 lpf_offset_khz = 0;
 	u32 target_mclk = 144000;
 	u32 pls_mode, pls_code;
 	u8 pls[] = { 0x1, 0, 0 }, isi;
@@ -2134,36 +2139,27 @@ static int m88rs6060_tune_once(struct dvb_frontend *fe, bool blind)
 					p->symbol_rate, p->inversion, p->stream_id);
 	clear_tune_state(state);
 
-	symbol_rate_KSs = p->symbol_rate / 1000;
+	symbol_rate_kss = p->symbol_rate / 1000;
 	realFreq = p->frequency;
 
 	m88rs6060_global_reset(state);
 	m88rs6060_clear_stream(state);
 
 	regmap_read(state->demod_regmap, 0xb2, &tmp);
-#if 0
-	if(blind) {
-		regmap_write(state->demod_regmap, 0xb2, 0x01); //reset microcontroller and stop
-		regmap_write(state->demod_regmap, 0x00, 0x00); //chip id
-	} else {
-#endif
 		if (tmp == 0x01) {
 			regmap_write(state->demod_regmap, 0x00, 0x0);
 			regmap_write(state->demod_regmap, 0xb2, 0x0); //start microntroller after reset
 		}
-#if 0
-	}
-#endif
 	if (p->symbol_rate < 5000000) {
-		lpf_offset_KHz = 3000;
+		lpf_offset_khz = 3000;
 		realFreq = p->frequency + 3000;
 	}
 
-	rs6060_set_mclk_according_to_symbol_rate(state, realFreq / 1000, symbol_rate_KSs, target_mclk, blind);
+	rs6060_set_mclk_according_to_symbol_rate(state, realFreq / 1000, symbol_rate_kss, target_mclk, blind);
 
 	// set frequency and symbol_rate
-	freq_MHz = (realFreq + 500) / 1000;
-	ret = rs6060_set_tuner(state, freq_MHz, symbol_rate_KSs, lpf_offset_KHz);
+	freq_mhz = (realFreq + 500) / 1000;
+	ret = rs6060_set_tuner(state, freq_mhz, symbol_rate_kss, lpf_offset_khz);
 	if (ret)
 		goto err;
 
@@ -2173,7 +2169,7 @@ static int m88rs6060_tune_once(struct dvb_frontend *fe, bool blind)
 		regmap_write(state->demod_regmap, 0x00, 0x0);
 	}
 
-	if(m88rs6060_set_demod(state, symbol_rate_KSs, blind ))
+	if(m88rs6060_set_demod(state, symbol_rate_kss, blind ))
 		goto err;
 
 	regmap_read(state->demod_regmap, 0x08, &tmp); //read modulation
@@ -2204,14 +2200,14 @@ static int m88rs6060_tune_once(struct dvb_frontend *fe, bool blind)
 	}
 
 	if(blind) {
-		if( symbol_rate_KSs <= 5000) {
+		if(symbol_rate_kss <= 5000) {
 			regmap_write(state->demod_regmap, 0xc0, 0x04);
 			regmap_write(state->demod_regmap, 0x8a, 0x09);
 			regmap_write(state->demod_regmap, 0x8b, 0x22);
 			regmap_write(state->demod_regmap, 0x8c, 0x88);
 		}
 	}
-	ret = m88rs6060_set_carrier_offset(state, lpf_offset_KHz);
+	ret = m88rs6060_set_carrier_offset(state, lpf_offset_khz);
 
 	if(!blind) {
 		ret = regmap_write(state->demod_regmap, 0x00, 0x00);
@@ -2261,13 +2257,8 @@ static int m88rs6060_tune_once(struct dvb_frontend *fe, bool blind)
 	} else if(1)	{ //blind
 		if (p->stream_id != NO_STREAM_ID_FILTER) {
 			isi = p->stream_id & 0xff;
-#if 0
-			pls_mode = (p->stream_id >> 26) & 3;
-			pls_code = (p->stream_id >> 8) & 0x3ffff;
-#else
 			pls_mode = 0;
 			pls_code = 1;
-#endif
 			if (!pls_mode && !pls_code)
 				pls_code = 1;
 		} else {
@@ -2369,7 +2360,7 @@ static int m88rs6060_init(struct dvb_frontend *fe)
 }
 
 static int m88rs6060_get_sym_rate(struct m88rs6060_state *dev,
-						u32 *sym_rate_KSs)
+						u32 *sym_rate_kss)
 {
 	u16 tmp;
 	u32 sym_rate_tmp;
@@ -2381,7 +2372,7 @@ static int m88rs6060_get_sym_rate(struct m88rs6060_state *dev,
 	tmp = (u16)((val_0x6e<<8)|val_0x6d);
 	sym_rate_tmp = tmp*dev->mclk;
 	sym_rate_tmp /= (1<<16);
-	*sym_rate_KSs = sym_rate_tmp;
+	*sym_rate_kss = sym_rate_tmp;
 
 	return 0;
 }
@@ -2389,14 +2380,14 @@ static int m88rs6060_get_sym_rate(struct m88rs6060_state *dev,
 
 
 
-static int rs6060_select_xm(struct m88rs6060_state* state, u32 *xm_KHz)
+static int rs6060_select_xm(struct m88rs6060_state* state, u32 *xm_khz)
 {
 	u32 symbol_rate = 0;
 	u8 reg16;
-	u32 offset_KHz[8] = {0};
+	u32 offset_khz[8] = {0};
 	u32 max_offset = 0;
 	u8 i, xm_line, xm_cnt = 5;
-	u32 xm_list_KHz[3][8] = {
+	u32 xm_list_khz[3][8] = {
 							{96000, 102400, 107162, 109714, 115200, 128000, 135529, 144000},
 							{93000,  99200, 111600, 117473, 124000, 139500, 144000, 148800},
 							{99000, 105600, 108000, 110511, 118800, 132000, 144000, 148500}
@@ -2405,7 +2396,7 @@ static int rs6060_select_xm(struct m88rs6060_state* state, u32 *xm_KHz)
 
 
 	m88rs6060_get_sym_rate(state, &symbol_rate);
-	xm_cnt = sizeof(xm_list_KHz) / sizeof(u32);
+	xm_cnt = sizeof(xm_list_khz) / sizeof(u32);
 	xm_cnt /= 3;
 	// C = (symbol * 1.35 / 2 + 2) * 1.1;
 	symbol_rate *= 135;
@@ -2427,51 +2418,51 @@ static int rs6060_select_xm(struct m88rs6060_state* state, u32 *xm_KHz)
 	}
 
 	for(i = 0; i < xm_cnt; i ++){
-		if(*xm_KHz > xm_list_KHz[xm_line][i])
+		if(*xm_khz > xm_list_khz[xm_line][i])
 		{
 			continue;
 		}
-		offset_KHz[i] = (state->tuned_frequency % xm_list_KHz[xm_line][i]);
-		if(offset_KHz[i] > (xm_list_KHz[xm_line][i] / 2))
-			offset_KHz[i] = xm_list_KHz[xm_line][i] - offset_KHz[i];
-		if(offset_KHz[i] > symbol_rate)
+		offset_khz[i] = (state->tuned_frequency % xm_list_khz[xm_line][i]);
+		if(offset_khz[i] > (xm_list_khz[xm_line][i] / 2))
+			offset_khz[i] = xm_list_khz[xm_line][i] - offset_khz[i];
+		if(offset_khz[i] > symbol_rate)
 		{
-			*xm_KHz = xm_list_KHz[xm_line][i];
+			*xm_khz = xm_list_khz[xm_line][i];
 			break;
 		}
-		if(offset_KHz[i] > max_offset)
+		if(offset_khz[i] > max_offset)
 		{
-			max_offset = offset_KHz[i];
-			*xm_KHz = xm_list_KHz[xm_line][i];
+			max_offset = offset_khz[i];
+			*xm_khz = xm_list_khz[xm_line][i];
 		}
 	 }
 
 	if(i == xm_cnt)
 	{
-		*xm_KHz = xm_list_KHz[xm_line][xm_cnt - 1];
+		*xm_khz = xm_list_khz[xm_line][xm_cnt - 1];
 	}
 
 	return 0;
 }
 
-static int m88rs6060_set_clock_ratio(struct m88rs6060_state*dev )
+static int m88rs6060_set_clock_ratio(struct m88rs6060_state* state, struct dtv_frontend_properties* p)
 {
 	unsigned mod_fac,tmp1,tmp2,val;
-	u32 input_datarate,locked_sym_rate_KSs;
-	u32 Mclk_KHz = 96000,iSerialMclkHz;
+	u32 input_datarate,locked_sym_rate_kss;
+	u32 Mclk_khz = 96000,iSerialMclkHz;
 	u16 divid_ratio = 0;
 	struct MT_FE_CHAN_INFO_DVBS2 p_info;
 	dprintk("Called\n");
-	m88rs6060_get_sym_rate(dev,&locked_sym_rate_KSs);
+	m88rs6060_get_sym_rate(state,&locked_sym_rate_kss);
 
-	regmap_read(dev->demod_regmap,0x9d,&val);
-	regmap_write(dev->demod_regmap,0x9d,val|0x08);
+	regmap_read(state->demod_regmap,0x9d,&val);
+	regmap_write(state->demod_regmap,0x9d,val|0x08);
 
-	m88rs6060_get_channel_info(dev,&p_info);
+	m88rs6060_get_channel_info(state, p);
 
-	if(p_info.type==MtFeType_DvbS2){
+	if(p->delivery_system == SYS_DVBS2){
 
-       switch(p_info.mod_mode)
+       switch(p->modulation)
         {
             case MtFeModMode_8psk:
             case MtFeModMode_8Apsk_L:       mod_fac = 3; break;
@@ -2488,60 +2479,60 @@ static int m88rs6060_set_clock_ratio(struct m88rs6060_state*dev )
             case MtFeModMode_Qpsk:
             default:                        mod_fac = 2; break;
         }
-		switch(p_info.code_rate)
+		switch(p->fec_inner)
 		{
-			case MtFeCodeRate_1_4:		input_datarate = locked_sym_rate_KSs*mod_fac/8/4;		break;
-			case MtFeCodeRate_1_3:		input_datarate = locked_sym_rate_KSs*mod_fac/8/3;		break;
-			case MtFeCodeRate_2_5:		input_datarate = locked_sym_rate_KSs*mod_fac*2/8/5;		break;
-			case MtFeCodeRate_1_2:		input_datarate = locked_sym_rate_KSs*mod_fac/8/2;		break;
-			case MtFeCodeRate_3_5:		input_datarate = locked_sym_rate_KSs*mod_fac*3/8/5;		break;
-			case MtFeCodeRate_2_3:		input_datarate = locked_sym_rate_KSs*mod_fac*2/8/3;		break;
-			case MtFeCodeRate_3_4:		input_datarate = locked_sym_rate_KSs*mod_fac*3/8/4;		break;
-			case MtFeCodeRate_4_5:		input_datarate = locked_sym_rate_KSs*mod_fac*4/8/5;		break;
-			case MtFeCodeRate_5_6:		input_datarate = locked_sym_rate_KSs*mod_fac*5/8/6;		break;
-			case MtFeCodeRate_8_9:		input_datarate = locked_sym_rate_KSs*mod_fac*8/8/9;		break;
-			case MtFeCodeRate_9_10:		input_datarate = locked_sym_rate_KSs*mod_fac*9/8/10;	break;
-			case MtFeCodeRate_5_9:		input_datarate = locked_sym_rate_KSs*mod_fac*5/8/9;		break;
-			case MtFeCodeRate_7_9:		input_datarate = locked_sym_rate_KSs*mod_fac*7/8/9;		break;
-			case MtFeCodeRate_4_15:		input_datarate = locked_sym_rate_KSs*mod_fac*4/8/15;	break;
-			case MtFeCodeRate_7_15:		input_datarate = locked_sym_rate_KSs*mod_fac*7/8/15;	break;
-			case MtFeCodeRate_8_15:		input_datarate = locked_sym_rate_KSs*mod_fac*8/8/15;	break;
-			case MtFeCodeRate_11_15:	input_datarate = locked_sym_rate_KSs*mod_fac*11/8/15;	break;
-			case MtFeCodeRate_13_18:	input_datarate = locked_sym_rate_KSs*mod_fac*13/8/18;	break;
-			case MtFeCodeRate_9_20:		input_datarate = locked_sym_rate_KSs*mod_fac*9/8/20;	break;
-			case MtFeCodeRate_11_20:	input_datarate = locked_sym_rate_KSs*mod_fac*11/8/20;	break;
-			case MtFeCodeRate_23_36:	input_datarate = locked_sym_rate_KSs*mod_fac*23/8/36;	break;
-			case MtFeCodeRate_25_36:	input_datarate = locked_sym_rate_KSs*mod_fac*25/8/36;	break;
-			case MtFeCodeRate_11_45:	input_datarate = locked_sym_rate_KSs*mod_fac*11/8/45;	break;
-			case MtFeCodeRate_13_45:	input_datarate = locked_sym_rate_KSs*mod_fac*13/8/45;	break;
-			case MtFeCodeRate_14_45:	input_datarate = locked_sym_rate_KSs*mod_fac*14/8/45;	break;
-			case MtFeCodeRate_26_45:	input_datarate = locked_sym_rate_KSs*mod_fac*26/8/45;	break;
-			case MtFeCodeRate_28_45:	input_datarate = locked_sym_rate_KSs*mod_fac*28/8/45;	break;
-			case MtFeCodeRate_29_45:	input_datarate = locked_sym_rate_KSs*mod_fac*29/8/45;	break;
-			case MtFeCodeRate_31_45:	input_datarate = locked_sym_rate_KSs*mod_fac*31/8/45;	break;
-			case MtFeCodeRate_32_45:	input_datarate = locked_sym_rate_KSs*mod_fac*32/8/45;	break;
-			case MtFeCodeRate_77_90:	input_datarate = locked_sym_rate_KSs*mod_fac*77/8/90;	break;
-			default:					input_datarate = locked_sym_rate_KSs*mod_fac*2/8/3;		break;
+			case MtFeCodeRate_1_4:		input_datarate = locked_sym_rate_kss * mod_fac/8/4;		break;
+			case MtFeCodeRate_1_3:		input_datarate = locked_sym_rate_kss * mod_fac/8/3;		break;
+			case MtFeCodeRate_2_5:		input_datarate = locked_sym_rate_kss * mod_fac*2/8/5;		break;
+			case MtFeCodeRate_1_2:		input_datarate = locked_sym_rate_kss * mod_fac/8/2;		break;
+			case MtFeCodeRate_3_5:		input_datarate = locked_sym_rate_kss * mod_fac*3/8/5;		break;
+			case MtFeCodeRate_2_3:		input_datarate = locked_sym_rate_kss * mod_fac*2/8/3;		break;
+			case MtFeCodeRate_3_4:		input_datarate = locked_sym_rate_kss * mod_fac*3/8/4;		break;
+			case MtFeCodeRate_4_5:		input_datarate = locked_sym_rate_kss * mod_fac*4/8/5;		break;
+			case MtFeCodeRate_5_6:		input_datarate = locked_sym_rate_kss * mod_fac*5/8/6;		break;
+			case MtFeCodeRate_8_9:		input_datarate = locked_sym_rate_kss * mod_fac*8/8/9;		break;
+			case MtFeCodeRate_9_10:		input_datarate = locked_sym_rate_kss * mod_fac*9/8/10;	break;
+			case MtFeCodeRate_5_9:		input_datarate = locked_sym_rate_kss * mod_fac*5/8/9;		break;
+			case MtFeCodeRate_7_9:		input_datarate = locked_sym_rate_kss * mod_fac*7/8/9;		break;
+			case MtFeCodeRate_4_15:		input_datarate = locked_sym_rate_kss * mod_fac*4/8/15;	break;
+			case MtFeCodeRate_7_15:		input_datarate = locked_sym_rate_kss * mod_fac*7/8/15;	break;
+			case MtFeCodeRate_8_15:		input_datarate = locked_sym_rate_kss * mod_fac*8/8/15;	break;
+			case MtFeCodeRate_11_15:	input_datarate = locked_sym_rate_kss * mod_fac*11/8/15;	break;
+			case MtFeCodeRate_13_18:	input_datarate = locked_sym_rate_kss * mod_fac*13/8/18;	break;
+			case MtFeCodeRate_9_20:		input_datarate = locked_sym_rate_kss * mod_fac*9/8/20;	break;
+			case MtFeCodeRate_11_20:	input_datarate = locked_sym_rate_kss * mod_fac*11/8/20;	break;
+			case MtFeCodeRate_23_36:	input_datarate = locked_sym_rate_kss * mod_fac*23/8/36;	break;
+			case MtFeCodeRate_25_36:	input_datarate = locked_sym_rate_kss * mod_fac*25/8/36;	break;
+			case MtFeCodeRate_11_45:	input_datarate = locked_sym_rate_kss * mod_fac*11/8/45;	break;
+			case MtFeCodeRate_13_45:	input_datarate = locked_sym_rate_kss * mod_fac*13/8/45;	break;
+			case MtFeCodeRate_14_45:	input_datarate = locked_sym_rate_kss * mod_fac*14/8/45;	break;
+			case MtFeCodeRate_26_45:	input_datarate = locked_sym_rate_kss * mod_fac*26/8/45;	break;
+			case MtFeCodeRate_28_45:	input_datarate = locked_sym_rate_kss * mod_fac*28/8/45;	break;
+			case MtFeCodeRate_29_45:	input_datarate = locked_sym_rate_kss * mod_fac*29/8/45;	break;
+			case MtFeCodeRate_31_45:	input_datarate = locked_sym_rate_kss * mod_fac*31/8/45;	break;
+			case MtFeCodeRate_32_45:	input_datarate = locked_sym_rate_kss * mod_fac*32/8/45;	break;
+			case MtFeCodeRate_77_90:	input_datarate = locked_sym_rate_kss * mod_fac*77/8/90;	break;
+			default:					input_datarate = locked_sym_rate_kss * mod_fac*2/8/3;		break;
 
 		}
-		rs6060_get_ts_mclk(dev,&Mclk_KHz);
-		if(dev->config.ts_mode==MtFeTsOutMode_Serial){
-			u32 target_mclk = Mclk_KHz;
+		rs6060_get_ts_mclk(state,&Mclk_khz);
+		if(state->config.ts_mode==MtFeTsOutMode_Serial){
+			u32 target_mclk = Mclk_khz;
 			input_datarate*=8;
 
 		//	target_mclk = input_datarate;
-				rs6060_select_xm(dev,&target_mclk);
-			if(target_mclk != Mclk_KHz){
-				regmap_write(dev->demod_regmap,0x06,0xe0);
-				rs6060_set_ts_mclk(dev,target_mclk);
-				regmap_write(dev->demod_regmap,0x06,0x00);
+				rs6060_select_xm(state,&target_mclk);
+			if(target_mclk != Mclk_khz){
+				regmap_write(state->demod_regmap,0x06,0xe0);
+				rs6060_set_ts_mclk(state,target_mclk);
+				regmap_write(state->demod_regmap,0x06,0x00);
 			}
 
-			rs6060_get_ts_mclk(dev,&iSerialMclkHz);
+			rs6060_get_ts_mclk(state,&iSerialMclkHz);
 			if(iSerialMclkHz>116000)
-				regmap_write(dev->demod_regmap,0x0a,0x01);
+				regmap_write(state->demod_regmap,0x0a,0x01);
 			else
-				regmap_write(dev->demod_regmap,0x0a,0x00);
+				regmap_write(state->demod_regmap,0x0a,0x00);
 
 
 		}else{
@@ -2559,14 +2550,14 @@ static int m88rs6060_set_clock_ratio(struct m88rs6060_state*dev )
 			if(input_datarate<6000)
 				input_datarate= 6000;
 			if(input_datarate != 0)
-				divid_ratio = (u16) (Mclk_KHz/input_datarate);
+				divid_ratio = (u16) (Mclk_khz/input_datarate);
 			else
 				divid_ratio = 0xff;
-			printk("MClk_KHz = %d,divid_ratio = %d \n",Mclk_KHz,divid_ratio);
+			printk("MClk_khz = %d,divid_ratio = %d \n",Mclk_khz,divid_ratio);
 
 			if(divid_ratio<8)
 				divid_ratio = 8;
-			if(dev->config.ts_mode == MtFeTsOutMode_Common){
+			if(state->config.ts_mode == MtFeTsOutMode_Common){
 				if(divid_ratio>27)
 					divid_ratio = 27;
 				if((divid_ratio == 14)||(divid_ratio==15))
@@ -2588,42 +2579,42 @@ static int m88rs6060_set_clock_ratio(struct m88rs6060_state*dev )
 		tmp1 &= 0x3f;
 		tmp2 &= 0x3f;
 		val = (tmp1 >>2)&0x0f;
-		regmap_update_bits(dev->demod_regmap,0xfe,0x0f,val);
+		regmap_update_bits(state->demod_regmap,0xfe,0x0f,val);
 		val = (u8)(((tmp1&0x3)<<6)|tmp2);
-		regmap_write(dev->demod_regmap,0xea,val);
+		regmap_write(state->demod_regmap,0xea,val);
 		}
 	}
 	else{    //dvbs
 	  mod_fac = 2;
 
 	  switch(p_info.code_rate){
-	  	case MtFeCodeRate_1_2:		input_datarate = locked_sym_rate_KSs*mod_fac/2/8;		break;
-		case MtFeCodeRate_2_3:		input_datarate = locked_sym_rate_KSs*mod_fac*2/3/8;		break;
-		case MtFeCodeRate_3_4:		input_datarate = locked_sym_rate_KSs*mod_fac*3/4/8;		break;
-		case MtFeCodeRate_5_6:		input_datarate = locked_sym_rate_KSs*mod_fac*5/6/8;		break;
-		case MtFeCodeRate_7_8:		input_datarate = locked_sym_rate_KSs*mod_fac*7/8/8;		break;
-		default:		input_datarate = locked_sym_rate_KSs*mod_fac*3/4/8;		break;
+	  	case MtFeCodeRate_1_2:		input_datarate = locked_sym_rate_kss * mod_fac/2/8;		break;
+		case MtFeCodeRate_2_3:		input_datarate = locked_sym_rate_kss * mod_fac*2/3/8;		break;
+		case MtFeCodeRate_3_4:		input_datarate = locked_sym_rate_kss * mod_fac*3/4/8;		break;
+		case MtFeCodeRate_5_6:		input_datarate = locked_sym_rate_kss * mod_fac*5/6/8;		break;
+		case MtFeCodeRate_7_8:		input_datarate = locked_sym_rate_kss * mod_fac*7/8/8;		break;
+		default:		input_datarate = locked_sym_rate_kss * mod_fac*3/4/8;		break;
 
 	  }
-		rs6060_get_ts_mclk(dev,&Mclk_KHz);
+		rs6060_get_ts_mclk(state,&Mclk_khz);
 
-		if(dev->config.ts_mode==MtFeTsOutMode_Serial){
-			u32 target_mclk = Mclk_KHz;
+		if(state->config.ts_mode==MtFeTsOutMode_Serial){
+			u32 target_mclk = Mclk_khz;
 			input_datarate*=8;
 
 		//	target_mclk = input_datarate;
-				rs6060_select_xm(dev,&target_mclk);
-			if(target_mclk != Mclk_KHz){
-				regmap_write(dev->demod_regmap,0x06,0xe0);
-				rs6060_set_ts_mclk(dev,target_mclk);
-				regmap_write(dev->demod_regmap,0x06,0x00);
+				rs6060_select_xm(state,&target_mclk);
+			if(target_mclk != Mclk_khz){
+				regmap_write(state->demod_regmap,0x06,0xe0);
+				rs6060_set_ts_mclk(state,target_mclk);
+				regmap_write(state->demod_regmap,0x06,0x00);
 			}
 
-			rs6060_get_ts_mclk(dev,&iSerialMclkHz);
+			rs6060_get_ts_mclk(state,&iSerialMclkHz);
 			if(iSerialMclkHz>116000)
-				regmap_write(dev->demod_regmap,0x0a,0x01);
+				regmap_write(state->demod_regmap,0x0a,0x01);
 			else
-				regmap_write(dev->demod_regmap,0x0a,0x00);
+				regmap_write(state->demod_regmap,0x0a,0x00);
 
 		  }else{
 				iSerialMclkHz = input_datarate*46/5;
@@ -2637,12 +2628,12 @@ static int m88rs6060_set_clock_ratio(struct m88rs6060_state*dev )
 				if(input_datarate<6000)
 					input_datarate = 6000;
 				if(input_datarate != 0)
-					divid_ratio = (u16)(Mclk_KHz/input_datarate);
+					divid_ratio = (u16)(Mclk_khz/input_datarate);
 				else
 					divid_ratio = 0xff;
 				if(divid_ratio<8)
 					divid_ratio = 8;
-				if(dev->config.ts_mode == MtFeTsOutMode_Common){
+				if(state->config.ts_mode == MtFeTsOutMode_Common){
 					if(divid_ratio>27)
 						divid_ratio=27;
 					}
@@ -2656,9 +2647,9 @@ static int m88rs6060_set_clock_ratio(struct m88rs6060_state*dev )
 				tmp1 &= 0x3f;
 				tmp2 &= 0x3f;
 				val = (tmp1 >>2)&0x0f;
-				regmap_update_bits(dev->demod_regmap,0xfe,0x0f,val);
+				regmap_update_bits(state->demod_regmap,0xfe,0x0f,val);
 				val = (u8)(((tmp1&0x3)<<6)|tmp2);
-				regmap_write(dev->demod_regmap,0xea,val);
+				regmap_write(state->demod_regmap,0xea,val);
 			}
 	}
 	return 0;
@@ -2688,7 +2679,7 @@ static void init_signal_quality(struct dvb_frontend* fe,	struct dtv_frontend_pro
 /*
 	read rf level, snr, signal quality, lock_status
  */
-static int m88rs6060_read_status(struct dvb_frontend *fe, enum fe_status *status)
+static int m88rs6060_read_status(struct dvb_frontend* fe, enum fe_status* status)
 {
 	struct m88rs6060_state* state = fe->demodulator_priv;
 	struct i2c_client* client = state->demod_client;
@@ -2697,7 +2688,6 @@ static int m88rs6060_read_status(struct dvb_frontend *fe, enum fe_status *status
 	unsigned int tmp1, tmp2;
 	u8 buf[3];
 	u16 temp;
-	u8 matype;
 	dev_dbg(&client->dev, "%s\n", __func__);
 	init_signal_quality(fe, p);
 
@@ -2771,7 +2761,7 @@ static int m88rs6060_read_status(struct dvb_frontend *fe, enum fe_status *status
 
 	if ((state->fe_status & FE_HAS_LOCK)&&(state->TsClockChecked)){
 		state->TsClockChecked = false;
-		m88rs6060_set_clock_ratio(state);
+		m88rs6060_set_clock_ratio(state, p);
 	}
 
 	if((state->config.HAS_CI)&&(state->fe_status & FE_HAS_LOCK)&&(state->newTP))

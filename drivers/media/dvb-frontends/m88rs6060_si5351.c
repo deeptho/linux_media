@@ -235,10 +235,10 @@ void si5351_set_pll(struct m88rs6060_state *dev,u32 pll_freq, enum si5351_pll ta
 	/* Prepare an array for parameters to be written to */
 
 	/* Registers 26-27 */
-	temp = ((pll_reg.p3 >> 8) & 0xFF);
+	temp = ((pll_reg.p3 >> 8) & 0xff);
 	params[i++] = temp;
 
-	temp = (u8)(pll_reg.p3  & 0xFF);
+	temp = (u8)(pll_reg.p3  & 0xff);
 	params[i++] = temp;
 
 	/* Register 28 */
@@ -246,22 +246,22 @@ void si5351_set_pll(struct m88rs6060_state *dev,u32 pll_freq, enum si5351_pll ta
 	params[i++] = temp;
 
 	/* Registers 29-30 */
-	temp = (u8)((pll_reg.p1 >> 8) & 0xFF);
+	temp = (u8)((pll_reg.p1 >> 8) & 0xff);
 	params[i++] = temp;
 
-	temp = (u8)(pll_reg.p1  & 0xFF);
+	temp = (u8)(pll_reg.p1  & 0xff);
 	params[i++] = temp;
 
 	/* Register 31 */
-	temp = (u8)((pll_reg.p3 >> 12) & 0xF0);
-	temp += (u8)((pll_reg.p2 >> 16) & 0x0F);
+	temp = (u8)((pll_reg.p3 >> 12) & 0xf0);
+	temp += (u8)((pll_reg.p2 >> 16) & 0x0f);
 	params[i++] = temp;
 
 	/* Registers 32-33 */
-	temp = (u8)((pll_reg.p2 >> 8) & 0xFF);
+	temp = (u8)((pll_reg.p2 >> 8) & 0xff);
 	params[i++] = temp;
 
-	temp = (u8)(pll_reg.p2  & 0xFF);
+	temp = (u8)(pll_reg.p2  & 0xff);
 	params[i++] = temp;
 
 	/* Write the parameters */
@@ -571,9 +571,9 @@ void si5351_set_freq(struct m88rs6060_state *dev,u32 freq, u32 pll_freq, enum si
 	if(ret== 0)
 	{
 		/* Registers 26-27 */
-		temp = ((pll_reg.p3 >> 8) & 0xFF);
+		temp = ((pll_reg.p3 >> 8) & 0xff);
 		params[i++] = temp;
-		temp = (u8)(pll_reg.p3  & 0xFF);
+		temp = (u8)(pll_reg.p3  & 0xff);
 		params[i++] = temp;
 
 		/* Register 28 */
@@ -581,21 +581,21 @@ void si5351_set_freq(struct m88rs6060_state *dev,u32 freq, u32 pll_freq, enum si
 		params[i++] = temp;
 
 		/* Registers 29-30 */
-		temp = (u8)((pll_reg.p1 >> 8) & 0xFF);
+		temp = (u8)((pll_reg.p1 >> 8) & 0xff);
 		params[i++] = temp;
-		temp = (u8)(pll_reg.p1  & 0xFF);
+		temp = (u8)(pll_reg.p1  & 0xff);
 		params[i++] = temp;
 
 		/* Register 31 */
-		temp = (u8)((pll_reg.p3 >> 12) & 0xF0);
-		temp += (u8)((pll_reg.p2 >> 16) & 0x0F);
+		temp = (u8)((pll_reg.p3 >> 12) & 0xf0);
+		temp += (u8)((pll_reg.p2 >> 16) & 0x0f);
 		params[i++] = temp;
 
 		/* Registers 32-33 */
-		temp = (u8)((pll_reg.p2 >> 8) & 0xFF);
+		temp = (u8)((pll_reg.p2 >> 8) & 0xff);
 		params[i++] = temp;
 
-		temp = (u8)(pll_reg.p2  & 0xFF);
+		temp = (u8)(pll_reg.p2  & 0xff);
 		params[i++] = temp;
 
 		/* Write the parameters */
@@ -613,10 +613,10 @@ void si5351_set_freq(struct m88rs6060_state *dev,u32 freq, u32 pll_freq, enum si
 	i = 0;
 
 	/* Registers 42-43 */
-	temp = (u8)((ms_reg.p3 >> 8) & 0xFF);
+	temp = (u8)((ms_reg.p3 >> 8) & 0xff);
 	params[i++] = temp;
 
-	temp = (u8)(ms_reg.p3  & 0xFF);
+	temp = (u8)(ms_reg.p3  & 0xff);
 	params[i++] = temp;
 
 	/* Register 44 */
@@ -625,21 +625,21 @@ void si5351_set_freq(struct m88rs6060_state *dev,u32 freq, u32 pll_freq, enum si
 	params[i++] = temp;
 
 	/* Registers 45-46 */
-	temp = (u8)((ms_reg.p1 >> 8) & 0xFF);
+	temp = (u8)((ms_reg.p1 >> 8) & 0xff);
 	params[i++] = temp;
 
-	temp = (u8)(ms_reg.p1  & 0xFF);
+	temp = (u8)(ms_reg.p1  & 0xff);
 	params[i++] = temp;
 
 	/* Register 47 */
-	temp = (u8)((ms_reg.p3 >> 12) & 0xF0);
-	temp += (u8)((ms_reg.p2 >> 16) & 0x0F);
+	temp = (u8)((ms_reg.p3 >> 12) & 0xf0);
+	temp += (u8)((ms_reg.p2 >> 16) & 0x0f);
 	params[i++] = temp;
 
 	/* Registers 48-49 */
-	temp = (u8)((ms_reg.p2 >> 8) & 0xFF);
+	temp = (u8)((ms_reg.p2 >> 8) & 0xff);
 	params[i++] = temp;
-	temp = (u8)(ms_reg.p2  & 0xFF);
+	temp = (u8)(ms_reg.p2  & 0xff);
 	params[i++] = temp;
 
 	/* Write the parameters */
