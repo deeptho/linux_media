@@ -196,10 +196,11 @@ struct MT_FE_CHAN_INFO_DVBS2 {
 	bool is_dummy_frame;
 	s8 iVcmCycle;
 	s8 iFrameLength;	/*0: Normal; 1: Short; 2: Medium */
+	u8 matype;
 };
 
 void rs6060_tuner_select_mclk(struct m88rs6060_state *dev, u32 freq_MHz, u32 symbol_rate, bool bBs);
-void rs6060_set_mclk(struct m88rs6060_state* state, u32 freq_MHz, u32 symbol_rate_kSs, u32 mclk, bool blind);
+void rs6060_set_mclk_according_to_symbol_rate(struct m88rs6060_state* state, u32 freq_MHz, u32 symbol_rate_kSs, u32 mclk, bool blind);
 void rs6060_set_default_mclk(struct m88rs6060_state* state);
 void rs6060_select_mclk(struct m88rs6060_state *dev, u32 freq_MHz, u32 symbol_rate, bool bBs);
 void rs6060_set_ts_mclk(struct m88rs6060_state *dev, u32 mclk);
