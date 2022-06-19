@@ -13,7 +13,7 @@ to support blindscan, to fix bugs and to make improvements.
 * Blindscan and spectrum upport for montage m88rs60606 based cards: tbs6902SE and tbs2904SE.
 * Support m883s6060 module unloading
 * stid135: BER is now reported properly othrough the PRE instead of POST error counters
-* improved correction of discontinuities in spectrum due to small errors in RF level
+* Improved correction of discontinuities in spectrum due to small errors in RF level
 * stid135: detected multi-stream IDs are now accumalated internally
 * Added DTV_BIT_RATE readout via dvbapi
 * stid135: improper estimation of required  llr rate, causing rai multistream on 5.0W to not tune sometimes
