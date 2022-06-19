@@ -1623,10 +1623,10 @@ static void m88rs6060_get_total_carrier_offset(struct m88rs6060_state* state, s3
 		nval_2 = val_0x5e_0x5f_2;
 
 	//nval_2 is a correction
-	*carrier_offset_khz = (nval_1 - nval_2) * state->mclk / (1 << 16);
-	dprintk("Carrier offset =%dkHz %dkHz freq=%d => %d nval_1=0x%x nval_2=0x%x\n", 	(nval_1) * state->mclk / (1 << 16),
-					*carrier_offset_khz, state->tuned_frequency, state->tuned_frequency + *carrier_offset_khz,
-					nval_1, nval_2);
+	*carrier_offset_khz = ((int)(nval_1 - nval_2) * state->mclk / (1 << 16)) + state->center_freq_offset;
+	dprintk("Carrier offset =%dkHz %dkHz freq=%d => %d offset=%d nval_1=0x%x nval_2=0x%x\n", 	(nval_1) * state->mclk / (1 << 16),
+					*carrier_offset_khz, state->tuned_frequency, state->tuned_frequency - *carrier_offset_khz,
+					state->center_freq_offset, nval_1, nval_2);
 }
 
 
@@ -2160,6 +2160,9 @@ static int m88rs6060_tune_once(struct dvb_frontend *fe, bool blind)
 	if (p->symbol_rate < 5000000) {
 		lpf_offset_khz = 3000;
 		realFreq = p->frequency + 3000;
+		state->center_freq_offset = 3000;
+	} else {
+		state->center_freq_offset = 0;
 	}
 
 	m88rs6060_set_mclk_according_to_symbol_rate(state, realFreq / 1000, symbol_rate_kss, target_mclk, blind);

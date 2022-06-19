@@ -57,7 +57,8 @@ struct m88rs6060_state {
 	s32 active_stream_id;
 
 	u32 dvbv3_ber;		/* for old DVBv3 API read_ber */
-	u32 tuned_frequency;    //khz
+	s32 tuned_frequency;    //khz
+	s32 center_freq_offset; //khz
 	u64 pre_bit_error;
 	u64 pre_bit_count;
 	u64 last_pre_bit_error;
