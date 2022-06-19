@@ -24,7 +24,7 @@
  */
 
 #include <media/dvb_math.h>
-
+#include <linux/kthread.h>
 #include "m88rs6060_priv.h"
 #include "si5351_priv.h"
 
