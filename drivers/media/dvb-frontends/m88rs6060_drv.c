@@ -1525,11 +1525,12 @@ static int m88rs6060_get_matype(struct m88rs6060_state* state, u32* matype)
 	int i;
 	*matype = 0;
 	regmap_read(state->demod_regmap, 0x08, &tmp);
+#if 0
 	if((tmp & 0x08) == 0x00)	{// DVB-S // reserved bit 3 indicates dvbs2 (1) or dvbs1 (0) ??
 		//return -1;
 		dprintk("this is dvbs? tmp=0x%x\n", tmp);
 	}
-
+#endif
 	regmap_write(state->demod_regmap, 0xe6, 0x00); //clear register containing code_rate
 	regmap_write(state->demod_regmap, 0xe8, 0x00);
 	regmap_write(state->demod_regmap, 0xe8, 0x01);
