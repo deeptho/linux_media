@@ -1673,17 +1673,16 @@ static bool m88rs6060_get_signal_info(struct dvb_frontend *fe)
 	p->frequency = state->tuned_frequency - carrier_offset_khz;
 	m88rs6060_get_symbol_rate(state, &p->symbol_rate);
 	dprintk("delsys =%d\n", p->delivery_system);
-	if (state->detected_pls_code >=0) {
-		if (!state->pls_active)
-			state->detected_pls_code = 1;
-		p->stream_id = (((state->active_stream_id >=0) ? (state->active_stream_id &0xff) :0xff) |
-										(0 << 26) | //PLS mode: root
-										((state->detected_pls_code &0x3FFFF)<<8)
-										);
-		dprintk("Returning p->stream_id=0x%x active_stream_id=%d\n", p->stream_id, state->active_stream_id);
-	} else { //not blind; keep what we have
-
+	if (!state->pls_active) {
+		state->detected_pls_code = 1;
+		state->detected_pls_mode = 1;
 	}
+	p->stream_id = (((state->active_stream_id >=0) ? (state->active_stream_id &0xff) :0xff) |
+									(0 << 26) | //PLS mode: root
+									((state->detected_pls_code &0x3FFFF)<<8)
+									);
+	dprintk("Returning p->stream_id=0x%x active_stream_id=%d\n", p->stream_id, state->active_stream_id);
+
 	return need_retune;
 }
 
@@ -1838,6 +1837,7 @@ static void m88rs6060_select_stream(struct m88rs6060_state* state, u8 stream_id)
 	bool found = false;
 	uint32_t mask;
 	u8 j;
+	dprintk("stream_id=%d is_mis=%d\n", stream_id, state->is_mis);
 	if(!state->is_mis) {
 		state->active_stream_id =  -1;
 		return;
@@ -1889,21 +1889,27 @@ static int m88rs6060_wait_for_demod_lock_non_blind(struct m88rs6060_state* state
 		regmap_read(state->demod_regmap, 0x0d, &tmp1); //get all lock bits
 		state->fec_locked = (tmp1 & 0x80); //only valid for dvbs2
 		state->has_viterbi = (tmp1 & 0x80);
-			state->has_carrier = (tmp1 >> 2)&1; //only dvbs1 mode
-			state->has_sync = (tmp1 & 0x08) && //header locked; only dvbs2
-				(tmp1 & 0x02); //timing locked
-			state->has_signal = (tmp1&0x1); //analog agc locked
-			state->has_timing_lock = (tmp1 & 0x2);
-			if ((tmp1 == 0x8f) //fully locked dvbs2
-					|| (tmp1 == 0xf7) //fully locked dvbs1 //TODO: only check the last three bits, should be 7
-					) {
-				state->demod_locked = true;
-				regmap_read(state->demod_regmap, 0xd1, &tmp2); //S_CTRL_1
-				dprintk("lock achieved tmp=0x%x tmp1=0x%x tmp2=0x%x\n", tmp, tmp1, tmp2);
-				is_dvbs2 = (tmp1==0x8f);
-				break;
-			}
-			msleep(20);
+		state->has_carrier = (tmp1 >> 2)&1; //only dvbs1 mode
+		state->has_sync = (tmp1 & 0x08) && //header locked; only dvbs2
+			(tmp1 & 0x02); //timing locked
+		state->has_signal = (tmp1&0x1); //analog agc locked
+		state->has_timing_lock = (tmp1 & 0x2);
+		state->is_mis = m88rs6060_detect_mis(state);
+		state->detected_delivery_system = (tmp&0x08) ? SYS_DVBS2: SYS_DVBS;
+		if(state->detected_delivery_system == SYS_DVBS2) {
+			state->detected_pls_mode = 1; //ROOT
+			state->pls_active = true;
+		}
+		if ((tmp1 == 0x8f) //fully locked dvbs2
+				|| (tmp1 == 0xf7) //fully locked dvbs1 //TODO: only check the last three bits, should be 7
+				) {
+			state->demod_locked = true;
+			regmap_read(state->demod_regmap, 0xd1, &tmp2); //S_CTRL_1
+			dprintk("lock achieved tmp=0x%x tmp1=0x%x tmp2=0x%x\n", tmp, tmp1, tmp2);
+			is_dvbs2 = (tmp1==0x8f);
+			break;
+		}
+		msleep(20);
 	}
 	if(i==150)
 		dprintk("Failed to lock: tmp=0x%x tmp1=0x%x fec=%d vit=%d car=%d sync=%d sign=%d\n", tmp, tmp1,
@@ -1970,6 +1976,7 @@ static int m88rs6060_find_pls(struct m88rs6060_state * state)
 	regmap_bulk_read(state->demod_regmap, 0x22, &state->detected_pls_code, 3);
 	dprintk("PLS: before 0x%x\n", state->detected_pls_code);
 	state->detected_pls_code &= 0x03ffff;
+	state->detected_pls_mode = 1; //ROOT
 	dprintk("PLS: after 0x%x\n", state->detected_pls_code);
 	regmap_bulk_write(state->demod_regmap, 0x22, &state->detected_pls_code, 3);
 	//end of read and rewrite pls code
@@ -2109,6 +2116,7 @@ static void clear_tune_state(struct m88rs6060_state* state)
 	state->detected_delivery_system = SYS_UNDEFINED;
 	state->has_timedout=false;
 	state->detected_pls_code  = -1;
+	state->detected_pls_mode = 1;
 	state->pls_active = false;
 	state->is_mis = false;
 	state->active_stream_id = -1;
@@ -2238,17 +2246,26 @@ static int m88rs6060_tune_once(struct dvb_frontend *fe, bool blind)
 			isi = p->stream_id & 0xff;
 			pls_mode = (p->stream_id >> 26) & 3;
 			pls_code = (p->stream_id >> 8) & 0x3ffff;
+			state->detected_pls_code =pls_code;
+			state->detected_pls_mode = pls_mode;
+			state->pls_active = pls_code > 0;
 			if (!pls_mode && !pls_code)
 				pls_code = 1;
 		} else {
 			isi = 0;
 			pls_mode = 0;
 			pls_code = 1;
+			state->detected_pls_code = -1;
+			state->detected_pls_mode = -1;
+			state->pls_active = false;
 		}
 
 		if (p->scrambling_sequence_index) {
 			pls_mode = 1;
 			pls_code = p->scrambling_sequence_index;
+			state->detected_pls_code = pls_code;
+			state->detected_pls_mode = pls_mode;
+			state->pls_active = true;
 		}
 
 		if (pls_mode)

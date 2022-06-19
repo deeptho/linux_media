@@ -50,7 +50,8 @@ struct m88rs6060_state {
 	bool TsClockChecked;  //clock retio
 	//bool warm;		// for the init and download fw
 	s32 mclk;		/*main mclk */
-	u32 detected_pls_code;
+	s32 detected_pls_code;
+	s32 detected_pls_mode;
 	enum fe_delivery_system detected_delivery_system;
 	bool pls_active;
 	bool is_mis;
