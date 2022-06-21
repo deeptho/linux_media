@@ -1561,7 +1561,7 @@ next:
 				lockwait = 40;
 				locksleep = 10;
 			} else if (c->symbol_rate > 7000000 && c->symbol_rate < 20000000) {
-				lockwait = 15;
+				lockwait = 25;
 				locksleep = 5;
 			} else if (c->symbol_rate > 20000000) {
 				lockwait = 20;
