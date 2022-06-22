@@ -248,6 +248,7 @@ struct dvb_tuner_ops {
 #define TUNER_STATUS_STEREO 2
 	int (*get_status)(struct dvb_frontend *fe, u32 *status);
 	int (*get_rf_strength)(struct dvb_frontend *fe, u16 *strength);
+	int (*get_rf_gain)(struct dvb_frontend *fe, s64 *gain);
 	int (*agc_to_gain_dbm)(struct dvb_frontend *fe, s32 agc);//returns gain in dB (units 0.001dB)
 	int (*get_afc)(struct dvb_frontend *fe, s32 *afc);
 
