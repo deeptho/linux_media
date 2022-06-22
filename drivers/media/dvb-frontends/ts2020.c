@@ -516,6 +516,7 @@ static const struct dvb_tuner_ops ts2020_tuner_ops = {
 	.get_frequency = ts2020_get_frequency,
 	.get_if_frequency = ts2020_get_if_frequency,
 	.get_rf_strength = ts2020_read_signal_strength,
+	.get_rf_gain = ts2020_get_tuner_gain,
 };
 
 struct dvb_frontend *ts2020_attach(struct dvb_frontend *fe,
