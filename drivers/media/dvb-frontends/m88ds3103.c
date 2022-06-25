@@ -1618,6 +1618,77 @@ err:
 	return ret;
 }
 
+static int m88ds3103_stop_task(struct dvb_frontend *fe)
+{
+	struct m88ds3103_dev *dev = fe->demodulator_priv;
+	struct m88ds3103_spectrum_scan_state *ss = &dev->spectrum_scan_state;
+
+	if (ss->freq)
+		kfree(ss->freq);
+	if (ss->spectrum)
+		kfree(ss->spectrum);
+
+	memset(ss, 0, sizeof(*ss));
+
+	return 0;
+}
+
+static int m88ds3103_spectrum_start(struct dvb_frontend *fe, struct dtv_fe_spectrum *s,
+				unsigned int *delay, enum fe_status *status)
+{
+	struct m88ds3103_dev *dev = fe->demodulator_priv;
+	struct i2c_client *client = dev->client;
+	struct m88ds3103_spectrum_scan_state *ss = &dev->spectrum_scan_state;
+	int ret;
+
+	ret = m88ds3103_stop_task(fe);
+	if (ret)
+		goto err;
+
+	s->scale = FE_SCALE_DECIBEL;
+
+	ret = m88ds3103_get_spectrum_scan_fft(fe, delay, status);
+	if (ret)
+		goto err;
+
+	s->num_freq = ss->spectrum_len;
+
+	return 0;
+err:
+	dev_dbg(&client->dev, "failed=%d\n", ret);
+	return ret;
+}
+
+static int m88ds3103_spectrum_get(struct dvb_frontend *fe, struct dtv_fe_spectrum *user)
+{
+	struct m88ds3103_dev *dev = fe->demodulator_priv;
+	int error = 0;
+
+	if (user->num_freq> dev->spectrum_scan_state.spectrum_len)
+		user->num_freq = dev->spectrum_scan_state.spectrum_len;
+
+	if (user->num_candidates > dev->spectrum_scan_state.num_candidates)
+		user->num_candidates = dev->spectrum_scan_state.num_candidates;
+
+	if (dev->spectrum_scan_state.freq && dev->spectrum_scan_state.spectrum) {
+		if (user->freq && user->num_freq > 0 && copy_to_user((void __user*) user->freq,
+			dev->spectrum_scan_state.freq, user->num_freq * sizeof(__u32))) {
+				error = -EFAULT;
+		}
+		if (user->rf_level && user->num_freq > 0 && copy_to_user((void __user*) user->rf_level,
+			dev->spectrum_scan_state.spectrum, user->num_freq * sizeof(__s32))) {
+				error = -EFAULT;
+		}
+		if (user->candidates && user->num_candidates > 0 && copy_to_user((void __user*) user->candidates,
+			dev->spectrum_scan_state.candidates, user->num_candidates * sizeof(struct spectral_peak_t))) {
+				error = -EFAULT;
+		}
+	} else
+		error = -EFAULT;
+
+	return error;
+}
+
 static int m88ds3103_set_frontend(struct dvb_frontend *fe)
 {
 	struct m88ds3103_dev *dev = fe->demodulator_priv;
@@ -2578,6 +2649,9 @@ static const struct dvb_frontend_ops m88ds3103_ops = {
 	.get_frontend = m88ds3103_get_frontend,
 
 	.scan = m88ds3103_blindscan,
+	.stop_task = m88ds3103_stop_task,
+	.spectrum_start = m88ds3103_spectrum_start,
+	.spectrum_get = m88ds3103_spectrum_get,
 
 	.read_status = m88ds3103_read_status,
 	.read_snr = m88ds3103_read_snr,
