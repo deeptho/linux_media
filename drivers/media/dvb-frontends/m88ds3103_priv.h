@@ -35,6 +35,21 @@ struct fe_tp_info
 	u32 symbol_rate;
 };
 
+struct m88ds3103_spectrum_scan_state {
+	bool spectrum_present;
+	bool scan_in_progress;
+	int fft_size;
+	s32 start_frequency;
+	s32 end_frequency;
+	s32 frequency_step;
+	s32 range;
+	struct spectral_peak_t *candidates;
+	int num_candidates;
+	s32 *freq;
+	s32 *spectrum;
+	int spectrum_len;
+};
+
 struct m88ds3103_dev {
 	struct i2c_client *client;
 	struct i2c_client *dt_client;
@@ -59,6 +74,7 @@ struct m88ds3103_dev {
 	u64 post_bit_count;
 	u8 dt_addr;
 	u16 prevUCBS2;
+	struct m88ds3103_spectrum_scan_state spectrum_scan_state;
 };
 
 struct m88ds3103_reg_val {
