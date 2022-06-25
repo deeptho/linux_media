@@ -1618,6 +1618,290 @@ err:
 	return ret;
 }
 
+static int m88ds3103_get_fft_one_band(struct dvb_frontend *fe, s32 center_freq, s32 range, u32 *freq, s32 *rf_level, int fft_size)
+{
+	struct m88ds3103_dev *dev = fe->demodulator_priv;
+	struct i2c_client *client = dev->client;
+	unsigned tmp1, tmp2;
+	int x, ret, i = 0;
+	bool fft_done = false;
+	s64 strength;
+	u8 cnt;
+	s32 tmp;
+
+	ret = regmap_write(dev->regmap, 0x9a, 0x80);
+	if (ret)
+		goto err;
+
+	for (i = 0; i < 2; ++i) {
+		for (cnt = 0; cnt < 200; ++cnt) {
+			ret = regmap_read(dev->regmap, 0x9a, &tmp);
+			if (ret)
+				goto err;
+			fft_done = ((tmp & 0x80) == 0x00);
+			if (fft_done)
+				break;
+			msleep(10);
+		}
+
+		if (!(fft_done)) {
+			if (i == 1)
+				msleep(100);
+			else
+				return -1;
+		} else
+			break;
+	}
+
+	if (fe->ops.tuner_ops.get_rf_gain) {
+		ret = fe->ops.tuner_ops.get_rf_gain(fe, &strength);
+		if (ret)
+			goto err;
+	}
+
+	ret = regmap_write(dev->regmap, 0x9a, 0x40);
+	if (ret)
+		goto err;
+
+	for (i = 0; i < 32; ++i)
+		rf_level[i] = 0;
+
+	for (i = 32; i < fft_size; ++i) {
+		freq[i] = ((i - (signed)fft_size / 2) * range) / (signed)fft_size + center_freq;
+		ret = regmap_read(dev->regmap, 0x9b, &tmp1);
+		if (ret)
+			goto err;
+		ret = regmap_read(dev->regmap, 0x9b, &tmp2);
+		if (ret)
+			goto err;
+		x = (tmp2 << 8) | tmp1;
+		x = ((20000 * ((long long) intlog10(x))) >> 24) - 10 * strength - 108370 + 7000;
+		rf_level[i] = x;
+	}
+
+	for (; i < fft_size; ++i)
+		rf_level[i] = 0;
+
+	msleep(50);
+
+	return 0;
+err:
+	dev_dbg(&client->dev, "failed=%d\n", ret);
+	return ret;
+}
+
+int m88ds3103_get_spectrum_scan_fft(struct dvb_frontend *fe, unsigned int *delay, enum fe_status *status)
+{
+
+	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
+	struct m88ds3103_dev *dev = fe->demodulator_priv;
+	struct i2c_client *client = dev->client;
+	struct m88ds3103_spectrum_scan_state *ss = &dev->spectrum_scan_state;
+	s32 useable_samples2, lost_samples2, sum_len, sum_correction, min_correction[2], max_correction[2];
+	s32 start_frequency = p->scan_start_frequency, end_frequency = p->scan_end_frequency;
+	s32 last_avg = 0, current_avg = 0, correction = 0, *temp_rf_level = NULL;
+	u32 table_size = 512, idx = 0, tmp, *temp_freq = NULL;
+	int i, ret, error = 0;
+
+	ss->spectrum_present = false;
+
+	if (p->scan_end_frequency < p->scan_start_frequency)
+		return -1;
+
+	ss->start_frequency = start_frequency;
+	ss->end_frequency = end_frequency;
+	ss->range = 96000;
+	ss->fft_size = 512;
+	ss->frequency_step = ss->range / ss->fft_size;
+
+	if (ss->fft_size != table_size)
+		return -1;
+
+	ss->fft_size = table_size;
+ 	ss->range = ss->frequency_step * ss->fft_size;
+	ss->spectrum_len = (end_frequency - start_frequency + ss->frequency_step - 1) / ss->frequency_step;
+	useable_samples2 = ((ss->fft_size * 6) / 10 + 1) / 2;
+	lost_samples2 = ss->fft_size / 2 - useable_samples2;
+
+	ss->freq = kzalloc(ss->spectrum_len * (sizeof(ss->freq[0])), GFP_KERNEL);
+	ss->spectrum = kzalloc(ss->spectrum_len * (sizeof(ss->spectrum[0])), GFP_KERNEL);
+	temp_freq = kzalloc(8192 * (sizeof(temp_freq[0])), GFP_KERNEL);
+	temp_rf_level = kzalloc(8192 * (sizeof(temp_rf_level[0])), GFP_KERNEL);
+
+	if (!temp_rf_level || !temp_freq || !ss->freq || !ss->spectrum) {
+		error = -1;
+		goto _end;
+	}
+
+	ret = m88ds3103_bs_set_frontend(fe);
+	if (ret)
+		goto err;
+
+	min_correction[0] = 0x7fffffff;
+	min_correction[1] = 0x7fffffff;
+	max_correction[0] = 0x80000000;
+	max_correction[1] = 0x80000000;
+	sum_correction = 0;
+	sum_len = 0;
+
+	for (idx = 0; idx < ss->spectrum_len;) {
+		if (kthread_should_stop() || dvb_frontend_task_should_stop(fe))
+			break;
+
+		ret = regmap_read(dev->regmap, 0x76, &tmp);
+		if (ret)
+			goto err;
+		ret = regmap_write(dev->regmap, 0x76, tmp | 0x80);
+		if (ret)
+			goto err;
+		ret = regmap_write(dev->regmap, 0xb2, 0x01);
+		if (ret)
+			goto err;
+		ret = regmap_write(dev->regmap, 0x00, 0x01);
+		if (ret)
+			goto err;
+		ret = regmap_write(dev->regmap, 0x4a, 0x00);
+		if (ret)
+			goto err;
+		ret = regmap_read(dev->regmap, 0x4d, &tmp);
+		if (ret)
+			goto err;
+		ret = regmap_write(dev->regmap, 0x4d, tmp | 0x91);
+		if (ret)
+			goto err;
+		ret = regmap_read(dev->regmap, 0x90, &tmp);
+		if (ret)
+			goto err;
+		ret = regmap_write(dev->regmap, 0x90, tmp | 0x73);
+		if (ret)
+			goto err;
+		ret = regmap_write(dev->regmap, 0x91, 0x42);
+		if (ret)
+			goto err;
+		ret = regmap_write(dev->regmap, 0x92, 0x01);
+		if (ret)
+			goto err;
+		ret = regmap_write(dev->regmap, 0x97, 0xbf);
+		if (ret)
+			goto err;
+		ret = regmap_write(dev->regmap, 0x99, 0x1c);
+		if (ret)
+			goto err;
+		ret = regmap_write(dev->regmap, 0x30, 0x08);
+		if (ret)
+			goto err;
+		ret = regmap_write(dev->regmap, 0x32, 0x44);
+		if (ret)
+			goto err;
+		ret = regmap_write(dev->regmap, 0x4b, 0x04);
+		if (ret)
+			goto err;
+		ret = regmap_write(dev->regmap, 0x56, 0x01);
+		if (ret)
+			goto err;
+		ret = regmap_write(dev->regmap, 0xa0, 0x44);
+		if (ret)
+			goto err;
+		ret = regmap_write(dev->regmap, 0x08, 0x83);
+		if (ret)
+			goto err;
+		ret = regmap_write(dev->regmap, 0x70, 0x00);
+		if (ret)
+			goto err;
+		ret = m88ds3103_update_bits(dev, 0x4d, 0x02, dev->cfg->spec_inv << 1);
+		if (ret)
+			goto err;
+		ret = regmap_write(dev->regmap, 0x00, 0x00);
+		if (ret)
+			goto err;
+		ret = regmap_write(dev->regmap, 0xb2, 0x00);
+		if (ret)
+			goto err;
+	
+		p->frequency = start_frequency + (idx + useable_samples2) * ss->frequency_step;
+		p->symbol_rate = 40000000;
+		p->bandwidth_hz = p->symbol_rate / 100 * 135;
+
+		if (fe->ops.tuner_ops.set_params) {
+			ret = fe->ops.tuner_ops.set_params(fe);
+			if (ret)
+				goto err;
+		}
+
+		ret = m88ds3103_set_carrier_offset(fe, 0);
+		if (ret)
+			goto err;
+
+		error = m88ds3103_get_fft_one_band(fe, p->frequency, ss->range, temp_freq, temp_rf_level, ss->fft_size);
+
+		if (error)
+			goto _end;
+
+		current_avg = 0;
+
+		for (i = lost_samples2 - 5; i < lost_samples2 + 5; ++i)
+			current_avg += temp_rf_level[i];
+	
+		current_avg /= 10;
+		correction = (idx == 0) ? 0 : -(current_avg - last_avg);
+
+		for (i = lost_samples2; i < ss->fft_size - lost_samples2 && idx < ss->spectrum_len; ++idx, i++ ) {
+			ss->freq[idx] = temp_freq[i];
+			ss->spectrum[idx] = temp_rf_level[i] + correction;
+		}
+
+		if (correction < min_correction[0]) {
+			min_correction[1] = min_correction[0];
+			min_correction[0] = correction;
+		} else if (correction < min_correction[1]) {
+			min_correction[1] = correction;
+		}
+
+		if (correction > max_correction[0]) {
+			max_correction[1] = max_correction[0];
+			max_correction[0] = correction;
+		} else  if (correction > max_correction[1]) {
+			max_correction[1] = correction;
+		}
+
+		sum_correction += correction;
+		sum_len ++;
+
+		last_avg = 0;
+
+		for (i = ss->fft_size - lost_samples2 - 5; i < ss->fft_size - lost_samples2 + 5; ++i)
+			last_avg += temp_rf_level[i] + correction;
+		last_avg /= 10;
+
+	}
+
+	if (sum_len > 4) {
+		sum_correction -= min_correction[0] + min_correction[1] + max_correction[0] + max_correction[1];
+		correction = sum_correction / (sum_len - 4);
+
+		for (i = 0; i < ss->spectrum_len; ++i)
+			ss->spectrum[i] -= correction;
+	}
+
+	ss->spectrum_present = true;
+_end:
+	if (temp_freq)
+		kfree(temp_freq);
+	if (temp_rf_level)
+		kfree(temp_rf_level);
+
+	if (!error) {
+		*status = FE_HAS_SIGNAL|FE_HAS_CARRIER|FE_HAS_VITERBI|FE_HAS_SYNC|FE_HAS_LOCK;
+		return 0;
+	} else {
+		*status = FE_TIMEDOUT|FE_HAS_SIGNAL|FE_HAS_CARRIER|FE_HAS_VITERBI|FE_HAS_SYNC|FE_HAS_LOCK;
+		return error;
+	}
+err:
+	dev_dbg(&client->dev, "failed=%d\n", ret);
+	return ret;
+}
+
 static int m88ds3103_stop_task(struct dvb_frontend *fe)
 {
 	struct m88ds3103_dev *dev = fe->demodulator_priv;
