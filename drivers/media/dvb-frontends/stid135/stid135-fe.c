@@ -998,7 +998,8 @@ static int stid135_read_status_(struct dvb_frontend* fe, enum fe_status *status)
 		dev_warn(&state->base->i2c->dev, "%s: fe_stid135_filter_forbidden_modcodes error %d !\n", __func__, err);
 
 	//update isi list
-	err = fe_stid135_isi_scan(state, &state->signal_info.isi_list);
+	if(state->mis_mode)
+		err = fe_stid135_isi_scan(state, &state->signal_info.isi_list);
 	memcpy(p->isi_bitset, state->signal_info.isi_list.isi_bitset, sizeof(p->isi_bitset));
 	//for the tbs6912 ts setting
 	if((state->base->set_TSparam)&&(state->newTP)) {
