@@ -1703,109 +1703,111 @@ fe_lla_error_t fe_stid135_get_lock_status(struct stv* state, bool*carrier_lock, 
 
 	pParams = &state->base->ip;
 
-		error = error1 =  ChipGetField(state->base->ip.handle_demod,
-																	 FLD_FC8CODEW_DVBSX_DEMOD_DMDSTATE_HEADER_MODE(state->nr+1), &(fld_value[0]));
-		demodState = (enum fe_sat_search_state)(fld_value[0]);
+	error = error1 =  ChipGetField(state->base->ip.handle_demod,
+																 FLD_FC8CODEW_DVBSX_DEMOD_DMDSTATE_HEADER_MODE(state->nr+1), &(fld_value[0]));
+	demodState = (enum fe_sat_search_state)(fld_value[0]);
 
-		if(error1)
-			dprintk("demodstate=%d error=%d\n", demodState, error1);
+	if(error1)
+		dprintk("demodstate=%d error=%d\n", demodState, error1);
 
-		switch (demodState) {
-		case FE_SAT_SEARCH:
-		case FE_SAT_PLH_DETECTED :
-			//dprintk("FIRST PLHEADER DETECTED\n");
+	switch (demodState) {
+	case FE_SAT_SEARCH:
+	case FE_SAT_PLH_DETECTED :
+		//dprintk("FIRST PLHEADER DETECTED\n");
 
-			state->signal_info.has_carrier = false;
-			state->signal_info.has_viterbi = false;
-			state->signal_info.has_sync = false;
+		state->signal_info.has_carrier = false;
+		state->signal_info.has_viterbi = false;
+		state->signal_info.has_sync = false;
 		break;
-		case FE_SAT_DVBS2_FOUND:
-			state->signal_info.has_carrier = 	true;
+	case FE_SAT_DVBS2_FOUND:
+		state->signal_info.has_carrier = 	true;
 
-			error |= (error1=ChipGetField(state->base->ip.handle_demod,
-																		FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS_LOCK_DEFINITIF(state->nr+1), &(fld_value[0])));
-			state->signal_info.has_lock = fld_value[0];
+		error |= (error1=ChipGetField(state->base->ip.handle_demod,
+																	FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS_LOCK_DEFINITIF(state->nr+1), &(fld_value[0])));
+		state->signal_info.has_lock = fld_value[0];
 
-			error |= (error1=ChipGetField(state->base->ip.handle_demod,
-																		FLD_FC8CODEW_DVBSX_PKTDELIN_PDELSTATUS1_PKTDELIN_LOCK(state->nr+1), &(fld_value[1])));
-			state->signal_info.has_viterbi = fld_value[0] & fld_value[1];
+		error |= (error1=ChipGetField(state->base->ip.handle_demod,
+																	FLD_FC8CODEW_DVBSX_PKTDELIN_PDELSTATUS1_PKTDELIN_LOCK(state->nr+1), &(fld_value[1])));
+		state->signal_info.has_viterbi = fld_value[0] & fld_value[1];
 
-			//TODO: stv091x does not check TSFIFO_LINEOK
-			//fld_value[2]==0 means that packets with errors have been received
-			error |= (error1=ChipGetField(state->base->ip.handle_demod,
-																		FLD_FC8CODEW_DVBSX_HWARE_TSSTATUS_TSFIFO_LINEOK(state->nr+1), &(fld_value[2])));
+		//TODO: stv091x does not check TSFIFO_LINEOK
+		//fld_value[2]==0 means that packets with errors have been received
+		error |= (error1=ChipGetField(state->base->ip.handle_demod,
+																	FLD_FC8CODEW_DVBSX_HWARE_TSSTATUS_TSFIFO_LINEOK(state->nr+1), &(fld_value[2])));
 
-			state->signal_info.has_sync = fld_value[0] & fld_value[1] & fld_value[2];
+		state->signal_info.has_sync = fld_value[0] & fld_value[1] & fld_value[2];
 #if 0			//only for dvb-s1?
-			error |= ChipGetField(state->base->ip.handle_demod,
+		error |= ChipGetField(state->base->ip.handle_demod,
 													FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS_CAR_LOCK(state->nr+1),
-														&(fld_value[3]));
+													&(fld_value[3]));
 #endif
-			error |= ChipGetField(state->base->ip.handle_demod,
+		error |= ChipGetField(state->base->ip.handle_demod,
 													FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS_TMGLOCK_QUALITY(state->nr+1),
 													&(fld_value[4]));
-			state->signal_info.has_timing_lock =  fld_value[4]&2;
+		state->signal_info.has_timing_lock =  fld_value[4]&2;
 
-			if(carrier_lock)
-				*carrier_lock =  state->signal_info.has_carrier;
-			if(has_viterbi)
-				*has_viterbi  = fld_value[0] & fld_value[1];
-			if(has_sync) {
-				*has_sync  = fld_value[0] & fld_value[1] & fld_value[2];
-				if(!state->signal_info.has_sync)
-					dprintk("[%d] DVBS2 NO SYNC: %d %d %d\n", state->nr+1,  fld_value[0] , fld_value[1] , fld_value[2]);
-			}
-				if(!state->signal_info.has_sync)
-					vprintk("[%d] DVBS2 NO SYNC: %d %d %d\n", state->nr+1,  fld_value[0] , fld_value[1] , fld_value[2]);
+		if(carrier_lock)
+			*carrier_lock =  state->signal_info.has_carrier;
+		if(has_viterbi)
+			*has_viterbi  = fld_value[0] & fld_value[1];
+		if(has_sync) {
+			*has_sync  = fld_value[0] & fld_value[1] & fld_value[2];
+			if(!state->signal_info.has_sync)
+				dprintk("[%d] DVBS2 NO SYNC: %d %d %d\n", state->nr+1,  fld_value[0] , fld_value[1] , fld_value[2]);
+		}
+		if(!state->signal_info.has_sync)
+			vprintk("[%d] DVBS2 NO SYNC: %d %d %d\n", state->nr+1,  fld_value[0] , fld_value[1] , fld_value[2]);
 		break;
 
-		case FE_SAT_DVBS_FOUND:
-			state->signal_info.has_carrier = 	true;
-			error |= (error1=ChipGetField(state->base->ip.handle_demod,
-																		FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS_LOCK_DEFINITIF(state->nr+1), &(fld_value[0])));
-			if(error1)
-				dprintk("error=%d\n", error1);
-			state->signal_info.has_lock = fld_value[0];
+	case FE_SAT_DVBS_FOUND:
+		state->signal_info.has_carrier = 	true;
+		//error |= ChipGetOneRegister(state->base->ip.handle_demod,RC8CODEW_DVBSX_DEMOD_DSTATUS, &last_dstatus); //FOLLOWING READS AGAIN
+		error |= (error1=ChipGetField(state->base->ip.handle_demod,
+																	FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS_LOCK_DEFINITIF(state->nr+1), &(fld_value[0])));
+		if(error1)
+			dprintk("error=%d\n", error1);
+		state->signal_info.has_lock = fld_value[0];
 
-			error |= (error1=ChipGetField(state->base->ip.handle_demod,
-																		FLD_FC8CODEW_DVBSX_VITERBI_VSTATUSVIT_LOCKEDVIT(state->nr+1), &(fld_value[1])));
-			if(error1)
-				dprintk("error=%d\n", error1);
+		error |= (error1=ChipGetField(state->base->ip.handle_demod,
+																	FLD_FC8CODEW_DVBSX_VITERBI_VSTATUSVIT_LOCKEDVIT(state->nr+1), &(fld_value[1])));
+		if(error1)
+			dprintk("error=%d\n", error1);
 
-			state->signal_info.has_viterbi = fld_value[0] & fld_value[1];
+		state->signal_info.has_viterbi = fld_value[0] & fld_value[1];
 
 
-			//TODO: stv091x does not check TSFIFO_LINEOK
-			//fld_value[2]==0 means that packets with errors have been received
-			error |= (error1=ChipGetField(state->base->ip.handle_demod,
-																		FLD_FC8CODEW_DVBSX_HWARE_TSSTATUS_TSFIFO_LINEOK(state->nr+1), &(fld_value[2])));
-			if(error1)
-				dprintk("error=%d\n", error1);
+		//TODO: stv091x does not check TSFIFO_LINEOK
+		//fld_value[2]==0 means that packets with errors have been received
+		error |= (error1=ChipGetField(state->base->ip.handle_demod,
+																	FLD_FC8CODEW_DVBSX_HWARE_TSSTATUS_TSFIFO_LINEOK(state->nr+1), &(fld_value[2])));
+		if(error1)
+			dprintk("error=%d\n", error1);
 
-			state->signal_info.has_sync = fld_value[0] & fld_value[1] & fld_value[2];
+		state->signal_info.has_sync = fld_value[0] & fld_value[1] & fld_value[2];
 
 #if 0
-			ChipGetField(state->base->ip.handle_demod,
-									 FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS_CAR_LOCK(state->nr+1), &(fld_value[3]));
-			state->signal_info.has_carrier = fld_value[3];//dvbs only carrier lock
+		ChipGetField(state->base->ip.handle_demod,
+								 FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS_CAR_LOCK(state->nr+1), &(fld_value[3]));
+		state->signal_info.has_carrier = fld_value[3];//dvbs only carrier lock
 #endif
 
-			error |= ChipGetField(state->base->ip.handle_demod,
+		//needless read -> use ChipGetFieldImage
+		error |= ChipGetField(state->base->ip.handle_demod,
 													FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS_TMGLOCK_QUALITY(state->nr+1),
 													&(fld_value[4]));
-			state->signal_info.has_timing_lock =  fld_value[4]&2;
+		state->signal_info.has_timing_lock =  fld_value[4]&2;
 
-			if(carrier_lock)
-				*carrier_lock = state->signal_info.has_carrier;
-			if(has_viterbi)
-				*has_viterbi  = fld_value[0] & fld_value[1];
-			if(has_sync) {
-				*has_sync  = fld_value[0] & fld_value[1] & fld_value[2];
-				if(!state->signal_info.has_sync)
-					dprintk("NO SYNC: %d %d\n",  fld_value[0] , fld_value[1]);
-			}
-			break;
+		if(carrier_lock)
+			*carrier_lock = state->signal_info.has_carrier;
+		if(has_viterbi)
+			*has_viterbi  = fld_value[0] & fld_value[1];
+		if(has_sync) {
+			*has_sync  = fld_value[0] & fld_value[1] & fld_value[2];
+			if(!state->signal_info.has_sync)
+				dprintk("NO SYNC: %d %d\n",  fld_value[0] , fld_value[1]);
 		}
+		break;
+	}
 	return error;
 }
 
@@ -2395,8 +2397,7 @@ fe_lla_error_t FE_STiD135_CarrierGetQuality(STCHIP_Info_t* hChip, enum fe_stid13
 --***************************************************/
 static fe_lla_error_t FE_STiD135_GetDemodLock (struct stv* state, u32 TimeOut, BOOL *Lock_p)
 {
-	u32 headerField, lockField, symbFreq1, symbFreq2;
-	s32 lock = 0;
+	u32 symbFreq1, symbFreq2;
 	u16 symbFreqRegister;
 	//u32 symbolRate ;
 	u32 TimeOut_SymbRate, SRate_1MSymb_Sec;
@@ -2405,13 +2406,11 @@ static fe_lla_error_t FE_STiD135_GetDemodLock (struct stv* state, u32 TimeOut, B
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	u32 MclkFreq = 0;
 	u8 timeout = 0;
+	bool has_carrier = false, has_viterbi=false, has_sync=false, has_timing_lock=false,has_lock = false;
 
-	enum fe_sat_search_state demodState;
 	struct fe_stid135_internal_param *pParams = &state->base->ip;
 	/* state machine search status field*/
-	headerField = FLD_FC8CODEW_DVBSX_DEMOD_DMDSTATE_HEADER_MODE(state->nr+1);
 	/* Demod lock status field*/
-	lockField   = FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS_LOCK_DEFINITIF(state->nr+1);
 
 	symbFreqRegister = (u16)REG_RC8CODEW_DVBSX_DEMOD_SFR2(state->nr+1);
 
@@ -2427,7 +2426,7 @@ static fe_lla_error_t FE_STiD135_GetDemodLock (struct stv* state, u32 TimeOut, B
 	SRate_1MSymb_Sec = (1<<16) * 1 / (12*MclkFreq/1000000);
 	vprintk("[%d] using srate dependent timeout\n", state->nr+1);
 
-	while ((timer < TimeOut_SymbRate) && (lock == 0)) {
+	while ((timer < TimeOut_SymbRate) && (!state->signal_info.has_lock)) {
 		int old;
 		int symbolRate;
 		if (kthread_should_stop() || dvb_frontend_task_should_stop(&state->fe)) {
@@ -2465,43 +2464,43 @@ static fe_lla_error_t FE_STiD135_GetDemodLock (struct stv* state, u32 TimeOut, B
 			vprintk("[%d] timeout changed to %d\n", state->nr+1,  TimeOut_SymbRate);
 		}
 
+		error |= fe_stid135_get_lock_status(state, NULL, NULL, NULL);
+		if(! has_carrier && state->signal_info.has_carrier) {
+			has_carrier = true;
+			state->signal_info.carrier_time = ktime_sub(ktime_get_coarse(), state->tune_time);
+		}
+		if(! has_lock && state->signal_info.has_lock) {
+			has_lock = true;
+			state->signal_info.lock_time = ktime_sub(ktime_get_coarse(), state->tune_time);
+		}
 
-	error |= ChipGetField(state->base->ip.handle_demod, headerField, &fld_value);
-	demodState = (enum fe_sat_search_state)fld_value;
-	switch (demodState) {
-	case FE_SAT_SEARCH: //value 00
-	case FE_SAT_PLH_DETECTED :	//01 1st DVB-S2 PLHeader detected, searching for residual offset symbol.
-		lock = 0;
-		state->signal_info.has_carrier = false;
-		if(state->signal_info.has_viterbi)
-			dprintk("[%d] FE_SAT_PLH_DETECTED: viterbi=%d\n", state->nr+1, state->signal_info.has_viterbi);
-		break;
+		if(! has_viterbi && state->signal_info.has_viterbi) {
+			has_viterbi = true;
+			state->signal_info.viterbi_time = ktime_sub(ktime_get_coarse(), state->tune_time);
+		}
 
-	case FE_SAT_DVBS2_FOUND: /* value10: found a DVBS2 signal */
-	case FE_SAT_DVBS_FOUND: //value 11  DVB-S1/Legacy DTV mode
-		error |= ChipGetField(state->base->ip.handle_demod, lockField, &lock);
-		vprintk("[%d] DVBS%d detected lock=%d\n", state->nr+1, (demodState==FE_SAT_DVBS_FOUND)?1:2, lock);
-		break;
-	}
-	state->signal_info.has_carrier = lock;
-#if 0
-	if(state->signal_info.has_viterbi)
-		dprintk("!!!!!  set has_carrier=0\n");
-#endif
-	if(lock == 0) {
-#if 0
-		state->signal_info.has_viterbi = false;
-			state->signal_info.has_sync = false;
-#endif
+		if(! has_sync && state->signal_info.has_sync) {
+			has_sync = true;
+			state->signal_info.sync_time = ktime_sub(ktime_get_coarse(), state->tune_time);
+		}
+
+		if(! has_timing_lock && state->signal_info.has_timing_lock) {
+			has_timing_lock = true;
+			state->signal_info.timing_lock_time = ktime_sub(ktime_get_coarse(), state->tune_time);
+		}
+
+
+	//state->signal_info.has_carrier = lock;
+
+	if( !state->signal_info.has_lock ) {
 			mutex_unlock(pParams->master_lock);
 			ChipWaitOrAbort(state->base->ip.handle_demod, 10);	/* wait 10ms */
 			mutex_lock(pParams->master_lock);
-		}
-		//report(state);
-		timer += 10;
-
 	}
-	if(lock == TRUE) {
+	//report(state);
+	timer += 10;
+	}
+	if(state->signal_info.has_lock) {
 		vprintk("[%d] LOCK_DEFINITIF achieved timout=%d/%d\n", state->nr+1, timer, TimeOut_SymbRate);
 		state->signal_info.demod_locked = true;
 		/* We have to wait for demod locked before reading ANNEXEM field (cut 1 only) */
@@ -2536,8 +2535,8 @@ static fe_lla_error_t FE_STiD135_GetDemodLock (struct stv* state, u32 TimeOut, B
 	} else {
 		vprintk("[%d] timedout %d/%d\n", state->nr+1, timer, TimeOut_SymbRate);
 	}
-	*Lock_p = (BOOL) lock;
-	state->signal_info.demod_locked = lock;
+	*Lock_p = state->signal_info.has_lock;
+	state->signal_info.demod_locked = state->signal_info.has_lock;
 	return error;
 }
 
