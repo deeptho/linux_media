@@ -2026,6 +2026,11 @@ static int m88rs6060_wait_for_demod_lock_blind(struct m88rs6060_state* state)
 	int count;
 
 	for (i = 0; i < 150; i++) {
+		if ((i% 20==19) &&  (kthread_should_stop() || dvb_frontend_task_should_stop(&state->fe))) {
+			dprintk("exiting on should stop\n");
+			break;
+		}
+
 		regmap_read(state->demod_regmap, 0xbe, &tmp); //?? if pls detection is ready
 		dprintk("reg[0xbe] = 0x%x i=%d\n", tmp, i);
 		if(!pls_lock && tmp == 0xfe) { //if pls presence has been detected
