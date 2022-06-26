@@ -1880,50 +1880,79 @@ static bool m88rs6060_detect_mis(struct m88rs6060_state* state)
  */
 static int m88rs6060_wait_for_demod_lock_non_blind(struct m88rs6060_state* state)
 {
-	unsigned tmp, tmp1, tmp2;
+	unsigned reg08, reg0d, regd1;
 	int i;
 	bool is_dvbs2 = false;
 
 	for (i = 0; i < 150; i++) {
-		regmap_read(state->demod_regmap, 0x08, &tmp);
-		regmap_read(state->demod_regmap, 0x0d, &tmp1); //get all lock bits
-		state->fec_locked = (tmp1 & 0x80); //only valid for dvbs2
-		state->has_viterbi = (tmp1 & 0x80);
-		state->has_carrier = (tmp1 >> 2)&1; //only dvbs1 mode
-		state->has_sync = (tmp1 & 0x08) && //header locked; only dvbs2
-			(tmp1 & 0x02); //timing locked
-		state->has_signal = (tmp1&0x1); //analog agc locked
-		state->has_timing_lock = (tmp1 & 0x2);
-		state->is_mis = m88rs6060_detect_mis(state);
-		state->detected_delivery_system = (tmp&0x08) ? SYS_DVBS2: SYS_DVBS;
-		if(state->detected_delivery_system == SYS_DVBS2) {
-			state->detected_pls_mode = 1; //ROOT
-			state->pls_active = true;
-		}
-		if ((tmp1 == 0x8f) //fully locked dvbs2
-				|| (tmp1 == 0xf7) //fully locked dvbs1 //TODO: only check the last three bits, should be 7
-				) {
-			state->demod_locked = true;
-			regmap_read(state->demod_regmap, 0xd1, &tmp2); //S_CTRL_1
-			dprintk("lock achieved tmp=0x%x tmp1=0x%x tmp2=0x%x\n", tmp, tmp1, tmp2);
-			is_dvbs2 = (tmp1==0x8f);
+		if ((i% 20==19) &&  (kthread_should_stop() || dvb_frontend_task_should_stop(&state->fe))) {
+			dprintk("exiting on should stop\n");
 			break;
+		}
+
+		regmap_read(state->demod_regmap, 0x08, &reg08);
+		regmap_read(state->demod_regmap, 0x0d, &reg0d); //get all lock bits
+
+		if (reg08 & 0x08) { // reserved bit 3 indicates dvbs2 (1) or dvbs1 (0)
+			//dvbs2
+			state->has_viterbi = (reg0d & 0x80); //only valid for dvbs2
+			state->fec_locked = state->has_viterbi;
+			state->has_sync = state->has_viterbi;
+			state->has_carrier = (reg0d >> 2) & 0x1; //carrier lock
+			state->has_timing_lock = (reg0d >> 1) & 0x01;
+			state->has_signal = (reg0d >>0) & 0x1; //analog agc locked
+			state->is_mis = m88rs6060_detect_mis(state);
+			dprintk("dvbs2 reg08=0x%x reg0d=0x%x mis=%d\n", reg08, reg0d, state->is_mis);
+			state->detected_delivery_system = SYS_DVBS2;
+
+			if (reg0d == 0x8f) {
+				//dvbs2 fully locked
+				state->demod_locked = true;
+				dprintk("succeeded to fully lock i=%d: reg08=0x%x reg0d=0x%x fec=%d vit=%d car=%d sync=%d sign=%d mis=%d\n",
+								i, reg08, reg0d, state->fec_locked, state->has_viterbi, state->has_carrier, state->has_sync,
+								state->has_signal, state->is_mis);
+				is_dvbs2 = true;
+				break;
+			}
+
+		} else { // reserved bit 3 indicates dvbs2 (1) or dvbs1 (0)
+			//dvbs1
+			regmap_read(state->demod_regmap, 0xd1, &regd1); //S_CTRL_1
+			dprintk("dvbs reg08=0x%x reg0d=0x%x regd1=0x%x\n", reg08, reg0d, regd1);
+			state->has_timedout = (regd1>>7)&1; //viterbi failed
+			state->has_viterbi = (regd1>>2)&1; //viterbi locked
+			state->fec_locked = state->has_viterbi;
+			state->has_sync = (regd1>>1)&1; //dvbs1 sync bit
+
+			state->has_carrier = (reg0d >> 2) & 0x1; //carrier lock
+			state->has_timing_lock = (reg0d >> 1) &0x1;
+			//state->has_signal = (regd1>>3)&1; //digital agc lock
+			state->has_signal = (reg0d >> 0) & 0x1; //analog agc locked
+
+ 			state->has_lock = state->has_signal && state->has_carrier && state->has_timing_lock &&
+				state->has_viterbi && state->has_sync;
+
+			if (state->has_lock) {
+				state->demod_locked = true;
+				dprintk("lock achieved reg08=0x%x reg0d=0x%x regd1=0x%x\n", reg08, reg0d, regd1);
+				is_dvbs2 = false;
+				break;
+			}
 		}
 		msleep(20);
 	}
 	if(i==150)
-		dprintk("Failed to lock: tmp=0x%x tmp1=0x%x fec=%d vit=%d car=%d sync=%d sign=%d\n", tmp, tmp1,
+		dprintk("Failed to lock: reg08=0x%x reg0d=0x%x fec=%d vit=%d car=%d sync=%d sign=%d\n", reg08, reg0d,
 						state->fec_locked, state->has_viterbi, state->has_carrier, state->has_sync, state->has_signal);
 	else
-		dprintk("succeeded to lock: tmp=0x%x tmp1=0x%x fec=%d vit=%d car=%d sync=%d sign=%d\n", tmp, tmp1,
+		dprintk("succeeded to lock: reg08=0x%x reg0d=0x%x fec=%d vit=%d car=%d sync=%d sign=%d\n", reg08, reg0d,
 						state->fec_locked, state->has_viterbi, state->has_carrier, state->has_sync, state->has_signal);
 
-	state->has_lock = state->demod_locked;
 	state->has_timedout = (i==150);
 	dprintk("timedout=%d\n", state->has_timedout);
 	if(state->has_lock) {
 		state->detected_delivery_system = is_dvbs2 ? SYS_DVBS2 : SYS_DVBS;
-		dprintk("tmp1=%d lock=%d i=%d delsys=%d\n", tmp1, state->has_lock, i, state->detected_delivery_system );
+		dprintk("reg0d=%d lock=%d i=%d delsys=%d\n", reg0d, state->has_lock, i, state->detected_delivery_system );
 	} else
 		state->detected_delivery_system = SYS_UNDEFINED;
 	return state->has_lock ? 0 : -1;
@@ -1992,7 +2021,7 @@ static int m88rs6060_find_pls(struct m88rs6060_state * state)
 static int m88rs6060_wait_for_demod_lock_blind(struct m88rs6060_state* state)
 {
 	bool pls_lock = false;
-	unsigned tmp, tmp1, tmp2;
+	unsigned reg08, reg0d, regd1, tmp, tmp1;
 	int i;
 	int count;
 
@@ -2007,35 +2036,32 @@ static int m88rs6060_wait_for_demod_lock_blind(struct m88rs6060_state* state)
 
 		//detect DVBS 2  reliably ??
 		for(count=0 ; count <50 ; ++count) {
-			regmap_read(state->demod_regmap, 0x08, &tmp);
-			if(tmp& 0x8)
+			regmap_read(state->demod_regmap, 0x08, &reg08);
+			if(reg08& 0x8)
 				break;
 		}
 		if(count == 50) {
-				dprintk("tmp=0x%x\n", tmp);
+				dprintk("reg08=0x%x\n", reg08);
 		}
 
-		regmap_read(state->demod_regmap, 0x08, &tmp);
-		regmap_read(state->demod_regmap, 0x0d, &tmp1); //get all lock bits
+		regmap_read(state->demod_regmap, 0x08, &reg08);
+		regmap_read(state->demod_regmap, 0x0d, &reg0d); //get all lock bits
 
-		if (tmp & 0x08) { // reserved bit 3 indicates dvbs2 (1) or dvbs1 (0)
+		if (reg08 & 0x08) { // reserved bit 3 indicates dvbs2 (1) or dvbs1 (0)
 			//dvbs2
-			state->has_carrier = 1;
-			//regmap_read(state->demod_regmap, 0x0d, &tmp1); //get all lock bits
-			state->fec_locked = (tmp1 & 0x80);
-			state->has_viterbi = state->fec_locked;
-			state->has_carrier = (tmp1 >> 2)&1; //only dvbs1 mode
-			state->has_sync = state->fec_locked && (tmp1 & 0x08 ) && //header locked only dvbs2
-				(tmp1 & 0x02); //timing locked
-			state->has_signal = (tmp1 & 0x1);  //analog agc locked
-			state->has_timing_lock = (tmp1 & 0x2);
+			state->has_viterbi = (reg0d & 0x80); //only valid for dvbs2
+			state->fec_locked = state->has_viterbi;
+			state->has_sync = state->has_viterbi;
+			state->has_carrier = (reg0d >> 2) & 0x01; //carrier lock
+			state->has_timing_lock = (reg0d >> 1) & 0x01;
+			state->has_signal = (reg0d >> 0) & 0x01;  //analog agc locked
 			state->is_mis = m88rs6060_detect_mis(state);
-			dprintk("dvbs2 tmp=0x%x tmp1=0x%x mis=%d\n", tmp, tmp1, state->is_mis);
+			dprintk("dvbs2 reg08=0x%x reg0d=0x%x mis=%d\n", reg08, reg0d, state->is_mis);
 			state->detected_delivery_system = SYS_DVBS2;
 
-			if(state->is_mis && !pls_lock && (tmp1 & 0x0f) == 0x0f) {
+			if(state->is_mis && !pls_lock && (reg0d & 0x0f) == 0x0f) {
 				u32 tmp3;
-				dprintk("ready to read pls tmp=0x%x tmp1=0x%x\n", tmp, tmp1);
+				dprintk("ready to read pls reg08=0x%x reg0d=0x%x\n", reg08, reg0d);
 				//state->detected_delivery_system = SYS_DVBS2;
 				regmap_read(state->demod_regmap, 0x89, &tmp); //read spectral inversion
 				regmap_read(state->demod_regmap, 0xca, &tmp1);
@@ -2049,39 +2075,40 @@ static int m88rs6060_wait_for_demod_lock_blind(struct m88rs6060_state* state)
 					continue;
 				}
 				dprintk("pls found tmp=0x%x tmp1=0x%x\n", tmp, tmp1);
-			} else if(tmp1 == 0x8f) {
+			} else if(reg0d == 0x8f) {
 				//dvbs2 fully locked
 				state->demod_locked = true;
-				dprintk("succeeded to fully lock i=%d: tmp=0x%x tmp1=0x%x fec=%d vit=%d car=%d sync=%d sign=%d mis=%d\n",
-								i, tmp, tmp1, state->fec_locked, state->has_viterbi, state->has_carrier, state->has_sync,
+				dprintk("succeeded to fully lock i=%d: reg08=0x%x reg0d=0x%x fec=%d vit=%d car=%d sync=%d sign=%d mis=%d\n",
+								i, reg08, reg0d, state->fec_locked, state->has_viterbi, state->has_carrier, state->has_sync,
 								state->has_signal, state->is_mis);
 				break;
 			}
 
 			{
-				dprintk("succeeded to PLS lock i=%d: tmp=0x%x tmp1=0x%x fec=%d vit=%d car=%d sync=%d sign=%d\n", i,
-								tmp, tmp1,
+				dprintk("succeeded to PLS lock i=%d: tmp=0x%x reg08=0x%x, tmp1=0x%x reg0d=0x%x fec=%d vit=%d car=%d sync=%d sign=%d\n", i,
+								tmp, reg08, tmp1, reg0d,
 								state->fec_locked, state->has_viterbi, state->has_carrier, state->has_sync, state->has_signal);
 			}
-		}  else {
-			//dvbs
-			dprintk("dvbs tmp=0x%x\n", tmp);
-			state->has_carrier = 1;
-			//regmap_read(state->demod_regmap, 0x0d, &tmp1);
-			//state->has_carrier = (tmp1>>7)&1;
+		} else {
+			//dvbs1
+			regmap_read(state->demod_regmap, 0xd1, &regd1); //S_CTRL_1
+			dprintk("dvbs reg08=0x%x reg0d=0x%x regd1=0x%x\n", reg08, reg0d, regd1);
+			state->has_timedout = (regd1>>7)&1; //viterbi failed
+			state->has_viterbi = (regd1>>2)&1; //viterbi locked
+			state->fec_locked = state->has_viterbi;
+			state->has_sync = (regd1>>1)&1; //dvbs1 sync bit
 
-			regmap_read(state->demod_regmap, 0xd1, &tmp2); //S_CTRL_1
+			state->has_carrier = (reg0d >> 2) & 0x1; //carrier lock
+			state->has_timing_lock = (reg0d>>1) & 0x01;
+			//state->has_signal = (regd1>>3)&1; //digital agc lock
+			state->has_signal = (reg0d >> 0) & 0x1; //analog agc locked
 
-			state->has_signal = (tmp2>>3)&1; //agc lock
-			state->has_carrier = 1;
-			state->fec_locked = (tmp1 >>7) &1;
-			state->has_viterbi = (tmp2>>2)&1; //viterbi locked
-			state->has_timedout = (tmp2>>7)&1; //viterbi failed
-			state->has_sync = state->fec_locked;
-			state->has_timing_lock = (tmp1>>1) & 1;
-			if(state->has_viterbi) {
+			state->has_lock = state->has_signal && state->has_carrier && state->has_timing_lock &&
+				state->has_viterbi && state->has_sync;
+
+			if(state->has_lock) {
 				state->demod_locked = true;
-				dprintk("lock achieved tmp=0x%x tmp1=0x%x tmp2=0x%x\n", tmp, tmp1, tmp2);
+				dprintk("lock achieved reg08=0x%x reg0d=0x%x regd1=0x%x\n", reg08, reg0d, regd1);
 				state->detected_delivery_system = SYS_DVBS;
 				break;
 			}
@@ -2089,14 +2116,14 @@ static int m88rs6060_wait_for_demod_lock_blind(struct m88rs6060_state* state)
 		msleep(20);
 	}
 	if( i==150) {
-		dprintk("FAILED to lock i=%d: tmp=0x%x tmp1=0x%x fec=%d vit=%d car=%d sync=%d sign=%d\n", i,
-						tmp, tmp1,
+		dprintk("FAILED to lock i=%d: tmp=0x%x reg08=0x%x tmp1=0x%x reg0d=0x%x fec=%d vit=%d car=%d sync=%d sign=%d\n", i,
+						tmp, reg08, tmp1, reg0d,
 						state->fec_locked, state->has_viterbi, state->has_carrier, state->has_sync, state->has_signal);
 		state->has_timedout = 1;
 
 	} else {
-		dprintk("succeeded to lock i=%d: tmp=0x%x tmp1=0x%x fec=%d vit=%d car=%d sync=%d sign=%d\n", i,
-						tmp, tmp1,
+		dprintk("succeeded to lock i=%d: tmp=0x%x reg08=0x%x tmp1=0x%x reg0d=0x%x fec=%d vit=%d car=%d sync=%d sign=%d\n", i,
+						tmp, reg08, tmp1, reg0d,
 						state->fec_locked, state->has_viterbi, state->has_carrier, state->has_sync, state->has_signal);
 	}
 
@@ -2104,7 +2131,7 @@ static int m88rs6060_wait_for_demod_lock_blind(struct m88rs6060_state* state)
 	state->has_timedout = (i==150);
 	dprintk("timedout=%d\n", state->has_timedout);
 	if(state->has_lock) {
-		dprintk("tmp1=%d lock=%d i=%d delsys=%d\n", tmp1, state->has_lock, i, state->detected_delivery_system );
+		dprintk("tmp1=0x%x reg0d=0x%x lock=%d i=%d delsys=%d\n", tmp1, reg0d, state->has_lock, i, state->detected_delivery_system );
 	} else
 		state->detected_delivery_system = SYS_UNDEFINED;
 	return state->has_lock ? 0 : -1;
@@ -2842,7 +2869,7 @@ static int m88rs6060_read_status(struct dvb_frontend* fe, enum fe_status* status
 	struct i2c_client* client = state->demod_client;
 	struct dtv_frontend_properties* p = &fe->dtv_property_cache;
 	int ret=0, i, itmp;
-	unsigned int tmp1, tmp2;
+	unsigned int reg0d, regd1, regff;
 	u8 buf[3];
 	u16 temp;
 	dev_dbg(&client->dev, "%s\n", __func__);
@@ -2850,38 +2877,55 @@ static int m88rs6060_read_status(struct dvb_frontend* fe, enum fe_status* status
 
 	//todo: if not locked, and signal is too low FE_HAS_SIGNAL should be removed
 	*status = FE_HAS_SIGNAL;
+	dprintk("delsys=%d\n", p->delivery_system);
 	switch (p->delivery_system) {
 	case SYS_DVBS:
-		ret = regmap_read(state->demod_regmap, 0x0d, &tmp1);  //get lock bits; bits 4..6 are reserved
+		ret = regmap_read(state->demod_regmap, 0x0d, &reg0d);  //get lock bits; bits 4..6 are reserved
 		if (ret)
 			goto done;
-		ret = regmap_read(state->demod_regmap, 0xd1, &tmp2);  //get lock bits; bits 4..6 are reserved
+		ret = regmap_read(state->demod_regmap, 0xd1, &regd1);  //get lock bits; bits 4..6 are reserved
 		if (ret)
 			goto done;
-		state->has_signal = (tmp2>>3)&1; //agc lock
-		state->has_carrier = 1;
-		state->fec_locked = (tmp1 >>7) &1;
-		state->has_viterbi = (tmp2>>2)&1; //viterbi locked
-		//state->has_timedout = (tmp2>>7)&1; //viterbi failed
-		state->has_sync = (tmp2>>1)^1; //dvbs1 sync bit
-		state->has_timing_lock = (tmp1>>1) & 1;
-		state->demod_locked = tmp1 == 0xf7;
+		state->has_timedout = (regd1>>7)&1; //viterbi failed
+		state->has_signal =  (regd1>>3)&1; //digital agc lock
+		state->has_signal = (reg0d & 0x1);  //analog agc locked
+		state->has_viterbi = (regd1>>2)&1; //viterbi locked
+		state->has_sync =    (regd1>>1)&1; //dvbs1 sync bit
+		state->has_carrier = (regd1>>1)&1; //descrambler lock;
+
+		state->fec_locked = (reg0d >>7) &1;
+		state->has_timing_lock = (reg0d>>1) & 1;
+
+		state->has_lock = state->has_signal && state->has_carrier && state->has_timing_lock &&
+			state->has_viterbi && state->has_sync;
+
+		state->demod_locked = state->has_lock; //reg0d == 0xf7;
+		dprintk("dvbs1: regd1=0x%x reg0d=0x%x fec=%d vit=%d car=%d sync=%d sign=%d mis=%d\n",
+						regd1, reg0d, state->fec_locked, state->has_viterbi, state->has_carrier, state->has_sync,
+						state->has_signal, state->is_mis);
+
+
 		break;
 	case SYS_DVBS2:
-		//ret = regmap_read(state->demod_regmap, 0x0d, &tmp1); //get lock bits; bits 4..6 are reserved
+		//ret = regmap_read(state->demod_regmap, 0x0d, &reg0d); //get lock bits; bits 4..6 are reserved
 		//if (ret)
 		//	goto done;
-		regmap_read(state->demod_regmap, 0x0d, &tmp1); //get all lock bits
-
-		state->has_signal = (tmp2>>3)&1; //agc lock
+		regmap_read(state->demod_regmap, 0x0d, &reg0d); //get all lock bits
+		if (ret)
+			goto done;
+		ret = regmap_read(state->demod_regmap, 0xd1, &regd1);  //get lock bits; bits 4..6 are reserved
+		if (ret)
+			goto done;
+		//state->has_signal = (regd1>>3)&1; //digital agc lock
+		state->has_signal = (reg0d & 0x1);  //analog agc locked
 		state->has_carrier = 1;
-		state->fec_locked = (tmp1 >>7) &1;
+		state->fec_locked = (reg0d >>7) &1;
 		state->has_viterbi = state->fec_locked;
-		state->has_sync = state->fec_locked && (tmp1 >>3) &1;
-		state->has_signal = (tmp1>>2) & 1;  //carrier lock ; //only dvbs1 ?
-		state->has_timing_lock = (tmp1>>1) & 1;
-		state->has_signal = (tmp1 & 1); //analog agc lock
-		state->demod_locked = tmp1 == 0x8f;
+		state->has_sync = state->fec_locked && (reg0d >>3) &1;
+		state->has_signal = (reg0d>>2) & 1;  //carrier lock ; //only dvbs1 ?
+		state->has_timing_lock = (reg0d>>1) & 1;
+		state->has_signal = (reg0d & 1); //analog agc lock
+		state->demod_locked = reg0d == 0x8f;
 		if(m88rs6060_get_matype(state, &p->matype)<0)
 			dprintk("No matype\n");
 		break;
@@ -2909,7 +2953,7 @@ static int m88rs6060_read_status(struct dvb_frontend* fe, enum fe_status* status
 	memcpy(p->isi_bitset,state->isi_list.isi_bitset, sizeof(p->isi_bitset));
 
 	state->fe_status = *status;
-	dev_dbg(&client->dev, "lock=%02x status=%02x\n", tmp1, *status);
+	dev_dbg(&client->dev, "lock=%02x status=%02x\n", reg0d, *status);
 
 	if ((state->fe_status & FE_HAS_LOCK)&&(state->TsClockChecked)){
 		state->TsClockChecked = false;
@@ -2955,11 +2999,11 @@ static int m88rs6060_read_status(struct dvb_frontend* fe, enum fe_status* status
 			itmp = 0;
 
 			for (i = 0; i < M88rs6060_SNR_ITERATIONS; i++) {
-				ret = regmap_read(state->demod_regmap, 0xff, &tmp1);
+				ret = regmap_read(state->demod_regmap, 0xff, &regff);
 				if (ret)
 					goto done;
 
-				itmp += tmp1;
+				itmp += regff;
 			}
 			temp = (u16) (itmp / 80);
 			if (temp > 32)
@@ -3099,7 +3143,6 @@ static int m88rs6060_set_voltage(struct dvb_frontend*fe,
 	int ret;
 	u8 utmp;
 	bool voltage_sel, lnb_power;
-
 
 	switch(voltage){
 		case SEC_VOLTAGE_18:
