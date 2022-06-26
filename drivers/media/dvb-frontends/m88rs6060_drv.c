@@ -1561,8 +1561,8 @@ static int m88rs6060_get_channel_info(struct m88rs6060_state* state, struct dtv_
 	bool ret = m88rs6060_get_channel_info_(state, &info);
 	p->delivery_system = (info.type == MtFeType_DvbS2) ? SYS_DVBS2 :
 		(info.type == MtFeType_DvbS2X) ? SYS_DVBS2 : //TODO
-		(info.type == MtFeType_DvbS) ? SYS_DVBS2 :
-		SYS_DVBS;
+		(info.type == MtFeType_DvbS) ? SYS_DVBS :
+		SYS_DVBS2;
 	p->modulation = info.mod_mode;
 	p->rolloff = info.roll_off;
 	p->fec_inner = info.code_rate;
