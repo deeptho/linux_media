@@ -895,7 +895,7 @@ fe_lla_error_t fe_stid135_set_symbol_rate(struct stv* state,  u32 symbol_rate)
 {
 	struct fe_stid135_internal_param * pParams = &state->base->ip;
 	u32 reg_field2, reg_field1, reg_field0;
-	u32 reg32;
+	u64 reg32;
 	STCHIP_Info_t* hchip = state->base->ip.handle_demod;
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 
@@ -905,11 +905,14 @@ fe_lla_error_t fe_stid135_set_symbol_rate(struct stv* state,  u32 symbol_rate)
 
 	/* Hypothesis: master_clock=130MHz, symbol_rate=0.5MSymb/s..500MSymb/s
 	FVCO/4/12=6.2GHz/4/12=130MHz*/
-
+#if 1
+	reg32 = ((u64)symbol_rate) <<24;
+	reg32 /= (12* (u64)pParams->master_clock);
+#else
 	reg32 = (1<<27) / (pParams->master_clock/10000);
 	reg32 = reg32 * (symbol_rate/10000);
 	reg32 = reg32 / (3*(1<<5));
-
+#endif
 	error |= ChipSetFieldImage(hchip, reg_field2,
 			((int)reg32 >> 16) & 0xFF);
 	error |= ChipSetFieldImage(hchip, reg_field1,
