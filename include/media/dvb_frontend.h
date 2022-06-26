@@ -739,6 +739,7 @@ struct dtv_frontend_properties {
 	u32		pls_search_range_end;
 	u8    pls_search_codes_len;
 	u32   bit_rate;
+	u32   locktime; //in ms
 #endif
 
 	/* statistics data */
