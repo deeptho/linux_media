@@ -473,6 +473,7 @@ static int stid135_set_parameters(struct dvb_frontend* fe)
 	//BOOL lock_stat=0;
 	struct fe_sat_signal_info* signal_info = &state->signal_info;
 	s32 current_llr=0;
+	state->tune_time = ktime_get_coarse();
 	memset(signal_info, 0, sizeof(*signal_info));
 	vprintk(
 					"[%d] delivery_system=%u modulation=%u frequency=%u symbol_rate=%u inversion=%u stream_id=%d\n",
@@ -911,7 +912,8 @@ static int stid135_read_status_(struct dvb_frontend* fe, enum fe_status *status)
 	u32 speed;
 
 	*status = 0;
-
+	p->locktime = ktime_to_ns(state->signal_info.lock_time)/1000000;
+	dprintk("LOCK TIME set: %d\n", p->locktime);
 	p->strength.len = 1;
 	p->strength.stat[0].scale = FE_SCALE_NOT_AVAILABLE;
 	p->cnr.len = 1;
@@ -1066,7 +1068,8 @@ static int stid135_tune_(struct dvb_frontend* fe, bool re_tune,
 		get rf level, CNR, BER
 	 */
 	r = stid135_read_status_(fe, status);
-
+	if(re_tune)
+		dprintk("LOCK TIME %dms locked=%d\n", ktime_to_ns(state->signal_info.lock_time)/1000000, state->signal_info.has_lock);
 	vprintk("[%d] setting timedout=%d\n", state->nr+1, !state->signal_info.has_viterbi);
 	state->signal_info.has_timedout = !state->signal_info.has_viterbi;
 	if(state->signal_info.has_timedout) {

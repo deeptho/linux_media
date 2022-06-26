@@ -45,6 +45,7 @@
 #include "oxford_anafe_func.h"
 #include "stid135_initLLA_cut2.h"
 #include "neumo-scan.h"
+#include <linux/timekeeping.h>
 #include <media/dvb_frontend.h>
 /* ========================================================== */
 // Typedefs - proprietary, non generic
@@ -344,11 +345,11 @@ struct stv {
 	struct dvb_frontend  fe;
 	int                  nr;     //DT: adapter aka demod: 0-7
 	int                  rf_in;  //DT  tuner frontend: 0-3
-	unsigned long        tune_time;
+	//unsigned long        tune_time;
 	//int current_llr_rate;  //Remember the current reconfiguration to avoid calling hardware needlessly
 	//int current_max_llr_rate;  //Remember the current reconfiguration to avoid calling hardware needlessly
 	struct fe_sat_signal_info signal_info;
-
+	ktime_t tune_time;
 	bool newTP; //for tbs6912
 	u32  bit_rate; //for tbs6912;
 	int loops ;//for tbs6912

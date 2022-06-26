@@ -47,7 +47,7 @@
 	*************************************************************/
 	#include "stddefs.h"    /* Standard definitions */
 	#include "chip.h"
-
+#include <linux/timekeeping.h>
 	/****************************************************************
 						COMMON STRUCTURES AND TYPEDEF
 	 ****************************************************************/
@@ -319,6 +319,7 @@ struct fe_sat_search_params {
 struct fe_sat_isi_struct_t
 {
 	u32 isi_bitset[8]; //bitset; 1 bit indicates corresponding ISI is in use
+	u8 matypes[256];
 };
 typedef  struct fe_sat_isi_struct_t  fe_sat_isi_struct;
 
@@ -357,6 +358,13 @@ struct fe_sat_signal_info {
 		u8        pls_mode;
  		u32       pls_code;
 		fe_sat_isi_struct isi_list;
+
+	ktime_t carrier_time;
+	ktime_t timing_lock_time;
+	ktime_t viterbi_time;
+	ktime_t sync_time;
+	ktime_t lock_time;
+
 	} ;
 
 

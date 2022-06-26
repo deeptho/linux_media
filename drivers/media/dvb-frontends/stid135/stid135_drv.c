@@ -873,7 +873,6 @@ fe_lla_error_t fe_stid135_set_symbol_rate_(struct fe_stid135_internal_param * pP
 			((int)reg32 >> 8) & 0xFF);
 	error |= ChipSetFieldImage(hchip, reg_field0,
 			((int)reg32) & 0xFF);
-
 	error |= ChipSetRegisters(hchip, (u16)REG_RC8CODEW_DVBSX_DEMOD_SFRINIT2(Demod), 3);
 
 
@@ -2534,6 +2533,7 @@ static fe_lla_error_t FE_STiD135_GetDemodLock (struct stv* state, u32 TimeOut, B
 		}
 	} else {
 		vprintk("[%d] timedout %d/%d\n", state->nr+1, timer, TimeOut_SymbRate);
+		state->signal_info.lock_time =ktime_sub(ktime_get_coarse(), state->tune_time);
 	}
 	*Lock_p = state->signal_info.has_lock;
 	state->signal_info.demod_locked = state->signal_info.has_lock;
