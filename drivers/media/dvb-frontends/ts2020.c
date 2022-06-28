@@ -203,14 +203,22 @@ static int ts2020_set_params(struct dvb_frontend *fe)
 	f_ref_khz = TS2020_XTAL_FREQ;
 	div_ref = DIV_ROUND_CLOSEST(f_ref_khz, 2000);
 
+	regmap_read(priv->regmap, 0x62, &utmp);
+
 	/* select LO output divider */
-	if (frequency_khz < priv->frequency_div) {
+	if (frequency_khz < 494000) {
+		div_out = 8;
+		reg10 = 0x01;
+		utmp |= 0x02;
+	} else if (frequency_khz < priv->frequency_div) {
 		div_out = 4;
 		reg10 = 0x10;
 	} else {
 		div_out = 2;
 		reg10 = 0x00;
 	}
+
+	regmap_write(priv->regmap, 0x62, utmp);
 
 	f_vco_khz = frequency_khz * div_out;
 	pll_n = f_vco_khz * div_ref / f_ref_khz;
