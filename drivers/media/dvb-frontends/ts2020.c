@@ -203,22 +203,23 @@ static int ts2020_set_params(struct dvb_frontend *fe)
 	f_ref_khz = TS2020_XTAL_FREQ;
 	div_ref = DIV_ROUND_CLOSEST(f_ref_khz, 2000);
 
-	regmap_read(priv->regmap, 0x62, &utmp);
+	if (priv->tuner == TS2020_M88TS2022)
+		regmap_read(priv->regmap, 0x62, &utmp);
 
 	/* select LO output divider */
-	if (frequency_khz < 494000) {
+	if (frequency_khz < 493714) {
 		div_out = 8;
 		reg10 = 0x01;
 		utmp |= 0x02;
-	} else if (frequency_khz < priv->frequency_div) {
+	} else if (frequency_khz >= 493714 && frequency_khz < priv->frequency_div) {
 		div_out = 4;
 		reg10 = 0x10;
+		utmp &= 0xfd;
 	} else {
 		div_out = 2;
 		reg10 = 0x00;
+		utmp &= 0xfd;
 	}
-
-	regmap_write(priv->regmap, 0x62, utmp);
 
 	f_vco_khz = frequency_khz * div_out;
 	pll_n = f_vco_khz * div_ref / f_ref_khz;
@@ -233,17 +234,29 @@ static int ts2020_set_params(struct dvb_frontend *fe)
 		lpf_coeff = 2766;
 		reg10 |= 0x01;
 		regmap_write(priv->regmap, 0x10, reg10);
+
+		u16tmp = pll_n - 1024;
+		buf[0] = (u16tmp >> 8) & 0x0f;
+		buf[1] = u16tmp & 0xff;
+		buf[2] = div_ref - 8;
 	} else {
 		lpf_coeff = 3200;
 		reg10 |= 0x0b;
 		regmap_write(priv->regmap, 0x10, reg10);
 		regmap_write(priv->regmap, 0x11, 0x40);
-	}
+		regmap_write(priv->regmap, 0x62, utmp);
 
-	u16tmp = pll_n - 1024;
-	buf[0] = (u16tmp >> 8) & 0xff;
-	buf[1] = (u16tmp >> 0) & 0xff;
-	buf[2] = div_ref - 8;
+		if (pll_n < 4095)
+			u16tmp = pll_n - 1024;
+		else if (pll_n < 6143)
+			u16tmp = pll_n + 1024;
+		else
+			u16tmp = pll_n + 3072;
+
+		buf[0] = (u16tmp >> 8) & 0x3f;
+		buf[1] = u16tmp & 0xff;
+		buf[2] = div_ref - 8;
+	}
 
 	regmap_write(priv->regmap, 0x01, buf[0]);
 	regmap_write(priv->regmap, 0x02, buf[1]);
