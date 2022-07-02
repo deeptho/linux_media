@@ -962,6 +962,34 @@ static int dvb_frontend_start(struct dvb_frontend *fe)
 	return 0;
 }
 
+
+static bool is_sat_fe(struct dvb_frontend* fe) {
+	int i;
+	for (i=0; i< sizeof(fe->ops.delsys)/sizeof(fe->ops.delsys); ++i) {
+		switch(fe->ops.delsys[i]) {
+		case SYS_DVBS:
+		case SYS_DVBS2:
+			return true;
+		}
+	}
+	return false;
+}
+
+static bool is_symbol_rate_fe(struct dvb_frontend* fe) {
+	int i;
+	for (i=0; i< sizeof(fe->ops.delsys)/sizeof(fe->ops.delsys); ++i) {
+		switch(fe->ops.delsys[i]) {
+		case SYS_DVBS:
+		case SYS_DVBS2:
+		case SYS_TURBO:
+		case SYS_DVBC_ANNEX_A:
+		case SYS_DVBC_ANNEX_C: //symbol rate == 0 is allowed - driver should do right thing
+			return true;
+		}
+	}
+	return false;
+}
+
 static void dvb_frontend_get_frequency_limits(struct dvb_frontend *fe,
 								u32 *freq_min, u32 *freq_max,
 								u32 *tolerance)
@@ -990,22 +1018,14 @@ static void dvb_frontend_get_frequency_limits(struct dvb_frontend *fe,
 		tuner_min, tuner_max, frontend_min, frontend_max);
 
 	/* If the standard is for satellite, convert frequencies to kHz */
-	switch (c->delivery_system) {
-	case SYS_DVBS:
-	case SYS_DVBS2:
-	case SYS_TURBO:
-	case SYS_ISDBS:
+	if(is_sat_fe(fe)) {
 		*freq_min /= kHz;
 		*freq_max /= kHz;
 		if (tolerance)
 			*tolerance = fe->ops.info.frequency_tolerance_hz / kHz;
+	} else  if (tolerance)
+		*tolerance = fe->ops.info.frequency_tolerance_hz;
 
-		break;
-	default:
-		if (tolerance)
-			*tolerance = fe->ops.info.frequency_tolerance_hz;
-		break;
-	}
 }
 
 static u32 dvb_frontend_get_stepsize(struct dvb_frontend *fe)
@@ -1034,8 +1054,10 @@ static int dvb_frontend_check_parameters(struct dvb_frontend *fe)
 	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
 	u32 freq_min;
 	u32 freq_max;
+	bool need_nonzero_symbol_rate= c->algorithm != ALGORITHM_BLIND;
 	switch(c->algorithm) {
 	case ALGORITHM_WARM:
+	case ALGORITHM_BLIND:
 	case ALGORITHM_BLIND_BEST_GUESS:
 	case ALGORITHM_COLD_BEST_GUESS:
 		printk("checking frequency\n");
@@ -1052,32 +1074,24 @@ static int dvb_frontend_check_parameters(struct dvb_frontend *fe)
 			return -EINVAL;
 		}
 
-		/* range check: symbol rate */
-		switch (c->delivery_system) {
-		case SYS_DVBS:
-		case SYS_DVBS2:
-		case SYS_TURBO:
-		case SYS_DVBC_ANNEX_A:
-		case SYS_DVBC_ANNEX_C:
-			if ((fe->ops.info.symbol_rate_min &&
-					 c->symbol_rate < fe->ops.info.symbol_rate_min) ||
-					(fe->ops.info.symbol_rate_max &&
+	}
+	/* range check: symbol rate */
+	if(is_symbol_rate_fe(fe) && (c->symbol_rate > 0 || need_nonzero_symbol_rate)) {
+		dprintk("checking symbol_rate: %d range: %d %d\n", c->symbol_rate, fe->ops.info.symbol_rate_min, fe->ops.info.symbol_rate_max);
+		if ((fe->ops.info.symbol_rate_min &&
+				 c->symbol_rate < fe->ops.info.symbol_rate_min) ||
+				(fe->ops.info.symbol_rate_max &&
 					 c->symbol_rate > fe->ops.info.symbol_rate_max)) {
-				dev_warn(fe->dvb->device, "DVB: adapter %i frontend %i symbol rate %u out of range (%u..%u)\n",
-								 fe->dvb->num, fe->id, c->symbol_rate,
-								 fe->ops.info.symbol_rate_min,
-								 fe->ops.info.symbol_rate_max);
+			dev_warn(fe->dvb->device, "DVB: adapter %i frontend %i symbol rate %u out of range (%u..%u)\n",
+							 fe->dvb->num, fe->id, c->symbol_rate,
+							 fe->ops.info.symbol_rate_min,
+							 fe->ops.info.symbol_rate_max);
 				dprintk("DVB: adapter %i frontend %i symbol rate %u out of range (%u..%u)\n",
 								fe->dvb->num, fe->id, c->symbol_rate,
 								fe->ops.info.symbol_rate_min,
 								fe->ops.info.symbol_rate_max);
 				return -EINVAL;
-			}
-		default:
-			break;
 		}
-	default:
-		break;
 	}
 
 	return 0;
@@ -2591,8 +2605,10 @@ static int dtv_set_frontend(struct dvb_frontend *fe)
 	struct dvb_frontend_tune_settings fetunesettings;
 	u32 rolloff = 0;
 
-	if (dvb_frontend_check_parameters(fe) < 0)
+	if (dvb_frontend_check_parameters(fe) < 0) {
+		fepriv->state = FESTATE_IDLE;
 		return -EINVAL;
+	}
 
 	/*
 	 * Initialize output parameters to match the values given by
