@@ -696,6 +696,58 @@ static void dvb_frontend_wakeup(struct dvb_frontend *fe)
 	wake_up_interruptible(&fepriv->wait_queue);
 }
 
+/*
+	This thread is started when a frontend device is opened.
+	It runs a work cycle in a loop, where a new cycle is started  every fepriv->heartbeat_interval
+	milliseconds (but a cycle can sometimes take longer)
+
+	For the typical case of DVBFE_ALGO_HW, the work cycle consist of
+	 -sleep for fepriv->heartbeat_interval milliseconds (sleep is interrupted by an ioctl)
+	 -if in IDLE state, do nothing (continue sleeping)
+   -if in any of the other states, perform the following actions, select a new state, send an event
+	  message to inform user space of status change (locked, no longer locked, spectrum finished)
+		and then go to sleep again:
+	   1. if in SCANNING state, ask driver to find the next mux, and then go into idle state
+	   2. if in GETTING_SPECTRUM state, ask driver to run a spectrum scan operation, and then go into idle state
+	   3. if in RETUNE state, ask driver to tune  (set frequency, symbolrate check for lock...)
+        and if this succeeds, go to TUNED state
+		 4. if in  TUNED state, ask the driver to read the current signal status (SNR and such) and lock
+	      status, and remain ine TUNED state
+	 -when the device receives an ioctl, the frontend loop is requested to abort its current operation and restart
+    the work cycle. Long running driver operations (e.g., tuning which can take several seconds, or spectrum
+		acquisition, which can take even linger) should periodically call
+       kthread_should_stop() || dvb_frontend_task_should_stop(fe)
+    to check if such a user request was received, and if so, return early. This prevents ioctls from blocking
+		for a long time.
+	 -when the frontend device is closed by all users, the work cycle is similarly interrupted and the thread
+	  is then terminated
+	 -the controlling user space connection (the only one having opened the frongtend device read-write)
+	  can also call DTV_STOP to explictly ask the frontend loop to go into IDLE mode.
+
+		It is important that the frontend loop is in IDLE mode while setting new tuning parameters prior to a tune.
+		This can be achieved in 2 ways:
+    1) sending all tuning parameters and the DTV_TUNE command in a single ioctl
+		   During an ioctl a lock is held, which means that the frontend loop can only be sleeping or waiting
+		   for the lock to be released, i.e., it is not possible that driver code runs while the new parameters
+		   are only partially written to the internal dtv_frontend_properties structure
+		2) call DTV_STOP in a first ioctl. Then set parameters in one or more ioctls. In a last ioctl, send
+		   DTVT_TUNE
+		Obviously, method 2 is slower and more error prone
+
+		If a user space ioctl asks for a tune, the code checks some parameters, and if these are out of
+		range, the frontend loop goes to idle state. Similarly, if the driver code returns an error after tuning,
+		because it detected some illegal user request, the loop goes to IDLE state again.
+
+		Note that a failure to  lock (poor signal, signal which cannot be demodulated... is not considered an error,
+		and the loop will enter TUNED state. There is no expectation that the driver itself will attempt to retune
+		in this case. Instead the user space is expected to detect this situation and take the right action,
+		which could invole sending diseqc commands, retuning ...
+
+
+		From the user
+
+ */
+
 static int dvb_frontend_thread(void *data)
 {
 	struct dvb_frontend *fe = data;
