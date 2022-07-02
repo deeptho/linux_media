@@ -1192,6 +1192,7 @@ static struct dtv_cmds_h dtv_cmds[DTV_MAX_COMMAND + 1] = {
 	_DTV_CMD(DTV_SPECTRUM, 1, 0),
 	_DTV_CMD(DTV_CONSTELLATION, 1, 0),
 	_DTV_CMD(DTV_BITRATE, 0, 0),
+	_DTV_CMD(DTV_LOCKTIME, 0, 0),
 	_DTV_CMD(DTV_HEARTBEAT, 1, 0),
 	_DTV_CMD(DTV_CLEAR, 1, 0),
 	/* Set */
@@ -1498,6 +1499,10 @@ static int dtv_property_process_get(struct dvb_frontend *fe,
 		break;
 	case DTV_BITRATE:
 		tvp->u.data = c->bit_rate;
+		break;
+	case DTV_LOCKTIME:
+		tvp->u.data = c->locktime;
+		dprintk("LOCK TIME: returning %d\n", 	tvp->u.data);
 		break;
 	case DTV_SCAN_START_FREQUENCY:
 		tvp->u.data = c->scan_start_frequency;
