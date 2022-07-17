@@ -293,15 +293,15 @@ fe_lla_error_t fe_stid135_init_fft(struct stv*state, int fft_mode, s32 Reg[60])
 	error |= ChipSetRegisters(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_THRESHOLD(path),1);
 
 #if 1
-	//do not treat overflow specially
+	//do not treat overflow specially. Rescaling will apply
 	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEBUG1_DISABLE_RESCALE(path), 0);
-	//do not remove mean value to disable DC coefficient
+	//do not remove mean value to disable DC coefficient (bad idea?)
 	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEBUG1_DISABLE_AVERAGE(path), 0);
 #else
-		error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEBUG1_DISABLE_RESCALE(path), 1);
+	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEBUG1_DISABLE_RESCALE(path), 1);
 	//do not remove mean value to disable DC coefficient
 	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEBUG1_DISABLE_AVERAGE(path), 1);
-	#endif
+#endif
 
 	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEBUG1_DEBUG_INTERSYMBOL(path), 0);	// Off
 #if 1
@@ -310,7 +310,7 @@ fe_lla_error_t fe_stid135_init_fft(struct stv*state, int fft_mode, s32 Reg[60])
 #else
 	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEBUG1_MODE_DB(path), 0);
 #endif
-	//read power spectral density instead of fft result
+	//read power spectral density instead of fft result; value 1 would read complex samples?
 	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEBUG1_SEL_MEM(path), 0);
 
 
@@ -504,14 +504,14 @@ fe_lla_error_t fe_stid135_fft(struct stv* state, u32 mode, u32 nb_acquisition, s
 	u32 nb_words =0;
 	s32 val[4]= { 0 }, val_max;
 	u32 guard=12345;
-	u32 jjj=0, iii=0, bin=0;
+	s32 jjj=0, iii=0, bin=0;
 	s32 f;
 	s32 memstat=0, contmode =0;
-	u32 nbr_pts =0;
+	s32 nbr_pts =0;
 	u32 exp;
-	static u32 max_exponent[4] = {0,0,0,0};
 	s32 fld_value;
-	u8 timeout = 0;
+	int timeout = 0;
+	bool mode_32bit = false;
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	const u16 cfr_factor = 6711; // 6711 = 2^20/(10^6/2^6)*100
 	dprintk("FFT start path=%d\n", path);
@@ -578,40 +578,23 @@ fe_lla_error_t fe_stid135_fft(struct stv* state, u32 mode, u32 nb_acquisition, s
 	}
 	//dprintk("FFT calculate memory readout range\n");
 	// calculate memory readout range
-	nbr_pts = (u32)(8192 / XtoPowerY(2, (u32) mode));
+	nbr_pts = 1<< (13-mode);
 
 	error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEBUG1_MODE_FULL(path), &fld_value);
-	if(fld_value == 1) { // 32-bit mode
+	if(fld_value == 1) {
+		//ask to read memory in terms if 32bit words
+		mode_32bit = true;
 		nb_words = ((u32)1<<(10-mode+1));     // memory size N/8 for memory readout
 	} else if(fld_value == 0) { // 16-bit mode
+		//ask to read memory in terms if 16bit words
+		mode_32bit = false;
 		nb_words = ((u32)1<<(10-mode));     // memory size N/8 for memory readout
 	}
-	//nb_words = ((u32)1<<(10-mode));     // memory size N/8 for memory readout
-	//dprintk("mode=%d buffer_size=%d nbr_pts=%d nb_words=%d 32bit=%d\n", mode, buffer_size, nbr_pts, nb_words, fld_value == 1);
+	dprintk("mode =%d/%d 32bit=%d nbr_pts=%d\n", mode, fft_mode32, mode_32bit, nbr_pts);
+	//n_words =128 nbr_pts=512
 	error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_EXPMAX_EXP_MAX(path), &fld_value);
 	dprintk("error=%d\n", error);
 	exp = (u32)fld_value;
-	switch(path) {
-	case FE_SAT_DEMOD_1:
-		if(exp > max_exponent[0])
-			max_exponent[0] = exp;
-		break;
-	case FE_SAT_DEMOD_2:
-		if(exp > max_exponent[1])
-			max_exponent[1] = exp;
-		break;
-	case FE_SAT_DEMOD_3:
-		if(exp > max_exponent[2])
-			max_exponent[2] = exp;
-		break;
-	case FE_SAT_DEMOD_4:
-		if(exp > max_exponent[3])
-			max_exponent[3] = exp;
-		break;
-	default:
-		//Only first 4 demods supported by hardware
-		break;
-	}
 
 	for (iii=0; iii<nb_words; iii++)	{   // set the FFT memory address in multiples of words
 #if 0
@@ -620,10 +603,11 @@ fe_lla_error_t fe_stid135_fft(struct stv* state, u32 mode, u32 nb_acquisition, s
 		//WAIT_N_MS(1);
 #endif
 
+		//Read 16 bytes from PSD memory into 8 2-byte registers (4 samples of 4 bytes each)
 		error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMADDR1_MEM_ADDR(path), (iii>>8) & 0x03);
 		error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMADDR0_MEM_ADDR(path), (iii & 0xff));
 		error |= ChipSetRegisters(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_MEMADDR1(path), 2);
-		//dprintk("FFT %d/%d\n", i, nb_words);
+
 		// wait for end of transfer
 		error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMSTAT_MEM_STAT(path), &memstat);
 		while ((!memstat) && (timeout < 50)) {
@@ -635,13 +619,20 @@ fe_lla_error_t fe_stid135_fft(struct stv* state, u32 mode, u32 nb_acquisition, s
 			return(FE_LLA_NODATA);
 		//dprintk("FFT %d/%d end of transfer\n", i, nb_words);
 		// read & store data to create an fft list
-
+#if 0
 		error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEBUG1_MODE_FULL(path), &fld_value);
 		if(fld_value==0)
 			dprintk("BUG!!!! 16 bit mode guard=%d\n", guard);
-		if(fld_value == 1) { // 32-bit mode
+#endif
+			error |= ChipGetRegisters(pParams->handle_demod, (u16)(REG_RC8CODEW_DVBSX_DEMOD_MEMVA01(path) + (4 * 0)), 16);
+				//Reads VA01, VA0i, VA11, VA10; accessed from cache below for jjj=0
+				//Reads VA21, VA21, VA31, VA30 accessed from caDXche below for jjj=2
+				//Reads VA31, VA41, VA51, VA50 accessed from cache below for jjj=3
+				//Reads VA61, VA61, VA71, VA70 accessed from cache below for jjj=4
+		if(mode_32bit) { // 32-bit mode
+
 			for (jjj=0; jjj<4; jjj++) {
-				error |= ChipGetRegisters(pParams->handle_demod, (u16)(REG_RC8CODEW_DVBSX_DEMOD_MEMVA01(path) + (4 * jjj)), 4);
+				//Read 2 16-but registers at a time, corresponding to 1 32-bit sample
 				val[3] = ChipGetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMVA01_MEM_VAL0(path) + ((4 * jjj) << 16)); // 16 = address bus width for demod
 				val[2] = ChipGetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMVA00_MEM_VAL0(path) + ((4 * jjj) << 16));
 				val[1] = ChipGetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMVA11_MEM_VAL1(path) + ((4 * jjj) << 16));
@@ -659,21 +650,21 @@ fe_lla_error_t fe_stid135_fft(struct stv* state, u32 mode, u32 nb_acquisition, s
 									guard);
 				tab[nbr_pts-bin-1] = (u32)val_max; 	// fill the table back to front
 			}
-		} else if(fld_value == 0) { // 16-bit mode
+		} else { // 16-bit mode
 			// read temporary memory
 			for (jjj=0; jjj<8; jjj++) {
-				error |= ChipGetRegisters(pParams->handle_demod, (u16)(REG_RC8CODEW_DVBSX_DEMOD_MEMVA01(path) + (2 * jjj)), 2);
 				val[3] = ChipGetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMVA01_MEM_VAL0(path) + ((2 * jjj) << 16)); // 16 = address bus width for demod
 				val[2] = ChipGetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMVA00_MEM_VAL0(path) + ((2 * jjj) << 16));
 #if 0
 				val_max = STLog10((val[3] << 8) + val[2]) + 3010*exp;
 #else
-					val_max = (((val[3] << 8) + val[2]) * 3000*XtoPowerY(2, exp))/64;
+				val_max = (((val[3] << 8) + (val[2])) * 3000*XtoPowerY(2, exp))/64;
 #endif
 				bin = (u32)(iii*8+jjj);
 				if(nbr_pts - bin-1 < 0 || bin >= buffer_size)
 					dprintk("BUG!!!! bin=%d max=%d\n", bin, buffer_size);
-				tab[nbr_pts-bin-1] = (u32)val_max; 	// fil the table back to front; unit is 0.001dB
+				else
+					tab[nbr_pts-bin-1] = (u32)val_max; 	// fil the table back to front; unit is 0.001dB
 			}
 		}
 	}
