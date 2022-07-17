@@ -1571,6 +1571,7 @@ static int stid135_spectrum_start(struct dvb_frontend* fe,
 
 	mutex_lock(&state->base->status_lock);
 	err = fe_stid135_set_rfmux_path(state, state->rf_in + 1);
+	mutex_unlock(&state->base->status_lock);
 	if(err) {
 		dprintk("Could not set rfpath error=%d\n", err);
 	}
@@ -1586,7 +1587,6 @@ static int stid135_spectrum_start(struct dvb_frontend* fe,
 		s->num_freq = ss->spectrum_len;
 		break;
 	}
-	mutex_unlock(&state->base->status_lock);
 	return -1;
 }
 

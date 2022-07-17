@@ -563,17 +563,19 @@ fe_lla_error_t fe_stid135_fft(struct stv* state, u32 mode, u32 nb_acquisition, s
 	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_GCTRL_UFBS_RESTART(path), 1);
 
 	WAIT_N_MS(5);
-
+	mutex_lock(&state->base->status_lock);
 	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_GCTRL_UFBS_RESTART(path), 0);
 
-	// wait for process done if not in continous mode
+	// wait for fft to finish if not in continuous mode
 	error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_GAINCONT_MODE_CONTINUOUS(path), &fld_value);
 	if (!fld_value) {
 		error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_GSTAT_PSD_DONE(path), &contmode);
 		while((contmode != TRUE) && (timeout < 40)){
 			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_GSTAT_PSD_DONE(path), &contmode);
+			mutex_unlock(&state->base->status_lock);
 			timeout = (u8)(timeout + 1);
 			ChipWaitOrAbort(pParams->handle_demod, 1);
+			mutex_lock(&state->base->status_lock);
 		}
 	}
 	//dprintk("FFT calculate memory readout range\n");
@@ -612,8 +614,9 @@ fe_lla_error_t fe_stid135_fft(struct stv* state, u32 mode, u32 nb_acquisition, s
 		error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMSTAT_MEM_STAT(path), &memstat);
 		while ((!memstat) && (timeout < 50)) {
 			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMSTAT_MEM_STAT(path), &memstat);
-			timeout = (u8)(timeout + 1);
+		 mutex_unlock(&state->base->status_lock);
 			ChipWaitOrAbort(pParams->handle_demod, 1);
+			mutex_lock(&state->base->status_lock);
 		}
 		if(timeout == 50)
 			return(FE_LLA_NODATA);
@@ -704,9 +707,10 @@ static int stid135_get_spectrum_scan_fft_one_band(struct stv *state,
 	vprintk("spectrum scan: center_freq=%dkHz lo=%dkHz range=%dkHz mode=%d fft_size=%d freq=%p rf_level=%p\n",
 					center_freq, lo_frequency_hz/1000, range, mode, fft_size, freq, rf_level);
 #endif
+	mutex_lock(&state->base->status_lock);
 	error = fe_stid135_fft(state, mode, nb_acquisition,
 												 center_freq*1000 - lo_frequency_hz, range*1000, rf_level, &begin, fft_size);
-
+	mutex_unlock(&state->base->status_lock);
 	pbandx1000 += mode*6020; //compensate for FFT number of bins: 20*log10(2)
 	delta = 10*(3000 + STLog10(range) - STLog10(fft_size)); //this is a power spectral density range*1000/fft_size is the bin width in Hz
 	//dprintk("Pbandx1000=%d error=%d\n", Pbandx1000, error);
@@ -829,6 +833,7 @@ int get_spectrum_scan_fft(struct dvb_frontend *fe)
 		error = -ENOMEM;
 		goto _end;
 	}
+	mutex_lock(&state->base->status_lock);
 	print_spectrum_scan_state(&state->spectrum_scan_state);
 	error = fe_stid135_init_fft(state, mode, Reg);
 
