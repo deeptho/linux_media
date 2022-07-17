@@ -734,6 +734,8 @@ struct dtv_frontend_properties {
 	u32			lna;
 #if 1 //neumo
 	u32		isi_bitset[8];
+	u16		matypes[256];
+	int num_matypes;
 	u32		pls_search_codes[64];
 	u32		pls_search_range_start;
 	u32		pls_search_range_end;

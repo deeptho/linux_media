@@ -319,7 +319,8 @@ struct fe_sat_search_params {
 struct fe_sat_isi_struct_t
 {
 	u32 isi_bitset[8]; //bitset; 1 bit indicates corresponding ISI is in use
-	u8 matypes[256];
+	u32 num_matypes;
+	u16 matypes[256];
 };
 typedef  struct fe_sat_isi_struct_t  fe_sat_isi_struct;
 
@@ -330,6 +331,7 @@ struct fe_sat_signal_info {
 	bool demod_locked;
 	bool satellite_scan;
 	///existing data
+	bool        has_error;
 	bool        has_signal;   /*tuning has finished*/
 	bool        has_carrier;  /*Some signal was found*/
 	bool        has_viterbi;  /*fec or viterbi locked*/

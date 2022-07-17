@@ -741,6 +741,9 @@ static int stid135_get_frontend(struct dvb_frontend* fe, struct dtv_frontend_pro
 	if(true || state->demod_search_algo == FE_SAT_BLIND_SEARCH ||
 							state->demod_search_algo == FE_SAT_NEXT) {
 		memcpy(p->isi_bitset, state->signal_info.isi_list.isi_bitset, sizeof(p->isi_bitset));
+		memcpy(p->matypes, state->signal_info.isi_list.matypes,
+					 state->signal_info.isi_list.num_matypes*sizeof(p->matypes[0]));
+		p->num_matypes = state->signal_info.isi_list.num_matypes;
 		p->matype = state->signal_info.matype;
 		p->frequency = state->signal_info.frequency;
 		p->symbol_rate = state->signal_info.symbol_rate;
@@ -896,11 +899,11 @@ static int stid135_get_frontend(struct dvb_frontend* fe, struct dtv_frontend_pro
 									(state->signal_info.pls_mode << 26) |
 									((state->signal_info.pls_code &0x3FFFF)<<8)
 									);
-	dprintk("read stream_id mis=%d pls_mode=0x%x pls_code=0x%x stream_id=0%x",
+	vprintk("read stream_id mis=%d pls_mode=0x%x pls_code=0x%x stream_id=0%x",
 					state->mis_mode,
 					state->signal_info.pls_mode, state->signal_info.pls_code, p->stream_id);
 
-	dprintk("READ stream_id=0x%x isi=0x%x\n",p->stream_id, state->signal_info.isi);
+	vprintk("READ stream_id=0x%x isi=0x%x\n",p->stream_id, state->signal_info.isi);
 	return 0;
 }
 
@@ -910,10 +913,13 @@ static int stid135_read_status_(struct dvb_frontend* fe, enum fe_status *status)
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
 	fe_lla_error_t err = FE_LLA_NO_ERROR;
 	u32 speed;
-
 	*status = 0;
+	if(state->signal_info.has_error) {
+		*status = FE_TIMEDOUT;
+		return 0;
+	}
+
 	p->locktime = ktime_to_ns(state->signal_info.lock_time)/1000000;
-	dprintk("LOCK TIME set: %d\n", p->locktime);
 	p->strength.len = 1;
 	p->strength.stat[0].scale = FE_SCALE_NOT_AVAILABLE;
 	p->cnr.len = 1;
@@ -961,7 +967,7 @@ static int stid135_read_status_(struct dvb_frontend* fe, enum fe_status *status)
 	}
 
 	get_raw_bit_rate(state, &p->bit_rate);
-	dprintk("NOW: raw_bit_rate=%d\n", p->bit_rate);
+	vprintk("NOW: raw_bit_rate=%d\n", p->bit_rate);
 
 	/* demod has lock */
 
@@ -1003,6 +1009,7 @@ static int stid135_read_status_(struct dvb_frontend* fe, enum fe_status *status)
 	if(state->mis_mode)
 		err = fe_stid135_isi_scan(state, &state->signal_info.isi_list);
 	memcpy(p->isi_bitset, state->signal_info.isi_list.isi_bitset, sizeof(p->isi_bitset));
+	memcpy(p->matypes, state->signal_info.isi_list.matypes, sizeof(p->matypes));
 	//for the tbs6912 ts setting
 	if((state->base->set_TSparam)&&(state->newTP)) {
 		speed = state->base->set_TSparam(state->base->i2c,state->nr/2,4,0);
@@ -1049,6 +1056,8 @@ static int stid135_tune_(struct dvb_frontend* fe, bool re_tune,
 	if (re_tune) {
 		r = stid135_set_parameters(fe);
 		if (r) {
+			state->signal_info.has_error = true;
+			*status = FE_TIMEDOUT;
 			return r;
 		}
 		state->tune_time = jiffies;
@@ -1060,7 +1069,7 @@ static int stid135_tune_(struct dvb_frontend* fe, bool re_tune,
 			 retrieve information about modulation, frequency, symbol_rate
 			 and CNR, BER
 		*/
-		memset(&state->signal_info.isi_list.isi_bitset[0], 0, sizeof(state->signal_info.isi_list.isi_bitset));
+		memset(&state->signal_info.isi_list, 0, sizeof(state->signal_info.isi_list));
 		fe_stid135_get_signal_info(state,  &state->signal_info, 0);
 	}
 	/*
@@ -1069,7 +1078,7 @@ static int stid135_tune_(struct dvb_frontend* fe, bool re_tune,
 	 */
 	r = stid135_read_status_(fe, status);
 	if(re_tune)
-		dprintk("LOCK TIME %dms locked=%d\n", ktime_to_ns(state->signal_info.lock_time)/1000000, state->signal_info.has_lock);
+		dprintk("LOCK TIME %lldms locked=%d\n", ktime_to_ns(state->signal_info.lock_time)/1000000, state->signal_info.has_lock);
 	vprintk("[%d] setting timedout=%d\n", state->nr+1, !state->signal_info.has_viterbi);
 	state->signal_info.has_timedout = !state->signal_info.has_viterbi;
 	if(state->signal_info.has_timedout) {
@@ -1704,6 +1713,7 @@ static int stid135_scan_sat(struct dvb_frontend* fe, bool init,
 			state->base->ip.handle_demod->Error = FE_LLA_NO_ERROR;
 			fe_stid135_get_signal_info(state,  &state->signal_info, 0);
 			memcpy(p->isi_bitset, state->signal_info.isi_list.isi_bitset, sizeof(p->isi_bitset));
+			memcpy(p->matypes, state->signal_info.isi_list.matypes, sizeof(p->matypes));
 			p->matype =  state->signal_info.matype;
 			p->frequency = state->signal_info.frequency;
 			p->symbol_rate = state->signal_info.symbol_rate;

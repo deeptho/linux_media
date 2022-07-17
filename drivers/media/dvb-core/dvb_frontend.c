@@ -1258,6 +1258,7 @@ static struct dtv_cmds_h dtv_cmds[DTV_MAX_COMMAND + 1] = {
 
 	_DTV_CMD(DTV_SCAN_FFT_SIZE, 1, 0),
 	_DTV_CMD(DTV_ISI_LIST, 0, 0),
+	_DTV_CMD(DTV_MATYPE_LIST, 0, 0),
 	_DTV_CMD(DTV_PLS_SEARCH_RANGE, 1, 0),
 	_DTV_CMD(DTV_PLS_SEARCH_LIST, 1, 0),
 	_DTV_CMD(DTV_BANDWIDTH_HZ, 1, 0),
@@ -1526,6 +1527,7 @@ static int dtv_set_pls_search_list(struct dvb_frontend *fe, struct dtv_pls_searc
 static int dtv_get_pls_search_list(struct dvb_frontend *fe, struct dtv_pls_search_list* user);
 static int dtv_set_constellation(struct dvb_frontend *fe, struct dtv_fe_constellation* constellation);
 static int dtv_get_constellation(struct dvb_frontend *fe, struct dtv_fe_constellation* user);
+static int dtv_get_matype_list(struct dvb_frontend *fe, struct dtv_matype_list* user);
 
 static int dtv_property_process_get(struct dvb_frontend *fe,
 						const struct dtv_frontend_properties *c,
@@ -1573,6 +1575,9 @@ static int dtv_property_process_get(struct dvb_frontend *fe,
 		break;
  	case DTV_CONSTELLATION:
 		dtv_get_constellation(fe, &tvp->u.constellation);
+		break;
+ 	case DTV_MATYPE_LIST:
+		dtv_get_matype_list(fe, &tvp->u.matype_list);
 		break;
 	case DTV_HEARTBEAT:
 		tvp->u.data = fepriv->heartbeat_interval;
@@ -2895,15 +2900,38 @@ static int dtv_set_constellation(struct dvb_frontend *fe, struct dtv_fe_constell
 static int dtv_get_constellation(struct dvb_frontend *fe, struct dtv_fe_constellation* user)
 {
 	int err = 0;
-	//dprintk("constellation retrieved user->num_samples=%d\n", user->num_samples);
 
-	if(fe->ops.constellation_get)
+	if(fe->ops.constellation_get) {
 		fe->ops.constellation_get(fe, user);
+		dprintk("constellation retrieved user->num_samples=%d\n", user->num_samples);
+	}
 	else if(user) {
-
 		user->num_samples = 0;
+		dprintk("constellation retrieved user->num_samples=%d\n", user->num_samples);
 	}
 	return err;
+}
+
+
+static int dtv_get_matype_list(struct dvb_frontend *fe, struct dtv_matype_list* user)
+{
+	int err = 0;
+	int stream_id;
+	int n=0;
+	//dprintk("constellation retrieved user->num_samples=%d\n", user->num_samples);
+	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
+
+	if(!user)
+		return -1;
+
+	if(user->num_entries > c->num_matypes)
+		user->num_entries = c->num_matypes;
+
+	if(copy_to_user((void __user *)user->matypes, c->matypes,
+									user->num_entries * sizeof(user->matypes[0])))
+		return -EFAULT;
+
+	return 0;
 }
 
 static int dvb_get_property(struct dvb_frontend *fe, struct file *file,
@@ -2920,18 +2948,18 @@ static int dvb_get_property(struct dvb_frontend *fe, struct file *file,
 		__func__, tvps->num);
 	dev_dbg(fe->dvb->device, "%s: properties.props = %p\n",
 		__func__, tvps->props);
-
+	dprintk("num_props=%d\n", tvps->num);
 	/*
 	 * Put an arbitrary limit on the number of messages that can
 	 * be sent at once
 	 */
 	if (!tvps->num || tvps->num > DTV_IOCTL_MAX_MSGS)
 		return -EINVAL;
-
+	dprintk("num_props=%d\n", tvps->num);
 	tvp = memdup_user((void __user *)tvps->props, tvps->num * sizeof(*tvp));
 	if (IS_ERR(tvp))
 		return PTR_ERR(tvp);
-
+	dprintk("num_props=%d\n", tvps->num);
 	/*
 	 * Let's use our own copy of property cache, in order to
 	 * avoid mangling with DTV zigzag logic, as drivers might
@@ -2941,6 +2969,9 @@ static int dvb_get_property(struct dvb_frontend *fe, struct file *file,
 	if (fepriv->state != FESTATE_IDLE) {
 		if(tvps->num > 1 || (tvp[0].cmd != DTV_SPECTRUM || tvp[0].cmd != DTV_CONSTELLATION)) {
 			err = dtv_get_frontend(fe, &getp, NULL);
+			if(err<0) {
+				dprintk("FAILED: prop=%d err=%d\n", tvp[i].cmd, err);
+			}
 			if (err < 0)
 				goto out;
 		}
@@ -2948,6 +2979,9 @@ static int dvb_get_property(struct dvb_frontend *fe, struct file *file,
 	for (i = 0; i < tvps->num; i++) {
 		err = dtv_property_process_get(fe, &getp,
 								 tvp + i, file);
+		if(err<0) {
+			dprintk("FAILED: prop=%d err=%d\n", tvp[i].cmd, err);
+		}
 		if (err < 0)
 			goto out;
 	}

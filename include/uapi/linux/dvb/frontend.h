@@ -279,13 +279,13 @@ enum fe_sec_mini_cmd {
  */
 enum fe_status {
 	FE_NONE			= 0x00,
-	FE_HAS_SIGNAL		= 0x01,
+	FE_HAS_SIGNAL		= 0x01, //not useful
 	FE_HAS_CARRIER		= 0x02,
 	FE_HAS_VITERBI		= 0x04,
 	FE_HAS_SYNC		= 0x08,
 	FE_HAS_LOCK		= 0x10,
 	FE_TIMEDOUT		= 0x20,
-	FE_HAS_TIMING_LOCK		= 0x40,
+	FE_HAS_TIMING_LOCK		= 0x40, //was FE_REINIT; not used anyway
 	FE_IDLE		= 0x80,
 };
 
@@ -638,7 +638,9 @@ enum fe_interleaving {
 #define DTV_CONSTELLATION 86
 #define DTV_HEARTBEAT 87
 #define DTV_BITRATE 88
-#define DTV_MAX_COMMAND	 DTV_BITRATE
+#define DTV_LOCKTIME 89
+#define DTV_MATYPE_LIST		90 //retrieve list of present matypesand stream_ids
+#define DTV_MAX_COMMAND	 DTV_MATYPE_LIST
 
 //commands for controlling long running algorithms via FE_ALGO_CTRL ioctl
 #define DTV_STOP 1
@@ -1031,6 +1033,11 @@ struct dtv_fe_constellation {
 	u8 constel_select;
 };
 
+struct dtv_matype_list {
+	u32 num_entries;
+	u16* matypes;
+};
+
 
 /**
  * struct dtv_property - store one of frontend command and its value
@@ -1057,6 +1064,7 @@ struct dtv_property {
 		struct dtv_fe_stats st;
 		struct dtv_fe_spectrum spectrum;
 		struct dtv_fe_constellation constellation;
+		struct dtv_matype_list matype_list;
 		struct dtv_pls_search_list pls_search_codes;
 		struct {
 			u8 data[32];

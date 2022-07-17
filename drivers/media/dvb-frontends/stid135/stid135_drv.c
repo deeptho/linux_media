@@ -1,35 +1,35 @@
 /*
-* This file is part of STiD135 OXFORD LLA
+ * This file is part of STiD135 OXFORD LLA
  *
-* Copyright (c) <2014>-<2018>, STMicroelectronics - All Rights Reserved
-* Author(s): Mathias Hilaire (mathias.hilaire@st.com), Thierry Delahaye (thierry.delahaye@st.com) for STMicroelectronics.
+ * Copyright (c) <2014>-<2018>, STMicroelectronics - All Rights Reserved
+ * Author(s): Mathias Hilaire (mathias.hilaire@st.com), Thierry Delahaye (thierry.delahaye@st.com) for STMicroelectronics.
  *
-* License terms: BSD 3-clause "New" or "Revised" License.
+ * License terms: BSD 3-clause "New" or "Revised" License.
  *
-* Redistribution and use in source and binary forms, with or without
-* modification, are permitted provided that the following conditions are met:
-*
-* 1. Redistributions of source code must retain the above copyright notice, this
-* list of conditions and the following disclaimer.
-*
-* 2. Redistributions in binary form must reproduce the above copyright notice,
-* this list of conditions and the following disclaimer in the documentation
-* and/or other materials provided with the distribution.
-*
-* 3. Neither the name of the copyright holder nor the names of its contributors
-* may be used to endorse or promote products derived from this software
-* without specific prior written permission.
-*
-* THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-* AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-* IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-* DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
-* FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
-* DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-* SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
-* CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
-* OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-* OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice, this
+ * list of conditions and the following disclaimer.
+ *
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ * this list of conditions and the following disclaimer in the documentation
+ * and/or other materials provided with the distribution.
+ *
+ * 3. Neither the name of the copyright holder nor the names of its contributors
+ * may be used to endorse or promote products derived from this software
+ * without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+ * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
 #include <linux/kthread.h>
@@ -968,6 +968,7 @@ fe_lla_error_t FE_STiD135_GetCarrierFrequencyOffset_(STCHIP_Info_t* hChip, enum 
 	/*	Read the carrier frequency regs value	*/
 	error |= ChipGetRegisters(hChip, cfrReg, 3);
 
+	//CFR10..CFR12: current carrier frequency offset
 	derot = (ChipGetFieldImage(hChip, cfrField2) << 16) +
 	(ChipGetFieldImage(hChip, cfrField1) << 8) +
 	(ChipGetFieldImage(hChip, cfrField0));
@@ -983,7 +984,7 @@ fe_lla_error_t FE_STiD135_GetCarrierFrequencyOffset_(STCHIP_Info_t* hChip, enum 
 	/*
 		Formula:  carrier_frequency = MasterClock * 12 * Reg / 2^24
 	*/
-	MasterClock = MasterClock * 12;
+	MasterClock = MasterClock * 12; //1 549 999 992Hz
 
 	intval1 = (s32)(MasterClock >> 12);
 	intval2 = derot       >> 12;
@@ -1760,7 +1761,6 @@ fe_lla_error_t fe_stid135_get_lock_status(struct stv* state, bool*carrier_lock, 
 
 	case FE_SAT_DVBS_FOUND:
 		state->signal_info.has_carrier = 	true;
-		//error |= ChipGetOneRegister(state->base->ip.handle_demod,RC8CODEW_DVBSX_DEMOD_DSTATUS, &last_dstatus); //FOLLOWING READS AGAIN
 		error |= (error1=ChipGetField(state->base->ip.handle_demod,
 																	FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS_LOCK_DEFINITIF(state->nr+1), &(fld_value[0])));
 		if(error1)
@@ -1773,7 +1773,6 @@ fe_lla_error_t fe_stid135_get_lock_status(struct stv* state, bool*carrier_lock, 
 			dprintk("error=%d\n", error1);
 
 		state->signal_info.has_viterbi = fld_value[0] & fld_value[1];
-
 
 		//TODO: stv091x does not check TSFIFO_LINEOK
 		//fld_value[2]==0 means that packets with errors have been received
@@ -3785,8 +3784,8 @@ fe_lla_error_t fe_stid135_get_signal_info(struct stv* state,
 		}
 		/* transponder_frequency = tuner +  demod carrier
 			 frequency */
-		pInfo->frequency = pParams->lo_frequency / 1000; //allways a dummy value (1.5Ghz)?
-		dprintk("[%d] freq=%d\n", state->nr+1, pInfo->frequency);
+		pInfo->frequency = pParams->lo_frequency / 1000; //always a dummy value (1.5Ghz)?
+		//dprintk("[%d] freq=%d\n", state->nr+1, pInfo->frequency);
 		/* On auxiliary demod, frequency found is not true, we have to pick it on master demod  */
 		/* On auxiliary demod, SR found is not true, we have to pick it on master demod  */
 		if(Demod == FE_SAT_DEMOD_2) {
@@ -3935,7 +3934,7 @@ fe_lla_error_t fe_stid135_get_signal_info(struct stv* state,
 					 (pParams->demod_search_algo[Demod-1] == FE_SAT_BLIND_SEARCH ||
 					 pParams->demod_search_algo[Demod-1] == FE_SAT_NEXT)*/) {
 					fe_lla_error_t error1 = FE_LLA_NO_ERROR;
-					memset(&state->signal_info.isi_list.isi_bitset[0], 0, sizeof(state->signal_info.isi_list.isi_bitset));
+					//memset(&state->signal_info.isi_list, 0, sizeof(state->signal_info.isi_list));
 					error1 = fe_stid135_isi_scan(state, &state->signal_info.isi_list);
 					dprintk("MIS DETECTION: error=%d\n", error1);
 				} else {
@@ -4109,7 +4108,7 @@ fe_lla_error_t fe_stid135_init(struct fe_sat_init_params *pInit,
 static fe_lla_error_t fe_stid135_manage_LNF_IP3 (STCHIP_Info_t* demod_handle, FE_OXFORD_TunerPath_t tuner_nb, u32 agc1Power)
 {
 	STCHIP_Error_t error = CHIPERR_NO_ERROR;
-				u8 modeLNF=0;
+	u8 modeLNF=0;
 
 	modeLNF = Oxford_GetVGLNAgainMode(demod_handle, tuner_nb);
 
@@ -10395,7 +10394,9 @@ fe_lla_error_t fe_stid135_isi_scan(struct stv* state, struct fe_sat_isi_struct_t
 				j = CurrentISI/32;
 				mask = ((uint32_t)1)<< (CurrentISI%32);
 				if( ! (p_isi_struct->isi_bitset[j] & mask)) {
-					dprintk("Found new ISI=%d\n",  CurrentISI);
+					dprintk("Found new ISI=%d matype=%d error=%d mis=%d\n",  CurrentISI, matype, error, state->mis_mode);
+					if(p_isi_struct->num_matypes < sizeof(p_isi_struct->matypes)/sizeof(p_isi_struct->matypes[0]))
+						p_isi_struct->matypes[p_isi_struct->num_matypes++] = (matype<<(int)8)|CurrentISI;
 				}
 					p_isi_struct->isi_bitset[j] |= mask;
 #if 1
