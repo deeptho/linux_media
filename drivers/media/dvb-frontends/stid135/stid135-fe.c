@@ -51,6 +51,11 @@ module_param(vglna_mode, int, 0444);
 MODULE_PARM_DESC(mode,
 		"vlglna on/off");
 
+bool fft_mode32=1;
+module_param(fft_mode32, bool, 0444);
+MODULE_PARM_DESC(fft_mode32,
+		"0: 16 bit fft mode on; else 32 bit");
+
 static unsigned int rfsource;
 module_param(rfsource, int, 0644);
 MODULE_PARM_DESC(rfsource, "RF source selection for direct connection mode (default:0 - auto)");

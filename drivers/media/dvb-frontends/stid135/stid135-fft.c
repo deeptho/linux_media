@@ -313,13 +313,11 @@ fe_lla_error_t fe_stid135_init_fft(struct stv*state, int fft_mode, s32 Reg[60])
 	//read power spectral density instead of fft result
 	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEBUG1_SEL_MEM(path), 0);
 
-#if 1
+
 	//format will be 32 bit, not 16 bit
-	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEBUG1_MODE_FULL(path), 1);
-#else
-		//format will be 16 bit, not 32 bit
-	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEBUG1_MODE_FULL(path), 0);
-#endif
+	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEBUG1_MODE_FULL(path), !!fft_mode32);
+	dprintk("Selecting %d bit fft mode\n", !!fft_mode32 ? 32 : 16);
+
 	//do not discards the values for which CTEHT=0. (unsigned)
 	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEBUG1_CFO_FILT(path), 0);
 	//store the result

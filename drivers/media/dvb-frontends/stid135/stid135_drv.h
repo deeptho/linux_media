@@ -50,6 +50,7 @@
 /* ========================================================== */
 // Typedefs - proprietary, non generic
 
+extern bool fft_mode32;
 enum fe_stid135_ber_status {
 	ERR_MIN_THRESHOLD_REACHED,
 	BER_THRESHOLD_REACHED,
