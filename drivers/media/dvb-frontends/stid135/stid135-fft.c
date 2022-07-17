@@ -561,6 +561,7 @@ fe_lla_error_t fe_stid135_fft(struct stv* state, u32 mode, u32 nb_acquisition, s
 
 	// start acquisition
 	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_GCTRL_UFBS_RESTART(path), 1);
+	mutex_unlock(&state->base->status_lock);
 
 	WAIT_N_MS(5);
 	mutex_lock(&state->base->status_lock);
@@ -795,7 +796,9 @@ int get_spectrum_scan_fft(struct dvb_frontend *fe)
 	}
 	ss->fft_size = table_size;
 
+	mutex_lock(&state->base->status_lock);
 	error = FE_STiD135_GetLoFreqHz(&state->base->ip, &ss->lo_frequency_hz);
+	mutex_unlock(&state->base->status_lock);
 	if(error) {
 		dprintk("FE_STiD135_GetLoFreqHz FAILED: error=%d\n", error);
 		return error;
@@ -838,6 +841,7 @@ int get_spectrum_scan_fft(struct dvb_frontend *fe)
 	error = fe_stid135_init_fft(state, mode, Reg);
 
 	error |= estimate_band_power_demod_for_fft(state, state->rf_in+1, &pbandx1000, &double_correction);
+	mutex_unlock(&state->base->status_lock);
 
 	if(error) {
 		dprintk("fe_stid135_init_fft FAILED: error=%d\n", error);
@@ -921,7 +925,9 @@ int get_spectrum_scan_fft(struct dvb_frontend *fe)
 	if(temp_rf_level)
 		kfree(temp_rf_level);
 	dprintk("Freed temp variables\n");
+	mutex_lock(&state->base->status_lock);
 	error |= (error1=fe_stid135_term_fft(state, Reg));
+	mutex_unlock(&state->base->status_lock);
 	dprintk("Terminated fft\n");
 	if(error) {
 		dprintk("fe_stid135_term_fft FAILED: error=%d\n", error1);
