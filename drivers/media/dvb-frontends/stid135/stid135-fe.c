@@ -1827,9 +1827,9 @@ static struct dvb_frontend_ops stid135_ops = {
 	.delsys = { SYS_DVBS, SYS_DVBS2, SYS_DVBS2X, SYS_DSS, SYS_AUTO },
 	.info = {
 		.name			= "STiD135 Multistandard",
-		.frequency_min_hz	 = 950 * MHz,
+		.frequency_min_hz	 = 850 * MHz,
 		.frequency_max_hz		= 2150 * MHz,
-		.symbol_rate_min	= 10000,
+		.symbol_rate_min	= 100000,
 		.symbol_rate_max	= 520000000,
 		.caps			= FE_CAN_INVERSION_AUTO |
 						FE_CAN_FEC_AUTO       |
