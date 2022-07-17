@@ -571,10 +571,9 @@ fe_lla_error_t fe_stid135_fft(struct stv* state, u32 mode, u32 nb_acquisition, s
 	error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_GAINCONT_MODE_CONTINUOUS(path), &fld_value);
 	if (!fld_value) {
 		error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_GSTAT_PSD_DONE(path), &contmode);
-		while((contmode != TRUE) && (timeout < 40)){
+		for(timeout=0; !contmode && (timeout < 40); ++timeout){
 			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_GSTAT_PSD_DONE(path), &contmode);
 			mutex_unlock(&state->base->status_lock);
-			timeout = (u8)(timeout + 1);
 			ChipWaitOrAbort(pParams->handle_demod, 1);
 			mutex_lock(&state->base->status_lock);
 		}
@@ -613,13 +612,13 @@ fe_lla_error_t fe_stid135_fft(struct stv* state, u32 mode, u32 nb_acquisition, s
 
 		// wait for end of transfer
 		error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMSTAT_MEM_STAT(path), &memstat);
-		while ((!memstat) && (timeout < 50)) {
+		for (timeout = 0; (!memstat) && (timeout < 20); ++timeout) {
 			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMSTAT_MEM_STAT(path), &memstat);
 		 mutex_unlock(&state->base->status_lock);
 			ChipWaitOrAbort(pParams->handle_demod, 1);
 			mutex_lock(&state->base->status_lock);
 		}
-		if(timeout == 50)
+		if(timeout == 20)
 			return(FE_LLA_NODATA);
 		//dprintk("FFT %d/%d end of transfer\n", i, nb_words);
 		// read & store data to create an fft list
