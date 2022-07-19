@@ -3165,9 +3165,9 @@ static int m88rs6060_set_voltage(struct dvb_frontend*fe,
 	}
 	utmp = lnb_power << 1 | voltage_sel << 0;
 	ret = m88rs6060_update_bits(state, 0xa2, 0x03, utmp);
+	dprintk("voltage=%d lnb_power=%d voltage_sel=%d\n", voltage, lnb_power, voltage_sel);
 	if (ret)
 		goto err;
-
 	return 0;
 err:
 	dev_dbg(&client->dev, "failed=%d\n", ret);

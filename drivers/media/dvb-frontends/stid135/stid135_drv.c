@@ -995,6 +995,21 @@ fe_lla_error_t FE_STiD135_GetCarrierFrequencyOffset_(STCHIP_Info_t* hChip, enum 
 	derot = (intval1 * intval2) +
 			((intval1 * rem2) >> 12) +
 			((intval2 * (s32)rem1) >> 12);  /*only for integer calculation */
+#if 0
+	{
+
+		s64 tst = (s64)MasterClock * (s64) derot1;
+		u32 reg0, reg1;
+		tst >>= 24;
+		dprintk("CFROFFSET = %lldHz %dHz %d mclk=%dHz\n", tst, derot, derot1, MasterClock);
+#if 0
+		error |= ChipGetOneRegister(hChip, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFOEST1(Demod), &reg1);
+		error |= ChipGetOneRegister(hChip, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFOEST0(Demod), &reg0);
+		dprintk("CFROFFSET xxx: %d err=%d\n", (s32) ((reg1<<8)|reg0), error);
+#endif
+
+	}
+#endif
 
 	if (sign == 1) {
 		*carrierFrequency_p=derot;  /* positive offset */
@@ -1089,8 +1104,11 @@ fe_lla_error_t fe_stid135_set_carrier_frequency_init_(struct fe_stid135_internal
 	/* Hypothesis: master_clock=130MHz, frequency_hz=-550MHz..+650MHz
 	(-550=950-1500 and 650=2150-1500)
 	FVCO/4/12=6.2GHz/4/12=130MHz */
-
-		si_register = ((frequency_hz/PLL_FVCO_FREQUENCY)*cfr_factor)/100;
+#if 1
+	si_register = ((frequency_hz/PLL_FVCO_FREQUENCY)*cfr_factor)/100; //PLL_FVCO_FREQUENCY=6200 cfr_factor=6711
+#else
+	si_register = (((u64)frequency_hz)<<24)/ (u64) mclk;
+#endif
 		dprintk("CFR_INIT set to %d\n", si_register );
 		error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_CFRINIT2_CFR_INIT(Demod),
 															 ((u8)(si_register >> 16)));
@@ -2458,7 +2476,17 @@ static fe_lla_error_t FE_STiD135_GetDemodLock (struct stv* state, u32 TimeOutUNU
 			mutex_lock(pParams->master_lock);
 	}
 	run_time = ktime_to_ns(ktime_sub(ktime_get_coarse(), start_time))/1000000;
+#if 0
+		{
+			s32 freq;
+			fe_lla_error_t error1 = FE_LLA_NO_ERROR;
+			error1 = FE_STiD135_GetCarrierFrequencyOffset(state, state->base->ip.master_clock, &freq);
+			dprintk("%d %d %d\n", run_time, freq, symbol_rate);
+		}
+#endif
 	}
+
+
 	if(state->signal_info.has_lock) {
 		dprintk("[%d] LOCK_DEFINITIF achieved timout=%d/%d\n", state->nr+1, run_time, timeout);
 		state->signal_info.demod_locked = true;
@@ -3732,7 +3760,6 @@ fe_lla_error_t fe_stid135_get_signal_info(struct stv* state,
 	//	dprintk("signal_info: start\n");
 	if ( state->base->ip.handle_demod->Error ) {
 				error = FE_LLA_I2C_ERROR;
-			 dprintk("here\n");
 	} else {
 		{
 			bool has_carrier, has_sync, has_viterbi;
@@ -3773,14 +3800,15 @@ fe_lla_error_t fe_stid135_get_signal_info(struct stv* state,
 				error |= FE_STiD135_GetSymbolRate(state, pParams->master_clock, &(pInfo->symbol_rate));
 				error |= FE_STiD135_TimingGetOffset(state, pInfo->symbol_rate, &symbolRateOffset);
 			}
-
+#if 0
+			dprintk("CFROFFSET carrier_freq= %d => %d\n", pInfo->frequency, (s32)pInfo->frequency + (s32) carrier_frequency);
+#endif
 			if(carrier_frequency < 0) {
 				carrier_frequency *= (-1);
 				pInfo->frequency -= (u32)carrier_frequency;
 			}
 			else
 				pInfo->frequency += (u32)carrier_frequency;
-
 
 			/* Get timing loop offset */
 			if(symbolRateOffset < 0) {
@@ -11823,11 +11851,15 @@ fe_lla_error_t fe_stid135_enable_constel_display(struct stv* state, u8 measuring
 		else {
 			// Output constellation display samples at symbol rate
 			// Test bus out and constellation point
+			// activate the test bus output on pads
 			error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_C8CODEW_TOP_CTRL_TSTOUT_TEST_OUT, 1);
 			switch(demod) {
 				case FE_SAT_DEMOD_1:
+
+					//choose demod 1 (other choice is 2) for the test bus
 					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_C8CODEW_PATH_CTRL_GEN_TBUSSEL_TBUS_SELECT(1), 0);
-					//which demodulator (master demod?)
+
+					//output data from demod 1 or 2 on test bus
 					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_C8CODEW_TOP_CTRL_TSTOUT_TS, 0);
 				break;
 				case FE_SAT_DEMOD_2:
@@ -11867,8 +11899,10 @@ fe_lla_error_t fe_stid135_enable_constel_display(struct stv* state, u8 measuring
 			error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1002, 0x00555555);
 			error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1003, 0x00555555);
 			error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1003, 0x00555555);
-			// MLCK output: SoC alternate1
+
+			// MLCK output: SoC alternate function 1 for PIO0_3; rest is general purpose
 			error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1000, 0x00001000);
+			//PIO_1_0 in alternative function 4????
 			error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1103, 0x00000004);
 			// Output enable: all for test
 			error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1040, 0x3FF01F1B);
@@ -12411,91 +12445,3 @@ fe_lla_error_t get_current_llr(struct stv* state, s32 *current_llr)
 	return FE_LLA_NO_ERROR;
 
 }
-
-
-/*
-	tests
-
-	bool        has_signal; Has found something above the noise level.
-                          always set to 1 after tuning; should depend on signal level
-	bool        has_carrier; Has found a dvb signal.
-                 DMDSTATE_HEADER_MODE indicates DVBS1 or DVBS2  and DSTATUS_LOCK_DEFINITIF is set (fe_stid135_get_lock_status,
-								 FE_STiD135_GetDemodLock)
-								 DMDSTATE_HEADER_MODE indicates DVBS1 or DVBS2 irrespective of  DSTATUS_LOCK_DEFINITIF (FE_STiD135_GetFECLock),
-                 but presumably this assumes  DSTATUS_LOCK_DEFINITIF is still set
-
-	bool        has_viterbi; 	FEC inner coding (Viterbi, LDPC or other inner code) is stable.
-	               PDELSTATUS1_PKTDELIN_LOCK or VSTATUSVIT_LOCKEDVIT is set and has_carrier (fe_stid135_get_lock_status, FE_STiD135_GetFECLock)
-
-	bool        has_sync; 	Synchronization bytes was found (mpeg stream)
-	              TSSTATUS_TSFIFO_LINEOK=set (no stream errors) (fe_stid135_get_lock_status)
-
-	bool        has_lock;  All is fine (should be and of the above? In code it is NOT like that:)
-	                  FE_STiD135_GetDemodLock(state and    FE_STiD135_GetFECLock both return locked, which means that
-										has_carrier==1  and  has_viterbi==1 (FE_STiD135_WaitForLock)
-                    so some data is available but it is not necessarily valid (not has_sync). Seems superfluous
-
-	bool        has_timedout = ! has_viterbi AT INITIAL TUNE
-	bool       fec_locked = has_sync (GE_STiD135_WaitForLock)
-                        =has_viterbi (FE_STiD135_GetFECLock)
-                        =has_viterbi (FE_STiD135_Algo)
-                        =has_sync (FE_STiD135_Algo)
-
-	bool        demod_locked;
-	             DSTATUS_LOCK_DEFINITIF is set (FE_STiD135_GetDemodLock)
-               Could be associated with has_signal?
-
-
-The transport streams are available on the banks of pins PIO3, PIO4, PIO5, PIO6 and PIO7
-using the Alternative functions 1, 2, 3 or 4. However, the bank of PIO3 is also shared with
-the FSK UART bus when using Alternative function 1.
-
- while running:
-REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1000                  = 0x00000100
-PIO1_3: general purpose
-PIO1_2: alternative function 1
-PIO1_1: general purpose
-PIO1_0: general purpose
-
-
-736
-
-REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1001                  = 0x00333333
-PIO4_5:  Alternative function 3
-PIO4_4:  Alternative function 3
-PIO4_3:  Alternative function 3
-PIO4_2:  Alternative function 3
-PIO4_1:  Alternative function 3
-PIO4_0:  Alternative function 3
-
-cannot be set to alternative function 5!
-
-
-REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1002                  = 0x00333333
-PIO5_5:  Alternative function 3
-PIO5_4:  Alternative function 3
-PIO5_3:  Alternative function 3
-PIO5_2:  Alternative function 3
-PIO5_1:  Alternative function 3
-PIO5_0:  Alternative function 3
-can be set to alternative function 5!
-
-
-REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1003                  = 0x00000000
-REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1040                  = 0x003f3f04
-REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1050                  = 0x00000000
-REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1055                  = 0x00000000
-REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1060                  = 0x00000000
-REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1100                  = 0x00000000
-REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1101                  = 0x00000000
-REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1102                  = 0x00000000
-REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1103                  = 0x00000000
-REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1104                  = 0x00000000
-REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1105                  = 0x00000000
-REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1106                  = 0x00000000
-REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1107                  = 0x00000000
-REG_RSTID135_SYSCFG_SOUTH_SYSTEM_CONFIG1108                  = 0x00000205
-REG_
-
-
- */
