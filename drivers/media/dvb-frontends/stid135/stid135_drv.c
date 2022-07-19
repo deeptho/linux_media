@@ -918,9 +918,8 @@ fe_lla_error_t fe_stid135_set_symbol_rate(struct stv* state,  u32 symbol_rate)
 			((int)reg32 >> 8) & 0xFF);
 	error |= ChipSetFieldImage(hchip, reg_field0,
 			((int)reg32) & 0xFF);
-
+	//dprintk("PPP sr=%d mclk=%d reg32=0x%x\n", symbol_rate, pParams->master_clock, (int)reg32);
 	error |= ChipSetRegisters(hchip, (u16)REG_RC8CODEW_DVBSX_DEMOD_SFRINIT2(state->nr+1), 3);
-
 
 	return error;
 }
@@ -972,8 +971,9 @@ fe_lla_error_t FE_STiD135_GetCarrierFrequencyOffset_(STCHIP_Info_t* hChip, enum 
 	derot = (ChipGetFieldImage(hChip, cfrField2) << 16) +
 	(ChipGetFieldImage(hChip, cfrField1) << 8) +
 	(ChipGetFieldImage(hChip, cfrField0));
+
 	/*	compute the signed value	*/
-	derot = Get2Comp(derot,24);
+	derot = (derot<<8)>>8;
 
 	if (derot < 0) {
 		sign = 0;
