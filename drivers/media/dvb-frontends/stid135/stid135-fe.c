@@ -51,7 +51,7 @@ module_param(vglna_mode, int, 0444);
 MODULE_PARM_DESC(mode,
 		"vlglna on/off");
 
-bool fft_mode32=1;
+bool fft_mode32=0;
 module_param(fft_mode32, bool, 0644);
 MODULE_PARM_DESC(fft_mode32,
 		"0: 16 bit fft mode on; else 32 bit");
