@@ -191,7 +191,7 @@ static int ts2020_set_params(struct dvb_frontend *fe)
 	struct ts2020_priv *priv = fe->tuner_priv;
 	unsigned int utmp;
 	u32 f3db, gdiv28;
-	u16 u16tmp, value, lpf_coeff;
+	u16 u16tmp, value, lpf_coeff = 2766;
 	u8 buf[3], reg10, lpf_mxdiv, mlpf_max, mlpf_min, nlpf;
 	unsigned int f_ref_khz, f_vco_khz, div_ref, div_out, pll_n;
 	unsigned int frequency_khz = c->frequency;
@@ -231,7 +231,6 @@ static int ts2020_set_params(struct dvb_frontend *fe)
 		 f_vco_khz, pll_n, div_ref, div_out);
 
 	if (priv->tuner == TS2020_M88TS2020) {
-		lpf_coeff = 2766;
 		reg10 |= 0x01;
 		regmap_write(priv->regmap, 0x10, reg10);
 
@@ -240,7 +239,6 @@ static int ts2020_set_params(struct dvb_frontend *fe)
 		buf[1] = u16tmp & 0xff;
 		buf[2] = div_ref - 8;
 	} else {
-		lpf_coeff = 3200;
 		reg10 |= 0x0b;
 		regmap_write(priv->regmap, 0x10, reg10);
 		regmap_write(priv->regmap, 0x11, 0x40);
