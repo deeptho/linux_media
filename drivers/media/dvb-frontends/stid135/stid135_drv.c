@@ -1916,7 +1916,7 @@ fe_lla_error_t FE_STiD135_WaitForLock(struct stv* state,
 	/* Stream Merger lock status field) */
 	strMergerLockField = FLD_FC8CODEW_DVBSX_HWARE_TSSTATUS_TSFIFO_LINEOK(state->nr+1);
 	error |= FE_STiD135_GetDemodLock(state, DemodTimeOut, lock_p);
-
+#if 0
 	if (*lock_p) {
 		error |= FE_STiD135_GetFECLock(state, FecTimeOut, &lock);
 		if(fec_lock_p) {
@@ -1925,7 +1925,7 @@ fe_lla_error_t FE_STiD135_WaitForLock(struct stv* state,
 		}
 		*lock_p = *lock_p &&  lock;
 	}
-
+#endif
 
 
 	/* LINEOK check is not performed during Satellite Scan */
@@ -2383,7 +2383,6 @@ fe_lla_error_t FE_STiD135_CarrierGetQuality(STCHIP_Info_t* hChip, enum fe_stid13
 	return error;
 }
 
-
 /*****************************************************
 --FUNCTION	::	FE_STiD135_GetDemodLock
 --ACTION	::	Returns the demod lock status
@@ -2393,75 +2392,40 @@ fe_lla_error_t FE_STiD135_CarrierGetQuality(STCHIP_Info_t* hChip, enum fe_stid13
 --PARAMS OUT	::	Lock_p -> lock status, boolean
 --RETURN	::	error
 --***************************************************/
-static fe_lla_error_t FE_STiD135_GetDemodLock (struct stv* state, u32 TimeOut, BOOL *Lock_p)
+static fe_lla_error_t FE_STiD135_GetDemodLock (struct stv* state, u32 TimeOutUNUSED, BOOL *Lock_p)
 {
-	u32 symbFreq1, symbFreq2;
-	u16 symbFreqRegister;
-	//u32 symbolRate ;
-	u32 TimeOut_SymbRate, SRate_1MSymb_Sec;
-	u32 timer = 0;
+	u32 timeout=0, old_timeout;
 	s32 fld_value, slc_min, slc_max, slc_sel;
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
-	u32 MclkFreq = 0;
-	u8 timeout = 0;
 	bool has_carrier = false, has_viterbi=false, has_sync=false, has_timing_lock=false,has_lock = false;
-
+	ktime_t start_time = ktime_get_coarse();
+	u32 symbol_rate;
+	u32 srate;
+	int32_t run_time = 0;
 	struct fe_stid135_internal_param *pParams = &state->base->ip;
-	/* state machine search status field*/
-	/* Demod lock status field*/
+	while (timeout == 0 || (run_time < timeout && error == FE_LLA_NO_ERROR  && (!state->signal_info.has_lock))) {
 
-	symbFreqRegister = (u16)REG_RC8CODEW_DVBSX_DEMOD_SFR2(state->nr+1);
-
-	symbFreq1 = FLD_FC8CODEW_DVBSX_DEMOD_SFR1_SYMB_FREQ(state->nr+1);
-	symbFreq2 = FLD_FC8CODEW_DVBSX_DEMOD_SFR2_SYMB_FREQ(state->nr+1);
-
-	TimeOut_SymbRate = TimeOut;
-	vprintk("[%d] Timeout=%d\n", state->nr+1, TimeOut_SymbRate);
-	 /* SR_register = 2^16 / (12 * MCLK) */
-	//SRate_1MSymb_Sec = 0x1e5;
-	MclkFreq = pParams->master_clock;
-
-	SRate_1MSymb_Sec = (1<<16) * 1 / (12*MclkFreq/1000000);
-	vprintk("[%d] using srate dependent timeout\n", state->nr+1);
-
-	while ((timer < TimeOut_SymbRate) && (!state->signal_info.has_lock)) {
-		int old;
-		int symbolRate;
 		if (kthread_should_stop() || dvb_frontend_task_should_stop(&state->fe)) {
 			dprintk("exiting on should stop\n");
-			timer = TimeOut_SymbRate;
 			break;
 		}
 
-		old = TimeOut_SymbRate;
-		error |= ChipGetRegisters(state->base->ip.handle_demod, symbFreqRegister, 2);
-		symbolRate = (u32)
-			((ChipGetFieldImage(state->base->ip.handle_demod, symbFreq2) << 8)+
-			 (ChipGetFieldImage(state->base->ip.handle_demod, symbFreq1)));
-		if (TimeOut < DmdLock_TIMEOUT_LIMIT) {
-			TimeOut_SymbRate = TimeOut;
-		} else {
-			/* no division by 0 */
-			if (symbolRate < SRate_1MSymb_Sec)
-				symbolRate = SRate_1MSymb_Sec;
-			else if (symbolRate > (5 * SRate_1MSymb_Sec))
-				symbolRate = 5 * SRate_1MSymb_Sec;
-
-			TimeOut_SymbRate = TimeOut / (symbolRate / SRate_1MSymb_Sec);
-
-			/* no weird results */
-			if (TimeOut_SymbRate < DmdLock_TIMEOUT_LIMIT)
-				TimeOut_SymbRate = DmdLock_TIMEOUT_LIMIT ;
-			else if (TimeOut_SymbRate > TimeOut)
-				TimeOut_SymbRate = TimeOut ;
-
-			/* The new timeout is between 200 ms and original
-				 TimeOut */
+		old_timeout = timeout;
+		if (timeout ==0) {
+			error |=  FE_STiD135_GetSymbolRate(state, state->base->ip.master_clock, &symbol_rate);
+			srate = symbol_rate/1000;
+			if(srate < 300)
+				timeout = 10000;
+			else if (srate < 1500)
+			timeout = 3000000/srate;
+			else
+				timeout = 2000;
+			if (timeout < old_timeout)
+				timeout = old_timeout;
 		}
-		if(old != TimeOut_SymbRate ) {
-			vprintk("[%d] timeout changed to %d\n", state->nr+1,  TimeOut_SymbRate);
-		}
-
+			if(old_timeout != timeout ) {
+				dprintk("[%d] timeout changed from %d to %d srate=%d\n", state->nr+1,  old_timeout, timeout, symbol_rate);
+			}
 		error |= fe_stid135_get_lock_status(state, NULL, NULL, NULL);
 		if(! has_carrier && state->signal_info.has_carrier) {
 			has_carrier = true;
@@ -2485,21 +2449,18 @@ static fe_lla_error_t FE_STiD135_GetDemodLock (struct stv* state, u32 TimeOut, B
 		if(! has_timing_lock && state->signal_info.has_timing_lock) {
 			has_timing_lock = true;
 			state->signal_info.timing_lock_time = ktime_sub(ktime_get_coarse(), state->tune_time);
+			timeout += 3000;
 		}
-
-
-	//state->signal_info.has_carrier = lock;
 
 	if( !state->signal_info.has_lock ) {
 			mutex_unlock(pParams->master_lock);
 			ChipWaitOrAbort(state->base->ip.handle_demod, 10);	/* wait 10ms */
 			mutex_lock(pParams->master_lock);
 	}
-	//report(state);
-	timer += 10;
+	run_time = ktime_to_ns(ktime_sub(ktime_get_coarse(), start_time))/1000000;
 	}
 	if(state->signal_info.has_lock) {
-		vprintk("[%d] LOCK_DEFINITIF achieved timout=%d/%d\n", state->nr+1, timer, TimeOut_SymbRate);
+		dprintk("[%d] LOCK_DEFINITIF achieved timout=%d/%d\n", state->nr+1, run_time, timeout);
 		state->signal_info.demod_locked = true;
 		/* We have to wait for demod locked before reading ANNEXEM field (cut 1 only) */
 		error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS6_SIGNAL_ANNEXEM(state->nr+1), &fld_value);
@@ -2531,7 +2492,7 @@ static fe_lla_error_t FE_STiD135_GetDemodLock (struct stv* state, u32 TimeOut, B
 			}
 		}
 	} else {
-		vprintk("[%d] timedout %d/%d\n", state->nr+1, timer, TimeOut_SymbRate);
+		dprintk("[%d] timedout %d/%d\n", state->nr+1, run_time, timeout);
 		state->signal_info.lock_time =ktime_sub(ktime_get_coarse(), state->tune_time);
 	}
 	*Lock_p = state->signal_info.has_lock;
@@ -2884,7 +2845,7 @@ fe_lla_error_t	fe_stid135_search(struct stv* state,
 	if(error1)
 		dprintk("[%d] error=%d\n", state->nr+1, error1);
 
-#ifdef USER2
+#ifdef USER2 //code not active!
 	if(((pSearch->search_algo == FE_SAT_COLD_START) || (pSearch->search_algo == FE_SAT_WARM_START))
 		&& (pSearch->symbol_rate >= pParams->master_clock >> 1)) { /* if SR >= MST_CLK / 2 */
 		error |= (error1=ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_PKTDELIN_MATCST1(demod), 0x70));
@@ -11243,7 +11204,7 @@ fe_lla_error_t fe_stid135_read_bin_from_psd_mem(struct fe_stid135_internal_param
 	error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEBUG1_MODE_FULL(FE_SAT_DEMOD_1), &fld_value);
 	if(fld_value == 1) { // 32-bit mode
 		if((bin_max%4) == 0) { // case bin_max divisable by 4 => 2 memory access needed
-			if(bin_max == 0) {
+			if(bin_max == 0) { //special case for bin 0
 				error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMADDR1_MEM_ADDR(FE_SAT_DEMOD_1), (((nb_samples-1)/4) >> 8) & 0x03);
 				error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMADDR0_MEM_ADDR(FE_SAT_DEMOD_1), ((nb_samples-1)/4) & 0xFF);
 				error |= ChipSetRegisters(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_MEMADDR1(FE_SAT_DEMOD_1), 2);
@@ -12351,6 +12312,7 @@ fe_lla_error_t get_current_llr(struct stv* state, s32 *current_llr)
 {
 	s32 max_llr_allowed, raw_bit_rate;
 	s32 fld_value[2];
+	bool vcm;
 	struct fe_stid135_internal_param * pParams = &state->base->ip;
 	// Bit rate = Mclk * tsfifo_bitrate / 16384
 	ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSBITRATE1_TSFIFO_BITRATE(state->nr+1), &(fld_value[0]));
@@ -12399,7 +12361,7 @@ fe_lla_error_t get_current_llr(struct stv* state, s32 *current_llr)
 		else
 			dprintk("[%d] LLR unknown\n", state->nr+1);
 
-		bool vcm = !((state->signal_info.matype >> 4) & 1);
+		vcm = !((state->signal_info.matype >> 4) & 1);
 		if(false && vcm) //todo
 			fe_stid135_set_maxllr_rate(state, 250); //disable limits; test above (rai multistreams) could still be wrong in case multiple modcodes
 		else if((*current_llr/1000)<80000)
