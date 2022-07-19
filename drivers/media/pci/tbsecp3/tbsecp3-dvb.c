@@ -270,7 +270,7 @@ static int tbs6304_read_mac(struct tbsecp3_adapter *adap)
 	if(ret!=0)
 	{
 		memcpy(adap->dvb_adapter.proposed_mac, rdbuffer,6);
-		printk("adapter %d ,mac address: %x,%x,%x,%x,%x,%x \n",adap->dvb_adapter.num,rdbuffer[0],rdbuffer[1],rdbuffer[2],rdbuffer[3],rdbuffer[4],rdbuffer[5]);
+		//printk("adapter %d ,mac address: %x,%x,%x,%x,%x,%x \n",adap->dvb_adapter.num,rdbuffer[0],rdbuffer[1],rdbuffer[2],rdbuffer[3],rdbuffer[4],rdbuffer[5]);
 	}
 
 	return ret;
@@ -545,7 +545,10 @@ static int set_mac_address(struct tbsecp3_adapter *adap)
 			adap->nr);
 	} else {
 		dev_info(&dev->pci_dev->dev,
-			"MAC address %pM\n", adap->dvb_adapter.proposed_mac);
+						 "adap=%p dvb_adap=%p MAC address %pM \n", adap, &adap->dvb_adapter,
+						 adap->dvb_adapter.proposed_mac);
+		dev->mac_address =0;
+		memcpy(&dev->mac_address, adap->dvb_adapter.proposed_mac, sizeof(adap->dvb_adapter.proposed_mac));
 	}
 	return 0;
 };
@@ -2190,6 +2193,7 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 	}
 	strlcpy(adapter->fe->ops.info.name, dev->info->name, sizeof(adapter->fe->ops.info.name));
 	strlcpy(adapter->fe->ops.info.card_name, dev->info->name, sizeof(adapter->fe->ops.info.card_name));
+	adapter->fe->ops.info.mac_address = dev->mac_address;
 	strlcpy(adapter->fe->ops.info.card_address, dev_name(&dev->pci_dev->dev), sizeof(adapter->fe->ops.info.card_address));
 	snprintf(adapter->fe->ops.info.adapter_address, sizeof(adapter->fe->ops.info.adapter_address),
 					 "%s:%d", adapter->fe->ops.info.card_address, adapter->nr);
@@ -2226,6 +2230,7 @@ int tbsecp3_dvb_init(struct tbsecp3_adapter *adapter)
 		struct dmx_frontend *fe_hw;
 		struct dmx_frontend *fe_mem;
 		int ret;
+		strlcpy(dev->card_address, dev_name(&dev->pci_dev->dev), sizeof(dev->card_address));
 		ret = dvb_register_adapter(adap, "TBSECP3 DVB Adapter",
 						THIS_MODULE,
 						&adapter->dev->pci_dev->dev,

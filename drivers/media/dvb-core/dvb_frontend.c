@@ -1046,7 +1046,6 @@ static void dvb_frontend_get_frequency_limits(struct dvb_frontend *fe,
 								u32 *freq_min, u32 *freq_max,
 								u32 *tolerance)
 {
-	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
 	u32 tuner_min = fe->ops.tuner_ops.info.frequency_min_hz;
 	u32 tuner_max = fe->ops.tuner_ops.info.frequency_max_hz;
 	u32 frontend_min = fe->ops.info.frequency_min_hz;
@@ -1108,6 +1107,8 @@ static int dvb_frontend_check_parameters(struct dvb_frontend *fe)
 	u32 freq_max;
 	bool need_nonzero_symbol_rate= c->algorithm != ALGORITHM_BLIND;
 	switch(c->algorithm) {
+	default:
+		break;
 	case ALGORITHM_WARM:
 	case ALGORITHM_BLIND:
 	case ALGORITHM_BLIND_BEST_GUESS:
@@ -2915,9 +2916,6 @@ static int dtv_get_constellation(struct dvb_frontend *fe, struct dtv_fe_constell
 
 static int dtv_get_matype_list(struct dvb_frontend *fe, struct dtv_matype_list* user)
 {
-	int err = 0;
-	int stream_id;
-	int n=0;
 	//dprintk("constellation retrieved user->num_samples=%d\n", user->num_samples);
 	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
 
@@ -3190,8 +3188,7 @@ static int dvb_frontend_handle_ioctl(struct file *file,
 	case FE_GET_EXTENDED_INFO: {
 		struct dvb_frontend_extended_info *info = parg;
 		memset(info, 0, sizeof(*info));
-
-		strscpy(info->name, fe->ops.info.name, sizeof(info->name));
+		info->mac_address = fe->ops.info.mac_address;
 		strscpy(info->card_address, fe->ops.info.card_address, sizeof(info->card_address));
 		strscpy(info->adapter_address, fe->ops.info.adapter_address, sizeof(info->adapter_address));
 		strscpy(info->card_name, fe->ops.info.card_name, sizeof(info->card_name));

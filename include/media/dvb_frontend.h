@@ -354,6 +354,7 @@ struct dvb_frontend_internal_info {
 	char	adapter_name[64];
 	char	card_address[64];
 	char	adapter_address[64];
+	uint64_t mac_address;
 #endif
 	char	name[64];
 	u32	frequency_min_hz;

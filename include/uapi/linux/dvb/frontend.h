@@ -172,7 +172,8 @@ struct dvb_frontend_extended_info {
 	char       adapter_name[64]; //human readable name of adapter
 	char       card_address[64]; //name of the linux bus to which the device is attached (e.g. pci-express slot)
 	char       adapter_address[64]; //unique name of adapter depending on pci-express address and physical input
-	char       name[64];
+	char       unused[64-8];
+	u64      mac_address;
 	u32      frequency_min;
 	u32      frequency_max;
 	u32      frequency_stepsize;

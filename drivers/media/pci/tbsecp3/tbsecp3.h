@@ -204,7 +204,8 @@ struct tbsecp3_dev {
 
 	/* i2c */
 	struct tbsecp3_i2c i2c_bus[TBSECP3_MAX_I2C_BUS];
-
+	char card_address[64]; //string to uniquely identify the card on the system; typically dev_name(&dev->pci_dev->dev)
+	u64 mac_address;
 	u8 mac_num;
 };
 
