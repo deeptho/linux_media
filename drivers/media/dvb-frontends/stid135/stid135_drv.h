@@ -637,9 +637,7 @@ fe_lla_error_t FE_STiD135_TunerStandby(STCHIP_Info_t* TunerHandle, FE_OXFORD_Tun
 
 fe_lla_error_t fe_stid135_get_band_power_demod_not_locked(struct stv* state, s32 *pband_rf);
 
-fe_lla_error_t estimate_band_power_demod_for_fft(struct stv* state,
-																								 u8 TunerNb,
-																								 s32 *Pbandx1000, bool* double_correction);
+fe_lla_error_t estimate_band_power_demod_for_fft(struct stv* state, u8 TunerNb, s32 *Pbandx1000);
 
 fe_lla_error_t fe_stid135_get_cut_id(struct fe_stid135_internal_param* pParams, enum device_cut_id *cut_id);
 

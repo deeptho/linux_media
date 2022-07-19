@@ -1,7 +1,11 @@
 /*
  * This file is part of STiD135 OXFORD LLA
  *
- * Copyright (c) <2020>-<2021>, Deep Thought <deeptho@gmail.com> Make this code actually work in the linux drivers
+ * Copyright (c) <2020>-<2022>, Deep Thought <deeptho@gmail.com>:
+ *     Make this code actually work in the linux drivers
+ *     Combine results in overall spectrum
+ *     Interface with dvbapi code, and making it interruptible
+ *     Optimize for speed
  * Copyright (c) <2014>-<2018>, STMicroelectronics - All Rights Reserved
  * Author(s): Mathias Hilaire (mathias.hilaire@st.com), Thierry Delahaye (thierry.delahaye@st.com) for STMicroelectronics.
  *
@@ -480,6 +484,137 @@ fe_lla_error_t fe_stid135_term_fft(struct stv* state, s32 Reg[60])
 	return error;
 }
 
+
+/*
+	Read a spectrum from the internal ram, by copying it into registers and then reading those
+ */
+
+static fe_lla_error_t fe_stid135_read_psd_mem(struct stv* state, s32* rf_level,
+																			 s32 start_idx, s32 end_idx, bool mode_32bit, s32 fft_size)
+{
+	struct fe_stid135_internal_param *pParams = &state->base->ip;
+	enum fe_stid135_demod path = state->nr+1;
+	s32 idx, line;
+	s32 val[4]= { 0 }, val_max;
+	s32 memstat=0;
+	u32 exp;
+	s32 fld_value;
+	int timeout = 0;
+	fe_lla_error_t error = FE_LLA_NO_ERROR;
+	int log_samples_per_line;
+	s32 start_line;
+	s32 end_line ;
+#ifdef	DEBUG_TIME
+	ktime_t start_time = ktime_get();
+#endif
+
+	if(path > FE_SAT_DEMOD_4)
+		return(FE_LLA_BAD_PARAMETER);
+
+	error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_EXPMAX_EXP_MAX(path), &fld_value);
+	dprintk("FFT read_psd_mem path=%d mode_32bit=%d fft_size=%d exp=%d\n", path, mode_32bit, fft_size, exp);
+
+	exp = (u32)fld_value;
+#ifdef DEBUG_TIME
+	{
+		ktime_t now = ktime_get();
+		ktime_t delta = ktime_sub(now, start_time);
+		start_time = now;
+		//dprintk("init took %lldms\n", delta/1000000);
+		//init took 0ms
+	}
+#endif
+	log_samples_per_line = (mode_32bit ? 2: 3);
+	start_line = (fft_size -1 - (end_idx -1)) >> log_samples_per_line;
+	end_line = (fft_size -1 - (start_idx - 1) + (1 << log_samples_per_line) -1 ) >> log_samples_per_line;
+
+	/*8*start_line and 8*end_line index a line of internal memory containing 16 bytes of data
+		all lines from start_line to end_line-1 must be read
+
+		Note that spectrum data is stored in reverse order in memory
+		The loop over lines below starts at the end of the spectrum and ends at the beginning
+
+		idx is the index of a sample in internal memory  (stored as 4 byte or 2 byte integer)
+		fft_size -1 - idx is the corresponding index in the output array (4 byte per sample)
+		line points to memory line in which idx is located
+	 */
+	for(idx = fft_size -1 - (end_idx -1), line=start_line; line < end_line; ++line) {
+		s32 start_register = idx - (line << log_samples_per_line);
+		s32 end_register;
+		s32 num_registers = (1 << log_samples_per_line) - start_register;
+		s32 reg;
+		if (num_registers  > end_idx - idx)
+			num_registers = end_idx - idx; //can happen at end of range
+		end_register = start_register + num_registers;
+
+		if (idx  > fft_size -1 - start_idx) {
+			dprintk("idx out of range: idx=%d\n", idx);
+			break;
+		}
+#if 0
+		dprintk("reading line=%d idx=%d o_idx=%d reg=%d-%d\n", line, idx, fft_size -1 -idx, start_register, end_register);
+		/*Request read of 16 bytes from PSD memory into 8 2-byte registers (4 samples of 4 bytes each in 32 bit mode;
+			8 samples of 2 bytes in 126 mode
+		)
+		*/
+#endif
+		error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMADDR1_MEM_ADDR(path),
+															 (line>>8) & 0x03);
+		error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMADDR0_MEM_ADDR(path),
+															 (line & 0xff));
+		error |= ChipSetRegisters(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_MEMADDR1(path), 2);
+
+		// wait for end of transfer
+		error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMSTAT_MEM_STAT(path), &memstat);
+		for (timeout = 0; (!memstat) && (timeout < 20); ++timeout) {
+			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMSTAT_MEM_STAT(path), &memstat);
+		 mutex_unlock(&state->base->status_lock);
+			ChipWaitOrAbort(pParams->handle_demod, 1);
+			mutex_lock(&state->base->status_lock);
+		}
+
+		if(timeout == 20)
+			return FE_LLA_NODATA;
+
+		error |= ChipGetRegisters(pParams->handle_demod, (u16)(REG_RC8CODEW_DVBSX_DEMOD_MEMVA01(path) + (4 * 0)), 16);
+		//Reads VA01, VA0i, VA11, VA10; accessed from cache below for jjj=0
+		//Reads VA21, VA21, VA31, VA30 accessed from caDXche below for jjj=2
+		//Reads VA31, VA41, VA51, VA50 accessed from cache below for jjj=3
+		//Reads VA61, VA61, VA71, VA70 accessed from cache below for jjj=4
+		for(reg = start_register; reg < end_register; ++reg, idx++) {
+			//read one sample
+			//Read 2 16-bit registers at a time, corresponding to 1 32-bit sample
+			if ( mode_32bit) {
+				val[3] = ChipGetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMVA01_MEM_VAL0(path)
+																	 + ((4 * reg) << 16));
+				val[2] = ChipGetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMVA00_MEM_VAL0(path)
+																	 + ((4 * reg) << 16));
+				val[1] = ChipGetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMVA11_MEM_VAL1(path)
+																	 + ((4 * reg) << 16));
+				val[0] = ChipGetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMVA10_MEM_VAL1(path)
+																	 + ((4 * reg) << 16));
+				//PSD=val*3/64 dB
+				val_max = ((((val[3] & 0x7) << 24) + (val[2] << 16) + (val[1] << 8) + val[0]) * 3000*XtoPowerY(2, exp))/64;
+			} else { // 16-bit mode
+				val[3] = ChipGetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMVA01_MEM_VAL0(path)
+																	 + ((2 * reg) << 16)); // 16 = address bus width for demod
+				val[2] = ChipGetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMVA00_MEM_VAL0(path)
+																	 + ((2 * reg) << 16));
+				val_max = (((val[3] << 8) + (val[2])) * 3000*XtoPowerY(2, exp))/64;
+			}
+			if (idx <0 || idx > fft_size -1) {
+				dprintk("index out of range: idx=%d\n", idx);
+			} else {
+				rf_level[fft_size -1 - idx ] = val_max; 	// fill the table back to front
+			}
+		}
+	}
+	// Calculate beginning of data table
+	return error;
+}
+
+
+
 /*****************************************************
 --FUNCTION	::	fe_stid135_fft
 --ACTION	::	Do an FFT with the hardware cell of the chip
@@ -487,33 +622,32 @@ fe_lla_error_t fe_stid135_term_fft(struct stv* state, s32 Reg[60])
 			Path -> number of the demod
 			Mode -> 1/2/3/4/5 (modified the number of points of the fft)
 			Nb_acquisition -> number of acquisition for an fft ( modified the precision of the fft)
-			Frq -> frequency in Hz
-			Range (in Hz)
+			Frq -> Center frequency in Hz
+			Range -> Bandwith (difference between highest and lowest frequency capture by fft) in Hz
 			Tab[] -> empty table of data
-			Begin -> pointer on an empty u32
+	only data in [start_idx, end_idx[ will actually be retrieved
+
 --PARAMS OUT	::	Tab[] -> table of fft return data
 			Begin -> first value on table of data
 --RETURN	::	Error (if any)
 --***************************************************/
 fe_lla_error_t fe_stid135_fft(struct stv* state, u32 mode, u32 nb_acquisition, s32 freq,
-															u32 range, u32 *tab, u32* begin, s32 buffer_size)
+															u32 range, s32* rf_level, s32 buffer_size,
+															s32 start_idx, s32 end_idx)
 {
 	struct fe_stid135_internal_param *pParams = &state->base->ip;
 	enum fe_stid135_demod path = state->nr+1;
-
-	u32 nb_words =0;
-	s32 val[4]= { 0 }, val_max;
-	u32 guard=12345;
-	s32 jjj=0, iii=0, bin=0;
 	s32 f;
-	s32 memstat=0, contmode =0;
-	s32 nbr_pts =0;
-	u32 exp;
+	s32 contmode =0;
 	s32 fld_value;
+	s32 fft_size;
 	int timeout = 0;
 	bool mode_32bit = false;
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	const u16 cfr_factor = 6711; // 6711 = 2^20/(10^6/2^6)*100
+#ifdef	DEBUG_TIME
+	ktime_t start_time = ktime_get();
+#endif
 	dprintk("FFT start path=%d\n", path);
 	if(path > FE_SAT_DEMOD_4)
 		return(FE_LLA_BAD_PARAMETER);
@@ -562,7 +696,15 @@ fe_lla_error_t fe_stid135_fft(struct stv* state, u32 mode, u32 nb_acquisition, s
 	// start acquisition
 	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_GCTRL_UFBS_RESTART(path), 1);
 	mutex_unlock(&state->base->status_lock);
-
+#ifdef	DEBUG_TIME
+	{
+	ktime_t now = ktime_get();
+	ktime_t delta = ktime_sub(now, start_time);
+	start_time = now;
+	dprintk("preparing took %lldus\n", delta/1000);
+	//preparing took 2514us
+	}
+#endif
 	WAIT_N_MS(5);
 	mutex_lock(&state->base->status_lock);
 	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_GCTRL_UFBS_RESTART(path), 0);
@@ -578,100 +720,34 @@ fe_lla_error_t fe_stid135_fft(struct stv* state, u32 mode, u32 nb_acquisition, s
 			mutex_lock(&state->base->status_lock);
 		}
 	}
-	//dprintk("FFT calculate memory readout range\n");
-	// calculate memory readout range
-	nbr_pts = 1<< (13-mode);
-
+#ifdef	DEBUG_TIME
+	{
+		ktime_t now = ktime_get();
+		ktime_t delta = ktime_sub(now, start_time);
+		start_time = now;
+		dprintk("waiting for fft to finish took %lldms\n", delta/1000000);
+		//waiting for fft to finish took 31ms (including the initial 5ms sleep)
+	}
+#endif
+	fft_size = 1<< (13-mode);
 	error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEBUG1_MODE_FULL(path), &fld_value);
 	if(fld_value == 1) {
 		//ask to read memory in terms if 32bit words
 		mode_32bit = true;
-		nb_words = ((u32)1<<(10-mode+1));     // memory size N/8 for memory readout
 	} else if(fld_value == 0) { // 16-bit mode
 		//ask to read memory in terms if 16bit words
 		mode_32bit = false;
-		nb_words = ((u32)1<<(10-mode));     // memory size N/8 for memory readout
 	}
-	dprintk("mode =%d/%d 32bit=%d nbr_pts=%d\n", mode, fft_mode32, mode_32bit, nbr_pts);
-	//n_words =128 nbr_pts=512
-	error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_EXPMAX_EXP_MAX(path), &fld_value);
-	dprintk("error=%d\n", error);
-	exp = (u32)fld_value;
-
-	for (iii=0; iii<nb_words; iii++)	{   // set the FFT memory address in multiples of words
-#if 0
-		WAIT_N_MS(5);
-#else
-		//WAIT_N_MS(1);
-#endif
-
-		//Read 16 bytes from PSD memory into 8 2-byte registers (4 samples of 4 bytes each)
-		error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMADDR1_MEM_ADDR(path), (iii>>8) & 0x03);
-		error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMADDR0_MEM_ADDR(path), (iii & 0xff));
-		error |= ChipSetRegisters(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_MEMADDR1(path), 2);
-
-		// wait for end of transfer
-		error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMSTAT_MEM_STAT(path), &memstat);
-		for (timeout = 0; (!memstat) && (timeout < 20); ++timeout) {
-			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMSTAT_MEM_STAT(path), &memstat);
-		 mutex_unlock(&state->base->status_lock);
-			ChipWaitOrAbort(pParams->handle_demod, 1);
-			mutex_lock(&state->base->status_lock);
-		}
-		if(timeout == 20)
-			return(FE_LLA_NODATA);
-		//dprintk("FFT %d/%d end of transfer\n", i, nb_words);
-		// read & store data to create an fft list
-#if 0
-		error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEBUG1_MODE_FULL(path), &fld_value);
-		if(fld_value==0)
-			dprintk("BUG!!!! 16 bit mode guard=%d\n", guard);
-#endif
-			error |= ChipGetRegisters(pParams->handle_demod, (u16)(REG_RC8CODEW_DVBSX_DEMOD_MEMVA01(path) + (4 * 0)), 16);
-				//Reads VA01, VA0i, VA11, VA10; accessed from cache below for jjj=0
-				//Reads VA21, VA21, VA31, VA30 accessed from caDXche below for jjj=2
-				//Reads VA31, VA41, VA51, VA50 accessed from cache below for jjj=3
-				//Reads VA61, VA61, VA71, VA70 accessed from cache below for jjj=4
-		if(mode_32bit) { // 32-bit mode
-
-			for (jjj=0; jjj<4; jjj++) {
-				//Read 2 16-but registers at a time, corresponding to 1 32-bit sample
-				val[3] = ChipGetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMVA01_MEM_VAL0(path) + ((4 * jjj) << 16)); // 16 = address bus width for demod
-				val[2] = ChipGetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMVA00_MEM_VAL0(path) + ((4 * jjj) << 16));
-				val[1] = ChipGetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMVA11_MEM_VAL1(path) + ((4 * jjj) << 16));
-				val[0] = ChipGetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMVA10_MEM_VAL1(path) + ((4 * jjj) << 16));
-#if 0
-				val_max = STLog10(((val[3] & 0x7) << 24) + (val[2] << 16) + (val[1] << 8) + val[0])
-					+3010* exp;
-#else
-				//PSD=val*3/64 dB
-				val_max = ((((val[3] & 0x7) << 24) + (val[2] << 16) + (val[1] << 8) + val[0]) * 3000*XtoPowerY(2, exp))/64;
-#endif
-				bin = (u32)(iii*4+jjj);
-				if(nbr_pts-bin-1 < 0 || nbr_pts-bin-1 >= buffer_size)
-					dprintk("BUG!!!! nbr_pts-bin-1=%d max=%d i=%d j=%d guard=%d\n", nbr_pts-bin-1, buffer_size, iii,jjj,
-									guard);
-				tab[nbr_pts-bin-1] = (u32)val_max; 	// fill the table back to front
-			}
-		} else { // 16-bit mode
-			// read temporary memory
-			for (jjj=0; jjj<8; jjj++) {
-				val[3] = ChipGetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMVA01_MEM_VAL0(path) + ((2 * jjj) << 16)); // 16 = address bus width for demod
-				val[2] = ChipGetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMVA00_MEM_VAL0(path) + ((2 * jjj) << 16));
-#if 0
-				val_max = STLog10((val[3] << 8) + val[2]) + 3010*exp;
-#else
-				val_max = (((val[3] << 8) + (val[2])) * 3000*XtoPowerY(2, exp))/64;
-#endif
-				bin = (u32)(iii*8+jjj);
-				if(nbr_pts - bin-1 < 0 || bin >= buffer_size)
-					dprintk("BUG!!!! bin=%d max=%d\n", bin, buffer_size);
-				else
-					tab[nbr_pts-bin-1] = (u32)val_max; 	// fil the table back to front; unit is 0.001dB
-			}
-		}
+	error |= fe_stid135_read_psd_mem(state, rf_level,  start_idx, end_idx, mode_32bit, fft_size);
+#ifdef	DEBUG_TIME
+	{
+		ktime_t now = ktime_get();
+		ktime_t delta = ktime_sub(now, start_time);
+		start_time = now;
+		dprintk("read_psd_mem took %lldms\n", delta/1000000);
+		//waiting for fft to finish took 31ms (including the initial 5ms sleep)
 	}
-	//dprintk("FFT empty hardware fft\n");
+#endif
 	// Empty hardware fft
 	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMADDR1_MEM_ADDR(path), 0x00);
 	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMADDR0_MEM_ADDR(path), 0x00);
@@ -679,27 +755,40 @@ fe_lla_error_t fe_stid135_fft(struct stv* state, u32 mode, u32 nb_acquisition, s
 	//dprintk("FFT sleep down fft\n");
 	// Sleep down hardware fft
 	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_GCTRL_UFBS_RESTART(path), 1);
-
-	// Calculate beginning of data table
-	*begin = (u32)(nbr_pts-1-bin);
-	return(error);
+	return error;
 }
 
 
 /*
-	center_freq and range in kHz
+	Input:
+	  center_freq in kHz
+	  range in kHz: bandwith of the fft scan (bin index 0 corresponds to center_freq -range/2,
+	                bin_index fft_size -1 corresponds to center_freq + range/2)
+    fft_size: length of fft; power of 2 (typically 512)
+    mode: integer such that fft_size == 1 << (13-mode)
+	  start_idx, end_idx
+	     only data for frequencies with bin index in [start_idx, end_idx[ will actually be retrieved
+		   other returned values will be untouched. Frequency components are ordered w.r.t. increasing frequency
+    lo_frequency_hz in Hz: frequency of the localk oscillator 1550000kHz
+       the chip itself refers tuning frequencies to this value. A physical frequency of 1.55Ghz corresponds
+		   to a chip frequency of 0
+	  pbandx1000: average band power deduced from RF AGC
+	Output:
+	  freq[fft_size]: frequencies of spectral components
+	  rf_level[fft_size]: strenngth of spectral components in millidB
  */
 static int stid135_get_spectrum_scan_fft_one_band(struct stv *state,
 																									s32 center_freq, s32 range,
 																									s32 lo_frequency_hz,
+																									int fft_size, int mode, s32 pbandx1000,
+																									s32 start_idx, s32 end_idx,
 																									u32* freq,
-																									s32* rf_level,
-																									int fft_size, int mode, s32 pbandx1000, bool double_correction)
+																									s32* rf_level
+																									)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	//	s32 Pbandx1000;
 	u32 nb_acquisition = 255; //average 1 samples
-	u32 begin =0;
 	int i;
 	int a=3;
 	s32 delta;
@@ -709,11 +798,11 @@ static int stid135_get_spectrum_scan_fft_one_band(struct stv *state,
 #endif
 	mutex_lock(&state->base->status_lock);
 	error = fe_stid135_fft(state, mode, nb_acquisition,
-												 center_freq*1000 - lo_frequency_hz, range*1000, rf_level, &begin, fft_size);
+												 center_freq*1000 - lo_frequency_hz, range*1000, rf_level, fft_size,
+												 start_idx, end_idx);
 	mutex_unlock(&state->base->status_lock);
 	pbandx1000 += mode*6020; //compensate for FFT number of bins: 20*log10(2)
 	delta = 10*(3000 + STLog10(range) - STLog10(fft_size)); //this is a power spectral density range*1000/fft_size is the bin width in Hz
-	//dprintk("Pbandx1000=%d error=%d\n", Pbandx1000, error);
 
 	for(i=0; i< fft_size; ++i) {
 		s32 f = ((i-(signed)fft_size/2)*range)/(signed)fft_size +center_freq; //in kHz
@@ -723,16 +812,11 @@ static int stid135_get_spectrum_scan_fft_one_band(struct stv *state,
 
 		correction1000 = (s32)(correction1000*1000/600);
 		correction1000 = (s32) (correction1000 * correction1000/1000);
-		if(double_correction)
-			correction1000 += correction1000;
-
 		rf_level[i] += pbandx1000 - delta +correction1000;
 	}
 
 	if(fft_size/2-a<0 || fft_size/2+a>= fft_size)
 		dprintk("BUG!!!! a=%d fft_size=%d\n", a, fft_size);
-	if(begin==1)
-		rf_level[0] = rf_level[1];
 	for(i=-a+1; i<a; ++i)
 		rf_level[fft_size/2+i] = (rf_level[fft_size/2-a] + rf_level[fft_size/2+a])/2;
 	return error;
@@ -763,14 +847,16 @@ int get_spectrum_scan_fft(struct dvb_frontend *fe)
 	s32 end_frequency = p->scan_end_frequency;
 	//s32 start_idx;
 	s32 pbandx1000;
-	bool double_correction;
 	s32 useable_samples2;
 	s32 lost_samples2;
 	s32 min_correction[2];
 	s32 max_correction[2];
 	s32 sum_len;
 	s32 sum_correction;
-
+#ifdef	DEBUG_TIME
+	ktime_t start_time;
+#endif
+	s32 start_idx, end_idx;
 	ss->spectrum_present = false;
 	if(p->scan_end_frequency < p->scan_start_frequency) {
 		vprintk("FULLY DONE\n");
@@ -784,14 +870,16 @@ int get_spectrum_scan_fft(struct dvb_frontend *fe)
 	ss->fft_size =  (p->scan_fft_size>0) ? p->scan_fft_size : 512;
 	if(ss->fft_size >= 4096)
 		ss->fft_size = 4096;
+	/*compute mode such that fft_size <= 1 << (13-mode)
+		So 1 << (13-mode) is the smallest power of 2 larger than or equal to fft_size
+	*/
 	for(mode=1;mode<=5; ++mode) {
-		table_size >>=1;
+		table_size >>=1; // 1<<(13-mode)
 		if(table_size <= ss->fft_size)
 			break;
 	}
 	if(ss->fft_size != table_size) {
-		dprintk("Error: fft_size should be power of 2\n");
-		return -1;
+		dprintk("Error: fft_size should be power of 2: changing from %d to %d\n", table_size, ss->fft_size);
 	}
 	ss->fft_size = table_size;
 
@@ -837,9 +925,19 @@ int get_spectrum_scan_fft(struct dvb_frontend *fe)
 	}
 	mutex_lock(&state->base->status_lock);
 	print_spectrum_scan_state(&state->spectrum_scan_state);
+#ifdef	DEBUG_TIME
+	start_time = ktime_get();
 	error = fe_stid135_init_fft(state, mode, Reg);
+	{
+	ktime_t now = ktime_get();
+	ktime_t delta = ktime_sub(now, start_time);
+	start_time = now;
+	dprintk("stid135_init took %lldus\n", delta/1000);
+	//preparing took 2514us
+	}
+#endif
 
-	error |= estimate_band_power_demod_for_fft(state, state->rf_in+1, &pbandx1000, &double_correction);
+	error |= estimate_band_power_demod_for_fft(state, state->rf_in+1, &pbandx1000);
 	mutex_unlock(&state->base->status_lock);
 
 	if(error) {
@@ -862,15 +960,21 @@ int get_spectrum_scan_fft(struct dvb_frontend *fe)
 			dprintk("exiting on should stop\n");
 			break;
 		}
+		start_idx = lost_samples2 -5;
+		end_idx = ss->fft_size-lost_samples2 +5;
 		error = stid135_get_spectrum_scan_fft_one_band(state, center_freq, ss->range,
 																									 ss->lo_frequency_hz,
-																									 temp_freq, temp_rf_level,
-																									 ss->fft_size, mode, pbandx1000, double_correction);
+																									 ss->fft_size, mode, pbandx1000,
+																									 start_idx, end_idx, temp_freq, temp_rf_level);
 		if(error) {
 			dprintk("Error=%d\n", error);
 			goto _end;
 		}
-
+		/* correct spectrum to compensate for discontinuities from band to band, which may arise
+			 due to differences in AGC and knowing AGC onlt with limited precision.
+			 The current band is corrected such that the average spectral value in its low frequency region
+			 equals the average spectral value of the high frequency range of the last (lower in frequency) band
+		*/
 		current_avg =0;
 		for(i=lost_samples2-5 ; i < lost_samples2+5 ; ++i)
 			current_avg += temp_rf_level[i];
@@ -881,6 +985,7 @@ int get_spectrum_scan_fft(struct dvb_frontend *fe)
 			ss->spectrum[idx] = temp_rf_level[i] + correction;
 		}
 
+		/* compute the mimimal correction applied over all bands, and also the second to lowest correction*/
 		if (correction < min_correction[0]) {
 			min_correction[1] = min_correction[0];
 			min_correction[0] = correction;
@@ -888,7 +993,7 @@ int get_spectrum_scan_fft(struct dvb_frontend *fe)
 			min_correction[1] = correction;
 		}
 
-
+		/* compute the maximal correction applied over all bands, and also the second to highest correction*/
 		if (correction > max_correction[0]) {
 			max_correction[1] = max_correction[0];
 			max_correction[0] = correction;
@@ -907,9 +1012,16 @@ int get_spectrum_scan_fft(struct dvb_frontend *fe)
 	}
 
 	if(sum_len > 4) {
+		/* compute the average correction applied, but exclude the two highest and the two lowest
+			 corrections, to reject outliers (most relevant on m88rs6060 based tbs cards where such
+			 outliers actually occur
+		*/
 		sum_correction  -= min_correction[0] + min_correction[1] + max_correction[0] + max_correction[1];
-
 		correction = sum_correction / (sum_len-4);
+
+		/*
+			subtract the average correction so that the overall correction is unbiased.
+		 */
 		dprintk("Applying correction %d\n", correction);
 		for(i=0; i < ss->spectrum_len; ++i) {
 			ss->spectrum[i] -= correction;
@@ -933,10 +1045,6 @@ int get_spectrum_scan_fft(struct dvb_frontend *fe)
 	}
 	return error;
 }
-
-
-
-
 
 /*
 	returns -1 when done or when error
