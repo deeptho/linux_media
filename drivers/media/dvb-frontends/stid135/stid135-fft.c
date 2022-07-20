@@ -927,7 +927,9 @@ int get_spectrum_scan_fft(struct dvb_frontend *fe)
 	print_spectrum_scan_state(&state->spectrum_scan_state);
 #ifdef	DEBUG_TIME
 	start_time = ktime_get();
+#endif
 	error = fe_stid135_init_fft(state, mode, Reg);
+#ifdef DEBUG_TIME
 	{
 	ktime_t now = ktime_get();
 	ktime_t delta = ktime_sub(now, start_time);
