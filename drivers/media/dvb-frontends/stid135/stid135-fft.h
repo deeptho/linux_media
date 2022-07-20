@@ -44,7 +44,7 @@
 
 			fe_lla_error_t fe_stid135_term_fft(struct stv* state, s32 Reg[60]);
 			fe_lla_error_t fe_stid135_fft(struct stv* state, u32 mode,
-																		u32 nb_acquisition, s32 frq, u32 range, s32* rf_level,
+																		u32 nb_acquisition, s32 freq, u32 range, s32* rf_level,
 																		s32 buffer_size, s32 start_idx, s32 end_idx);
 
 
