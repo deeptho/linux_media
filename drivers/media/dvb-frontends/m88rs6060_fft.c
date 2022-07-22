@@ -190,14 +190,13 @@ static int m88rs6060_get_spectrum_scan_fft_one_band(struct m88rs6060_state* stat
 	}
 
 	msleep(50);
-
+#if 0 //to test
 	regmap_write(state->demod_regmap, 0x9A, 0x20);
-
 	regmap_read(state->demod_regmap, 0x9B, &tmp1);
 	regmap_read(state->demod_regmap, 0x9B, &tmp2);
 	regmap_read(state->demod_regmap, 0x9B, &tmp3);
 	regmap_read(state->demod_regmap, 0x9B, &tmp4);
-
+#endif
 	return 0;
 }
 
