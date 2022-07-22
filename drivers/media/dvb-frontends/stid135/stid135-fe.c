@@ -48,7 +48,7 @@ MODULE_PARM_DESC(mode,
 
 static int vglna_mode=0;
 module_param(vglna_mode, int, 0444);
-MODULE_PARM_DESC(mode,
+MODULE_PARM_DESC(vglna_mode,
 		"vlglna on/off");
 
 bool fft_mode32=0;
@@ -297,9 +297,10 @@ static int stid135_init(struct dvb_frontend* fe)
 	BUG_ON(state->base->tuner_use_count[state->rf_in]>1);
 	BUG_ON((state->rf_in<0 || state->rf_in>=4));
 	if(state->base->tuner_use_count[state->rf_in]++ == 0) {
-	err |= fe_stid135_tuner_enable(p_params->handle_demod, state->rf_in + 1);
-	err |= fe_stid135_diseqc_init(&state->base->ip, state->rf_in + 1, FE_SAT_DISEQC_2_3_PWM);
+		err |= fe_stid135_tuner_enable(p_params->handle_demod, state->rf_in + 1);
+		err |= fe_stid135_diseqc_init(&state->base->ip, state->rf_in + 1, FE_SAT_DISEQC_2_3_PWM);
 	}
+
 	dprintk("Setting rf_mux_path demod=%d rf_in=%d\n", state->nr, state->rf_in);
 	err |= fe_stid135_set_rfmux_path(state, state->rf_in + 1);
 	mutex_unlock(&state->base->status_lock);
@@ -1906,7 +1907,7 @@ struct dvb_frontend* stid135_attach(struct i2c_adapter *i2c,
 	if (base) {
 		base->count++;
 		state->base = base;
-		dprintk("ATTACH DUP nr=%d rf_in=%d base=%p count=%d\n", nr, rf_in, base, base->count);
+		dprintk("XXX ATTACH DUP nr=%d rf_in=%d base=%p count=%d\n", nr, rf_in, base, base->count);
 	} else {
 		base = kzalloc(sizeof(struct stv_base), GFP_KERNEL);
 		if (!base)
