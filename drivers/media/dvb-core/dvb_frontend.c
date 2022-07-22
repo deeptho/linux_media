@@ -3190,7 +3190,8 @@ static int dvb_frontend_handle_ioctl(struct file *file,
 		memset(info, 0, sizeof(*info));
 		info->rf_in = (fe->ops.info.supports_neumo && fe->ops.info.rf_in >=0) ? fe->ops.info.rf_in : fe->dvb->num;
 		info->adapter_mac_address = fe->ops.info.adapter_mac_address  ?
-			fe->ops.info.adapter_mac_address :  fe->dvb->num;
+			fe->ops.info.adapter_mac_address :  (0x2L | ((((uint64_t)fe->dvb->num) << 8) <<32));
+
 		info->card_mac_address = fe->ops.info.card_mac_address ? fe->ops.info.card_mac_address:
 			fe->dvb->num; //best we can do; each adapter will appear as different card
 		strscpy(info->card_address, fe->ops.info.card_address, sizeof(info->card_address));
