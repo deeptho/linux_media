@@ -1109,7 +1109,7 @@ fe_lla_error_t fe_stid135_set_carrier_frequency_init_(struct fe_stid135_internal
 #else
 	si_register = (((u64)frequency_hz)<<24)/ (u64) mclk;
 #endif
-		dprintk("CFR_INIT set to %d\n", si_register );
+	//dprintk("CFR_INIT set to %d\n", si_register );
 		error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_CFRINIT2_CFR_INIT(Demod),
 															 ((u8)(si_register >> 16)));
 		error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_CFRINIT1_CFR_INIT(Demod),
@@ -5533,11 +5533,13 @@ fe_lla_error_t fe_stid135_reset_obs_registers(struct stv* state)
 fe_lla_error_t FE_STiD135_Term(struct fe_stid135_internal_param* pParams)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
-
-
+#ifndef DONT_ALLOW_MULTIPLE_CARDS //todo: rewrite this code
 	chip_close_proc("stid135");
+#endif
 	ChipClose(pParams->handle_demod);
+#ifdef DONT_ALLOW_MULTIPLE_CARDS
 	chip_close_proc("soc");
+#endif
 	ChipClose(pParams->handle_soc);
 
 
@@ -12178,7 +12180,9 @@ STCHIP_Error_t stvvglna_init(SAT_VGLNA_Params_t *InitParams, STCHIP_Info_t* *hCh
 
 
 		(*hChipHandle) = ChipOpen(InitParams->Chip);
+#ifdef DONT_ALLOW_MULTIPLE_CARDS
 		chip_init_proc(*hChipHandle, "vglna");
+#endif
 		hChip=(*hChipHandle);
 
 		if(hChip != NULL)

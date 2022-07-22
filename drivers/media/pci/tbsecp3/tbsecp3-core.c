@@ -93,10 +93,7 @@ static int tbsecp3_adapters_attach(struct tbsecp3_dev *dev)
 {
 	int i, ret = 0;
 	for (i = 0; i < dev->info->adapters; i++) {
-#ifdef NOV11
-		dprintk("adapter =%p dvbdemux=%p dev=%p dev->p=%p", &dev->adapter[i], &dev->adapter[i].demux,
-						&dev->adapter[i].dev->pci_dev->dev, dev->adapter[i].dev->pci_dev->dev.p);
-#endif
+
 		ret = tbsecp3_dvb_init(&dev->adapter[i]);
 		if (ret) {
 			dev_err(&dev->pci_dev->dev,

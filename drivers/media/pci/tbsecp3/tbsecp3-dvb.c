@@ -1063,7 +1063,6 @@ static struct stid135_cfg tbs6909x_V2_stid135_cfg = {
 	.vglna = 1,
 };
 
-#if 0
 static struct stid135_cfg tbs6916_stid135_cfg = {
 	.adr		= 0x68,
 	.clk		= 27,
@@ -1075,9 +1074,8 @@ static struct stid135_cfg tbs6916_stid135_cfg = {
 	.read_eeprom = ecp3_eeprom_read,
 	.set_TSsampling = NULL,
 	.set_TSparam = NULL,
-	.vglna = 2,
+	.vglna = 0,
 };
-#endif
 
 static struct stid135_cfg tbs6912_stid135_cfg = {
 	.adr		= 0x68,
@@ -1246,6 +1244,7 @@ static struct cxd2878_config tbs7230_cfg = {
 		.write_properties = ecp3_spi_write,
 		.read_properties = ecp3_spi_read,
 	};
+
 static void tbs6209SE_reset_demod(struct tbsecp3_adapter *adapter)
 {
 	struct tbsecp3_dev *dev = adapter->dev;
@@ -2161,7 +2160,19 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 		if (adapter->fe == NULL)
 			goto frontend_atach_fail;
 		break;
+	case TBSECP3_BOARD_TBS6916:
+		if(adapter->nr<8){
+		  adapter->fe = dvb_attach(stid135_attach, i2c,
+					&tbs6916_stid135_cfg, adapter->nr, adapter->nr%4);
+		  }
+		else{
+			adapter->fe = dvb_attach(stid135_attach, i2c,
+					  &tbs6916_stid135_cfg, (adapter->nr - 8), (adapter->nr - 8)%4);
+		}
 
+		if (adapter->fe == NULL)
+			goto frontend_atach_fail;
+		break;
 	case TBSECP3_BOARD_TBS6903X:
 	case TBSECP3_BOARD_TBS6912:
 		if(pci->subsystem_vendor==0x6912)

@@ -153,7 +153,12 @@ void tbsecp3_i2c_reg_init(struct tbsecp3_dev *dev)
 	int i;
 	u32 baud = dev->info->i2c_speed;
 
-	/* default to 400kbps */
+	/* default to 400kbps
+		 i2c_speed in kHz is = 125000/4/baud/2/4
+		 baud = 9:  434kHz
+		 baud = 39: 100.16 kHz
+		 baud = 3:  1302.08 kHz
+*/
 	if (!baud)
 		baud = 9;
 
