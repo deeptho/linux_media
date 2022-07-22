@@ -536,6 +536,7 @@ static int set_mac_address(struct tbsecp3_adapter *adap)
 		eep_addr = dev->info->eeprom_addr;
 
 	eep_addr += 0x10 * adap->nr;
+	dev->adapter_mac_address =0;
 
 	ret = i2c_transfer(i2c, msg, 2);
 	ret = i2c_transfer(i2c, msg, 2);
@@ -545,11 +546,20 @@ static int set_mac_address(struct tbsecp3_adapter *adap)
 			adap->nr);
 	} else {
 		dev_info(&dev->pci_dev->dev,
-						 "adap=%p dvb_adap=%p MAC address %pM \n", adap, &adap->dvb_adapter,
+						 "adap=%p dvb_adap=%p adap=%d MAC address %pM \n", adap, &adap->dvb_adapter, adap->nr,
 						 adap->dvb_adapter.proposed_mac);
-		dev->mac_address =0;
-		memcpy(&dev->mac_address, adap->dvb_adapter.proposed_mac, sizeof(adap->dvb_adapter.proposed_mac));
+		memcpy(&dev->adapter_mac_address, adap->dvb_adapter.proposed_mac, sizeof(adap->dvb_adapter.proposed_mac));
+		if (dev->adapter_mac_address == 0xffffffffffff)
+			dev->adapter_mac_address =0 ; 			//card which has not been initialised properly
 	}
+
+	if(dev->adapter_mac_address == 0) {
+		dev->adapter_mac_address = 0x2L | ((((uint64_t)adap->nr) << 8) <<32);
+		dprintk("No mac address; faking one: 0x%llx\n", dev->adapter_mac_address);
+	}
+
+	if(dev->card_mac_address ==0)
+		dev->card_mac_address = dev->adapter_mac_address; //Seelect mac of first adapter as card mac_address
 	return 0;
 };
 
@@ -2204,7 +2214,8 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 	}
 	strlcpy(adapter->fe->ops.info.name, dev->info->name, sizeof(adapter->fe->ops.info.name));
 	strlcpy(adapter->fe->ops.info.card_name, dev->info->name, sizeof(adapter->fe->ops.info.card_name));
-	adapter->fe->ops.info.mac_address = dev->mac_address;
+	adapter->fe->ops.info.adapter_mac_address = dev->adapter_mac_address;
+	adapter->fe->ops.info.card_mac_address = dev->card_mac_address;
 	strlcpy(adapter->fe->ops.info.card_address, dev_name(&dev->pci_dev->dev), sizeof(adapter->fe->ops.info.card_address));
 	snprintf(adapter->fe->ops.info.adapter_address, sizeof(adapter->fe->ops.info.adapter_address),
 					 "%s:%d", adapter->fe->ops.info.card_address, adapter->nr);
@@ -2242,6 +2253,7 @@ int tbsecp3_dvb_init(struct tbsecp3_adapter *adapter)
 		struct dmx_frontend *fe_mem;
 		int ret;
 		strlcpy(dev->card_address, dev_name(&dev->pci_dev->dev), sizeof(dev->card_address));
+		//dprintk("Card address=%s option index=%d\n", dev->card_address, option_idx_for_card(dev));
 		ret = dvb_register_adapter(adap, "TBSECP3 DVB Adapter",
 						THIS_MODULE,
 						&adapter->dev->pci_dev->dev,
