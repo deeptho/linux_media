@@ -2926,7 +2926,9 @@ static struct dvb_frontend_ops stv091x_ops = {
 		.symbol_rate_max	= 70000000,
 		.caps			= FE_CAN_INVERSION_AUTO | FE_CAN_FEC_AUTO |
 		FE_CAN_QPSK | FE_CAN_2G_MODULATION | FE_CAN_MULTISTREAM,
-		.extended_caps = FE_CAN_SPECTRUMSCAN	| FE_CAN_IQ | FE_CAN_BLINDSEARCH
+		.extended_caps = FE_CAN_SPECTRUMSCAN	| FE_CAN_IQ | FE_CAN_BLINDSEARCH,
+		.supports_neumo = true,
+		 .rf_in = -1,
 	},
 	.init				= init,
 	.sleep				= sleep,

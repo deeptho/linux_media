@@ -349,12 +349,16 @@ struct dtv_frontend_properties;
  *				as specified in &enum fe_caps.
  */
 struct dvb_frontend_internal_info {
-#if 1 //neumo
+#if 1 //neumo - destroys binary compatibility
 	char	card_name[64];
 	char	adapter_name[64];
 	char	card_address[64];
 	char	adapter_address[64];
-	uint64_t mac_address;
+	int64_t card_mac_address;
+	int64_t adapter_mac_address;
+	uid_t owner_uid;
+	bool supports_neumo; //set to true if values if this driver supports neumo
+	s32 rf_in;
 #endif
 	char	name[64];
 	u32	frequency_min_hz;
@@ -473,7 +477,6 @@ struct dvb_frontend_ops {
 	struct dvb_frontend_internal_info info;
 
 	u8 delsys[MAX_DELSYS];
-
 	void (*detach)(struct dvb_frontend *fe);
 	void (*release)(struct dvb_frontend* fe);
 	void (*release_sec)(struct dvb_frontend* fe);
@@ -491,7 +494,7 @@ struct dvb_frontend_ops {
 		    unsigned int mode_flags,
 		    unsigned int *delay,
 		    enum fe_status *status);
-#if 1 //neumo
+#if 1 //neumo - destroys binary compatibility with standard kernel
 	int (*stop_task)(struct dvb_frontend* fe);
 
 	int (*scan)(struct dvb_frontend* fe,
@@ -810,7 +813,7 @@ struct dvb_frontend {
 	void *sec_priv;
 	void *analog_demod_priv;
 	struct dtv_frontend_properties dtv_property_cache;
-#if 1 //neumo
+#if 1 //neumo, destroys binary compatibility with standard kernel
 	struct dtv_fe_algo_state algo_state;
 #endif
 #define DVB_FRONTEND_COMPONENT_TUNER 0

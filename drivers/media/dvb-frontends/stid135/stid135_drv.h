@@ -344,8 +344,8 @@ struct stv_base {
 struct stv {
 	struct stv_base     *base;
 	struct dvb_frontend  fe;
-	int                  nr;     //DT: adapter aka demod: 0-7
-	int                  rf_in;  //DT  tuner frontend: 0-3
+	int                  nr;     //DT: number of demod device 0-7 (st internal api uses nr+1)
+	int                  rf_in;  //DT  tuner number (0-3, corresponding to a physical input connector)
 	//unsigned long        tune_time;
 	//int current_llr_rate;  //Remember the current reconfiguration to avoid calling hardware needlessly
 	//int current_max_llr_rate;  //Remember the current reconfiguration to avoid calling hardware needlessly

@@ -1837,7 +1837,9 @@ static struct dvb_frontend_ops stid135_ops = {
 						FE_CAN_2G_MODULATION  |
 		        FE_CAN_MULTISTREAM,
 		.extended_caps          = FE_CAN_SPECTRUMSCAN	|FE_CAN_HR_SPECTRUMSCAN |
-		FE_CAN_IQ | FE_CAN_BLINDSEARCH
+		FE_CAN_IQ | FE_CAN_BLINDSEARCH,
+		.supports_neumo = true,
+		.rf_in = -1,
 	},
 	.init				= stid135_init,
 	.sleep				= stid135_sleep,
@@ -1977,7 +1979,7 @@ struct dvb_frontend* stid135_attach(struct i2c_adapter *i2c,
 
 	if (base->mode == 2)
 		state->rf_in = 3;
-
+	state->fe.ops.info.rf_in = rf_in;
 	dev_info(&i2c->dev, "%s demod found at adr %02X on %s\n",
 					 state->fe.ops.info.name, cfg->adr, dev_name(&i2c->dev));
 
