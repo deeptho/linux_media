@@ -16,7 +16,7 @@ static int reg_read(struct i2c_client *client,u8 reg_addr,u8 *val)
 	};
 
 	ret = i2c_transfer(client->adapter,msg,2);
-	
+
 	if(ret!=2)
 	{
 		pr_warn("i2c read reg error !!");
@@ -25,14 +25,14 @@ static int reg_read(struct i2c_client *client,u8 reg_addr,u8 *val)
 		else
 			return -EREMOTEIO;
 	}
-	return 0 ;	
+	return 0 ;
 
 }
 static int reg_write(struct i2c_client *client,u8 reg_addr,u8 val)
 {
 	int ret;
 	u8 buf[2]={reg_addr,val};
-	struct i2c_msg msg ={.addr = client->addr, .flags = 0, .buf = buf, .len = 2}; 
+	struct i2c_msg msg ={.addr = client->addr, .flags = 0, .buf = buf, .len = 2};
 
 	if((ret = i2c_transfer (client->adapter,&msg,1))!=1){
 		pr_warn("%s: i2c write error (addr 0x%02x, ret == %i)\n",
@@ -47,15 +47,15 @@ static int mxl603_ctrl_programRegisters(struct i2c_client *client, PMXL603_REG_C
 	int ret = 0;
 	u8 tmp =0 ;
 	u16 i = 0;
-		
+
 	while (!ret)
 	{
 		if ((ctrlRegInfoPtr[i].regAddr == 0) && (ctrlRegInfoPtr[i].mask == 0) && (ctrlRegInfoPtr[i].data == 0)) break;
 
 		// Check if partial bits of register were updated
-		if (ctrlRegInfoPtr[i].mask != 0xFF)  
+		if (ctrlRegInfoPtr[i].mask != 0xFF)
 		{
-			ret = reg_read(dev->client,ctrlRegInfoPtr[i].regAddr, (int)&tmp);
+			ret = reg_read(dev->client,ctrlRegInfoPtr[i].regAddr, &tmp);
 			if (ret) break;;
 		}
 
@@ -79,10 +79,9 @@ static int mxl603_init(struct dvb_frontend *fe)
 
 	int ret;
 	u8 readData;
-	u8 dfeRegData;
 	u8 control = 0;
 	u16 ifFcw;
-	MXL603_REG_CTRL_INFO_T MxL603_OverwriteDefaults[] = 
+	MXL603_REG_CTRL_INFO_T MxL603_OverwriteDefaults[] =
 	{
 	  {0x14, 0xFF, 0x13},
 	  {0x6D, 0xFF, 0x8A},
@@ -120,7 +119,7 @@ static int mxl603_init(struct dvb_frontend *fe)
 	ret |= reg_read(dev->client,0x31,&readData);
 	if(ret)
 		goto err;
-	
+
 	readData &= 0x2F;
 	readData |= 0xD0;
 
@@ -131,14 +130,14 @@ static int mxl603_init(struct dvb_frontend *fe)
 	ret |= reg_write(dev->client,MAIN_REG_AMP,0x04);
 
 	/**setup xtal**/
-	
-	control = ((dev->xtalFreqSel << 5) | (dev->xtalCap & 0x1F));  
+
+	control = ((dev->xtalFreqSel << 5) | (dev->xtalCap & 0x1F));
 	control |= (1 << 7);
 	ret = reg_write(dev->client, XTAL_CAP_CTRL_REG, control);
-		
+
 	// program Clock out div & Xtal sharing
-	ret |= reg_write(dev->client, XTAL_ENABLE_DIV_REG, 0x40); 
-	
+	ret |= reg_write(dev->client, XTAL_ENABLE_DIV_REG, 0x40);
+
 	// Main regulator re-program
 	ret |= reg_write(client, MAIN_REG_AMP, 0x14);
 	if(ret)
@@ -154,10 +153,10 @@ static int mxl603_init(struct dvb_frontend *fe)
 
 		// Manual IF freq set
 		ifFcw = (u16)(dev->manualIFOutFreqInKHz * 8192 / 216000);
-		control = (ifFcw & 0xFF); // Get low 8 bit 
-		ret |= reg_write(client, IF_FCW_LOW_REG, control); 
+		control = (ifFcw & 0xFF); // Get low 8 bit
+		ret |= reg_write(client, IF_FCW_LOW_REG, control);
 
-		control = ((ifFcw >> 8) & 0x0F); // Get high 4 bit 
+		control = ((ifFcw >> 8) & 0x0F); // Get high 4 bit
 		ret |= reg_write(client, IF_FCW_HIGH_REG, control);
 	}
 	else
@@ -168,10 +167,10 @@ static int mxl603_init(struct dvb_frontend *fe)
 		ret |= reg_write(client, IF_FREQ_SEL_REG, readData);
 	}
 
-	// Set spectrum invert, gain level and IF path 
+	// Set spectrum invert, gain level and IF path
 	// Spectrum invert indication is bit<7:6>
 
-	// Gain level is bit<3:0> 
+	// Gain level is bit<3:0>
 	control = (dev->gainLevel & 0x0F);
 	control |= 0x20; // Enable IF out
 	ret |= reg_write(client, IF_PATH_GAIN_REG, control);
@@ -181,17 +180,17 @@ static int mxl603_init(struct dvb_frontend *fe)
 
 	/*5.setup AGC  agctye :0 self ;1:externel */
 	// AGC selecton <3:2> and mode setting <0>
-	ret = reg_read(dev->client, AGC_CONFIG_REG, &readData); 
+	ret = reg_read(dev->client, AGC_CONFIG_REG, &readData);
 	readData &= 0xF2; // Clear bits <3:2> & <0>
 	readData = (u8) (readData | (dev->agcType << 2) | 0x01);
 	ret |= reg_write(dev->client, AGC_CONFIG_REG, readData);
-	
+
 	// AGC set point <6:0>
 	ret |= reg_read(dev->client, AGC_SET_POINT_REG, &readData);
 	readData &= 0x80; // Clear bit <6:0>
 	readData |= dev->setagcPoint;
 	ret |= reg_write(dev->client, AGC_SET_POINT_REG, readData);
-	
+
 	// AGC Polarity <4>
 	ret |= reg_read(dev->client, AGC_FLIP_REG, &readData);
 	readData &= 0xEF; // Clear bit <4>
@@ -200,8 +199,8 @@ static int mxl603_init(struct dvb_frontend *fe)
 
 	if(ret)
 		goto err;
- 
-	
+
+
 	dev->active = true;
 	return ret;
 err:
@@ -218,14 +217,14 @@ static int mxl603_set_params(struct dvb_frontend *fe)
 	u8 signalMode,regData,agcData,dfeTuneData,dfeCdcData;
 	u32 freq = 0;
 	u8 tmp;
-	
+
 	pr_info("delivery_system=%d frequency=%d\n",
 			c->delivery_system, c->frequency);
 	if (!dev->active) {
 		ret = -EAGAIN;
 		goto err;
 	}
-	MXL603_REG_CTRL_INFO_T MxL603_DigitalDvbc[] = 
+	MXL603_REG_CTRL_INFO_T MxL603_DigitalDvbc[] =
 	{
 	  {0x0C, 0xFF, 0x00},
 	  {0x13, 0xFF, 0x04},
@@ -255,8 +254,8 @@ static int mxl603_set_params(struct dvb_frontend *fe)
 	  {0xDC, 0xFF, 0x1C},
 	  {0,	 0,    0}
 	};
-	
-	 MXL603_REG_CTRL_INFO_T MxL603_DigitalIsdbtAtsc[] = 
+
+	 MXL603_REG_CTRL_INFO_T MxL603_DigitalIsdbtAtsc[] =
 	{
 	  {0x0C, 0xFF, 0x00},
 	  {0x13, 0xFF, 0x04},
@@ -288,7 +287,7 @@ static int mxl603_set_params(struct dvb_frontend *fe)
 	case SYS_ATSC:
 		 signalMode = 1;
 		ret = mxl603_ctrl_programRegisters(client, MxL603_DigitalIsdbtAtsc);
-	
+
 		if (dev->ifOutFreqinKHz < HIGH_IF_35250_KHZ)
 		{
 			// Low power
@@ -303,13 +302,13 @@ static int mxl603_set_params(struct dvb_frontend *fe)
 			ret |= reg_write(dev->client, DIG_ANA_IF_CFG_1, 0x16);
 			ret |= reg_write(dev->client, DIG_ANA_IF_PWR, 0xB1);
 		}
-		
+
 		if (MXL603_XTAL_16MHz == dev->xtalFreqSel) tmp = 0x0D;
 		if (MXL603_XTAL_24MHz == dev->xtalFreqSel) tmp = 0x0E;
-		
-		
+
+
 		ret |= reg_write(dev->client, DFE_CSF_SS_SEL, tmp);
-		
+
 		tmp = 0;
 		switch(dev->gainLevel)
 		{
@@ -321,7 +320,7 @@ static int mxl603_set_params(struct dvb_frontend *fe)
 		default: break;
 		}
 		ret |= reg_write(dev->client, DFE_DACIF_GAIN, tmp);
-	
+
 			break;
 	case SYS_DVBC_ANNEX_B:
 	case SYS_DVBC_ANNEX_A:
@@ -346,7 +345,7 @@ static int mxl603_set_params(struct dvb_frontend *fe)
 
 		if (dev->xtalFreqSel == MXL603_XTAL_16MHz) tmp = 0x0D;
 		if (dev->xtalFreqSel == MXL603_XTAL_24MHz) tmp = 0x0E;
-	
+
 
 		ret |= reg_write(dev->client, DFE_CSF_SS_SEL, tmp);
 			break;
@@ -356,27 +355,27 @@ static int mxl603_set_params(struct dvb_frontend *fe)
 	}
 
 	// XTAL calibration
-	ret |= reg_write(dev->client, XTAL_CALI_SET_REG, 0x00);   
+	ret |= reg_write(dev->client, XTAL_CALI_SET_REG, 0x00);
 	ret |= reg_write(dev->client, XTAL_CALI_SET_REG, 0x01);
 
 	msleep(50);
 
-	ret = reg_write(dev->client, START_TUNE_REG, 0x00); 
-	
-	// RF Frequency VCO Band Settings 
-	if (c->frequency < 700000000) 
+	ret = reg_write(dev->client, START_TUNE_REG, 0x00);
+
+	// RF Frequency VCO Band Settings
+	if (c->frequency < 700000000)
 	{
 		ret |= reg_write(dev->client, 0x7C, 0x1F);
-		if ((signalMode == MXL603_DIG_DVB_C) || (signalMode == MXL603_DIG_J83B)) 
+		if ((signalMode == MXL603_DIG_DVB_C) || (signalMode == MXL603_DIG_J83B))
 			regData = 0xC1;
 		else
 			regData = 0x81;
 
 	}
-	else 
+	else
 	{
 		ret |= reg_write(dev->client, 0x7C, 0x9F);
-		if ((signalMode == MXL603_DIG_DVB_C) || (signalMode == MXL603_DIG_J83B)) 
+		if ((signalMode == MXL603_DIG_DVB_C) || (signalMode == MXL603_DIG_J83B))
 			regData = 0xD1;
 		else
 			regData = 0x91;
@@ -388,12 +387,12 @@ static int mxl603_set_params(struct dvb_frontend *fe)
 	ret |= reg_write(dev->client, 0x00, 0x00);
 
 	// Bandwidth <7:0>
-	
+
 	ret |= reg_write(dev->client, CHAN_TUNE_BW_REG, 0x20);
 
 	/* Calculate RF Channel = DIV(64*RF(Hz), 1E6) */
-	freq = (u32)((c->frequency/1000000)*64); 	
-	// Set RF  
+	freq = (u32)((c->frequency/1000000)*64);
+	// Set RF
 	ret |= reg_write(dev->client, CHAN_TUNE_LOW_REG, (u8)(freq & 0xFF));
 	ret |= reg_write(dev->client, CHAN_TUNE_HI_REG, (u8)((freq >> 8 ) & 0xFF));
 
@@ -402,12 +401,12 @@ static int mxl603_set_params(struct dvb_frontend *fe)
 	ret |= reg_write(dev->client, TUNER_ENABLE_REG, 0x01);
 
 	// Start Sequencer settings
-	ret |= reg_write(dev->client, PAGE_CHANGE_REG, 0x01); 
+	ret |= reg_write(dev->client, PAGE_CHANGE_REG, 0x01);
 	ret |= reg_read(dev->client, DIG_ANA_GINJO_LT_REG, &regData);
-	ret |= reg_write(dev->client, PAGE_CHANGE_REG, 0x00); 
+	ret |= reg_write(dev->client, PAGE_CHANGE_REG, 0x00);
 
 	ret |= reg_read(dev->client, 0xB6, &agcData);
-	ret |= reg_write(dev->client, PAGE_CHANGE_REG, 0x01); 
+	ret |= reg_write(dev->client, PAGE_CHANGE_REG, 0x01);
 	ret |= reg_read(dev->client, 0x60, &dfeTuneData);
 	ret |= reg_read(dev->client, 0x5F, &dfeCdcData);
 
@@ -441,20 +440,20 @@ static int mxl603_set_params(struct dvb_frontend *fe)
 		dfeCdcData |= 0x37;
 	}
 
-	ret |= reg_write(dev->client, 0x60, dfeTuneData); 
-	ret |= reg_write(dev->client, 0x5F, dfeCdcData); 
-	ret |= reg_write(dev->client, PAGE_CHANGE_REG, 0x00); 
-	ret |= reg_write(dev->client, 0xB6, agcData); 
+	ret |= reg_write(dev->client, 0x60, dfeTuneData);
+	ret |= reg_write(dev->client, 0x5F, dfeCdcData);
+	ret |= reg_write(dev->client, PAGE_CHANGE_REG, 0x00);
+	ret |= reg_write(dev->client, 0xB6, agcData);
 
 	// Bit <0> 1 : start , 0 : abort calibrations
-	ret |= reg_write(dev->client, START_TUNE_REG, 0x01); 
+	ret |= reg_write(dev->client, START_TUNE_REG, 0x01);
 
 	// Sleep 15 ms
 	msleep(15);
 
-	// dfe_agc_auto = 1 
+	// dfe_agc_auto = 1
 	agcData = (agcData | 0x40);
-	ret |= reg_write(dev->client, 0xB6, agcData); 
+	ret |= reg_write(dev->client, 0xB6, agcData);
 	if(ret)
 		goto err;
 
@@ -471,8 +470,8 @@ static int mxl603_get_status(struct dvb_frontend *fe,u32*status)
 	struct mxl603_dev *dev = i2c_get_clientdata(client);
 	int ret;
 	u8 regData;
-	
-	ret = reg_read(dev->client, RF_REF_STATUS_REG, &regData);  
+
+	ret = reg_read(dev->client, RF_REF_STATUS_REG, &regData);
 
 	if((regData & 0x03) == 0x03)
 		*status = 1;
@@ -501,7 +500,7 @@ static int mxl603_probe(struct i2c_client *client,
 	struct mxl603_config *cfg = client->dev.platform_data;
 	struct dvb_frontend *fe = cfg->fe;
 	struct mxl603_dev *dev;
-	
+
 	int ret;
 	u8 utemp;
 
@@ -529,9 +528,9 @@ static int mxl603_probe(struct i2c_client *client,
 	ret = reg_read(dev->client,CHIP_ID_REQ_REG,&utemp);
 	if (ret)
 		goto err_kfree;
-	
+
 	pr_info("chip id = 0x%x \n",utemp);
-	
+
 	if(utemp!=0x1){
 		ret = -ENODEV;
 		goto err_kfree;
@@ -544,7 +543,7 @@ static int mxl603_probe(struct i2c_client *client,
 	memcpy(&fe->ops.tuner_ops,&mxl603_ops,sizeof(struct dvb_tuner_ops));
 	fe->tuner_priv = client;
 	i2c_set_clientdata(client, dev);
-		
+
 	return 0;
 
 
@@ -559,7 +558,7 @@ static int mxl603_remove(struct i2c_client *client)
 	struct mxl603_dev *dev = i2c_get_clientdata(client);
 
 	kfree(dev);
-	
+
 	return 0;
 }
 
@@ -583,4 +582,3 @@ module_i2c_driver(mxl603_driver);
 MODULE_AUTHOR("Davin <smiledavin@gmail.com>");
 MODULE_DESCRIPTION("Panasonic MN88436 ATSC/QAMB demodulator driver");
 MODULE_LICENSE("GPL");
-

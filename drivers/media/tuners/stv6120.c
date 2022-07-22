@@ -208,6 +208,7 @@ static int i2c_write(struct i2c_adapter *adap, u8 adr, u8 *data, int len)
 	return 0;
 }
 
+#ifdef UNUSED
 static int write_regs(struct stv *state, int reg, int len)
 {
 	u8 d[8];
@@ -218,6 +219,7 @@ static int write_regs(struct stv *state, int reg, int len)
 	d[0] = reg;
 	return i2c_write(state->base->i2c, state->base->adr, d, len + 1);
 }
+#endif
 
 /*
 	write CTRL3 ... CTRL10

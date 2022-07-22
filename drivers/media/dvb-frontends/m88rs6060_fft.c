@@ -121,7 +121,7 @@ static int m88rs6060_get_spectrum_scan_fft_one_band(struct m88rs6060_state* stat
 																						 u32* freq, s32* rf_level, int fft_size)
 {
 	bool	agc_locked, fft_done;
-	s32	tmp, tmp1, tmp2, tmp3, tmp4;
+	s32	tmp;
 	u8 cnt;
 	u16	totaltpnum;
 	u32	nSize = (FFT_N - 16 * 2) * 2;		// sm_buf = 2, overlap = 16, nSize = 960

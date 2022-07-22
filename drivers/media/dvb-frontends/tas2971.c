@@ -67,19 +67,25 @@ static int tas2971_rd(struct tas2971_priv *priv, u8 addr, u8 *data)
 
 }
 
+#ifdef UNUSED
 static int tas2971_regmask(struct tas2971_priv *priv,
 	u8 reg, u8 setmask, u8 clrmask)
 {
 	return 0;
 
 }
+#endif
 
+
+#ifdef UNUSED
 static int tas2971_wrtable(struct tas2971_priv *priv,
 	struct tas2971_regtable *regtable, int len)
 {
 	return 0;
 
 }
+
+#endif
 
 static int tas2971_read_ber(struct dvb_frontend *fe, u32 *ber)
 {
@@ -258,7 +264,6 @@ struct dvb_frontend *tas2971_attach(const struct tas2101_config *cfg,
 	struct tas2971_priv *priv = NULL;
 	struct tas2971_base *base = NULL;
 	int ret;
-	u8 id[2];
 	printk(KERN_INFO "begin Attaching frontend\n");
 	dev_dbg(&i2c->dev, "%s: Attaching frontend\n", KBUILD_MODNAME);
 
@@ -343,7 +348,6 @@ struct dvb_frontend *tas2971_attach(const struct tas2101_config *cfg,
 	printk(KERN_INFO "end Attaching frontend\n");
 	return &priv->fe;
 
-err3:
 #ifdef TAS2971_USE_I2C_MUX
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 7, 0)
 	i2c_mux_del_adapters(base->muxc);

@@ -74,16 +74,16 @@ static int rda5816_init(struct dvb_frontend *fe)
 
 	if(priv->init_done)
 		return 0;
-	 msleep(1);  //Wait 1ms. 
+	 msleep(1);  //Wait 1ms.
 
-	 // Chip register soft reset	 
+	 // Chip register soft reset
 	 rda5816_wr(priv,0x04,0x04);
-	 rda5816_wr(priv,0x04,0x05); 
+	 rda5816_wr(priv,0x04,0x05);
 
 	 // Initial configuration start
-	 msleep(2);  //Wait 1ms. 
-	 
-	 // pll setting 
+	 msleep(2);  //Wait 1ms.
+
+	 // pll setting
 	 rda5816_wr(priv,0x2b,0x97); //clk_interface_27m=1
 	 rda5816_wr(priv,0x1a,0x13);
 	 rda5816_wr(priv,0x41,0x53);
@@ -136,28 +136,28 @@ static int rda5816_init(struct dvb_frontend *fe)
 	 rda5816_wr(priv,0x4b,0xDB);
 
 	 if(priv->cfg->xtal){	//27M
-	 //th1=901M  
+	 //th1=901M
 	 rda5816_wr(priv,0x79,0x04);
 	 rda5816_wr(priv,0x7a,0x2A);
 	 rda5816_wr(priv,0x7b,0xAA);
 	 rda5816_wr(priv,0x7c,0xAB);
-	 //th2=1580M   
+	 //th2=1580M
 	 rda5816_wr(priv,0x72,0x07);
 	 rda5816_wr(priv,0x73,0x40);
 	 rda5816_wr(priv,0x74,0x74);
 	 }
 
 	 if(!priv->cfg->xtal){// Xtal_24M
-	 //th1=901M  
+	 //th1=901M
 	 rda5816_wr(priv,0x79,0x04);
 	 rda5816_wr(priv,0x7a,0xB0);
 	 rda5816_wr(priv,0x7b,0x00);
 	 rda5816_wr(priv,0x7c,0x00);
-	 //th2=1580M   
+	 //th2=1580M
 	 rda5816_wr(priv,0x72,0x08);
 	 rda5816_wr(priv,0x73,0x00);
 	 rda5816_wr(priv,0x74,0x80);
-	 } 
+	 }
 	 //agc setting
 	 rda5816_wr(priv,0x4f,0x40);
 	 rda5816_wr(priv,0x5b,0x20);
@@ -196,78 +196,78 @@ static int rda5816_init(struct dvb_frontend *fe)
 	 rda5816_wr(priv,0x28,0xFF);
 	 rda5816_wr(priv,0x2a,0xFF);
 	 rda5816_wr(priv,0xb4,0xFF);
-	 rda5816_wr(priv,0xb6,0xFF);  
+	 rda5816_wr(priv,0xb6,0xFF);
 
-	 rda5816_wr(priv,0xb7,0x00);//start0	 
-	 rda5816_wr(priv,0xb9,0x42);//start1			 
-	 rda5816_wr(priv,0xbb,0x4B);//start2			 
-	 rda5816_wr(priv,0xbd,0x4A);//start3			 
-	 rda5816_wr(priv,0xbf,0x5E);//start4	 
-	 rda5816_wr(priv,0xc1,0x44);//start5	 
-	 rda5816_wr(priv,0xc3,0x45);//start6	 
-	 rda5816_wr(priv,0xc5,0x47);//start7	 
-	 rda5816_wr(priv,0xa3,0x48);//start8			 
-	 rda5816_wr(priv,0xa5,0x46);//start9	 
-	 rda5816_wr(priv,0xa7,0x46);//start10		 
-	 rda5816_wr(priv,0xa9,0x43);//start11		 
-	 rda5816_wr(priv,0xab,0x24);//start12		 
-	 rda5816_wr(priv,0xad,0x34);//start13		 
-	 rda5816_wr(priv,0xaf,0x63);//start14		 
-	 rda5816_wr(priv,0xb1,0x95);//start15		 
+	 rda5816_wr(priv,0xb7,0x00);//start0
+	 rda5816_wr(priv,0xb9,0x42);//start1
+	 rda5816_wr(priv,0xbb,0x4B);//start2
+	 rda5816_wr(priv,0xbd,0x4A);//start3
+	 rda5816_wr(priv,0xbf,0x5E);//start4
+	 rda5816_wr(priv,0xc1,0x44);//start5
+	 rda5816_wr(priv,0xc3,0x45);//start6
+	 rda5816_wr(priv,0xc5,0x47);//start7
+	 rda5816_wr(priv,0xa3,0x48);//start8
+	 rda5816_wr(priv,0xa5,0x46);//start9
+	 rda5816_wr(priv,0xa7,0x46);//start10
+	 rda5816_wr(priv,0xa9,0x43);//start11
+	 rda5816_wr(priv,0xab,0x24);//start12
+	 rda5816_wr(priv,0xad,0x34);//start13
+	 rda5816_wr(priv,0xaf,0x63);//start14
+	 rda5816_wr(priv,0xb1,0x95);//start15
 
-	 rda5816_wr(priv,0xb8,0x43);//end0			 
-	 rda5816_wr(priv,0xba,0x78);//end1		 
-	 rda5816_wr(priv,0xbc,0x78);//end2		 
-	 rda5816_wr(priv,0xbe,0x87);//end3		 
-	 rda5816_wr(priv,0xc0,0x8A);//end4		 
-	 rda5816_wr(priv,0xc2,0x72);//end5		 
-	 rda5816_wr(priv,0xc4,0x73);//end6		 
-	 rda5816_wr(priv,0xc6,0x75);//end7		 
-	 rda5816_wr(priv,0xa4,0x76);//end8	 
-	 rda5816_wr(priv,0xa6,0x74);//end9		 
-	 rda5816_wr(priv,0xa8,0x6D);//end10 	 
-	 rda5816_wr(priv,0xaa,0x6A);//end11 	 
-	 rda5816_wr(priv,0xac,0x35);//end12 	 
-	 rda5816_wr(priv,0xae,0x63);//end13 	 
-	 rda5816_wr(priv,0xb0,0x95);//end14 	  
-	 rda5816_wr(priv,0xb2,0xCA);//end15 	  
+	 rda5816_wr(priv,0xb8,0x43);//end0
+	 rda5816_wr(priv,0xba,0x78);//end1
+	 rda5816_wr(priv,0xbc,0x78);//end2
+	 rda5816_wr(priv,0xbe,0x87);//end3
+	 rda5816_wr(priv,0xc0,0x8A);//end4
+	 rda5816_wr(priv,0xc2,0x72);//end5
+	 rda5816_wr(priv,0xc4,0x73);//end6
+	 rda5816_wr(priv,0xc6,0x75);//end7
+	 rda5816_wr(priv,0xa4,0x76);//end8
+	 rda5816_wr(priv,0xa6,0x74);//end9
+	 rda5816_wr(priv,0xa8,0x6D);//end10
+	 rda5816_wr(priv,0xaa,0x6A);//end11
+	 rda5816_wr(priv,0xac,0x35);//end12
+	 rda5816_wr(priv,0xae,0x63);//end13
+	 rda5816_wr(priv,0xb0,0x95);//end14
+	 rda5816_wr(priv,0xb2,0xCA);//end15
 
-	 rda5816_wr(priv,0x81,0x7F);//rise0 			 
-	 rda5816_wr(priv,0x82,0xA7);//rise1 	 
-	 rda5816_wr(priv,0x83,0xB6);//rise2 	 
-	 rda5816_wr(priv,0x84,0xB5);//rise3  
-	 rda5816_wr(priv,0x85,0xB8);//rise4 	 
-	 rda5816_wr(priv,0x86,0xA3);//rise5 	 
-	 rda5816_wr(priv,0x87,0xA3);//rise6 	 
-	 rda5816_wr(priv,0x88,0xA5);//rise7 	 
-	 rda5816_wr(priv,0x89,0xA6);//rise8 	 
-	 rda5816_wr(priv,0x8a,0x9E);//rise9 	 
-	 rda5816_wr(priv,0x8b,0x8A);//rise10	 
-	 rda5816_wr(priv,0x8c,0xc1);//rise11	 
-	 rda5816_wr(priv,0x8d,0x6A);//rise12	 
-	 rda5816_wr(priv,0x8e,0x9C);//rise13	 
-	 rda5816_wr(priv,0x8f,0xD1);//rise14	 
+	 rda5816_wr(priv,0x81,0x7F);//rise0
+	 rda5816_wr(priv,0x82,0xA7);//rise1
+	 rda5816_wr(priv,0x83,0xB6);//rise2
+	 rda5816_wr(priv,0x84,0xB5);//rise3
+	 rda5816_wr(priv,0x85,0xB8);//rise4
+	 rda5816_wr(priv,0x86,0xA3);//rise5
+	 rda5816_wr(priv,0x87,0xA3);//rise6
+	 rda5816_wr(priv,0x88,0xA5);//rise7
+	 rda5816_wr(priv,0x89,0xA6);//rise8
+	 rda5816_wr(priv,0x8a,0x9E);//rise9
+	 rda5816_wr(priv,0x8b,0x8A);//rise10
+	 rda5816_wr(priv,0x8c,0xc1);//rise11
+	 rda5816_wr(priv,0x8d,0x6A);//rise12
+	 rda5816_wr(priv,0x8e,0x9C);//rise13
+	 rda5816_wr(priv,0x8f,0xD1);//rise14
 
-	 rda5816_wr(priv,0x90,0x00);//fall1 	 
-	 rda5816_wr(priv,0x91,0x0A);//fall2 	 
-	 rda5816_wr(priv,0x92,0x13);//fall3 	 
-	 rda5816_wr(priv,0x93,0x17);//fall4  
-	 rda5816_wr(priv,0x94,0x0B);//fall5  
-	 rda5816_wr(priv,0x95,0x0C);//fall6  
-	 rda5816_wr(priv,0x96,0x0F);//fall7 	 
-	 rda5816_wr(priv,0x97,0x10);//fall8 	 
-	 rda5816_wr(priv,0x98,0x0E);//fall9 	 
-	 rda5816_wr(priv,0x99,0x0E);//fall10		 
-	 rda5816_wr(priv,0x9a,0x14);//fall11		 
-	 rda5816_wr(priv,0x9b,0x00);//fall12	 
-	 rda5816_wr(priv,0x9c,0x1C);//fall13	 
-	 rda5816_wr(priv,0x9d,0x2C);//fall14	 
-	 rda5816_wr(priv,0x9e,0x5B);//fall15	 
+	 rda5816_wr(priv,0x90,0x00);//fall1
+	 rda5816_wr(priv,0x91,0x0A);//fall2
+	 rda5816_wr(priv,0x92,0x13);//fall3
+	 rda5816_wr(priv,0x93,0x17);//fall4
+	 rda5816_wr(priv,0x94,0x0B);//fall5
+	 rda5816_wr(priv,0x95,0x0C);//fall6
+	 rda5816_wr(priv,0x96,0x0F);//fall7
+	 rda5816_wr(priv,0x97,0x10);//fall8
+	 rda5816_wr(priv,0x98,0x0E);//fall9
+	 rda5816_wr(priv,0x99,0x0E);//fall10
+	 rda5816_wr(priv,0x9a,0x14);//fall11
+	 rda5816_wr(priv,0x9b,0x00);//fall12
+	 rda5816_wr(priv,0x9c,0x1C);//fall13
+	 rda5816_wr(priv,0x9d,0x2C);//fall14
+	 rda5816_wr(priv,0x9e,0x5B);//fall15
 
    	 msleep(10); //Wait 10ms;
 
 	 rda5816_wr(priv,0x04,0x85);  // enable current channel of dual-channel tuner
-	if(priv->cfg->i2c_adr==0x8){ 
+	if(priv->cfg->i2c_adr==0x8){
 	 priv->cfg->i2c_adr=0x9;
 	 rda5816_rd(priv,0x04,&buffer);   //address^0x02
 	 rda5816_wr(priv,0x04,(buffer|0x80));  // address^0x02 enable adjacent channel of dual-channel tuner
@@ -278,15 +278,15 @@ static int rda5816_init(struct dvb_frontend *fe)
 
 	// rfsel set rf switch
 	if(priv->cfg->i2c_adr==0x8){
-	  rda5816_rd(priv,0x65,&buffer);	 
-	  rda5816_wr(priv,0x65,(buffer|0x6)); 
-	  priv->cfg->i2c_adr=0x9; 
-	  rda5816_rd(priv,0x65,&buffer); 	
-	  rda5816_wr(priv,0x65,(buffer&0xF9)); 
+	  rda5816_rd(priv,0x65,&buffer);
+	  rda5816_wr(priv,0x65,(buffer|0x6));
+	  priv->cfg->i2c_adr=0x9;
+	  rda5816_rd(priv,0x65,&buffer);
+	  rda5816_wr(priv,0x65,(buffer&0xF9));
 	  priv->cfg->i2c_adr=0x8;
 	}
 	priv->init_done = 1;
-	
+
 	return 0;
 
 }
@@ -294,8 +294,8 @@ static int rda5816_set_params(struct dvb_frontend *fe)
 {
 	struct rda5816_priv *priv = fe->tuner_priv;
 	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
-	u8 buffer; 
-	u8 Filter_bw_control_bit;	
+	u8 buffer;
+	u8 Filter_bw_control_bit;
 	int i;
 	u32 fPLL, bw,fSym,temp_value = 0;
 
@@ -303,7 +303,7 @@ static int rda5816_set_params(struct dvb_frontend *fe)
 			"symbol_rate=%d\n", __func__,
 			c->delivery_system, c->frequency, c->symbol_rate);
 
-	
+
 	printk("%s() delivery_system=%d frequency=%d " \
 			"symbol_rate=%d\n", __func__,
 			c->delivery_system, c->frequency, c->symbol_rate);
@@ -312,7 +312,7 @@ static int rda5816_set_params(struct dvb_frontend *fe)
  	fPLL = c->frequency/1000;
 	fSym = c->symbol_rate/1000;
 
-	 rda5816_wr(priv,0x04,0xc1); 
+	 rda5816_wr(priv,0x04,0xc1);
 	 //set frequency start
 	 if(fPLL>1075)
 	 {
@@ -337,10 +337,10 @@ static int rda5816_set_params(struct dvb_frontend *fe)
 
 	 buffer = ((unsigned char)((temp_value>>24)&0xff));
 	 rda5816_wr(priv,0x07,buffer);
-	 buffer = ((unsigned char)((temp_value>>16)&0xff));  
-	 rda5816_wr(priv,0x08,buffer);	 
+	 buffer = ((unsigned char)((temp_value>>16)&0xff));
+	 rda5816_wr(priv,0x08,buffer);
 	 buffer = ((unsigned char)((temp_value>>8)&0xff));
-	 rda5816_wr(priv,0x09,buffer);	 
+	 rda5816_wr(priv,0x09,buffer);
 	 buffer = ((unsigned char)( temp_value&0xff));
 	 rda5816_wr(priv,0x0a,buffer);
 	 //set frequency end
@@ -361,20 +361,20 @@ static int rda5816_set_params(struct dvb_frontend *fe)
  	 msleep(5);	 //Wait 5ms;
 
 	 for(i=0; i<130; i++)
-	 
-	 { 
-		 rda5816_rd(priv,0x03,&buffer); 
-		 if((buffer & 0x03) == 0x03)break; 
+
+	 {
+		 rda5816_rd(priv,0x03,&buffer);
+		 if((buffer & 0x03) == 0x03)break;
 		 msleep(2);
 	 }
-	 
+
 	 if((buffer & 0x03) != 0x03){
-	
+
 		 printk("rda5816 unlocked!!\n"); //unlocked
-	 } 
+	 }
 	 else{
-	 
-		printk("rda5816 locked...\n"); //locked 
+
+		printk("rda5816 locked...\n"); //locked
 		}
 
  	 return 0;
@@ -402,10 +402,10 @@ static int rda5816_get_status(struct dvb_frontend *fe, u32 *status)
 	if((buffer & 0x03) != 0x03){
 
 		*status = 0; //unlocked
-	} 
+	}
 	else{
 
-	   
+
 	   *status = 1;   //locked
 
 	   }
@@ -416,7 +416,6 @@ static  int   RDA5816_level_dBm_10[] = {    90, -50,  -263, -361, -463, -563, -6
 
 static int rda5816_get_rf_strength(struct dvb_frontend *fe, u16 *st)
 {
-	struct rda5816_priv *priv = fe->tuner_priv;
 	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
 	int   if_agc, index, table_length, slope, *x, *y;
 
@@ -425,7 +424,7 @@ static int rda5816_get_rf_strength(struct dvb_frontend *fe, u16 *st)
 	y = RDA5816_level_dBm_10;
 	table_length = sizeof(RDA5816_agc)/sizeof(int);
 
-	
+
 	/* Finding in which segment the if_agc value is */
 	for (index = 0; index < table_length; index ++)
 		if (x[index] > if_agc ) break;
@@ -507,4 +506,3 @@ EXPORT_SYMBOL(rda5816_attach);
 MODULE_DESCRIPTION("RDA 5816 tuner driver");
 MODULE_AUTHOR("Davin<smiledavin@gmail.com>");
 MODULE_LICENSE("GPL");
-
