@@ -1003,7 +1003,7 @@ err:
 	return ret;
 }
 
-static int m88ds3103_bs_set_reg(struct dvb_frontend *fe)
+static int m88ds3103_bs_set_reg(struct dvb_frontend *fe, bool vendor)
 {
 	struct m88ds3103_dev *dev = fe->demodulator_priv;
 	struct i2c_client *client = dev->client;
@@ -1031,28 +1031,30 @@ static int m88ds3103_bs_set_reg(struct dvb_frontend *fe)
 	ret = regmap_write(dev->regmap, 0x90, tmp | 0x73);
 	if (ret)
 		goto err;
-	ret = regmap_write(dev->regmap, 0x91, 0x46);
+	ret = regmap_write(dev->regmap, 0x91, vendor ? 0x46 : 0x42);
 	if (ret)
 		goto err;
-	ret = regmap_write(dev->regmap, 0x92, 0x03);
+	ret = regmap_write(dev->regmap, 0x92, vendor ? 0x03 : 0x01);
 	if (ret)
 		goto err;
-	ret = regmap_read(dev->regmap, 0x93, &tmp);
-	if (ret)
-		goto err;
-	tmp &= 0x0f;
-	ret = regmap_write(dev->regmap, 0x93, tmp | 0x8f);
-	if (ret)
-		goto err;
-	ret = regmap_read(dev->regmap, 0x94, &tmp);
-	if (ret)
-		goto err;
-	ret = regmap_write(dev->regmap, 0x94, tmp | 0x15);
-	if (ret)
-		goto err;
-	ret = regmap_write(dev->regmap, 0x95, 0x64);
-	if (ret)
-		goto err;
+	if (vendor) {
+		ret = regmap_read(dev->regmap, 0x93, &tmp);
+		if (ret)
+			goto err;
+		tmp &= 0x0f;
+		ret = regmap_write(dev->regmap, 0x93, tmp | 0x8f);
+		if (ret)
+			goto err;
+		ret = regmap_read(dev->regmap, 0x94, &tmp);
+		if (ret)
+			goto err;
+		ret = regmap_write(dev->regmap, 0x94, tmp | 0x15);
+		if (ret)
+			goto err;
+		ret = regmap_write(dev->regmap, 0x95, 0x64);
+		if (ret)
+			goto err;
+	}
 	ret = regmap_write(dev->regmap, 0x97, 0xb3);
 	if (ret)
 		goto err;
@@ -1062,15 +1064,17 @@ static int m88ds3103_bs_set_reg(struct dvb_frontend *fe)
 	ret = regmap_write(dev->regmap, 0x30, dev->cfg->agc_inv ? 0x18 : 0x08);
 	if (ret)
 		goto err;
-	ret = regmap_write(dev->regmap, 0x32, 0x44);
-	if (ret)
-		goto err;
-	ret = regmap_write(dev->regmap, 0x33, dev->cfg->agc);
-	if (ret)
-		goto err;
-	ret = regmap_write(dev->regmap, 0x35, 0x7f);
-	if (ret)
-		goto err;
+	if (vendor) {
+		ret = regmap_write(dev->regmap, 0x32, 0x44);
+		if (ret)
+			goto err;
+		ret = regmap_write(dev->regmap, 0x33, dev->cfg->agc);
+		if (ret)
+			goto err;
+		ret = regmap_write(dev->regmap, 0x35, 0x7f);
+		if (ret)
+			goto err;
+	}
 	ret = regmap_write(dev->regmap, 0x4b, 0x04);
 	if (ret)
 		goto err;
@@ -1483,7 +1487,7 @@ static int m88ds3103_blindscan(struct dvb_frontend *fe, bool init, unsigned int 
 		c->frequency = c->scan_start_frequency;
 		c->symbol_rate = 40000000;
 		c->bandwidth_hz = c->symbol_rate / 100 * 135;
-		ret = m88ds3103_bs_set_reg(fe);
+		ret = m88ds3103_bs_set_reg(fe, 1);
 		if (ret)
 			goto err;
 
@@ -1700,7 +1704,7 @@ int m88ds3103_get_spectrum_scan_fft(struct dvb_frontend *fe, unsigned int *delay
 	s32 useable_samples2, lost_samples2, sum_len, sum_correction, min_correction[2], max_correction[2];
 	s32 start_frequency = p->scan_start_frequency, end_frequency = p->scan_end_frequency;
 	s32 last_avg = 0, current_avg = 0, correction = 0, *temp_rf_level = NULL;
-	u32 table_size = 512, idx = 0, tmp, *temp_freq = NULL;
+	u32 idx = 0, *temp_freq = NULL;
 	int i, ret, error = 0;
 
 	ss->spectrum_present = false;
@@ -1713,11 +1717,6 @@ int m88ds3103_get_spectrum_scan_fft(struct dvb_frontend *fe, unsigned int *delay
 	ss->range = 96000;
 	ss->fft_size = 512;
 	ss->frequency_step = ss->range / ss->fft_size;
-
-	if (ss->fft_size != table_size)
-		return -1;
-
-	ss->fft_size = table_size;
  	ss->range = ss->frequency_step * ss->fft_size;
 	ss->spectrum_len = (end_frequency - start_frequency + ss->frequency_step - 1) / ss->frequency_step;
 	useable_samples2 = ((ss->fft_size * 6) / 10 + 1) / 2;
@@ -1748,73 +1747,7 @@ int m88ds3103_get_spectrum_scan_fft(struct dvb_frontend *fe, unsigned int *delay
 		if (kthread_should_stop() || dvb_frontend_task_should_stop(fe))
 			break;
 
-		ret = regmap_read(dev->regmap, 0x76, &tmp);
-		if (ret)
-			goto err;
-		ret = regmap_write(dev->regmap, 0x76, tmp | 0x80);
-		if (ret)
-			goto err;
-		ret = regmap_write(dev->regmap, 0xb2, 0x01);
-		if (ret)
-			goto err;
-		ret = regmap_write(dev->regmap, 0x00, 0x01);
-		if (ret)
-			goto err;
-		ret = regmap_write(dev->regmap, 0x4a, 0x00);
-		if (ret)
-			goto err;
-		ret = regmap_read(dev->regmap, 0x4d, &tmp);
-		if (ret)
-			goto err;
-		ret = regmap_write(dev->regmap, 0x4d, tmp | 0x91);
-		if (ret)
-			goto err;
-		ret = regmap_read(dev->regmap, 0x90, &tmp);
-		if (ret)
-			goto err;
-		ret = regmap_write(dev->regmap, 0x90, tmp | 0x73);
-		if (ret)
-			goto err;
-		ret = regmap_write(dev->regmap, 0x91, 0x42);
-		if (ret)
-			goto err;
-		ret = regmap_write(dev->regmap, 0x92, 0x01);
-		if (ret)
-			goto err;
-		ret = regmap_write(dev->regmap, 0x97, 0xbf);
-		if (ret)
-			goto err;
-		ret = regmap_write(dev->regmap, 0x99, 0x1c);
-		if (ret)
-			goto err;
-		ret = regmap_write(dev->regmap, 0x30, 0x08);
-		if (ret)
-			goto err;
-		ret = regmap_write(dev->regmap, 0x32, 0x44);
-		if (ret)
-			goto err;
-		ret = regmap_write(dev->regmap, 0x4b, 0x04);
-		if (ret)
-			goto err;
-		ret = regmap_write(dev->regmap, 0x56, 0x01);
-		if (ret)
-			goto err;
-		ret = regmap_write(dev->regmap, 0xa0, 0x44);
-		if (ret)
-			goto err;
-		ret = regmap_write(dev->regmap, 0x08, 0x83);
-		if (ret)
-			goto err;
-		ret = regmap_write(dev->regmap, 0x70, 0x00);
-		if (ret)
-			goto err;
-		ret = m88ds3103_update_bits(dev, 0x4d, 0x02, dev->cfg->spec_inv << 1);
-		if (ret)
-			goto err;
-		ret = regmap_write(dev->regmap, 0x00, 0x00);
-		if (ret)
-			goto err;
-		ret = regmap_write(dev->regmap, 0xb2, 0x00);
+		ret = m88ds3103_bs_set_reg(fe, 0);
 		if (ret)
 			goto err;
 	
