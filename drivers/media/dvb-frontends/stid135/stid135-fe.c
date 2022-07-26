@@ -222,6 +222,18 @@ static int stid135_probe(struct stv *state)
 			state->base->set_voltage(state->base->i2c, SEC_VOLTAGE_18, 2);
 			state->base->set_voltage(state->base->i2c, SEC_VOLTAGE_18, 3);
 		}
+	} else {
+		err |= fe_stid135_diseqc_init(&state->base->ip,AFE_TUNER1, FE_SAT_DISEQC_2_3_PWM);
+		err |= fe_stid135_diseqc_init(&state->base->ip,AFE_TUNER2, FE_SAT_DISEQC_2_3_PWM);
+		err |= fe_stid135_diseqc_init(&state->base->ip,AFE_TUNER3, FE_SAT_DISEQC_2_3_PWM);
+		err |= fe_stid135_diseqc_init(&state->base->ip,AFE_TUNER4, FE_SAT_DISEQC_2_3_PWM);
+		if (state->base->set_voltage) {
+			state->base->set_voltage(state->base->i2c, SEC_VOLTAGE_OFF, 0);
+			state->base->set_voltage(state->base->i2c, SEC_VOLTAGE_OFF, 1);
+			state->base->set_voltage(state->base->i2c, SEC_VOLTAGE_OFF, 2);
+			state->base->set_voltage(state->base->i2c, SEC_VOLTAGE_OFF, 3);
+		}
+
 	}
 ///////////////////*stvvglna*////////////////////////
 	if(state->base->vglna) { //for 6909x v2 version
@@ -1252,7 +1264,11 @@ static int stid135_sleep(struct dvb_frontend* fe)
 		state->base->tuner_use_count[state->rf_in]--;
 	if(state->base->tuner_use_count[state->rf_in]==0) {
 		dprintk("Calling TunerStandby 0\n");
-		err = FE_STiD135_TunerStandby(p_params->handle_demod, state->rf_in + 1, 0);
+		err = fe_stid135_set_22khz_cont(&state->base->ip, state->rf_in + 1, false);
+		if(state->base->set_voltage) {
+			state->base->set_voltage(state->base->i2c, SEC_VOLTAGE_OFF, state->rf_in);
+		}
+		err |= FE_STiD135_TunerStandby(p_params->handle_demod, state->rf_in + 1, 0);
 	}
 	mutex_unlock(&state->base->status_lock);
 
