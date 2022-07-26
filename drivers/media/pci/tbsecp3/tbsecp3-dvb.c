@@ -854,10 +854,10 @@ static int max_set_voltage(struct i2c_adapter *i2c,
 		break;
 	case SEC_VOLTAGE_OFF:
 	default:
-		//val |= 4;
+		val |= 4;
 		break;
 	}
-
+	dprintk("set voltageL: rf_in=%d voltage=%d reg=%d\n", rf_in, voltage, val);
 	tbs_write(TBSECP3_GPIO_BASE, reg, val);
 	return 0;
 }
