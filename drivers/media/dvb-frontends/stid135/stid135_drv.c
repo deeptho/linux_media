@@ -1927,7 +1927,7 @@ fe_lla_error_t FE_STiD135_WaitForLock(struct stv* state,
 	fe_lla_error_t error               = FE_LLA_NO_ERROR;
 	u32 strMergerLockField;
 	struct fe_stid135_internal_param *pParams;
-	BOOL lock;
+
 	vprintk("[%d] entering  FecTimeOut=%d\n", state->nr+1,  FecTimeOut);
 	pParams = &state->base->ip;
 
@@ -5537,7 +5537,7 @@ fe_lla_error_t FE_STiD135_Term(struct fe_stid135_internal_param* pParams)
 	chip_close_proc("stid135");
 #endif
 	ChipClose(pParams->handle_demod);
-#ifdef DONT_ALLOW_MULTIPLE_CARDS
+#ifndef DONT_ALLOW_MULTIPLE_CARDS
 	chip_close_proc("soc");
 #endif
 	ChipClose(pParams->handle_soc);
@@ -6147,7 +6147,6 @@ fe_lla_error_t fe_stid135_diseqc_init(struct fe_stid135_internal_param* pParams,
 		return FE_LLA_I2C_ERROR;
 
 	error |= Oxford_Disec_Lnb_FskStartup(pParams->handle_demod);
-
 	switch(diseqc_mode) {
 	case FE_SAT_22KHZ_Continues:
 	case FE_SAT_DISEQC_2_3_PWM:
@@ -6171,7 +6170,7 @@ fe_lla_error_t fe_stid135_diseqc_init(struct fe_stid135_internal_param* pParams,
 		return FE_LLA_BAD_PARAMETER;
 		break;
 	}
-	vprintk("DISEQC[%d] error=%d mode=%d mode_fld=%d envelope_fld=%d", tuner_nb, error, diseqc_mode,
+	dprintk("DISEQC[%d] error=%d mode=%d mode_fld=%d envelope_fld=%d", tuner_nb, error, diseqc_mode,
 					mode_fld, envelop_fld);
 	/* Set alternate function #1 */
 	//p. 650 SYS_N_CONFIG1000 Alternative function output control for PIO0; only applies to tuners 2,3, 4
@@ -6269,7 +6268,7 @@ fe_lla_error_t fe_stid135_set_22khz_cont(struct fe_stid135_internal_param* pPara
 
 	error |= ChipSetField(pParams->handle_demod,
 		FLD_FC8CODEW_DVBSX_DISEQC_DISTXCFG_DISEQC_MODE(tuner_nb), tone ? FE_SAT_22KHZ_Continues : FE_SAT_DISEQC_2_3_PWM);
-	vprintk("DISEQC[%d] tone=%d errror=%d", tuner_nb, tone, pParams->handle_demod->Error);
+	dprintk("DISEQC[%d] tone=%d errror=%d", tuner_nb, tone, pParams->handle_demod->Error);
 	/* Check the error at the end of the function */
 	vprintk("DISEQC[%d] error=%d %d", tuner_nb, pParams->handle_demod->Error, error);
 	if(pParams->handle_demod->Error)
@@ -12180,7 +12179,7 @@ STCHIP_Error_t stvvglna_init(SAT_VGLNA_Params_t *InitParams, STCHIP_Info_t* *hCh
 
 
 		(*hChipHandle) = ChipOpen(InitParams->Chip);
-#ifdef DONT_ALLOW_MULTIPLE_CARDS
+#ifndef DONT_ALLOW_MULTIPLE_CARDS
 		chip_init_proc(*hChipHandle, "vglna");
 #endif
 		hChip=(*hChipHandle);

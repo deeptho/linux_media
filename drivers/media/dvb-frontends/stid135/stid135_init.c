@@ -8924,7 +8924,7 @@ STCHIP_Error_t STiD135_Init(Demod_InitParams_t *InitParams,
 	ChipSetHierarchyMap (TRUE);
 
 	(*hChipHandle) = ChipOpen(InitParams->Chip);
-#ifdef DONT_ALLOW_MULTIPLE_CARDS`
+#ifndef DONT_ALLOW_MULTIPLE_CARDS
 	chip_init_proc(*hChipHandle, "stid135");
 #endif
 	ChipSetHierarchyMap (FALSE);
@@ -9000,7 +9000,7 @@ STCHIP_Error_t STiD135_SOC_Init(Demod_InitParams_t *InitParams, STCHIP_Info_t** 
 	InitParams->Chip->pData    = NULL;
 
 	(*hChipHandle) = ChipOpen(InitParams->Chip);
-#ifdef DONT_ALLOW_MULTIPLE_CARDS
+#ifndef DONT_ALLOW_MULTIPLE_CARDS
 	chip_init_proc(*hChipHandle, "soc");
 #endif
 	hChip=(*hChipHandle);
