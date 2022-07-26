@@ -1402,7 +1402,7 @@ static enum dvbfe_algo si2183_get_algo(struct dvb_frontend *fe)
 	return DVBFE_ALGO_HW;
 }
 
-static int si2183_set_dvb_property(struct dvb_frontend *fe, u32 cmd, u32 data)
+static int si2183_set_dvb_propertyOFF(struct dvb_frontend *fe, u32 cmd, u32 data)
 {
 	int ret = 0;
 
@@ -1656,7 +1656,7 @@ static const struct dvb_frontend_ops si2183_ops = {
 	.get_frontend_algo = si2183_get_algo,
 	.tune = si2183_tune,
 
-	.set_property			= si2183_set_dvb_property,
+	//.set_property			= si2183_set_dvb_property,
 
 	.set_tone			= si2183_set_tone,
 	.diseqc_send_burst = si2183_diseqc_send_burst,
@@ -1831,6 +1831,7 @@ MODULE_DEVICE_TABLE(i2c, si2183_id_table);
 static struct i2c_driver si2183_driver = {
 	.driver = {
 		.name	= "si2183",
+
 	},
 	.probe		= si2183_probe,
 	.remove		= si2183_remove,
