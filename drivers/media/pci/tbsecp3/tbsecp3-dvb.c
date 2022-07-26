@@ -2222,6 +2222,8 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 	snprintf(adapter->fe->ops.info.adapter_name, sizeof(adapter->fe->ops.info.adapter_name),
 					 "%s #%d", adapter->fe->ops.info.card_name, adapter->nr);
 	if (adapter->fe2) {
+		adapter->fe2->ops.info.adapter_mac_address = dev->adapter_mac_address;
+		adapter->fe2->ops.info.card_mac_address = dev->card_mac_address;
 		strlcpy(adapter->fe2->ops.info.name, dev->info->name, sizeof(adapter->fe2->ops.info.card_name));
 		strlcpy(adapter->fe2->ops.info.card_address, dev_name(&dev->pci_dev->dev), sizeof(adapter->fe2->ops.info.card_address));
 		strlcpy(adapter->fe2->ops.info.card_name, dev->info->name, sizeof(adapter->fe2->ops.info.card_name));
