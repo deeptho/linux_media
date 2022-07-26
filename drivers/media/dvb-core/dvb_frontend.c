@@ -1021,6 +1021,7 @@ static bool is_sat_fe(struct dvb_frontend* fe) {
 		switch(fe->ops.delsys[i]) {
 		case SYS_DVBS:
 		case SYS_DVBS2:
+		case SYS_DVBS2X:
 			return true;
 		}
 	}
@@ -1113,7 +1114,7 @@ static int dvb_frontend_check_parameters(struct dvb_frontend *fe)
 	case ALGORITHM_BLIND:
 	case ALGORITHM_BLIND_BEST_GUESS:
 	case ALGORITHM_COLD_BEST_GUESS:
-		printk("checking frequency\n");
+		dprintk("checking frequency\n");
 	/* range check: frequency */
 		dvb_frontend_get_frequency_limits(fe, &freq_min, &freq_max, NULL);
 		if ((freq_min && c->frequency < freq_min) ||

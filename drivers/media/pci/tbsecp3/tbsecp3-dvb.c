@@ -844,7 +844,6 @@ static int max_set_voltage(struct i2c_adapter *i2c,
 
 	reg = rf_in * 4;
 	val = tbs_read(TBSECP3_GPIO_BASE, reg) & ~4;
-
 	switch (voltage) {
 	case SEC_VOLTAGE_13:
 		val &= ~2;
@@ -1865,6 +1864,10 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 		adapter->fe->ops.delsys[3] = SYS_ISDBT;
 		adapter->fe->ops.delsys[4] = SYS_DVBC_ANNEX_B;
 		adapter->fe->ops.delsys[5] = SYS_AUTO;
+		//The following limits are determined by the tuner
+		adapter->fe->ops.info.frequency_min_hz = 0x0;
+		adapter->fe->ops.info.frequency_max_hz = 0xffffffff;
+		dprintk("XXX2: fe=%p %u %u\n", 	adapter->fe, adapter->fe->ops.info.frequency_min_hz, 	adapter->fe->ops.info.frequency_max_hz);
 
 		/* attach tuner */
 		memset(&si2157_config, 0, sizeof(si2157_config));
@@ -1874,7 +1877,7 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 		memset(&info, 0, sizeof(struct i2c_board_info));
 		strlcpy(info.type, "si2157", I2C_NAME_SIZE);
 		info.addr = (adapter->nr %2) ? 0x61 : 0x60;
-		info.platform_data = &si2157_config;
+		info.platform_data = &si2157_config; //DVBT-DVBC tuner
 		request_module(info.type);
 		client_tuner = i2c_new_client_device(i2c, &info); //si2157
 		if (client_tuner == NULL ||
@@ -1889,13 +1892,17 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 
 
 		/* sattelite tuner */
-		//This overrides the information produced by si2183_probe
+		//This overrides the information produced by si2183_probe -- hack
 		memset(adapter->fe2->ops.delsys, 0, MAX_DELSYS);
 		adapter->fe2->ops.delsys[0] = SYS_DVBS;
 		adapter->fe2->ops.delsys[1] = SYS_DVBS2;
 		adapter->fe2->ops.delsys[2] = SYS_DSS;
 		adapter->fe2->ops.delsys[3] = SYS_AUTO;
 		adapter->fe2->id = 1;
+		//The following limits are determined by the tuner
+		adapter->fe2->ops.info.frequency_min_hz = 0;
+		adapter->fe2->ops.info.frequency_max_hz = 0xffffffff;
+		dprintk("XXX1: fe=%p: %u %u\n", 	adapter->fe2, adapter->fe2->ops.info.frequency_min_hz, 	adapter->fe2->ops.info.frequency_max_hz);
 		//dvb_attach basically loads a module and calls (av201x_attach
 		if (dvb_attach(av201x_attach, adapter->fe2, &tbs6522_av201x_cfg[(adapter->nr %2)],
 					i2c) == NULL) {
