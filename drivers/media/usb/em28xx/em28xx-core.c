@@ -1107,6 +1107,7 @@ void em28xx_unregister_extension(struct em28xx_ops *ops)
 			if (dev->dev_next)
 				ops->fini(dev->dev_next);
 			ops->fini(dev);
+			dev->disconnected = true;
 		}
 	}
 	list_del(&ops->next);
@@ -1133,7 +1134,10 @@ void em28xx_init_extension(struct em28xx *dev)
 
 void em28xx_close_extension(struct em28xx *dev)
 {
-	const struct em28xx_ops *ops = NULL;
+	struct em28xx_ops *ops = NULL;
+
+	if(dev->disconnected)
+		return;
 
 	mutex_lock(&em28xx_devlist_mutex);
 	list_for_each_entry(ops, &em28xx_extension_devlist, next) {

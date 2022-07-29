@@ -2065,7 +2065,9 @@ static int em28xx_dvb_fini(struct em28xx *dev)
 
 	/* release I2C module bindings */
 	dvb_module_release(dvb->i2c_client_sec);
+#if 0 //done in em28xx_unregister_dvb
 	dvb_module_release(dvb->i2c_client_tuner);
+#endif
 	dvb_module_release(dvb->i2c_client_demod);
 
 	kfree(dvb);
