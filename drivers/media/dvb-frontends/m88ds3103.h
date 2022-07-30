@@ -10,6 +10,7 @@
 
 #include <linux/dvb/frontend.h>
 
+bool blind;
 bool scandone;
 u16 tpcnt;
 u16 tpnum;
