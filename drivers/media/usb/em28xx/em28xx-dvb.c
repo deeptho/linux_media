@@ -75,11 +75,9 @@ MODULE_PARM_DESC(debug, "enable debug messages [dvb]");
 
 DVB_DEFINE_MOD_OPT_ADAPTER_NR(adapter_nr);
 
-#define dprintk(level, fmt, arg...) do {				\
-	if (debug >= level)						\
-		dev_printk(KERN_DEBUG, &dev->intf->dev,			\
-			   "dvb: " fmt, ## arg);			\
-} while (0)
+#define dprintk(fmt, arg...)																					\
+	printk(KERN_DEBUG pr_fmt("%s:%d " fmt),  __func__, __LINE__, ##arg)
+
 
 struct em28xx_dvb {
 	struct dvb_frontend        *fe[2];
@@ -138,9 +136,9 @@ static inline void print_err_status(struct em28xx *dev,
 		break;
 	}
 	if (packet < 0) {
-		dprintk(1, "URB status %d [%s].\n", status, errmsg);
+		dprintk("URB status %d [%s].\n", status, errmsg);
 	} else {
-		dprintk(1, "URB packet %d, status %d [%s].\n",
+		dprintk("URB packet %d, status %d [%s].\n",
 			packet, status, errmsg);
 	}
 }
@@ -226,7 +224,7 @@ static int em28xx_start_streaming(struct em28xx_dvb *dvb)
 	if (rc < 0)
 		return rc;
 
-	dprintk(1, "Using %d buffers each with %d x %d bytes, alternate %d\n",
+	dprintk("Using %d buffers each with %d x %d bytes, alternate %d\n",
 		EM28XX_DVB_NUM_BUFS,
 		packet_multiplier,
 		dvb_max_packet_size, dvb_alt);
