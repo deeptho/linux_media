@@ -38,6 +38,10 @@
 
 #define DRIVER_NAME         "em28xx"
 
+#define dprintk(fmt, arg...)																					\
+	printk(KERN_DEBUG pr_fmt("%s:%d " fmt),  __func__, __LINE__, ##arg)
+
+
 static int tuner = -1;
 module_param(tuner, int, 0444);
 MODULE_PARM_DESC(tuner, "tuner type");
@@ -3484,7 +3488,9 @@ static void em28xx_release_resources(struct em28xx *dev)
 	struct usb_device *udev = interface_to_usbdev(dev->intf);
 
 	/*FIXME: I2C IR should be disconnected */
-
+	WARN_ON(dev->disconnected);
+	if(dev->disconnected)
+		return;
 	mutex_lock(&dev->lock);
 
 	em28xx_unregister_media_device(dev);
@@ -4135,33 +4141,42 @@ static void em28xx_usb_disconnect(struct usb_interface *intf)
 
 	if (!dev)
 		return;
+	WARN_ON(dev->disconnected);
+	if(dev->disconnected) {
+		dprintk("already disconnected\n");
+		return;
+	}
 
 	if (dev->dev_next) {
-		dev->dev_next->disconnected = 1;
-		dev_info(&dev->intf->dev, "Disconnecting %s\n",
+		dev_info(&dev->intf->dev, "Disconnecting dev_next %s\n",
 			 dev->dev_next->name);
 	}
 
-	dev->disconnected = 1;
 
-	dev_info(&dev->intf->dev, "Disconnecting %s\n", dev->name);
+	dev_info(&dev->intf->dev, "Disconnecting dev=%p %s\n", dev, dev->name);
 
 	flush_request_modules(dev);
 
 	em28xx_close_extension(dev);
 
 	if (dev->dev_next) {
-		em28xx_close_extension(dev->dev_next);
-		em28xx_release_resources(dev->dev_next);
+		WARN_ON(dev->dev_next->disconnected);
+		if(!dev->dev_next->disconnected)
+			em28xx_close_extension(dev->dev_next);
+		if(! dev->dev_next->disconnected)
+			em28xx_release_resources(dev->dev_next);
+		dev->dev_next->disconnected = 1;
 	}
-
-	em28xx_release_resources(dev);
-
+	dev->disconnected = 1;
+	if(! dev->disconnected)
+		em28xx_release_resources(dev);
+#if 0 //already done in _fini functions
 	if (dev->dev_next) {
-		kref_put(&dev->dev_next->ref, em28xx_free_device);
+			kref_put(&dev->dev_next->ref, em28xx_free_device); //BAD!!!! use after release
 		dev->dev_next = NULL;
 	}
 	kref_put(&dev->ref, em28xx_free_device);
+#endif
 }
 
 static int em28xx_usb_suspend(struct usb_interface *intf,

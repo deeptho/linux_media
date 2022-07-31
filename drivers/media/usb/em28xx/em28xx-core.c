@@ -30,6 +30,10 @@
 #include <sound/ac97_codec.h>
 #include <media/v4l2-common.h>
 
+#define dprintk(fmt, arg...)																					\
+	printk(KERN_DEBUG pr_fmt("%s:%d " fmt),  __func__, __LINE__, ##arg)
+
+
 #define DRIVER_AUTHOR "Ludovico Cavedon <cavedon@sssup.it>, " \
 		      "Markus Rechberger <mrechberger@gmail.com>, " \
 		      "Mauro Carvalho Chehab <mchehab@kernel.org>, " \
@@ -1106,11 +1110,13 @@ void em28xx_unregister_extension(struct em28xx_ops *ops)
 		if (ops->fini) {
 			if (dev->dev_next)
 				ops->fini(dev->dev_next);
-			ops->fini(dev);
+			if(ops && ops->fini)
+				ops->fini(dev);
 			dev->disconnected = true;
 		}
 	}
-	list_del(&ops->next);
+	if(!ops->next.next)
+		list_del(&ops->next);
 	mutex_unlock(&em28xx_devlist_mutex);
 	pr_info("em28xx: Removed (%s) extension\n", ops->name);
 }
@@ -1121,6 +1127,7 @@ void em28xx_init_extension(struct em28xx *dev)
 	const struct em28xx_ops *ops = NULL;
 
 	mutex_lock(&em28xx_devlist_mutex);
+	WARN_ON(dev->ts == SECONDARY_TS);
 	list_add_tail(&dev->devlist, &em28xx_devlist);
 	list_for_each_entry(ops, &em28xx_extension_devlist, next) {
 		if (ops->init) {
@@ -1135,7 +1142,7 @@ void em28xx_init_extension(struct em28xx *dev)
 void em28xx_close_extension(struct em28xx *dev)
 {
 	struct em28xx_ops *ops = NULL;
-
+	WARN_ON(dev->disconnected);
 	if(dev->disconnected)
 		return;
 
@@ -1147,7 +1154,9 @@ void em28xx_close_extension(struct em28xx *dev)
 			ops->fini(dev);
 		}
 	}
-	list_del(&dev->devlist);
+	if(dev->ts != SECONDARY_TS)
+		list_del(&dev->devlist);
+	dev->disconnected = 1;
 	mutex_unlock(&em28xx_devlist_mutex);
 }
 
