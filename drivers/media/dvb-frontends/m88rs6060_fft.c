@@ -24,7 +24,6 @@
 #include "m88rs6060_priv.h"
 #include "si5351_priv.h"
 
-
 #define dprintk(fmt, arg...)																					\
 	printk(KERN_DEBUG pr_fmt("%s:%d " fmt), __func__, __LINE__, ##arg)
 
@@ -33,8 +32,6 @@
 
 
 /*blind scan register defines*/
-#define    FFT_N		512
-
 
 #define    PSD_OVERLAP      96
 #define    AVE_TIMES        256
@@ -45,16 +42,16 @@
 #define    FLAT_THR_ONE_LOOP                28
 #define    BLINDSCAN_SYMRATE_KSS     45000//40000
 
-int m88rs6060_init_fft(struct m88rs6060_state* state, s32 center_freq)
+int m88rs6060_init_fft(struct m88rs6060_state* state)
 {
 	u32 tmp;
 	u8 sm_buf;
 	sm_buf = 2;
-
+#if 0
 	regmap_read(state->demod_regmap, 0x76, &tmp);  //set adaptive equalizer to bypassed
 	tmp |= 0x80;
 	regmap_write(state->demod_regmap, 0x76, tmp); //set adaptive equalizer to bypassed
-
+#endif
 
 	//first part of a soft reset
 	regmap_write(state->demod_regmap, 0xB2, 0x01); //reset microcontroller
@@ -123,20 +120,19 @@ static int m88rs6060_get_spectrum_scan_fft_one_band(struct m88rs6060_state* stat
 	bool	agc_locked, fft_done;
 	s32	tmp;
 	u8 cnt;
-	u16	totaltpnum;
-	u32	nSize = (FFT_N - 16 * 2) * 2;		// sm_buf = 2, overlap = 16, nSize = 960
 	int i = 0;
-	u32	nCount = 0;
 	s32 strength;
 
 	fft_done		= false;
+	//code must be kept
 	agc_locked = m88rs6060_wait_for_analog_agc_lock(state);
 	if(!agc_locked) {
 		dprintk("reg: No analogue lock\n");
 		return -1; //no agc lock achieved
 	}
-	msleep(100);
-
+#if 0
+	msleep(10);
+#endif
 
 	regmap_write(state->demod_regmap, 0x9a, 0x80);
 
@@ -150,25 +146,23 @@ static int m88rs6060_get_spectrum_scan_fft_one_band(struct m88rs6060_state* stat
 				break;
 			if(kthread_should_stop() || dvb_frontend_task_should_stop(&state->fe))
 				break;
+#if 0
 			msleep(10);
+#else
+			msleep(1); //replacing with lower usleep_range values starts to break up fft)
+#endif
 		}
-
 		dprintk("fft_done=%d agc_locked=%d tmp=%d\n", fft_done, agc_locked, tmp);
-	if(!(fft_done && agc_locked)) {
-		if(i==1)
-			msleep(100); //retry once
-		else
-			return -1;
-	 } else
-		break;
+		if(!(fft_done && agc_locked)) {
+			if(i==1)
+				msleep(100); //retry once
+			else
+				return -1;
+		} else
+			break;
 	}
 
 	m88rs6060_get_gain(state, center_freq / 1000, &strength);
-
-	regmap_read(state->demod_regmap, 0x9a, &tmp);
-	totaltpnum = (u16)(tmp & 0x1F);
-	dprintk("totaltpnum = %d nSize=%d\n", totaltpnum, nSize);
-	nCount = 1;
 
 	regmap_write(state->demod_regmap, 0x9A, 0x40);
 	for(i = 0; i < 32; ++i) {
@@ -189,8 +183,8 @@ static int m88rs6060_get_spectrum_scan_fft_one_band(struct m88rs6060_state* stat
 		rf_level[i]=0;
 	}
 
-	msleep(50);
 #if 0 //to test
+	msleep(50);
 	regmap_write(state->demod_regmap, 0x9A, 0x20);
 	regmap_read(state->demod_regmap, 0x9B, &tmp1);
 	regmap_read(state->demod_regmap, 0x9B, &tmp2);
@@ -209,7 +203,6 @@ int m88rs6060_get_spectrum_scan_fft(struct dvb_frontend *fe,
 	struct m88rs6060_state* state = fe->demodulator_priv;
 	struct spectrum_scan_state* ss = &state->spectrum_scan_state;
 	int error=0;
-	u32 table_size = FFT_N;
 	u32* temp_freq = NULL;
 	s32* temp_rf_level = NULL;
 	s32 last_avg =0, current_avg =0, correction = 0;
@@ -233,16 +226,9 @@ int m88rs6060_get_spectrum_scan_fft(struct dvb_frontend *fe,
 	ss->start_frequency = start_frequency;
 	ss->end_frequency = end_frequency;
 	ss->range = 96000;
-	ss->fft_size = FFT_N;
+	ss->fft_size = 512;
 	ss->frequency_step = ss->range/ss->fft_size; //187kHz
 	dprintk("frequency_step=%d\n", ss->frequency_step);
-
-	if(ss->fft_size != table_size) {
-		dprintk("Error: fft_size should be power of 2\n");
-		return -1;
-	}
-	ss->fft_size = table_size;
-
  	ss->range = ss->frequency_step * ss->fft_size; //in kHz
 
 	ss->spectrum_len = (end_frequency - start_frequency + ss->frequency_step-1) /ss->frequency_step;
@@ -265,7 +251,9 @@ int m88rs6060_get_spectrum_scan_fft(struct dvb_frontend *fe,
 	}
 
 	m88rs6060_set_default_mclk(state);
-
+#if 1
+	m88rs6060_init_fft(state); //moving it here had no effect on spectrum plot, possible code exec speedup
+#endif
 	min_correction[0] = 0x7fffffff;
 	min_correction[1] = 0x7fffffff;
 	max_correction[0] = 0x80000000;
@@ -282,13 +270,15 @@ int m88rs6060_get_spectrum_scan_fft(struct dvb_frontend *fe,
 			break;
 		}
 		dprintk("SPEC: center_freq=%d\n", center_freq);
-		m88rs6060_init_fft(state, center_freq);
+#if 0
+		m88rs6060_init_fft(state);
+#endif
 		iFreqKHz = (center_freq + 500) / 1000 * 1000;
-
-		msleep(10);
+#if 0
+		msleep(10); //wasn't needed on ds3103
+#endif
 
 		m88rs6060_set_tuner(state, iFreqKHz / 1000, BLINDSCAN_SYMRATE_KSS, 0);
-
 		m88rs6060_set_carrier_offset(state, iFreqKHz - (iFreqKHz/ 1000)*1000);
 
 		error = m88rs6060_get_spectrum_scan_fft_one_band(state,	iFreqKHz, ss->range,
