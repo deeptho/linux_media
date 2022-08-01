@@ -2197,6 +2197,7 @@ static int m88rs6060_tune_once(struct dvb_frontend *fe, bool blind)
 			regmap_write(state->demod_regmap, 0x00, 0x0);
 			regmap_write(state->demod_regmap, 0xb2, 0x0); //start microntroller after reset
 		}
+#if 0
 	if (p->symbol_rate < 5000000) {
 		lpf_offset_khz = 3000;
 		realFreq = p->frequency + 3000;
@@ -2204,7 +2205,9 @@ static int m88rs6060_tune_once(struct dvb_frontend *fe, bool blind)
 	} else {
 		state->center_freq_offset = 0;
 	}
-
+#else
+	state->center_freq_offset = 0;
+#endif
 	m88rs6060_set_mclk_according_to_symbol_rate(state, realFreq / 1000, symbol_rate_kss, target_mclk, blind);
 
 	// set frequency and symbol_rate
