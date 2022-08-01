@@ -97,8 +97,9 @@ struct tbsecp3_board tbsecp3_boards[] = {
 	[TBSECP3_BOARD_TBS6904SE] = {
 		.board_id	= TBSECP3_BOARD_TBS6904SE,
 		.name		= "TurboSight TBS 6904se DVB-S/S2/S2x ",
+		.short_name		= "TBS 6904se",
 		.adapters	= 4,
-		.i2c_speed	= 39,
+		.i2c_speed	= 3,
 		.eeprom_i2c	= 3,
 		.adap_config	= {
 			{
