@@ -149,7 +149,7 @@ static int check_candidate_tp(struct spectrum_scan_state* ss,
 				//vprintk("Rejecting peak because it contains other peaks\n");
 				return -1;
 			} else {
-				memmove(&si->peaks[i] , &si->peaks[i+1], sizeof(si->peaks[0]) * si->num_peaks-i-1);
+				memmove(&si->peaks[i] , &si->peaks[i+1], sizeof(si->peaks[0]) * (si->num_peaks-i-1));
 				--i;
 				si->num_peaks--;
 				continue;
@@ -161,7 +161,7 @@ static int check_candidate_tp(struct spectrum_scan_state* ss,
 			 (cand->fall_idx >= old->rise_idx &&  cand->fall_idx <= old->fall_idx)
 			) {
 			if( cand->level - old->level >= ss->threshold2) {
-				memmove(&si->peaks[i] , &si->peaks[i+1], sizeof(si->peaks[0]) * si->num_peaks-i-1);
+				memmove(&si->peaks[i] , &si->peaks[i+1], sizeof(si->peaks[0]) * (si->num_peaks-i-1));
 				si->num_peaks--;
 				--i;
 				continue;
