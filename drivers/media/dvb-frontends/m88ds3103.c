@@ -1048,17 +1048,15 @@ static int m88ds3103_bs_set_reg(struct dvb_frontend *fe, bool vendor)
 	ret = regmap_write(dev->regmap, 0x30, dev->cfg->agc_inv ? 0x18 : 0x08);
 	if (ret)
 		goto err;
-	if (vendor) {
-		ret = regmap_write(dev->regmap, 0x32, 0x44);
-		if (ret)
-			goto err;
-		ret = regmap_write(dev->regmap, 0x33, dev->cfg->agc);
-		if (ret)
-			goto err;
-		ret = regmap_write(dev->regmap, 0x35, 0x7f);
-		if (ret)
-			goto err;
-	}
+	ret = regmap_write(dev->regmap, 0x32, 0x44);
+	if (ret)
+		goto err;
+	ret = regmap_write(dev->regmap, 0x33, dev->cfg->agc);
+	if (ret)
+		goto err;
+	ret = regmap_write(dev->regmap, 0x35, 0x7f);
+	if (ret)
+		goto err;
 	ret = regmap_write(dev->regmap, 0x4b, 0x04);
 	if (ret)
 		goto err;
