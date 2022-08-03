@@ -1193,7 +1193,7 @@ static int em28178_dvb_init_pctv_461e(struct em28xx *dev)
 
 	/* attach tuner */
 	ts2020_config.fe = dvb->fe[0];
-
+	ts2020_config.get_agc_pwm = m88ds3103_get_agc_pwm;
 	dvb->i2c_client_tuner = dvb_module_probe("ts2020", "ts2022",
 						 i2c_adapter,
 						 0x60, &ts2020_config);
@@ -1251,6 +1251,7 @@ static int em28178_dvb_init_pctv_461e_v2(struct em28xx *dev)
 
 	/* attach tuner */
 	ts2020_config.fe = dvb->fe[0];
+	ts2020_config.get_agc_pwm = m88ds3103_get_agc_pwm;
 	dvb->i2c_client_tuner = dvb_module_probe("ts2020", "ts2022",
 						 i2c_adapter,
 						 0x60, &ts2020_config);
