@@ -1061,13 +1061,15 @@ static int dvb_frontend_check_parameters(struct dvb_frontend *fe)
 		dvb_frontend_get_frequency_limits(fe, &freq_min, &freq_max, NULL);
 		if ((freq_min && c->frequency < freq_min) ||
 				(freq_max && c->frequency > freq_max)) {
-			dev_warn(fe->dvb->device, "DVB: adapter %i frontend %i frequency %u out of range (%u..%u)\n",
+			if (c->frequency != 0) {
+				dev_warn(fe->dvb->device, "DVB: adapter %i frontend %i frequency %u out of range (%u..%u)\n",
 							 fe->dvb->num, fe->id, c->frequency,
 							 freq_min, freq_max);
-			dprintk( "DVB: adapter %i frontend %i frequency %u out of range (%u..%u)\n",
+				dprintk( "DVB: adapter %i frontend %i frequency %u out of range (%u..%u)\n",
 							 fe->dvb->num, fe->id, c->frequency,
 							 freq_min, freq_max);
-			return -EINVAL;
+				return -EINVAL;
+			}
 		}
 
 		/* range check: symbol rate */
@@ -1082,15 +1084,17 @@ static int dvb_frontend_check_parameters(struct dvb_frontend *fe)
 					 c->symbol_rate < fe->ops.info.symbol_rate_min) ||
 					(fe->ops.info.symbol_rate_max &&
 					 c->symbol_rate > fe->ops.info.symbol_rate_max)) {
-				dev_warn(fe->dvb->device, "DVB: adapter %i frontend %i symbol rate %u out of range (%u..%u)\n",
+				if (c->symbol_rate != 0) {
+					dev_warn(fe->dvb->device, "DVB: adapter %i frontend %i symbol rate %u out of range (%u..%u)\n",
 								 fe->dvb->num, fe->id, c->symbol_rate,
 								 fe->ops.info.symbol_rate_min,
 								 fe->ops.info.symbol_rate_max);
-				dprintk("DVB: adapter %i frontend %i symbol rate %u out of range (%u..%u)\n",
+					dprintk("DVB: adapter %i frontend %i symbol rate %u out of range (%u..%u)\n",
 								fe->dvb->num, fe->id, c->symbol_rate,
 								fe->ops.info.symbol_rate_min,
 								fe->ops.info.symbol_rate_max);
-				return -EINVAL;
+					return -EINVAL;
+				}
 			}
 		default:
 			break;
