@@ -1156,6 +1156,9 @@ struct tbsecp3_board tbsecp3_boards[] = {
 		}
 	},
 	[TBSECP3_BOARD_TBS6909X] = {
+#if 1
+		.i2c_speed =3, //default=9
+#endif
 		.board_id	= TBSECP3_BOARD_TBS6909X,
 		.name		= "TurboSight TBS 6909x ",
 		.short_name		= "TBS 6909X",
@@ -1200,6 +1203,9 @@ struct tbsecp3_board tbsecp3_boards[] = {
 		}
 	},
 	[TBSECP3_BOARD_TBS6903X] = {
+#if 1
+		.i2c_speed =3, //default=9
+#endif
 		.board_id	= TBSECP3_BOARD_TBS6903X,
 		.name		= "TurboSight TBS 6903x ",
 		.short_name		= "TBS 6903X",
