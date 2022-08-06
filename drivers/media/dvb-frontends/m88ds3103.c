@@ -174,7 +174,7 @@ static int m88ds3103_set_carrier_offset(struct dvb_frontend *fe, s16 lpfoffset)
 	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
 	u32 tuner_frequency_khz;
 	s32 s32tmp;
-	u8 buf[3];
+	u8 buf[2];
 	int ret;
 
 	if (fe->ops.tuner_ops.get_frequency) {
@@ -1100,15 +1100,21 @@ static int m88ds3103_set_delsys(struct dvb_frontend *fe, u8 delivery_system)
 	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
 	const struct m88ds3103_reg_val *init;
 	u32 target_mclk = 96000000, ts_clk = dev->cfg->ts_clk, u32tmp;
-	u8 u8tmp, u8tmp1 = 0, u8tmp2 = 0, buf[3];
+	u8 u8tmp, u8tmp1 = 0, u8tmp2 = 0, buf[2];
 	unsigned tmp;
 	u16 u16tmp;
 	int ret, len;
 	static const struct reg_sequence reset_buf[] = {
 		{0x07, 0x80}, {0x07, 0x00}
 	};
+	buf[0] = 0;
+	buf[1] = 0;
 
 	ret = regmap_multi_reg_write(dev->regmap, reset_buf, 2);
+	if (ret)
+		goto err;
+
+	ret = regmap_bulk_write(dev->regmap, 0x5e, buf, 2);
 	if (ret)
 		goto err;
 
