@@ -2414,11 +2414,11 @@ static int dvb_frontend_handle_algo_ctrl_ioctl(struct file *file,
 	struct dvb_device *dvbdev = file->private_data;
 	struct dvb_frontend *fe = dvbdev->priv;
 	struct dvb_frontend_private *fepriv = fe->frontend_priv;
+	struct dtv_algo_ctrl* p  = parg;
 	int err = -ENOTSUPP;
-
 	dev_dbg(fe->dvb->device, "%s:\n", __func__);
 
-	switch (cmd) {
+	switch (p->cmd) {
 	case DTV_STOP:
 		//this will request the task to stop processing
 		dprintk("entering DTV_STOP: stop_task\n");
@@ -2479,6 +2479,13 @@ static int dvb_frontend_do_ioctl(struct file *file, unsigned int cmd,
 	dev_dbg(fe->dvb->device, "%s: (%d)\n", __func__, _IOC_NR(cmd));
 	if((file->f_flags & O_ACCMODE) != O_RDONLY)  {
 		if(cmd == DTV_STOP) {
+			static struct dtv_algo_ctrl algo_ctrl = {.cmd= DTV_STOP};
+			dprintk("BAD CALL: DTV_STOP insted of FE_ALGO_CTRL\n");
+			parg = &algo_ctrl;
+			//	cmd = FE_ALGO_CTRL;
+		}
+
+		if(cmd == FE_ALGO_CTRL) {
 			dprintk("algo_ctrl requested\n");
 			if ((file->f_flags & O_ACCMODE) == O_RDONLY
 					&& (_IOC_DIR(cmd) != _IOC_READ
