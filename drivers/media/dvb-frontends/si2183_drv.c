@@ -358,7 +358,7 @@ int si2183_read_status(struct dvb_frontend *fe, enum fe_status *status)
 		c->cnr.stat[0].scale = FE_SCALE_NOT_AVAILABLE;
 		break;
 	case 0x03:
-		*status = FE_HAS_SIGNAL | FE_HAS_CARRIER | FE_HAS_VITERBI |
+		*status = FE_HAS_SIGNAL | FE_HAS_CARRIER | FE_HAS_TIMING_LOCK | FE_HAS_VITERBI |
 			FE_HAS_SYNC | FE_HAS_LOCK;
 		c->cnr.len = 1;
 		c->cnr.stat[0].scale = FE_SCALE_DECIBEL;
