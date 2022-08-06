@@ -960,6 +960,7 @@ int get_spectrum_scan_fft(struct dvb_frontend *fe)
 		if (kthread_should_stop() || dvb_frontend_task_should_stop(fe)) {
 			//@todo:  should this be moved into  stid135_get_spectrum_scan_fft_one_band?
 			dprintk("exiting on should stop\n");
+			goto _end;
 			break;
 		}
 		start_idx = lost_samples2 -5;
@@ -1065,7 +1066,7 @@ int stid135_spectral_scan_start(struct dvb_frontend *fe)
 	if(error)
 		return error;
 
-	if (!ss->spectrum) {
+	if (!ss->spectrum || ! ss->spectrum_present) {
 		dprintk("No spectrum\n");
 		return -ENOMEM;
 	}
