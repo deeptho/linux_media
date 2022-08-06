@@ -1489,7 +1489,7 @@ static int stid135_get_spectrum_scan_sweep(struct dvb_frontend* fe,
 		return  -ENOMEM;
 	}
 	ss->spectrum_present = true;
-
+	mutex_lock(&state->base->status_lock);
 #ifdef TODO
 	state->tuner_bw = stv091x_bandwidth(ROLLOFF_AUTO, bandwidth);
 #endif
@@ -1605,9 +1605,11 @@ static int stid135_get_spectrum_scan_sweep(struct dvb_frontend* fe,
 		usleep_range(12000, 13000);
 
 	}
+	mutex_unlock(&state->base->status_lock);
 	*status =  FE_HAS_SIGNAL|FE_HAS_CARRIER|FE_HAS_VITERBI|FE_HAS_SYNC|FE_HAS_LOCK;
 	return 0;
  __onerror:
+	mutex_unlock(&state->base->status_lock);
 	dprintk("encountered error at %d/%d\n", i, ss->spectrum_len);
 	*status =  FE_TIMEDOUT|FE_HAS_SIGNAL|FE_HAS_CARRIER|FE_HAS_VITERBI|FE_HAS_SYNC|FE_HAS_LOCK;
 	return 0;
