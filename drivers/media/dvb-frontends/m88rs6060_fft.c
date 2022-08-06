@@ -105,7 +105,7 @@ int m88rs6060_init_fft(struct m88rs6060_state* state)
 
 	//reset reg[0x30] to default 0x88
 	//value has little or no effect on spectrum (sporadic drop on one tp)
-	regmap_write(state->demod_regmap, 0x30, 0x88);
+	regmap_write(state->demod_regmap, 0x30, 0x88); //why 0x88? ds3103 reference code has 0x08
 	//last part of soft reset
 	regmap_write(state->demod_regmap, 0x00, 0x00); //chip id??
 	regmap_write(state->demod_regmap, 0xB2, 0x00); //start microcontroller
