@@ -3728,10 +3728,10 @@ static const struct dvb_frontend_ops m88rs6060_ops = {
 		 .symbol_rate_max = 45000000,
 		 .caps			= FE_CAN_INVERSION_AUTO | FE_CAN_FEC_AUTO | FE_CAN_QPSK |
 		 FE_CAN_RECOVER	| FE_CAN_2G_MODULATION | FE_CAN_MULTISTREAM,
-		 .extended_caps = FE_CAN_SPECTRUMSCAN	|FE_CAN_HR_SPECTRUMSCAN
+		 .extended_caps = FE_CAN_SPECTRUM_SWEEP	|FE_CAN_SPECTRUM_FFT
 		 | /* FE_CAN_IQ | */ FE_CAN_BLINDSEARCH,
 		 .supports_neumo = true,
-		 .rf_in = -1, //meansL: use adapterno
+		 .default_rf_input = -1, //means: use adapter_no
 	},
 
 	.tuner_ops = {

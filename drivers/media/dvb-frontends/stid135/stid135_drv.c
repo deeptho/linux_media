@@ -3977,7 +3977,6 @@ fe_lla_error_t fe_stid135_init(struct fe_sat_init_params *pInit,
 	/* Internal params structure allocation */
 
 	STCHIP_Info_t DemodChip;
-
 	//dprintk("here\n");
 		/* Chip initialisation */
 
@@ -5926,7 +5925,7 @@ TUNER_Error_t FE_STiD135_TunerInit(struct fe_stid135_internal_param *pParams)
 fe_lla_error_t fe_stid135_tuner_enable(STCHIP_Info_t* tuner_handle, FE_OXFORD_TunerPath_t tuner_nb)
 {
 	STCHIP_Error_t error = CHIPERR_NO_ERROR;
-
+	dprintk("tuner=%d\n", tuner_nb);
 	switch(tuner_nb) {
 		case AFE_TUNER1:
 			error |= Oxford_EnableLO(tuner_handle, AFE_TUNER1);
@@ -6064,6 +6063,7 @@ fe_lla_error_t fe_stid135_set_rfmux_path_(STCHIP_Info_t* hChip, 	enum fe_stid135
 																					FE_OXFORD_TunerPath_t tuner)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
+	dprintk("demod=%d tuner=%d\n", Demod, tuner);
 	switch(Demod) {
 		case 1:
 			error |= ChipSetField(hChip, FLD_FC8CODEW_C8CODEW_RFMUX_RFMUX0_RFMUX_DEMOD_SEL_1, (s32)(tuner - 1));
@@ -6145,7 +6145,7 @@ fe_lla_error_t fe_stid135_diseqc_init(struct fe_stid135_internal_param* pParams,
 
 	if (pParams->handle_demod->Error)
 		return FE_LLA_I2C_ERROR;
-
+	dprintk("tuner=%d mode=%d\n", tuner_nb, diseqc_mode);
 	error |= Oxford_Disec_Lnb_FskStartup(pParams->handle_demod);
 	switch(diseqc_mode) {
 	case FE_SAT_22KHZ_Continues:

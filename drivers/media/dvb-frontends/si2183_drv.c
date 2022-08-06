@@ -1634,9 +1634,9 @@ static const struct dvb_frontend_ops si2183_ops = {
 			FE_CAN_MUTE_TS |
 			FE_CAN_2G_MODULATION |
 		FE_CAN_MULTISTREAM,
-		.extended_caps = FE_CAN_SPECTRUMSCAN| FE_CAN_IQ | FE_CAN_BLINDSEARCH,
+		.extended_caps = FE_CAN_SPECTRUM_SWEEP | FE_CAN_SPECTRUM_FFT| FE_CAN_IQ | FE_CAN_BLINDSEARCH,
 		.supports_neumo = true,
-		 .rf_in = -1, //means: use adapterno
+		 .default_rf_input = -1, //means: use adapter_no
 	},
 
 	.get_tune_settings = si2183_get_tune_settings,

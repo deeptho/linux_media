@@ -95,6 +95,10 @@ static int tbsecp3_adapters_attach(struct tbsecp3_dev *dev)
 	for (i = 0; i < dev->info->adapters; i++) {
 
 		ret = tbsecp3_dvb_init(&dev->adapter[i]);
+		dprintk("adapter[%d]=%p tbs_nr=%d dvb_nr=%d q=%d\n", i, &dev->adapter[i],
+						dev->adapter[i].nr, dev->adapter[i].dvb_adapter.num, DVB_MAX_ADAPTERS);
+
+
 		if (ret) {
 			dev_err(&dev->pci_dev->dev,
 				"adapter%d attach failed\n",

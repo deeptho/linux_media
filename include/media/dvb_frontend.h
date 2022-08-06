@@ -359,7 +359,9 @@ struct dvb_frontend_internal_info {
 	int64_t adapter_mac_address;
 	uid_t owner_uid;
 	bool supports_neumo; //set to true if values if this driver supports neumo
-	s32 rf_in;
+	s8 default_rf_input;
+	u8 num_rf_inputs;
+	s8 rf_inputs[16];
 #endif
 	char name[64]; //name of card
 	u32	frequency_min_hz;
@@ -534,6 +536,8 @@ struct dvb_frontend_ops {
 	int (*set_tone)(struct dvb_frontend *fe, enum fe_sec_tone_mode tone);
 	int (*set_voltage)(struct dvb_frontend *fe,
 			   enum fe_sec_voltage voltage);
+	int (*set_rf_input)(struct dvb_frontend *fe,
+			   s32 rf_input);
 	int (*enable_high_lnb_voltage)(struct dvb_frontend* fe, long arg);
 	int (*dishnetwork_send_legacy_command)(struct dvb_frontend* fe, unsigned long cmd);
 	int (*i2c_gate_ctrl)(struct dvb_frontend* fe, int enable);
@@ -675,6 +679,8 @@ struct dtv_frontend_properties {
 	u32			symbol_rate;
 #if 1 //neumo
 	u32			max_symbol_rate; //for sat search
+	s32     rf_in;
+	bool rf_in_valid; // to indicated if value has been set
 #endif
 	enum fe_code_rate	code_rate_HP;
 	enum fe_code_rate	code_rate_LP;

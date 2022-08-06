@@ -1678,9 +1678,9 @@ static struct dvb_frontend_ops tas2101_ops = {
 			FE_CAN_2G_MODULATION |
 			FE_CAN_QPSK | FE_CAN_RECOVER |
 		FE_HAS_EXTENDED_CAPS,
-	 	.extended_caps = FE_CAN_SPECTRUMSCAN | FE_CAN_IQ | FE_CAN_BLINDSEARCH,
+	 	.extended_caps = FE_CAN_SPECTRUM_SWEEP | FE_CAN_IQ | FE_CAN_BLINDSEARCH,
 		.supports_neumo = true,
-		.rf_in = -1,
+		.default_rf_input = -1,  //means: use adapter_no
 	},
 	.release = tas2101_release,
 

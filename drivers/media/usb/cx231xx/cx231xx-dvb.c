@@ -418,7 +418,7 @@ static int stop_streaming(struct cx231xx_dvb *dvb)
 	struct cx231xx *dev = dvb->adapter.priv;
 
 	if (dev->USE_ISO) {
-		if (dvb->count == 1)		  
+		if (dvb->count == 1)
 			cx231xx_uninit_isoc_ts2(dev);
 		else
 			cx231xx_uninit_isoc(dev);
@@ -777,9 +777,9 @@ static int tbs_cx_mac(struct i2c_adapter *i2c_adap, u8 count, u8 *mac)
 
 	memcpy(&e[64 * i], b , 64);
     }
-    
+
     memcpy(mac, &e[0xa0 + 16*count], 6);
-	  
+
     return 0;
 }
 

@@ -1339,6 +1339,7 @@ static struct dtv_cmds_h dtv_cmds[DTV_MAX_COMMAND + 1] = {
 	_DTV_CMD(DTV_ATSCMH_SCCC_CODE_MODE_B, 0, 0),
 	_DTV_CMD(DTV_ATSCMH_SCCC_CODE_MODE_C, 0, 0),
 	_DTV_CMD(DTV_ATSCMH_SCCC_CODE_MODE_D, 0, 0),
+	_DTV_CMD(DTV_RF_INPUT, 1, 0),
 
 	/* Statistics API */
 	_DTV_CMD(DTV_STAT_SIGNAL_STRENGTH, 0, 0),
@@ -1558,6 +1559,9 @@ static int dtv_property_process_get(struct dvb_frontend *fe,
 		break;
 	case DTV_ALGORITHM:
 		tvp->u.data = c->algorithm;
+		break;
+	case DTV_RF_INPUT:
+		tvp->u.data = c->rf_in_valid ? c->rf_in : fe->dvb->num;
 		break;
 	case DTV_FREQUENCY:
 		tvp->u.data = c->frequency;
@@ -2481,7 +2485,7 @@ static int dvb_frontend_do_ioctl(struct file *file, unsigned int cmd,
 							|| cmd == DTV_STOP)) {
 				return -EPERM;
 			}
-			return 	dvb_frontend_handle_algo_ctrl_ioctl(file, cmd, parg);
+			return dvb_frontend_handle_algo_ctrl_ioctl(file, cmd, parg);
 
 		}
 		if(cmd == FE_GET_EVENT) {
@@ -3199,7 +3203,24 @@ static int dvb_frontend_handle_ioctl(struct file *file,
 	case FE_GET_EXTENDED_INFO: {
 		struct dvb_frontend_extended_info *info = parg;
 		memset(info, 0, sizeof(*info));
-		info->rf_in = (fe->ops.info.supports_neumo && fe->ops.info.rf_in >=0) ? fe->ops.info.rf_in : fe->dvb->num;
+		dprintk("default_rf_input=%d %d => %d\n", info->default_rf_input, fe->ops.info.default_rf_input,
+						(fe->ops.info.supports_neumo && fe->ops.info.default_rf_input >=0) ?
+						fe->ops.info.default_rf_input : fe->dvb->num);
+		info->supports_neumo = fe->ops.info.supports_neumo;
+		info->default_rf_input = (fe->ops.info.supports_neumo && fe->ops.info.default_rf_input >=0) ?
+			fe->ops.info.default_rf_input : fe->dvb->num;
+		if (fe->ops.info.num_rf_inputs > 0 ) {
+			int i;
+			int n= fe->ops.info.num_rf_inputs;
+			if (n > sizeof(info->rf_inputs)/sizeof(info->rf_inputs[0]))
+				n =  sizeof(info->rf_inputs)/sizeof(info->rf_inputs[0]);
+			for(i=0; i < n; ++i)
+					info->rf_inputs[i] = fe->ops.info.rf_inputs[i];
+			info->num_rf_inputs = n;
+		} else {
+			info->rf_inputs[0] = 	info->default_rf_input;
+			info->num_rf_inputs = 1;
+		}
 		info->adapter_mac_address = fe->ops.info.adapter_mac_address  ?
 			fe->ops.info.adapter_mac_address :  (0x2L | ((((uint64_t)fe->dvb->num) << 8) <<32));
 		dprintk("MAC: 0x%llx => 0x%llx", fe->ops.info.adapter_mac_address, 	info->adapter_mac_address);
@@ -3245,6 +3266,13 @@ static int dvb_frontend_handle_ioctl(struct file *file,
 		}
 		break;
 	}
+
+	case FE_SET_RF_INPUT:
+		dprintk("FE_SET_RF_INPUT %d\n",  (s32)parg);
+		if (fe->ops.set_rf_input)
+			fe->ops.set_rf_input(fe, (s32)parg);
+		err = 0;
+		break;
 
 	case FE_DISEQC_RESET_OVERLOAD:
 		if (fe->ops.diseqc_reset_overload) {
