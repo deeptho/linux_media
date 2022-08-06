@@ -796,10 +796,14 @@ restart:
 
 		if (fepriv->reinitialise) {
 			dvb_frontend_init(fe);
-			if (fe->ops.set_tone && fepriv->tone != -1)
+			if (fe->ops.set_tone && fepriv->tone != -1) {
+				dprintk("calling set_tone: tone=%d\n", fepriv->tone);
 				fe->ops.set_tone(fe, fepriv->tone);
-			if (fe->ops.set_voltage && fepriv->voltage != -1)
+			}
+			if (fe->ops.set_voltage && fepriv->voltage != -1) {
+				dprintk("calling set_voltage: voltage=%d\n", fepriv->voltage);
 				fe->ops.set_voltage(fe, fepriv->voltage);
+			}
 			fepriv->reinitialise = 0;
 		}
 		if(fepriv->state == FESTATE_IDLE)
@@ -899,8 +903,10 @@ restart:
 	}
 	dprintk("Exiting frontend thread\n");
 	if (dvb_powerdown_on_sleep) {
-		if (fe->ops.set_voltage)
+		if (fe->ops.set_voltage) {
 			fe->ops.set_voltage(fe, SEC_VOLTAGE_OFF);
+			dprintk("calling set_voltage OFF: old voltage=%d\n", fepriv->voltage);
+		}
 		if (fe->ops.tuner_ops.sleep) {
 			if (fe->ops.i2c_gate_ctrl)
 				fe->ops.i2c_gate_ctrl(fe, 1);
@@ -1051,7 +1057,9 @@ static void dvb_frontend_get_frequency_limits(struct dvb_frontend *fe,
 	u32 tuner_max = fe->ops.tuner_ops.info.frequency_max_hz;
 	u32 frontend_min = fe->ops.info.frequency_min_hz;
 	u32 frontend_max = fe->ops.info.frequency_max_hz;
-
+	dprintk("fe=%p: %u %u %u %u\n", fe,
+					fe->ops.tuner_ops.info.frequency_min_hz, fe->ops.tuner_ops.info.frequency_max_hz,
+					fe->ops.info.frequency_min_hz, fe->ops.info.frequency_max_hz);
 	*freq_min = max(frontend_min, tuner_min);
 
 	if (frontend_max == 0)
@@ -1073,11 +1081,12 @@ static void dvb_frontend_get_frequency_limits(struct dvb_frontend *fe,
 	if(is_sat_fe(fe)) {
 		*freq_min /= kHz;
 		*freq_max /= kHz;
+		dprintk("This is a sat_fe returning %u %d\n", *freq_min, *freq_max);
 		if (tolerance)
 			*tolerance = fe->ops.info.frequency_tolerance_hz / kHz;
 	} else  if (tolerance)
 		*tolerance = fe->ops.info.frequency_tolerance_hz;
-
+	dprintk("Returning %u %d\n", *freq_min, *freq_max);
 }
 
 static u32 dvb_frontend_get_stepsize(struct dvb_frontend *fe)
@@ -2129,11 +2138,13 @@ static int dtv_property_process_set_int(struct dvb_frontend *fe,
 		break;
 	case DTV_VOLTAGE:
 		c->voltage = data;
+		dprintk("DTV_VOLTAGE: %d\n", c->voltage);
 		r = dvb_frontend_handle_ioctl(file, FE_SET_VOLTAGE,
 								(void *)c->voltage);
 		break;
 	case DTV_TONE:
 		c->sectone = data;
+		dprintk("DTV_TONE: %d\n", c->sectone);
 		r = dvb_frontend_handle_ioctl(file, FE_SET_TONE,
 								(void *)c->sectone);
 		break;
@@ -2520,7 +2531,6 @@ static long dvb_frontend_ioctl(struct file *file, unsigned int cmd,
 
 	if (!dvbdev)
 		return -ENODEV;
-
 	return dvb_usercopy(file, cmd, arg, dvb_frontend_do_ioctl);
 }
 
@@ -2829,6 +2839,7 @@ static int dtv_get_pls_search_list(struct dvb_frontend *fe, struct dtv_pls_searc
 
 static int dtv_set_pls_search_list(struct dvb_frontend *fe, struct dtv_pls_search_list* user)
 {
+	int i;
 	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
 	c->pls_search_codes_len = sizeof(c->pls_search_codes)/sizeof(c->pls_search_codes[0]);
 	if(user->num_codes < c->pls_search_codes_len)
@@ -2841,7 +2852,6 @@ static int dtv_set_pls_search_list(struct dvb_frontend *fe, struct dtv_pls_searc
 		dprintk("ERROR: len=%d/%d codes=%p", c->pls_search_codes_len, user->num_codes, user->codes);
 		return -EFAULT;
 	}
-	int i;
 	dprintk("PLS: %d codes:\n", c->pls_search_codes_len);
 	for(i=0;i< c->pls_search_codes_len;++i)
 		dprintk("code=0x%x\n", c->pls_search_codes[i]);
@@ -3421,6 +3431,7 @@ static int dvb_frontend_handle_ioctl(struct file *file,
 		break;
 
 	default:
+		dprintk("unsupported ioctl\n");
 		return -ENOTSUPP;
 	} /* switch */
 
@@ -3659,11 +3670,14 @@ int dvb_frontend_resume(struct dvb_frontend *fe)
 		ret = fe->ops.tuner_ops.resume(fe);
 	else if (fe->ops.tuner_ops.init)
 		ret = fe->ops.tuner_ops.init(fe);
-
-	if (fe->ops.set_tone && fepriv->tone != -1)
+	if (fe->ops.set_tone && fepriv->tone != -1) {
+		dprintk("calling set_tone: tone=%d\n", fepriv->tone);
 		fe->ops.set_tone(fe, fepriv->tone);
-	if (fe->ops.set_voltage && fepriv->voltage != -1)
+	}
+	if (fe->ops.set_voltage && fepriv->voltage != -1) {
+		dprintk("calling set_voltage: voltage=%d\n", fepriv->voltage);
 		fe->ops.set_voltage(fe, fepriv->voltage);
+	}
 
 	fe->exit = DVB_FE_NO_EXIT;
 	fepriv->state = FESTATE_RETUNE;
