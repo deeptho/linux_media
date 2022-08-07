@@ -113,6 +113,7 @@ struct tbsecp3_adap_config {
 struct tbsecp3_board {
 	u16  board_id;
 	char *name;
+	char *short_name;
 	int adapters;
 	u32 i2c_speed;
 	u8 eeprom_i2c;
