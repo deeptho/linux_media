@@ -68,6 +68,7 @@ struct stv_base {
 
 	u8                   adr;
 	struct i2c_adapter  *i2c;
+	struct mutex         status_lock;
 	struct mutex         i2c_lock;
 	struct mutex         reg_lock;
 	int                  count;
