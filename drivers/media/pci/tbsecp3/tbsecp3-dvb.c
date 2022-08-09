@@ -837,7 +837,7 @@ static int max_set_voltage(struct i2c_adapter *i2c,
 
 	u32 val, reg;
 
-	//printk("set voltage on %u = %d\n", rf_in, voltage);
+	dprintk("YYY set voltage rf_in=%d voltage=%d\n", rf_in, voltage);
 
 	if (rf_in > 3)
 		return -EINVAL;
@@ -856,7 +856,7 @@ static int max_set_voltage(struct i2c_adapter *i2c,
 		val |= 4;
 		break;
 	}
-	dprintk("set voltage: rf_in=%d voltage=%d reg=%d\n", rf_in, voltage, val);
+	//dprintk("set voltage: rf_in=%d voltage=%d reg=%d\n", rf_in, voltage, val);
 	tbs_write(TBSECP3_GPIO_BASE, reg, val);
 	return 0;
 }
@@ -2219,6 +2219,7 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 		return -ENODEV;
 		break;
 	}
+	//for legacy apps
 	strlcpy(adapter->fe->ops.info.name, dev->info->name, sizeof(adapter->fe->ops.info.name));
 
 	//for neumo

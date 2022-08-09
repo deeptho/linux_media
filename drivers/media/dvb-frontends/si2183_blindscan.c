@@ -448,9 +448,9 @@ static int si2183_scan_abort(struct i2c_client *client)
 	return ret;
 }
 
-#if 0
+#if 1
 static inline int fff(int freq) {
-	return freq + 10700000-950000;
+	return freq + 9750000;
 }
 #else
 static inline int fff(int freq) {
@@ -560,7 +560,7 @@ static int si2183_scan_action(struct i2c_client *client, s32 action, s32 seek_fr
 		.wlen=8,
 		.rlen=1};
 	int ret = si2183_cmd_execute(client, &cmd);
-	dprintk(" Si2183_SCAN_CTRL_CMD_ACTION_START freq=%dkHz", seek_freq);
+	dprintk(" Si2183_SCAN_CTRL_CMD_ACTION_START freq=%dkHz", fff(seek_freq));
 	//action = Si2183_SCAN_CTRL_CMD_ACTION_RESUME;
 	if(ret)
 		dprintk("scan action failed");
@@ -599,6 +599,7 @@ static int si2183_scan_sat_start(struct dvb_frontend *fe, struct blindscan_state
 
 	/* Load blindscan status at start */
 	si2183_scan_status(client, Si2183_SCAN_STATUS_CMD_INTACK_OK, scan_status);
+	dprintk("scan_status = %d\n", *scan_status);
  return 0;
 }
 
@@ -765,7 +766,7 @@ int si2183_scan_sat_(struct dvb_frontend *fe, bool init,
 								 scan_status->rf_freq - old_seek_freq);
 				 if(dont_retune) {
 					 scan_status->rf_freq = old_seek_freq;
-					 vprintk("rf_freq=%d", fff(scan_status->rf_freq));
+					 dprintk("SCAN ignoring retune request for rf_freq=%d", fff(scan_status->rf_freq));
 				 }
 				 bs->seek_freq = scan_status->rf_freq;
 				 state->demod_tuned_freq= bs->seek_freq;
@@ -1540,10 +1541,10 @@ int blind_tune(struct dvb_frontend *fe)
 	if(delta<0)
 		delta = -delta;
 	need_retune = (delta > 2000);
-	vprintk("si2183_scan_sat ended need_retune=%d", need_retune);
+	dprintk("si2183_scan_sat ended need_retune=%d", need_retune);
 	if(!need_retune) {
 		int bw = (p->symbol_rate/1000)*135/200 + 2000 +delta;
-		vprintk("reducing bandwidth to %d", bw);
+		dprintk("reducing bandwidth to %d for symbol_rate %d", bw, p->symbol_rate);
 		if(fe->ops.tuner_ops.set_bandwidth)
 			fe->ops.tuner_ops.set_bandwidth(fe, bw);
 	}

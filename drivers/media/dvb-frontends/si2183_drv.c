@@ -154,7 +154,7 @@ int si2183_cmd_execute_unlocked(struct i2c_client *client,
 
 		/* error bit set? */
 		if ((cmd->args[0] >> 6) & 0x01) {
-			dprintk("cmd->args[0]=0x%x", cmd->args[0]);
+			dprintk("error bit was set cmd->args[0]=0x%x", cmd->args[0]);
 			ret = -EREMOTEIO;
 			goto err;
 		}

@@ -1280,6 +1280,8 @@ static int dvb_init(struct cx231xx *dev)
 		dvb->frontend[0]->callback = cx231xx_tuner_callback;
 
 		strlcpy(dvb->frontend[0]->ops.info.name,dev->board.name,52);
+		strlcpy(dvb->frontend[0]->ops.info.card_short_name, "TBS 5990",
+						sizeof(dvb->frontend[0]->ops.info.card_short_name));
 
 		break;
 	}

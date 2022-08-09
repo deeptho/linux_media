@@ -1623,7 +1623,9 @@ static int cx24117_get_frontend(struct dvb_frontend *fe,
 static const struct dvb_frontend_ops cx24117_ops = {
 	.delsys = { SYS_DVBS, SYS_DVBS2 },
 	.info = {
-		.name = "Conexant CX24117/CX24132",
+		//.name = "Conexant CX24117/CX24132",
+		.name = "TBS6981",
+		.card_short_name = "TBS6981",
 		.frequency_min_hz =  950 * MHz,
 		.frequency_max_hz = 2150 * MHz,
 		.frequency_stepsize_hz = 1011 * kHz,
@@ -1664,4 +1666,3 @@ MODULE_AUTHOR("Luis Alves (ljalvs@gmail.com)");
 MODULE_LICENSE("GPL");
 MODULE_VERSION("1.1");
 MODULE_FIRMWARE(CX24117_DEFAULT_FIRMWARE);
-
