@@ -350,7 +350,8 @@ struct dtv_frontend_properties;
  */
 struct dvb_frontend_internal_info {
 #if 1 //neumo - destroys binary compatibility
-	char	card_name[64];
+	//char	card_name[64];
+	char	card_short_name[64];
 	char	adapter_name[64];
 	char	card_address[64];
 	char	adapter_address[64];
@@ -360,7 +361,7 @@ struct dvb_frontend_internal_info {
 	bool supports_neumo; //set to true if values if this driver supports neumo
 	s32 rf_in;
 #endif
-	char	name[64];
+	char name[64]; //name of card
 	u32	frequency_min_hz;
 	u32	frequency_max_hz;
 	u32	frequency_stepsize_hz;

@@ -3202,12 +3202,12 @@ static int dvb_frontend_handle_ioctl(struct file *file,
 		info->rf_in = (fe->ops.info.supports_neumo && fe->ops.info.rf_in >=0) ? fe->ops.info.rf_in : fe->dvb->num;
 		info->adapter_mac_address = fe->ops.info.adapter_mac_address  ?
 			fe->ops.info.adapter_mac_address :  (0x2L | ((((uint64_t)fe->dvb->num) << 8) <<32));
-
+		dprintk("MAC: 0x%llx => 0x%llx", fe->ops.info.adapter_mac_address, 	info->adapter_mac_address);
 		info->card_mac_address = fe->ops.info.card_mac_address ? fe->ops.info.card_mac_address:
 			fe->dvb->num; //best we can do; each adapter will appear as different card
 		strscpy(info->card_address, fe->ops.info.card_address, sizeof(info->card_address));
-		strscpy(info->adapter_address, fe->ops.info.adapter_address, sizeof(info->adapter_address));
-		strscpy(info->card_name, fe->ops.info.card_name, sizeof(info->card_name));
+		strscpy(info->card_name, fe->ops.info.name, sizeof(info->card_name));
+		strscpy(info->card_short_name, fe->ops.info.card_short_name, sizeof(info->card_short_name));
 		strscpy(info->adapter_name, fe->ops.info.adapter_name, sizeof(info->adapter_name));
 		info->symbol_rate_min = fe->ops.info.symbol_rate_min;
 		info->symbol_rate_max = fe->ops.info.symbol_rate_max;

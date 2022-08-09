@@ -856,7 +856,7 @@ static int max_set_voltage(struct i2c_adapter *i2c,
 		val |= 4;
 		break;
 	}
-	dprintk("set voltageL: rf_in=%d voltage=%d reg=%d\n", rf_in, voltage, val);
+	dprintk("set voltage: rf_in=%d voltage=%d reg=%d\n", rf_in, voltage, val);
 	tbs_write(TBSECP3_GPIO_BASE, reg, val);
 	return 0;
 }
@@ -2220,26 +2220,38 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 		break;
 	}
 	strlcpy(adapter->fe->ops.info.name, dev->info->name, sizeof(adapter->fe->ops.info.name));
-	strlcpy(adapter->fe->ops.info.card_name, dev->info->name, sizeof(adapter->fe->ops.info.card_name));
+
+	//for neumo
+	strlcpy(adapter->fe->ops.info.name, dev->info->name, sizeof(adapter->fe->ops.info.name));
+	strlcpy(adapter->fe->ops.info.card_short_name, dev->info->short_name, sizeof(adapter->fe->ops.info.card_short_name));
 	adapter->fe->ops.info.adapter_mac_address = dev->adapter_mac_address;
 	adapter->fe->ops.info.card_mac_address = dev->card_mac_address;
 	strlcpy(adapter->fe->ops.info.card_address, dev_name(&dev->pci_dev->dev), sizeof(adapter->fe->ops.info.card_address));
 	snprintf(adapter->fe->ops.info.adapter_address, sizeof(adapter->fe->ops.info.adapter_address),
 					 "%s:%d", adapter->fe->ops.info.card_address, adapter->nr);
-	snprintf(adapter->fe->ops.info.adapter_name, sizeof(adapter->fe->ops.info.adapter_name),
-					 "%s #%d", adapter->fe->ops.info.card_name, adapter->nr);
+	if (adapter->fe->ops.info.card_short_name[0] == 0)
+		snprintf(adapter->fe->ops.info.adapter_name, sizeof(adapter->fe->ops.info.adapter_name),
+						 "%s#%d", adapter->fe->ops.info.name, adapter->dvb_adapter.num);
+	else
+		snprintf(adapter->fe->ops.info.adapter_name, sizeof(adapter->fe->ops.info.adapter_name),
+						 "%s #%d", adapter->fe->ops.info.card_short_name, adapter->dvb_adapter.num);
 	if (adapter->fe2) {
+		strlcpy(adapter->fe2->ops.info.name, dev->info->name, sizeof(adapter->fe2->ops.info.name));
+		strlcpy(adapter->fe2->ops.info.card_short_name, dev->info->short_name,
+						sizeof(adapter->fe2->ops.info.card_short_name));
 		adapter->fe2->ops.info.adapter_mac_address = dev->adapter_mac_address;
 		adapter->fe2->ops.info.card_mac_address = dev->card_mac_address;
-		strlcpy(adapter->fe2->ops.info.name, dev->info->name, sizeof(adapter->fe2->ops.info.card_name));
 		strlcpy(adapter->fe2->ops.info.card_address, dev_name(&dev->pci_dev->dev), sizeof(adapter->fe2->ops.info.card_address));
-		strlcpy(adapter->fe2->ops.info.card_name, dev->info->name, sizeof(adapter->fe2->ops.info.card_name));
+		strlcpy(adapter->fe2->ops.info.name, dev->info->name, sizeof(adapter->fe2->ops.info.name));
 		snprintf(adapter->fe2->ops.info.adapter_address, sizeof(adapter->fe2->ops.info.adapter_address),
 						 "%s:%d", adapter->fe->ops.info.card_address, adapter->nr);
-		snprintf(adapter->fe2->ops.info.adapter_name, sizeof(adapter->fe2->ops.info.adapter_name),
-						 "%s #%d", adapter->fe2->ops.info.card_name,
-						 adapter->nr);
-	}
+		if (adapter->fe2->ops.info.card_short_name[0] == 0)
+			snprintf(adapter->fe2->ops.info.adapter_name, sizeof(adapter->fe2->ops.info.adapter_name),
+							 "%s#%d", adapter->fe2->ops.info.name, adapter->dvb_adapter.num);
+		else
+			snprintf(adapter->fe2->ops.info.adapter_name, sizeof(adapter->fe2->ops.info.adapter_name),
+							 "%s #%d", adapter->fe2->ops.info.card_short_name, adapter->dvb_adapter.num);
+			}
 	return 0;
 
 frontend_atach_fail:
