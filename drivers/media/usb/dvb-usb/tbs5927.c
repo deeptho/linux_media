@@ -273,17 +273,22 @@ static int tbs5927_frontend_attach(struct dvb_usb_adapter *d)
 {
 	struct dvb_usb_device *u = d->dev;
 	u8 buf[20];
+	u8 mac[6];
 
 	buf[0] = 6; /* I2C speed */
 	buf[1] = 0; /* 100KHz */
 	tbs5927_op_rw(d->dev->udev, 0x8a, 0, 0,
 			buf, 2, TBS5927_WRITE_MSG);
 
+	tbs5927_read_mac_address(u,mac);
+
 	if (tbs5927_properties.adapter->fe->tuner_attach == &tbs5927_tuner_attach) {
 		d->fe_adap->fe = dvb_attach(stv091x_attach, &d->dev->i2c_adap,
 					    &tbs5927_stv0910_cfg, 1 );
 		if (d->fe_adap->fe != NULL) {
-			d->fe_adap->fe->ops.set_voltage = tbs5927_set_voltage;
+			memcpy(&d->fe_adap->fe->ops.info.card_mac_address, mac, sizeof(mac));
+			memcpy(&d->fe_adap->fe->ops.info.adapter_mac_address, mac, sizeof(mac));
+			strlcpy(d->fe_adap->fe->ops.info.card_short_name, "TBS 5927", 16);
 
 			buf[0] = 1; /* LNB power disable */
 			buf[1] = 0;
@@ -296,14 +301,14 @@ static int tbs5927_frontend_attach(struct dvb_usb_adapter *d)
 					buf, 2, TBS5927_WRITE_MSG);
 
 			strlcpy(d->fe_adap->fe->ops.info.name,u->props.devices[0].name,52);
-			strlcpy(d->fe_adap->fe->ops.info.card_name, u->props.devices[0].name ,
-							sizeof(d->fe_adap->fe->ops.info.card_name));
+			strlcpy(d->fe_adap->fe->ops.info.name, u->props.devices[0].name ,
+							sizeof(d->fe_adap->fe->ops.info.name));
 			strlcpy(d->fe_adap->fe->ops.info.card_address, dev_name(&d->dev->udev->dev),
 							sizeof(d->fe_adap->fe->ops.info.card_address));
 			snprintf(d->fe_adap->fe->ops.info.adapter_address, sizeof(d->fe_adap->fe->ops.info.adapter_address),
 							 "%s:%d", d->fe_adap->fe->ops.info.card_address, 0/*d->fe_adap->nr*/);
 			snprintf(d->fe_adap->fe->ops.info.adapter_name, sizeof(d->fe_adap->fe->ops.info.adapter_name),
-							 "%s #%d", d->fe_adap->fe->ops.info.card_name, 0/*d->fe_adap->nr*/);
+							 "%s #%d", d->fe_adap->fe->ops.info.card_short_name, 0/*d->fe_adap->nr*/);
 
 			return 0;
 		}
@@ -440,9 +445,10 @@ static struct dvb_usb_device_properties tbs5927_properties = {
 
 	.num_device_descs = 1,
 	.devices = {
-		{"TurboSight TBS 5927 DVB-S/S2",
-			{&tbs5927_table[0], NULL},
-			{NULL},
+		{.name = "TurboSight TBS 5927 DVB-S/S2",
+		 .short_name ="TBS 5927",
+		 .cold_ids = {&tbs5927_table[0], NULL},
+		 .warm_ids = {NULL},
 		}
 	}
 };
