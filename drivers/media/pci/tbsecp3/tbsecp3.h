@@ -105,7 +105,7 @@ struct tbsecp3_gpio_config {
 };
 
 struct tbsecp3_adap_config {
-        u32 ts_in;
+	u32 ts_in;
 	u8 i2c_bus_nr;
 	struct tbsecp3_gpio_config gpio;
 };

@@ -517,6 +517,49 @@ static struct dvb_frontend *tbsecp3_attach_sec(struct tbsecp3_adapter *adap, str
 	return fe;
 }
 
+
+static inline bool is_dvbs(struct dvb_frontend* fe) {
+	int i;
+	for(i=0; i< sizeof(fe->ops.delsys)/sizeof(fe->ops.delsys[0]); ++i) {
+		if(fe->ops.delsys[i] == SYS_DVBS ||
+			 fe->ops.delsys[i] == SYS_DVBS2 ||
+			 fe->ops.delsys[i] == SYS_TURBO ||
+			 fe->ops.delsys[i] == SYS_DSS)
+			return true;
+	}
+	return false;
+}
+
+/*
+	If mac address is unknown, make up an address based on bus ids. This will at laest ensure that
+	pci devices when left in the same slot will obtain a relatively stable mac address
+ */
+static inline void fake_mac_address(struct tbsecp3_adapter* adapter) {
+	struct tbsecp3_dev *dev = adapter->dev;
+	const char* bus  = dev_name(&dev->pci_dev->dev);
+	int i;
+	int64_t mac=0;
+	int nr = adapter->nr;
+	mac = nr;
+	for(i=0; i< 16; ++i) {
+		int c = bus[i];
+		if(!c)
+			break;
+		switch (c) {
+		case '0'...'9': mac = (mac << 4) | (bus[i]-'0'); break;
+		case 'A'...'F': mac = (mac << 4) | (bus[i]-'A' +10); break;
+		case 'a'...'f': mac = (mac << 4) | (bus[i]-'a' +10); break;
+		default: break;
+		}
+	}
+	mac = (0x2L | (mac & ~ 0x2L));
+	memcpy(&adapter->dvb_adapter.proposed_mac, &mac, sizeof(adapter->dvb_adapter.proposed_mac));
+	dev->adapter_mac_address = mac;
+	if(dev->card_mac_address ==0)
+		dev->card_mac_address = mac; //Seelect mac of first adapter as card mac_address
+}
+
+
 static int set_mac_address(struct tbsecp3_adapter *adap)
 {
 	struct tbsecp3_dev *dev = adap->dev;
@@ -551,15 +594,10 @@ static int set_mac_address(struct tbsecp3_adapter *adap)
 		memcpy(&dev->adapter_mac_address, adap->dvb_adapter.proposed_mac, sizeof(adap->dvb_adapter.proposed_mac));
 		if (dev->adapter_mac_address == 0xffffffffffff)
 			dev->adapter_mac_address =0 ; 			//card which has not been initialised properly
+		if(dev->card_mac_address ==0)
+			dev->card_mac_address = dev->adapter_mac_address; //Seelect mac of first adapter as card mac_address
 	}
 
-	if(dev->adapter_mac_address == 0) {
-		dev->adapter_mac_address = 0x2L | ((((uint64_t)adap->nr) << 8) <<32);
-		dprintk("No mac address; faking one: 0x%llx\n", dev->adapter_mac_address);
-	}
-
-	if(dev->card_mac_address ==0)
-		dev->card_mac_address = dev->adapter_mac_address; //Seelect mac of first adapter as card mac_address
 	return 0;
 };
 
@@ -1272,6 +1310,8 @@ static void tbs6209SE_reset_demod(struct tbsecp3_adapter *adapter)
 	tbs_write(TBSECP3_GPIO_BASE, gpio, tmp);
 	msleep(50);
 }
+
+
 static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 {
 	struct tbsecp3_dev *dev = adapter->dev;
@@ -2236,10 +2276,30 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 		break;
 
 	default:
-		dev_warn(&dev->pci_dev->dev, "unknonw card\n");
+		dev_warn(&dev->pci_dev->dev, "unknown card\n");
 		return -ENODEV;
 		break;
 	}
+
+	if(adapter->fe->ops.info.num_rf_inputs==0) {
+		/*the driver did not set this, so provide some reasonable value: assume
+			that card has no rf_mux and each adapter is connected to one rf input
+			For DVB-T/C there is only one cable, and the value should be 0.
+		*/
+		adapter->fe->ops.info.rf_inputs[0] = is_dvbs(adapter->fe) ? adapter->nr : 0;
+		adapter->fe->ops.info.num_rf_inputs = 1;
+		adapter->fe->ops.info.default_rf_input = 	adapter->fe->ops.info.rf_inputs[0];
+		adapter->fe->ops.info.default_rf_input = 	adapter->fe->ops.info.rf_inputs[0];
+		dprintk("SET rf_input_nr=%d %s\n", 	adapter->fe->ops.info.default_rf_input, dev->info->short_name);
+	}
+	if(dev->adapter_mac_address == 0) {
+		fake_mac_address(adapter);
+		dprintk("Faked mac: 0x%llx\n", dev->adapter_mac_address);
+	} else {
+		dprintk("Got mac: 0x%llx\n", dev->adapter_mac_address);
+	}
+
+
 	dprintk("adapter->fe=%p dev=%p\n", adapter->fe, dev);
 	strlcpy(adapter->fe->ops.info.name, dev->info->name, sizeof(adapter->fe->ops.info.name));
 	dprintk("dev=%p dev->info=%p\n", dev, dev ? dev->info : NULL);
@@ -2259,6 +2319,17 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 						 "A%d %s", adapter->dvb_adapter.num, adapter->fe->ops.info.card_short_name);
 	}
 	if (adapter->fe2) {
+		if(adapter->fe2->ops.info.num_rf_inputs==0) {
+		/*the driver did not set this, so provide some reasonable value: assume
+			that card has no rf_mux and each adapter is connected to one rf input
+			For DVB-T/C there is only one cable, and the value should be 0.
+		*/
+			adapter->fe2->ops.info.rf_inputs[0] = is_dvbs(adapter->fe2) ? adapter->nr : 0;
+			adapter->fe2->ops.info.num_rf_inputs = 1;
+			adapter->fe2->ops.info.default_rf_input = adapter->fe2->ops.info.rf_inputs[0];
+			dprintk("SET2 rf_input_nr=%d %s\n", 	adapter->fe2->ops.info.default_rf_input, dev->info->short_name);
+		}
+
 		dprintk("adapter->fe2=%p dev=%p\n", adapter->fe2, dev);
 		strlcpy(adapter->fe2->ops.info.name, dev->info->name, sizeof(adapter->fe2->ops.info.name));
 		dprintk("dev=%p dev->info=%p\n", dev, dev ? dev->info : NULL);
@@ -2292,6 +2363,11 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 	return -ENODEV;
 }
 
+/*
+	adapter->nr 0, 1, ... is a card specific adapter number for each adapter on a tbs card,
+	whereas adapter->dvb_adapter.num is a globally unique number assigned by the dvb_api
+	adapter_nr[....] is an array of prefered adapter numbers as a hint to dvb_api
+ */
 int tbsecp3_dvb_init(struct tbsecp3_adapter *adapter)
 {
 		struct tbsecp3_dev *dev = adapter->dev;

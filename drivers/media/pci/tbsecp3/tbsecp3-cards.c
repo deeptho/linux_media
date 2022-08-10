@@ -1124,14 +1124,12 @@ struct tbsecp3_board tbsecp3_boards[] = {
 				.i2c_bus_nr = 0,
 				.gpio.demod_reset.lvl = TBSECP3_GPIODEF_NONE,
 				.gpio.demod_reset.nr  = TBSECP3_GPIO_PIN(0, 0),
-
 			},
 			{
 				.ts_in = 1,
 				.i2c_bus_nr = 1,
 				.gpio.demod_reset.lvl = TBSECP3_GPIODEF_NONE,
 				.gpio.demod_reset.nr  = TBSECP3_GPIO_PIN(2, 0),
-
 			},
 		}
 	},
