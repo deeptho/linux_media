@@ -1957,6 +1957,17 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 				i2c_unregister_device(client_demod);
 				goto frontend_atach_fail;
 		}
+#if 1
+		/*This needs to be repeated from above, because the dvb code
+			will decrease module refcnt once for each adapter and the
+			sat tuner would not have taken a reference: only the dvbt/dvbc tuner takes one and
+			fe2 is a copy of fe (see below)*/
+		if (!try_module_get(client_demod->dev.driver->owner)) {
+			dprintk("unregistering i2c device because try_module_get failed");
+			i2c_unregister_device(client_demod);
+				goto frontend_atach_fail;
+		}
+#endif
 		adapter->i2c_client_demod = client_demod;
 
 		/* dvb core doesn't support 2 tuners for 1 demod so

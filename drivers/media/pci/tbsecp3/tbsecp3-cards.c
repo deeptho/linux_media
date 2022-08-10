@@ -1086,6 +1086,7 @@ struct tbsecp3_board tbsecp3_boards[] = {
 	[TBSECP3_BOARD_TBS6590] = {
 		.board_id	= TBSECP3_BOARD_TBS6590,
 		.name		= "TurboSight TBS 6590 DVB-S/S2/S2X/T/T2/C/C2/ISDB-T + 2xCI ",
+		.short_name = "TBS 6590",
 		.adapters	= 2,
 		.i2c_speed	= 39,
 		.eeprom_i2c	= 0,
