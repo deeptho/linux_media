@@ -435,7 +435,7 @@ static void tbs6301_read_mac(struct tbsecp3_adapter *adap)
 	memcpy(adap->dvb_adapter.proposed_mac, rdbuffer,6);
 	printk(" tbs6301 mac address: %x,%x,%x,%x,%x,%x \n",rdbuffer[0],rdbuffer[1],rdbuffer[2],rdbuffer[3],rdbuffer[4],rdbuffer[5]);
 
-	return ;
+	return;
 };
 
 
@@ -837,7 +837,7 @@ static int max_set_voltage(struct i2c_adapter *i2c,
 
 	u32 val, reg;
 
-	dprintk("YYY set voltage rf_in=%d voltage=%d\n", rf_in, voltage);
+	//printk("set voltage on %u = %d\n", rf_in, voltage);
 
 	if (rf_in > 3)
 		return -EINVAL;
@@ -1851,10 +1851,12 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 				goto frontend_atach_fail;
 		}
 		adapter->i2c_client_demod = client_demod;
+
 		/* dvb core doesn't support 2 tuners for 1 demod so
 			we split the adapter in 2 frontends */
 		adapter->fe2 = &adapter->_fe2;
 		memcpy(adapter->fe2, adapter->fe, sizeof(struct dvb_frontend));
+
 		/* terrestrial tuner */
 		//This overrides the information produced by si2183_probe
 		memset(adapter->fe->ops.delsys, 0, MAX_DELSYS);
@@ -1877,6 +1879,7 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 		memset(&info, 0, sizeof(struct i2c_board_info));
 		strlcpy(info.type, "si2157", I2C_NAME_SIZE);
 		info.addr = (adapter->nr %2) ? 0x61 : 0x60;
+
 		info.platform_data = &si2157_config; //DVBT-DVBC tuner
 		request_module(info.type);
 		client_tuner = i2c_new_client_device(i2c, &info); //si2157
@@ -1899,10 +1902,12 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 		adapter->fe2->ops.delsys[2] = SYS_DSS;
 		adapter->fe2->ops.delsys[3] = SYS_AUTO;
 		adapter->fe2->id = 1;
+
 		//The following limits are determined by the tuner
 		adapter->fe2->ops.info.frequency_min_hz = 0;
 		adapter->fe2->ops.info.frequency_max_hz = 0xffffffff;
 		dprintk("XXX1: fe=%p: %u %u\n", 	adapter->fe2, adapter->fe2->ops.info.frequency_min_hz, 	adapter->fe2->ops.info.frequency_max_hz);
+
 		//dvb_attach basically loads a module and calls (av201x_attach
 		if (dvb_attach(av201x_attach, adapter->fe2, &tbs6522_av201x_cfg[(adapter->nr %2)],
 					i2c) == NULL) {
@@ -1961,12 +1966,14 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 
 
 		/* terrestrial tuner */
+		//This overrides the information produced by si2183_probe
 		memset(adapter->fe->ops.delsys, 0, MAX_DELSYS);
 		adapter->fe->ops.delsys[0] = SYS_DVBT;
 		adapter->fe->ops.delsys[1] = SYS_DVBT2;
 		adapter->fe->ops.delsys[2] = SYS_DVBC_ANNEX_A;
 		adapter->fe->ops.delsys[3] = SYS_ISDBT;
 		adapter->fe->ops.delsys[4] = SYS_DVBC_ANNEX_B;
+		adapter->fe->ops.delsys[5] = SYS_AUTO;
 
 		/* attach tuner */
 		memset(&si2157_config, 0, sizeof(si2157_config));
@@ -1998,7 +2005,9 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 		adapter->fe2->ops.delsys[0] = SYS_DVBS;
 		adapter->fe2->ops.delsys[1] = SYS_DVBS2;
 		adapter->fe2->ops.delsys[2] = SYS_DSS;
+		adapter->fe2->ops.delsys[3] = SYS_AUTO;
 		adapter->fe2->id = 1;
+
 		if(pci->subsystem_vendor==0x6528)
 		{
 				if (dvb_attach(av201x_attach, adapter->fe2, &tbs6522_av201x_cfg[1],
@@ -2025,6 +2034,7 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 		}
 
 		tbsecp3_ca_init(adapter, adapter->nr);
+		dprintk("tbsecp3_ca_init returned fine\n");
 		break;
 
 	case TBSECP3_BOARD_TBS6902:
@@ -2219,48 +2229,54 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 		return -ENODEV;
 		break;
 	}
-	//for legacy apps
+	dprintk("adapter->fe=%p dev=%p\n", adapter->fe, dev);
 	strlcpy(adapter->fe->ops.info.name, dev->info->name, sizeof(adapter->fe->ops.info.name));
-
-	//for neumo
-	strlcpy(adapter->fe->ops.info.name, dev->info->name, sizeof(adapter->fe->ops.info.name));
+	dprintk("dev=%p dev->info=%p\n", dev, dev ? dev->info : NULL);
 	strlcpy(adapter->fe->ops.info.card_short_name, dev->info->short_name, sizeof(adapter->fe->ops.info.card_short_name));
-	adapter->fe->ops.info.adapter_mac_address = dev->adapter_mac_address;
 	adapter->fe->ops.info.card_mac_address = dev->card_mac_address;
+	dprintk("dev->pci_dev=%p dev->pci_dev->dev=%p\n", dev->pci_dev, dev->pci_dev ? &dev->pci_dev->dev : NULL);
 	strlcpy(adapter->fe->ops.info.card_address, dev_name(&dev->pci_dev->dev), sizeof(adapter->fe->ops.info.card_address));
 	snprintf(adapter->fe->ops.info.adapter_address, sizeof(adapter->fe->ops.info.adapter_address),
 					 "%s:%d", adapter->fe->ops.info.card_address, adapter->nr);
-	if (adapter->fe->ops.info.card_short_name[0] == 0)
+	if (adapter->fe->ops.info.card_short_name[0] == 0) {
+		dprintk("copying adapter->fe->ops.info.adapter_name");
 		snprintf(adapter->fe->ops.info.adapter_name, sizeof(adapter->fe->ops.info.adapter_name),
-						 "%s#%d", adapter->fe->ops.info.name, adapter->dvb_adapter.num);
-	else
+						 "A%d %s", adapter->dvb_adapter.num, adapter->fe->ops.info.name);
+	} else {
+		dprintk("faking adapter->fe->ops.info.adapter_name");
 		snprintf(adapter->fe->ops.info.adapter_name, sizeof(adapter->fe->ops.info.adapter_name),
-						 "%s #%d", adapter->fe->ops.info.card_short_name, adapter->dvb_adapter.num);
+						 "A%d %s", adapter->dvb_adapter.num, adapter->fe->ops.info.card_short_name);
+	}
 	if (adapter->fe2) {
+		dprintk("adapter->fe2=%p dev=%p\n", adapter->fe2, dev);
 		strlcpy(adapter->fe2->ops.info.name, dev->info->name, sizeof(adapter->fe2->ops.info.name));
+		dprintk("dev=%p dev->info=%p\n", dev, dev ? dev->info : NULL);
 		strlcpy(adapter->fe2->ops.info.card_short_name, dev->info->short_name,
 						sizeof(adapter->fe2->ops.info.card_short_name));
-		adapter->fe2->ops.info.adapter_mac_address = dev->adapter_mac_address;
 		adapter->fe2->ops.info.card_mac_address = dev->card_mac_address;
+		dprintk("dev->pci_dev=%p dev->pci_dev->dev=%p\n", dev->pci_dev, dev->pci_dev ? &dev->pci_dev->dev : NULL);
 		strlcpy(adapter->fe2->ops.info.card_address, dev_name(&dev->pci_dev->dev), sizeof(adapter->fe2->ops.info.card_address));
 		strlcpy(adapter->fe2->ops.info.name, dev->info->name, sizeof(adapter->fe2->ops.info.name));
 		snprintf(adapter->fe2->ops.info.adapter_address, sizeof(adapter->fe2->ops.info.adapter_address),
 						 "%s:%d", adapter->fe->ops.info.card_address, adapter->nr);
-		if (adapter->fe2->ops.info.card_short_name[0] == 0)
+		if (adapter->fe2->ops.info.card_short_name[0] == 0) {
+			dprintk("copying adapter->fe2->ops.info.adapter_name");
 			snprintf(adapter->fe2->ops.info.adapter_name, sizeof(adapter->fe2->ops.info.adapter_name),
-							 "%s#%d", adapter->fe2->ops.info.name, adapter->dvb_adapter.num);
-		else
+							 "A%d %s", adapter->dvb_adapter.num, adapter->fe2->ops.info.name);
+		} else {
+			dprintk("faking adapter->fe->ops.info.adapter_name");
 			snprintf(adapter->fe2->ops.info.adapter_name, sizeof(adapter->fe2->ops.info.adapter_name),
-							 "%s #%d", adapter->fe2->ops.info.card_short_name, adapter->dvb_adapter.num);
-			}
+							 "A%d %s", adapter->dvb_adapter.num, adapter->fe2->ops.info.card_short_name);
+		}
+	}
 	return 0;
 
-frontend_atach_fail:
+ frontend_atach_fail:
 	if (adapter->fe != NULL)
-			dvb_frontend_detach(adapter->fe);
+		dvb_frontend_detach(adapter->fe);
 	adapter->fe = NULL;
 	dev_err(&dev->pci_dev->dev, "TBSECP3 frontend %d attach failed\n",
-		adapter->nr);
+					adapter->nr);
 
 	return -ENODEV;
 }

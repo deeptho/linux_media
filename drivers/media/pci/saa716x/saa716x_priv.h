@@ -91,6 +91,7 @@ struct saa716x_adap_config {
 
 struct saa716x_config {
 	char				*model_name;
+	char				*model_short_name;
 	char				*dev_type;
 
 	enum saa716x_boot_mode		boot_mode;
@@ -122,7 +123,7 @@ struct saa716x_adapter {
 
 	struct i2c_client	*i2c_client_demod;
 	struct i2c_client	*i2c_client_tuner;
-	
+
 	struct tbsci_i2c_state *tbsci;
 	void*adap_priv;
 };

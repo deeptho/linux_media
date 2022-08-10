@@ -3228,15 +3228,29 @@ static int dvb_frontend_handle_ioctl(struct file *file,
 			info->rf_inputs[0] = 	info->default_rf_input;
 			info->num_rf_inputs = 1;
 		}
-		info->adapter_mac_address = fe->ops.info.adapter_mac_address  ?
-			fe->ops.info.adapter_mac_address :  (0x2L | ((((uint64_t)fe->dvb->num) << 8) <<32));
-		dprintk("MAC: 0x%llx => 0x%llx", fe->ops.info.adapter_mac_address, 	info->adapter_mac_address);
+		//fe->dvb->proposed_mac u8[6]
+		//fe->dvb->device
+		dprintk("dev->id=%d dev->parent->id=%d\n", fe->dvb->device->id, fe->dvb->device->parent ? fe->dvb->device->parent->id :-1);
+		//id = device_instance
+		//bus = Type of bus device is on.
+		{
+			uint64_t proposed_mac;
+			memcpy(&proposed_mac, fe->dvb->proposed_mac, sizeof(proposed_mac));
+			dprintk("proposed mac: %06x\n", proposed_mac);
+			info->adapter_mac_address =  proposed_mac ? proposed_mac : (0x2L | ((((uint64_t)fe->dvb->num) << 8) <<32));
+		}
+		dprintk("MAC: 0x%llx", info->adapter_mac_address);
 		info->card_mac_address = fe->ops.info.card_mac_address ? fe->ops.info.card_mac_address:
 			fe->dvb->num; //best we can do; each adapter will appear as different card
 		strscpy(info->card_address, fe->ops.info.card_address, sizeof(info->card_address));
 		strscpy(info->card_name, fe->ops.info.name, sizeof(info->card_name));
 		strscpy(info->card_short_name, fe->ops.info.card_short_name, sizeof(info->card_short_name));
-		strscpy(info->adapter_name, fe->ops.info.adapter_name, sizeof(info->adapter_name));
+		if(fe->ops.info.adapter_name[0]!=0) {
+			strscpy(info->adapter_name, fe->ops.info.adapter_name, sizeof(info->adapter_name));
+		} else {
+			snprintf(info->adapter_name, sizeof(info->adapter_name), "A%d %s",
+							 fe->dvb->num,  info->card_short_name);
+		}
 		info->symbol_rate_min = fe->ops.info.symbol_rate_min;
 		info->symbol_rate_max = fe->ops.info.symbol_rate_max;
 		info->symbol_rate_tolerance = fe->ops.info.symbol_rate_tolerance;

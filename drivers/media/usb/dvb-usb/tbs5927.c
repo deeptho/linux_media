@@ -287,7 +287,6 @@ static int tbs5927_frontend_attach(struct dvb_usb_adapter *d)
 					    &tbs5927_stv0910_cfg, 1 );
 		if (d->fe_adap->fe != NULL) {
 			memcpy(&d->fe_adap->fe->ops.info.card_mac_address, mac, sizeof(mac));
-			memcpy(&d->fe_adap->fe->ops.info.adapter_mac_address, mac, sizeof(mac));
 			strlcpy(d->fe_adap->fe->ops.info.card_short_name, "TBS 5927", 16);
 
 			buf[0] = 1; /* LNB power disable */
@@ -307,9 +306,10 @@ static int tbs5927_frontend_attach(struct dvb_usb_adapter *d)
 							sizeof(d->fe_adap->fe->ops.info.card_address));
 			snprintf(d->fe_adap->fe->ops.info.adapter_address, sizeof(d->fe_adap->fe->ops.info.adapter_address),
 							 "%s:%d", d->fe_adap->fe->ops.info.card_address, 0/*d->fe_adap->nr*/);
+#if 0
 			snprintf(d->fe_adap->fe->ops.info.adapter_name, sizeof(d->fe_adap->fe->ops.info.adapter_name),
 							 "%s #%d", d->fe_adap->fe->ops.info.card_short_name, 0/*d->fe_adap->nr*/);
-
+#endif
 			return 0;
 		}
 	}
