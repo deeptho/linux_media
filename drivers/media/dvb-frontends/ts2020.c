@@ -209,7 +209,7 @@ static int ts2020_set_params(struct dvb_frontend *fe)
 	/* select LO output divider */
 	if (frequency_khz < 493714) {
 		div_out = 8;
-		reg10 = 0x01;
+		reg10 = 0x10;
 		utmp |= 0x02;
 	} else if (frequency_khz >= 493714 && frequency_khz < priv->frequency_div) {
 		div_out = 4;
@@ -302,7 +302,7 @@ static int ts2020_set_params(struct dvb_frontend *fe)
 	regmap_read(priv->regmap, 0x26, &utmp);
 	value = utmp;
 
-	f3db = (c->bandwidth_hz / 1000 / 2) + 2000;
+	f3db = (c->bandwidth_hz / 1000 / 2) + priv->frequency_khz - c->frequency;
 	f3db += (c->symbol_rate < 5000000) ? FREQ_OFFSET_LOW_SYM_RATE : 0;
 	f3db = clamp(f3db, 7000U, 40000U);
 
