@@ -2318,10 +2318,14 @@ err:
 
 static int m88ds3103_read_snr(struct dvb_frontend *fe, u16 *snr)
 {
+	struct m88ds3103_dev *dev = fe->demodulator_priv;
 	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
 	u16 tmp;
 
 	tmp = div_s64(c->cnr.stat[0].svalue, 100);
+
+	if (c->delivery_system == SYS_AUTO)
+		c->delivery_system = dev->delivery_system;
 
 	if (c->delivery_system == SYS_DVBS)
 		*snr = (tmp > 0x7d) ? 0xffff : tmp * 524;
