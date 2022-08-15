@@ -286,6 +286,8 @@ static int tbs5927_frontend_attach(struct dvb_usb_adapter *d)
 		d->fe_adap->fe = dvb_attach(stv091x_attach, &d->dev->i2c_adap,
 					    &tbs5927_stv0910_cfg, 1 );
 		if (d->fe_adap->fe != NULL) {
+			d->fe_adap->fe->ops.set_voltage = tbs5927_set_voltage;
+
 			memcpy(&d->fe_adap->fe->ops.info.card_mac_address, mac, sizeof(mac));
 			strlcpy(d->fe_adap->fe->ops.info.card_short_name, "TBS 5927", 16);
 
