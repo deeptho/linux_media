@@ -2142,9 +2142,9 @@ static int dtv_property_process_set_int(struct dvb_frontend *fe,
 		break;
 	case DTV_VOLTAGE:
 		c->voltage = data;
-		dprintk("DTV_VOLTAGE: %d\n", c->voltage);
 		r = dvb_frontend_handle_ioctl(file, FE_SET_VOLTAGE,
 								(void *)c->voltage);
+		dprintk("DTV_VOLTAGE: %d r=%d\n", c->voltage, r);
 		break;
 	case DTV_TONE:
 		c->sectone = data;
@@ -2468,7 +2468,7 @@ static int dvb_frontend_handle_algo_ctrl_ioctl(struct file *file,
 	return err;
 }
 
-
+//main entry point; semaphore not held yet
 static int dvb_frontend_do_ioctl(struct file *file, unsigned int cmd,
 				 void *parg)
 {
@@ -3471,7 +3471,7 @@ static int dvb_frontend_handle_ioctl(struct file *file,
 		err = dtv_set_frontend(fe);
 		break;
 
-	case FE_GET_EVENT:
+	case FE_GET_EVENT: //already handled in dvb_frontend_handle_ioctl above
 		err = dvb_frontend_get_event(fe, parg, file->f_flags);
 		break;
 

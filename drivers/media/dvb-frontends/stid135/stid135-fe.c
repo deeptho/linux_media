@@ -338,6 +338,7 @@ static int stid135_select_rf_in_(struct stv* state, int rf_in)
 	return err;
 }
 
+
 static int stid135_init(struct dvb_frontend* fe)
 {
 	struct stv *state = fe->demodulator_priv;
@@ -1208,7 +1209,22 @@ static int stid135_set_voltage(struct dvb_frontend* fe, enum fe_sec_voltage volt
 			state->rf_in &= ~2;
 		return 0;
 	}
-	if (state->base->set_voltage) {//official driver does not use mutex
+	/*
+		when two adapters use the same tuner and one of them exists, dvb_frontend_thread calls
+		set set_voltage(..., SEC_VOLTAGE_OFF) which will turn off the tuner.
+
+		We might also want to prevent other voltage and tone changes, because they will surely disrupt
+		some of the adapters, but we also might want to tolerate that when the user wants to send some
+		diseqc commands to move a dish, while accepting temporary disruptions on other tuners.
+		The current compromise is to disallow all voltage changes.
+
+		The rest is up to user space.
+	 */
+	if(state->base->tuner_use_count[state->rf_in] >1 ) {
+		dprintk("demod=%d rf_in=%d calling state->base->set_voltage i2c=%p DISALLOW voltage=%d\n",
+						state->nr, state->rf_in,
+						state->base->i2c, voltage);
+	} else  if (state->base->set_voltage) {//official driver does not use mutex
 		mutex_lock(&state->base->status_lock); //DeepThought: this performs multiple i2c calls and needs to be protected
 		dprintk("demod=%d rf_in=%d calling state->base->set_voltage i2c=%p voltage=%d\n",
 						state->nr, state->rf_in,

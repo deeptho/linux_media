@@ -1035,7 +1035,7 @@ static ssize_t version_show(struct kobject *kobj, struct kobj_attribute *attr,
 		scnprintf().*/
 	return sprintf(buf,
 								 "type = \"neumo\";\n"
-								 "version = \"1.4\";\n");
+								 "version = \"1.5\";\n");
 }
 
 static ssize_t version_store(struct kobject *kobj, struct kobj_attribute *attr,
