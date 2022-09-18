@@ -1787,6 +1787,9 @@ static int m88ds3103_blindscan(struct dvb_frontend *fe, bool init, unsigned int 
 		}
 	}
 
+	if (tpcnt == 0)
+		goto end;
+
 next:
 	for (index = tpnum; index < tpcnt; index++) {
 		if (kthread_should_stop() || dvb_frontend_task_should_stop(fe))
