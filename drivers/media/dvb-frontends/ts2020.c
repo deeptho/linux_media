@@ -12,9 +12,6 @@
 #include <linux/regmap.h>
 #include <linux/math64.h>
 
-#define TS2020_XTAL_FREQ   27000 /* in kHz */
-#define FREQ_OFFSET_LOW_SYM_RATE 3000
-
 struct ts2020_priv {
 	struct i2c_client *client;
 	struct mutex regmap_mutex;
@@ -32,8 +29,6 @@ struct ts2020_priv {
 	bool dont_poll:1;
 	u32 frequency_div; /* LO output divider switch frequency */
 	u32 frequency_khz; /* actual used LO frequency */
-#define TS2020_M88TS2020 0
-#define TS2020_M88TS2022 1
 	u8 tuner;
 };
 
@@ -288,8 +283,7 @@ static int ts2020_set_params(struct dvb_frontend *fe)
 	value = utmp;
 
 	f3db = (c->bandwidth_hz / 1000 / 2) + priv->frequency_khz - c->frequency;
-	f3db += (c->symbol_rate < 5000000) ? FREQ_OFFSET_LOW_SYM_RATE : 0;
-	f3db = clamp(f3db, 7000U, 40000U);
+	f3db = clamp(f3db, 100U, 40000U);
 
 	gdiv28 = gdiv28 * 207 / (value * 2 + 151);
 	mlpf_max = gdiv28 * 135 / 100;
