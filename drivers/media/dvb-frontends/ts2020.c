@@ -261,21 +261,6 @@ static int ts2020_set_params(struct dvb_frontend *fe)
 	regmap_write(priv->regmap, 0x03, buf[2]);
 
 	ts2020_tuner_gate_ctrl(fe, 0x10);
-
-	if (priv->tuner == TS2020_M88TS2022) {
-		regmap_read(priv->regmap, 0x10, &utmp);
-		if (frequency_khz < 1103000 || frequency_khz > 1710000) {
-			regmap_write(priv->regmap, 0x10, utmp | 0x80);
-			regmap_write(priv->regmap, 0x11, 0x6f);
-			ts2020_tuner_gate_ctrl(fe, 0x10);
-		}
-
-		if ((frequency_khz >= 1103000 && frequency_khz < 1220000) ||
-			(frequency_khz > 1710000 && frequency_khz < 1745000)) {
-			regmap_write(priv->regmap, 0x10, utmp & 0xfd);
-		}
-	}
-
 	ts2020_tuner_gate_ctrl(fe, 0x08);
 
 	if (priv->tuner == TS2020_M88TS2022) {
