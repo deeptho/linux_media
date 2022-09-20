@@ -12,6 +12,13 @@
 
 #include <linux/dvb/frontend.h>
 
+#define TS2020_CLK_OUT_DISABLED 0
+#define TS2020_CLK_OUT_ENABLED 1
+#define TS2020_CLK_OUT_ENABLED_XTALOUT 2
+#define TS2020_M88TS2020 0
+#define TS2020_M88TS2022 1
+#define TS2020_XTAL_FREQ 27000 /* in kHz */
+
 struct ts2020_config {
 	u8 tuner_address;
 	u32 frequency_div;
@@ -24,9 +31,6 @@ struct ts2020_config {
 	/*
 	 * clock output
 	 */
-#define TS2020_CLK_OUT_DISABLED        0
-#define TS2020_CLK_OUT_ENABLED         1
-#define TS2020_CLK_OUT_ENABLED_XTALOUT 2
 	u8 clk_out:2;
 
 	/*
