@@ -184,12 +184,9 @@ static int ts2020_set_params(struct dvb_frontend *fe)
 {
 	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
 	struct ts2020_priv *priv = fe->tuner_priv;
-	unsigned int utmp;
-	u32 f3db, gdiv28;
-	u16 u16tmp, value, lpf_coeff = 2766;
+	u32 utmp, f3db, gdiv28, f_ref_khz, f_vco_khz, div_ref, div_out, pll_n;
+	u16 u16tmp, lpf_coeff = 2766;
 	u8 buf[3], reg10, lpf_mxdiv, mlpf_max, mlpf_min, nlpf;
-	unsigned int f_ref_khz, f_vco_khz, div_ref, div_out, pll_n;
-	unsigned int frequency_khz = c->frequency;
 
 	/*
 	 * Integer-N PLL synthesizer
@@ -202,11 +199,11 @@ static int ts2020_set_params(struct dvb_frontend *fe)
 		regmap_read(priv->regmap, 0x62, &utmp);
 
 	/* select LO output divider */
-	if (frequency_khz < 493714) {
+	if (c->frequency < 493714) {
 		div_out = 8;
 		reg10 = 0x10;
 		utmp |= 0x02;
-	} else if (frequency_khz >= 493714 && frequency_khz < priv->frequency_div) {
+	} else if (c->frequency >= 493714 && c->frequency < priv->frequency_div) {
 		div_out = 4;
 		reg10 = 0x10;
 		utmp &= 0xfd;
@@ -216,7 +213,7 @@ static int ts2020_set_params(struct dvb_frontend *fe)
 		utmp &= 0xfd;
 	}
 
-	f_vco_khz = frequency_khz * div_out;
+	f_vco_khz = c->frequency * div_out;
 	pll_n = f_vco_khz * div_ref / f_ref_khz;
 	pll_n += pll_n % 2;
 	priv->frequency_khz = pll_n * f_ref_khz / div_ref / div_out;
@@ -254,24 +251,19 @@ static int ts2020_set_params(struct dvb_frontend *fe)
 	regmap_write(priv->regmap, 0x01, buf[0]);
 	regmap_write(priv->regmap, 0x02, buf[1]);
 	regmap_write(priv->regmap, 0x03, buf[2]);
-
 	ts2020_tuner_gate_ctrl(fe, 0x10);
-	ts2020_tuner_gate_ctrl(fe, 0x08);
-
-	if (priv->tuner == TS2020_M88TS2022) {
-		regmap_read(priv->regmap, 0x3c, &utmp)
-		if (utmp == 0)
-			ts2020_tuner_gate_ctrl(fe, 0x08);
-	}
 
 	/* Tuner RF */
+	ts2020_tuner_gate_ctrl(fe, 0x08);
+	regmap_read(priv->regmap, 0x3c, &utmp);
+
+	if (utmp == 0)
+		ts2020_tuner_gate_ctrl(fe, 0x08);
+
 	if (priv->tuner == TS2020_M88TS2020)
 		ts2020_set_tuner_rf(fe);
 
-	gdiv28 = (TS2020_XTAL_FREQ / 1000 * 1694 + 500) / 1000;
-	regmap_write(priv->regmap, 0x04, gdiv28 & 0xff);
-	ts2020_tuner_gate_ctrl(fe, 0x04);
-
+	/* Tuner BB LPF */
 	if (priv->tuner == TS2020_M88TS2022) {
 		regmap_write(priv->regmap, 0x25, 0x00);
 		regmap_write(priv->regmap, 0x27, 0x70);
@@ -279,49 +271,41 @@ static int ts2020_set_params(struct dvb_frontend *fe)
 		regmap_write(priv->regmap, 0x08, 0x0b);
 	}
 
-	regmap_read(priv->regmap, 0x26, &utmp);
-	value = utmp;
-
 	f3db = (c->bandwidth_hz / 1000 / 2) + priv->frequency_khz - c->frequency;
 	f3db = clamp(f3db, 100U, 40000U);
-
-	gdiv28 = gdiv28 * 207 / (value * 2 + 151);
+	gdiv28 = (TS2020_XTAL_FREQ / 1000 * 1694 + 500) / 1000;
+	regmap_write(priv->regmap, 0x04, gdiv28);
+	ts2020_tuner_gate_ctrl(fe, 0x04);
+	regmap_read(priv->regmap, 0x26, &utmp);
+	gdiv28 = gdiv28 * 207 / (utmp * 2 + 151);
 	mlpf_max = gdiv28 * 135 / 100;
+	mlpf_max = clamp_val(mlpf_max, 1U, 63U);
 	mlpf_min = gdiv28 * 78 / 100;
-	if (mlpf_max > 63)
-		mlpf_max = 63;
-
-	nlpf = (f3db * gdiv28 * 2 / lpf_coeff /
-		(TS2020_XTAL_FREQ / 1000)  + 1) / 2;
-	if (nlpf > 23)
-		nlpf = 23;
-	if (nlpf < 1)
-		nlpf = 1;
-
-	lpf_mxdiv = (nlpf * (TS2020_XTAL_FREQ / 1000)
-		* lpf_coeff * 2  / f3db + 1) / 2;
+	nlpf = (f3db * gdiv28 * 2 / lpf_coeff / (TS2020_XTAL_FREQ / 1000) + 1) / 2;
+	nlpf = clamp_val(nlpf, 1U, 31U);
+	lpf_mxdiv = (nlpf * (TS2020_XTAL_FREQ / 1000) * lpf_coeff * 2 / f3db + 1) / 2;
 
 	if (lpf_mxdiv < mlpf_min) {
 		nlpf++;
-		lpf_mxdiv = (nlpf * (TS2020_XTAL_FREQ / 1000)
-			* lpf_coeff * 2  / f3db + 1) / 2;
+		lpf_mxdiv = (nlpf * (TS2020_XTAL_FREQ / 1000) * lpf_coeff * 2 / f3db + 1) / 2;
 	}
 
-	if (lpf_mxdiv > mlpf_max)
-		lpf_mxdiv = mlpf_max;
-
+	lpf_mxdiv = clamp_val(lpf_mxdiv, 1U, mlpf_max);
 	regmap_write(priv->regmap, 0x04, lpf_mxdiv);
 	regmap_write(priv->regmap, 0x06, nlpf);
-
 	ts2020_tuner_gate_ctrl(fe, 0x04);
 
+	/* Tuner BB gain */
 	ts2020_tuner_gate_ctrl(fe, 0x01);
 
 	if (priv->tuner == TS2020_M88TS2022) {
-		regmap_read(priv->regmap, 0x21, &utmp)
+		regmap_read(priv->regmap, 0x21, &utmp);
 		if (utmp == 0)
 			ts2020_tuner_gate_ctrl(fe, 0x01);
 	}
+
+	if (c->frequency > 1700000)
+		msleep(60);
 
 	return 0;
 }
