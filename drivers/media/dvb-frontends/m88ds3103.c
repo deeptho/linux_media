@@ -2696,7 +2696,7 @@ static const struct dvb_frontend_ops m88ds3103_ops = {
 		.frequency_max_hz = 2350 * MHz,
 		.frequency_tolerance_hz = 5 * MHz,
 		.symbol_rate_min =  500000,
-		.symbol_rate_max = 45000000,
+		.symbol_rate_max = 48000000,
 		.caps = FE_CAN_INVERSION_AUTO |
 			FE_CAN_FEC_1_2 |
 			FE_CAN_FEC_2_3 |
