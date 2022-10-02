@@ -1382,8 +1382,8 @@ static int m88ds3103_set_delsys(struct dvb_frontend *fe, u8 delivery_system)
 		if (ret)
 			goto err;
 		u16tmp = 0;
-		u8tmp1 = 0x3f;
-		u8tmp2 = 0x3f;
+		u8tmp1 = 0;
+		u8tmp2 = 0;
 		break;
 	case M88DS3103_TS_PARALLEL:
 		if (dev->chiptype == M88DS3103_CHIPTYPE_3103B) {
