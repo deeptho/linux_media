@@ -1879,7 +1879,6 @@ static int m88ds3103_get_fft_one_band(struct dvb_frontend *fe, s32 center_freq, 
 	unsigned tmp1, tmp2;
 	int x, ret, i = 0;
 	bool fft_done = false;
-	s64 strength;
 	u8 cnt;
 	s32 tmp;
 
@@ -1907,12 +1906,6 @@ static int m88ds3103_get_fft_one_band(struct dvb_frontend *fe, s32 center_freq, 
 			break;
 	}
 
-	if (fe->ops.tuner_ops.get_rf_gain) {
-		ret = fe->ops.tuner_ops.get_rf_gain(fe, &strength);
-		if (ret)
-			goto err;
-	}
-
 	ret = regmap_write(dev->regmap, 0x9a, 0x40);
 	if (ret)
 		goto err;
@@ -1929,7 +1922,7 @@ static int m88ds3103_get_fft_one_band(struct dvb_frontend *fe, s32 center_freq, 
 		if (ret)
 			goto err;
 		x = (tmp2 << 8) | tmp1;
-		x = ((20000 * ((long long) intlog10(x))) >> 24) - 10 * strength - 108370 + 7000;
+		x = ((20000 * ((long long) intlog10(x))) >> 24);
 		rf_level[i] = x;
 	}
 
