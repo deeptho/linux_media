@@ -327,20 +327,25 @@ static int dvb_frontend_get_event(struct dvb_frontend *fe,
 	if (events->overflow) {
 		events->overflow = 0;
 		events->eventr = events->eventw;
+		dprintk("Returning -EOVERFLOW=%d\n", -EOVERFLOW);
 		return -EOVERFLOW;
 	}
 
 	if (events->eventw == events->eventr) {
 		int ret;
 
-		if (flags & O_NONBLOCK)
+		if (flags & O_NONBLOCK) {
+			dprintk("Returning -EWOULDBLOCK=%d\n", -EWOULDBLOCK);
 			return -EWOULDBLOCK;
+		}
 
 		ret = wait_event_interruptible(events->wait_queue,
 								 dvb_frontend_test_event(fepriv, events));
 
-		if (ret < 0)
+		if (ret < 0) {
+			dprintk("Retuning -ret=%d\n", ret);
 			return ret;
+		}
 	}
 
 	mutex_lock(&events->mtx);
@@ -1571,7 +1576,7 @@ static int dtv_property_process_get(struct dvb_frontend *fe,
 		break;
 	case DTV_LOCKTIME:
 		tvp->u.data = c->locktime;
-		dprintk("LOCK TIME: returning %d\n", 	tvp->u.data);
+		//dprintk("LOCK TIME: returning %d\n", 	tvp->u.data);
 		break;
 	case DTV_SCAN_START_FREQUENCY:
 		tvp->u.data = c->scan_start_frequency;
@@ -2968,18 +2973,24 @@ static int dvb_get_property(struct dvb_frontend *fe, struct file *file,
 		__func__, tvps->num);
 	dev_dbg(fe->dvb->device, "%s: properties.props = %p\n",
 		__func__, tvps->props);
+#if 0
 	dprintk("num_props=%d\n", tvps->num);
+#endif
 	/*
 	 * Put an arbitrary limit on the number of messages that can
 	 * be sent at once
 	 */
 	if (!tvps->num || tvps->num > DTV_IOCTL_MAX_MSGS)
 		return -EINVAL;
+#if 0
 	dprintk("num_props=%d\n", tvps->num);
+#endif
 	tvp = memdup_user((void __user *)tvps->props, tvps->num * sizeof(*tvp));
 	if (IS_ERR(tvp))
 		return PTR_ERR(tvp);
+#if 0
 	dprintk("num_props=%d\n", tvps->num);
+#endif
 	/*
 	 * Let's use our own copy of property cache, in order to
 	 * avoid mangling with DTV zigzag logic, as drivers might
