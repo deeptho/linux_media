@@ -2922,7 +2922,13 @@ static int stv091x_stop_task(struct dvb_frontend *fe)
 	struct stv* state = fe->demodulator_priv;
 	struct stv_spectrum_scan_state* ss = &state->scan_state;
 	struct stv_constellation_scan_state* cs = &state->constellation_scan_state;
+#if 0
+	/*this code should only been called when frontend task is not running
+		locking is then not needed and can be quite slow if many frontends
+		are in use on same card
+	*/
 	mutex_lock(&state->base->status_lock);
+#endif
 	if(ss->freq)
 		kfree(ss->freq);
 #if 0
@@ -2936,7 +2942,9 @@ static int stv091x_stop_task(struct dvb_frontend *fe)
 	memset(ss, 0, sizeof(*ss));
 	memset(cs, 0, sizeof(*cs));
 	//dprintk("Freed memory\n");
+#if 0
 	mutex_unlock(&state->base->status_lock);
+#endif
 	return 0;
 }
 
