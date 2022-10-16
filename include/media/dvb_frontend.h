@@ -570,7 +570,7 @@ struct dvb_frontend_ops {
 };
 
 #ifdef __DVB_CORE__
-#define MAX_EVENT 8
+#define MAX_EVENT 64
 
 /* Used only internally at dvb_frontend.c */
 struct dvb_fe_events {
