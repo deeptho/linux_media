@@ -568,9 +568,7 @@ static fe_lla_error_t fe_stid135_read_psd_mem(struct stv* state, s32* rf_level,
 		error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMSTAT_MEM_STAT(path), &memstat);
 		for (timeout = 0; (!memstat) && (timeout < 20); ++timeout) {
 			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMSTAT_MEM_STAT(path), &memstat);
-		 mutex_unlock(&state->base->status_lock);
-			ChipWaitOrAbort(pParams->handle_demod, 1);
-			mutex_lock(&state->base->status_lock);
+			state_sleep(state, 1);
 		}
 
 		if(timeout == 20)
@@ -715,9 +713,7 @@ fe_lla_error_t fe_stid135_fft(struct stv* state, u32 mode, u32 nb_acquisition, s
 		error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_GSTAT_PSD_DONE(path), &contmode);
 		for(timeout=0; !contmode && (timeout < 40); ++timeout){
 			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_GSTAT_PSD_DONE(path), &contmode);
-			mutex_unlock(&state->base->status_lock);
-			ChipWaitOrAbort(pParams->handle_demod, 1);
-			mutex_lock(&state->base->status_lock);
+			state_sleep(state, 1);
 		}
 	}
 #ifdef	DEBUG_TIME

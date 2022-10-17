@@ -396,6 +396,7 @@ struct stv {
 void state_lock_(struct stv* state, const char* func, int line);
 int state_trylock_(struct stv* state, const char* func, int line);
 void state_unlock_(struct stv* state, const char* func, int line);
+void state_sleep_(struct stv* state, int timems, const char* func, int line);
 
 /*
 	Singleton structure, one per chip (i.e., the same for all 8 demods and all 4 tuners
@@ -410,6 +411,10 @@ void state_unlock_(struct stv* state, const char* func, int line);
 
 #define base_unlock(state) \
 	state_unlock_(state, __func__, __LINE__)
+
+#define state_sleep(state, time)											\
+	state_sleep_(state, time, __func__, __LINE__)
+
 
 extern void print_signal_info(const char* prefix, struct fe_sat_signal_info* i);
 
@@ -703,7 +708,7 @@ fe_lla_error_t fe_stid135_diseqc_init(struct fe_stid135_internal_param* pParams,
 
 fe_lla_error_t fe_stid135_diseqc_receive(struct fe_stid135_internal_param* pParams, u8 *data, u8 *nbdata);
 
-fe_lla_error_t fe_stid135_diseqc_send(struct fe_stid135_internal_param* pParams, FE_OXFORD_TunerPath_t tuner_nb, u8 *data, u8 nbdata);
+fe_lla_error_t fe_stid135_diseqc_send(struct stv* state, FE_OXFORD_TunerPath_t tuner_nb, u8 *data, u8 nbdata);
 
 fe_lla_error_t fe_stid135_diseqc_reset(struct fe_stid135_internal_param* pParams, FE_OXFORD_TunerPath_t tuner_nb);
 
