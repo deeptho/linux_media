@@ -695,7 +695,7 @@ fe_lla_error_t fe_stid135_fft(struct stv* state, u32 mode, u32 nb_acquisition, s
 
 	// start acquisition
 	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_GCTRL_UFBS_RESTART(path), 1);
-	mutex_unlock(&state->base->status_lock);
+	base_unlock(state);
 #ifdef	DEBUG_TIME
 	{
 	ktime_t now = ktime_get();
@@ -706,7 +706,7 @@ fe_lla_error_t fe_stid135_fft(struct stv* state, u32 mode, u32 nb_acquisition, s
 	}
 #endif
 	WAIT_N_MS(5);
-	mutex_lock(&state->base->status_lock);
+	base_lock(state);
 	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_GCTRL_UFBS_RESTART(path), 0);
 
 	// wait for fft to finish if not in continuous mode
@@ -796,11 +796,11 @@ static int stid135_get_spectrum_scan_fft_one_band(struct stv *state,
 	vprintk("spectrum scan: center_freq=%dkHz lo=%dkHz range=%dkHz mode=%d fft_size=%d freq=%p rf_level=%p\n",
 					center_freq, lo_frequency_hz/1000, range, mode, fft_size, freq, rf_level);
 #endif
-	mutex_lock(&state->base->status_lock);
+	base_lock(state);
 	error = fe_stid135_fft(state, mode, nb_acquisition,
 												 center_freq*1000 - lo_frequency_hz, range*1000, rf_level, fft_size,
 												 start_idx, end_idx);
-	mutex_unlock(&state->base->status_lock);
+	base_unlock(state);
 	pbandx1000 += mode*6020; //compensate for FFT number of bins: 20*log10(2)
 	delta = 10*(3000 + STLog10(range) - STLog10(fft_size)); //this is a power spectral density range*1000/fft_size is the bin width in Hz
 
@@ -883,9 +883,9 @@ int get_spectrum_scan_fft(struct dvb_frontend *fe)
 	}
 	ss->fft_size = table_size;
 
-	mutex_lock(&state->base->status_lock);
+	base_lock(state);
 	error = FE_STiD135_GetLoFreqHz(&state->base->ip, &ss->lo_frequency_hz);
-	mutex_unlock(&state->base->status_lock);
+	base_unlock(state);
 	if(error) {
 		dprintk("FE_STiD135_GetLoFreqHz FAILED: error=%d\n", error);
 		return error;
@@ -923,7 +923,7 @@ int get_spectrum_scan_fft(struct dvb_frontend *fe)
 		error = -ENOMEM;
 		goto _end;
 	}
-	mutex_lock(&state->base->status_lock);
+	base_lock(state);
 	print_spectrum_scan_state(&state->spectrum_scan_state);
 #ifdef	DEBUG_TIME
 	start_time = ktime_get();
@@ -940,7 +940,7 @@ int get_spectrum_scan_fft(struct dvb_frontend *fe)
 #endif
 
 	error |= estimate_band_power_demod_for_fft(state, state->rf_in+1, &pbandx1000);
-	mutex_unlock(&state->base->status_lock);
+	base_unlock(state);
 
 	if(error) {
 		dprintk("fe_stid135_init_fft FAILED: error=%d\n", error);
@@ -1039,9 +1039,9 @@ int get_spectrum_scan_fft(struct dvb_frontend *fe)
 	if(temp_rf_level)
 		kfree(temp_rf_level);
 	dprintk("Freed temp variables\n");
-	mutex_lock(&state->base->status_lock);
+	base_lock(state);
 	error |= (error1=fe_stid135_term_fft(state, Reg));
-	mutex_unlock(&state->base->status_lock);
+	base_unlock(state);
 	dprintk("Terminated fft\n");
 	if(error) {
 		dprintk("fe_stid135_term_fft FAILED: error=%d\n", error1);

@@ -47,6 +47,10 @@
 #include "neumo-scan.h"
 #include <linux/timekeeping.h>
 #include <media/dvb_frontend.h>
+
+#define dprintk(fmt, arg...)																					\
+	printk(KERN_DEBUG pr_fmt("%s:%d " fmt),  __func__, __LINE__, ##arg)
+
 /* ========================================================== */
 // Typedefs - proprietary, non generic
 
@@ -253,7 +257,6 @@ struct fe_stid135_internal_param {
 	BOOL				mis_mode[8]; /* Memorisation of MIS mode */
 	struct modcod_data		mc_flt[NB_SAT_MODCOD];
 #endif
-	struct mutex *master_lock;
 };
 
 
@@ -302,18 +305,21 @@ struct status_bit_fields {
 };
 
 
+struct lock_t {
+	struct mutex m;
+	ktime_t lock_time;
+	int adapter_no;
+	const char* func;
+	int line;
+};
 
-/*
-	Singleton structure, one per chip (i.e., the same for all 8 demods and all 4 tuners
-	on tbs6909x. Created in fe_stid135_init.
-*/
 
 struct stv_base {
 	struct list_head     stvlist;
 
 	u8                   adr;
 	struct i2c_adapter  *i2c;
-	struct mutex         status_lock;
+	struct lock_t         lock;
 	int                  count;
 	u32                  extclk;
 	u8                   ts_mode;
@@ -386,6 +392,24 @@ struct stv {
 	struct spectrum_scan_state spectrum_scan_state;
 	struct constellation_scan_state constellation_scan_state;
 };
+
+void state_lock_(struct stv* state, const char* func, int line);
+int state_trylock_(struct stv* state, const char* func, int line);
+void state_unlock_(struct stv* state, const char* func, int line);
+
+/*
+	Singleton structure, one per chip (i.e., the same for all 8 demods and all 4 tuners
+	on tbs6909x. Created in fe_stid135_init.
+*/
+
+#define base_lock(state) \
+	state_lock_(state, __func__, __LINE__)
+
+#define base_trylock(state)										\
+	state_trylock_(state, __func__, __LINE__)
+
+#define base_unlock(state) \
+	state_unlock_(state, __func__, __LINE__)
 
 extern void print_signal_info(const char* prefix, struct fe_sat_signal_info* i);
 

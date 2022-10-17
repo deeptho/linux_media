@@ -37,8 +37,6 @@
 #include "stid135_drv.h"
 #include "stid135-fft.h"
 #define MAX_FFT_SIZE 8192
-#define dprintk(fmt, arg...)																					\
-	printk(KERN_DEBUG pr_fmt("%s:%d " fmt),  __func__, __LINE__, ##arg)
 LIST_HEAD(stvlist);
 
 static int mode;
@@ -158,7 +156,6 @@ static int stid135_probe(struct stv *state)
 	}
 
 	p_params = &state->base->ip;
-	p_params->master_lock = &state->base->status_lock;
 	vprintk("here state=%p\n", state);
 	vprintk("here state->base=%p\n", state->base);
 	vprintk("here state->base=%p\n", state->base);
@@ -521,9 +518,9 @@ static int stid135_set_rf_input(struct dvb_frontend* fe, s32 rf_in)
 {
 	int ret;
 	struct stv *state = fe->demodulator_priv;
-	mutex_lock(&state->base->status_lock);
+	base_lock(state);
 	ret = stid135_select_rf_in_(state, rf_in);
-	mutex_unlock(&state->base->status_lock);
+	base_unlock(state);
 	return ret;
 }
 
@@ -1106,7 +1103,7 @@ static int stid135_read_status(struct dvb_frontend* fe, enum fe_status *status)
 {
 	struct stv *state = fe->demodulator_priv;
 	int ret = 0;
-	if (!mutex_trylock(&state->base->status_lock)) {
+	if (!base_trylock(state)) {
 		if (state->signal_info.has_viterbi) {//XX: official driver tests for has_sync?
 			*status |= FE_HAS_SIGNAL | FE_HAS_CARRIER
 				| FE_HAS_VITERBI | FE_HAS_SYNC | FE_HAS_LOCK;
@@ -1114,7 +1111,7 @@ static int stid135_read_status(struct dvb_frontend* fe, enum fe_status *status)
 		return 0;
 	}
 	ret = stid135_read_status_(fe, status);
-	mutex_unlock(&state->base->status_lock);
+	base_unlock(state);
 	return ret;
 }
 
@@ -1178,7 +1175,7 @@ static int stid135_tune(struct dvb_frontend* fe, bool re_tune,
 	struct stv *state = fe->demodulator_priv;
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
 	int r;
-	mutex_lock(&state->base->status_lock);
+	base_lock(state);
 	r = stid135_tune_(fe, re_tune, mode_flags, delay, status);
 	if(/*state->signal_info.has_carrier &&*/ p->constellation.num_samples>0) {
 		int max_num_samples = state->signal_info.symbol_rate /5 ; //we spend max 500 ms on this
@@ -1186,7 +1183,7 @@ static int stid135_tune(struct dvb_frontend* fe, bool re_tune,
 			max_num_samples = 1024; //also set an upper limit which should be fast enough
 		r = stid135_constellation_start_(fe, &p->constellation, max_num_samples);
 	}
-	mutex_unlock(&state->base->status_lock);
+	base_unlock(state);
 	return r;
 }
 
@@ -1225,13 +1222,13 @@ static int stid135_set_voltage(struct dvb_frontend* fe, enum fe_sec_voltage volt
 						state->nr, state->rf_in,
 						state->base->i2c, voltage);
 	} else  if (state->base->set_voltage) {//official driver does not use mutex
-		mutex_lock(&state->base->status_lock); //DeepThought: this performs multiple i2c calls and needs to be protected
+		base_lock(state); //DeepThought: this performs multiple i2c calls and needs to be protected
 		dprintk("demod=%d rf_in=%d calling state->base->set_voltage i2c=%p voltage=%d\n",
 						state->nr, state->rf_in,
 						state->base->i2c, voltage);
 		stid135_select_rf_in_(state, state->rf_in);
 		state->base->set_voltage(state->base->i2c, voltage, state->rf_in);
-		mutex_unlock(&state->base->status_lock);
+		base_unlock(state);
 	}
 	return 0;
 }
@@ -1251,10 +1248,10 @@ static int stid135_set_tone(struct dvb_frontend* fe, enum fe_sec_tone_mode tone)
 		return 0;
 	}
 
-	mutex_lock(&state->base->status_lock);
+	base_lock(state);
 	err |= stid135_select_rf_in_(state, state->rf_in);
 	err = fe_stid135_set_22khz_cont(&state->base->ip, state->rf_in + 1, tone == SEC_TONE_ON);
-	mutex_unlock(&state->base->status_lock);
+	base_unlock(state);
 
 	dprintk("demod=%d DISEQC[%d] tone=%d error=%d err=%d abort=%d", state->nr, state->rf_in+1,  tone, err,
 					state->base->ip.handle_demod->Error,
@@ -1277,11 +1274,11 @@ static int stid135_send_master_cmd(struct dvb_frontend* fe,
 		return 0;
 #endif
 	dprintk("diseqc rf_in=%d\n", state->rf_in);
-	mutex_lock(&state->base->status_lock);
+	base_lock(state);
 	err |= stid135_select_rf_in_(state, state->rf_in);
 	err |= fe_stid135_diseqc_init(&state->base->ip, state->rf_in + 1, FE_SAT_DISEQC_2_3_PWM);
-	err |= fe_stid135_diseqc_send(&state->base->ip, state->rf_in + 1, cmd->msg, cmd->msg_len);
-	mutex_unlock(&state->base->status_lock);
+	err |= fe_stid135_diseqc_send(state, state->rf_in + 1, cmd->msg, cmd->msg_len);
+	base_unlock(state);
 
 	if (err != FE_LLA_NO_ERROR)
 		dev_err(&state->base->i2c->dev, "%s: fe_stid135_diseqc_send error %d !\n", __func__, err);
@@ -1300,9 +1297,9 @@ static int stid135_recv_slave_reply(struct dvb_frontend* fe,
 		return 0;
 #endif
 
-	mutex_lock(&state->base->status_lock);
+	base_lock(state);
 	err = fe_stid135_diseqc_receive(&state->base->ip, reply->msg, &reply->msg_len);
-	mutex_unlock(&state->base->status_lock);
+	base_unlock(state);
 
 	if (err != FE_LLA_NO_ERROR)
 		dev_err(&state->base->i2c->dev, "%s: fe_stid135_diseqc_receive error %d !\n", __func__, err);
@@ -1333,7 +1330,7 @@ static int stid135_sleep(struct dvb_frontend* fe)
 
 	dev_dbg(&state->base->i2c->dev, "%s: tuner %d\n", __func__, state->rf_in);
 	dprintk("sleep called");
-	mutex_lock(&state->base->status_lock);
+	base_lock(state);
 	BUG_ON((state->rf_in<0 || state->rf_in >= 4));
 	BUG_ON(state->base->tuner_use_count[state->rf_in] < 0);
 	if(state->base->tuner_use_count[state->rf_in] > 0)
@@ -1347,7 +1344,7 @@ static int stid135_sleep(struct dvb_frontend* fe)
 		}
 		err |= FE_STiD135_TunerStandby(p_params->handle_demod, state->rf_in + 1, 0);
 	}
-	mutex_unlock(&state->base->status_lock);
+	base_unlock(state);
 
 	if (err != FE_LLA_NO_ERROR)
 		dev_warn(&state->base->i2c->dev, "%s: STiD135 standby tuner %d failed!\n", __func__, state->rf_in);
@@ -1451,9 +1448,9 @@ static int stid135_read_temp(struct dvb_frontend* fe, s16 *temp)
 	struct stv *state = fe->demodulator_priv;
 	fe_lla_error_t err = FE_LLA_NO_ERROR;
 
-	mutex_lock(&state->base->status_lock);
+	base_lock(state);
 	err = fe_stid135_get_soc_temperature(&state->base->ip, temp);
-	mutex_unlock(&state->base->status_lock);
+	base_unlock(state);
 
 	if (err != FE_LLA_NO_ERROR)
 		dev_warn(&state->base->i2c->dev, "%s: fe_stid135_get_soc_temperature error %d !\n", __func__, err);
@@ -1505,7 +1502,7 @@ static int stid135_get_spectrum_scan_sweep(struct dvb_frontend* fe,
 		return  -ENOMEM;
 	}
 	ss->spectrum_present = true;
-	mutex_lock(&state->base->status_lock);
+	base_lock(state);
 #ifdef TODO
 	state->tuner_bw = stv091x_bandwidth(ROLLOFF_AUTO, bandwidth);
 #endif
@@ -1621,11 +1618,11 @@ static int stid135_get_spectrum_scan_sweep(struct dvb_frontend* fe,
 		usleep_range(12000, 13000);
 
 	}
-	mutex_unlock(&state->base->status_lock);
+	base_unlock(state);
 	*status =  FE_HAS_SIGNAL|FE_HAS_CARRIER|FE_HAS_VITERBI|FE_HAS_SYNC|FE_HAS_LOCK;
 	return 0;
  __onerror:
-	mutex_unlock(&state->base->status_lock);
+	base_unlock(state);
 	dprintk("encountered error at %d/%d\n", i, ss->spectrum_len);
 	*status =  FE_TIMEDOUT|FE_HAS_SIGNAL|FE_HAS_CARRIER|FE_HAS_VITERBI|FE_HAS_SYNC|FE_HAS_LOCK;
 	return 0;
@@ -1644,7 +1641,7 @@ static int stid135_stop_task(struct dvb_frontend* fe)
 		locking is then not needed and can be quite slow if many frontends
 		are in use on same card
 	*/
-	mutex_lock(&state->base->status_lock);
+	base_lock(state);
 #endif
 	if(ss->freq)
 		kfree(ss->freq);
@@ -1657,7 +1654,7 @@ static int stid135_stop_task(struct dvb_frontend* fe)
 	memset(ss, 0, sizeof(*ss));
 	memset(cs, 0, sizeof(*cs));
 #if 0
-	mutex_unlock(&state->base->status_lock);
+	base_unlock(state);
 #endif
 	//dprintk("Freed memory\n");
 	return 0;
@@ -1674,7 +1671,7 @@ static int stid135_spectrum_start(struct dvb_frontend* fe,
 	fe_lla_error_t err = FE_LLA_NO_ERROR;
 	stid135_stop_task(fe);
 
-	mutex_lock(&state->base->status_lock);
+	base_lock(state);
 	if(p->rf_in < 0 || !p->rf_in_valid)  {
 		p->rf_in = state->tuner_active ? state->rf_in : state->fe.ops.info.default_rf_input;
 		p->rf_in_valid = true;
@@ -1683,7 +1680,7 @@ static int stid135_spectrum_start(struct dvb_frontend* fe,
 	}
 	dprintk("Setting rf_in: %d\n", p->rf_in);
 	err |= stid135_select_rf_in_(state, p->rf_in);
-	mutex_unlock(&state->base->status_lock);
+	base_unlock(state);
 	if(err) {
 		dprintk("Could not set rfpath error=%d\n", err);
 	}
@@ -1706,7 +1703,7 @@ int stid135_spectrum_get(struct dvb_frontend* fe, struct dtv_fe_spectrum* user)
 {
 	struct stv *state = fe->demodulator_priv;
 	int error=0;
-	mutex_lock(&state->base->status_lock);
+	base_lock(state);
 	if (user->num_freq> state->spectrum_scan_state.spectrum_len)
 		user->num_freq = state->spectrum_scan_state.spectrum_len;
 	if (user->num_candidates > state->spectrum_scan_state.num_candidates)
@@ -1728,7 +1725,7 @@ int stid135_spectrum_get(struct dvb_frontend* fe, struct dtv_fe_spectrum* user)
 		}
 	} else
 		error = -EFAULT;
-	mutex_unlock(&state->base->status_lock);
+	base_unlock(state);
 	//stid135_stop_task(fe);
 	return error;
 }
@@ -1758,17 +1755,17 @@ static int stid135_scan_sat(struct dvb_frontend* fe, bool init,
 		if(state->spectrum_scan_state.scan_in_progress) {
 			stid135_stop_task(fe); //cleanup older scan
 		}
-		mutex_lock(&state->base->status_lock);
+		base_lock(state);
 		ret = stid135_spectral_scan_start(fe);
 		if(ret<0) {
 			dprintk("Could not start spectral scan\n");
-			mutex_unlock(&state->base->status_lock);
+			base_unlock(state);
 			return -1; //
 		}
 	} else {
 		if(!state->spectrum_scan_state.scan_in_progress) {
 			dprintk("Error: Called with init==false, but scan was  not yet started\n");
-			mutex_lock(&state->base->status_lock);
+			base_lock(state);
 			ret = stid135_spectral_scan_start(fe);
 			if(ret<0) {
 				dprintk("Could not start spectral scan\n");
@@ -1789,7 +1786,7 @@ static int stid135_scan_sat(struct dvb_frontend* fe, bool init,
 		if(ret<0) {
 			dprintk("reached end of scan range\n");
 			*status =  FE_TIMEDOUT;
-			mutex_unlock(&state->base->status_lock);
+			base_unlock(state);
 			return error;
 		}
 		if (p->frequency < p->scan_start_frequency) {
@@ -1847,7 +1844,7 @@ static int stid135_scan_sat(struct dvb_frontend* fe, bool init,
 			state->spectrum_scan_state.num_bad++;
 		}
 	}
-	mutex_unlock(&state->base->status_lock);
+	base_unlock(state);
 	return ret;
 }
 
@@ -1906,10 +1903,10 @@ int stid135_constellation_start(struct dvb_frontend* fe,
 	int ret;
 	struct stv* state = fe->demodulator_priv;
 	stid135_stop_task(fe);
-	mutex_lock(&state->base->status_lock);
+	base_lock(state);
 	ret = stid135_constellation_start_(fe, user);
 	*status =  FE_HAS_SIGNAL|FE_HAS_CARRIER|FE_HAS_VITERBI|FE_HAS_SYNC|FE_HAS_LOCK;
-	mutex_unlock(&state->base->status_lock);
+	base_unlock(state);
 	return 0;
 }
 #endif
@@ -1919,7 +1916,7 @@ static int stid135_constellation_get(struct dvb_frontend* fe, struct dtv_fe_cons
 	struct stv *state = fe->demodulator_priv;
 	struct constellation_scan_state* cs = &state->constellation_scan_state;
 	int error = 0;
-	mutex_lock(&state->base->status_lock);
+	base_lock(state);
 	if(user->num_samples > cs->num_samples)
 		user->num_samples = cs->num_samples;
 	if(cs->samples) {
@@ -1930,7 +1927,7 @@ static int stid135_constellation_get(struct dvb_frontend* fe, struct dtv_fe_cons
 	}
 	else
 		error = -EFAULT;
-	mutex_unlock(&state->base->status_lock);
+	base_unlock(state);
 	return error;
 }
 
@@ -2042,7 +2039,7 @@ struct dvb_frontend* stid135_attach(struct i2c_adapter *i2c,
 		base->set_TSparam  = cfg->set_TSparam;
 		base->vglna		=	cfg->vglna;    //for stvvglna 6909x v2 6903x v2
 
-		mutex_init(&base->status_lock);
+		mutex_init(&base->lock.m);
 
 		state->base = base;
 		if (stid135_probe(state) < 0) {

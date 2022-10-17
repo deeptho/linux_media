@@ -12448,3 +12448,30 @@ fe_lla_error_t get_current_llr(struct stv* state, s32 *current_llr)
 	return FE_LLA_NO_ERROR;
 
 }
+
+void state_lock_(struct stv* state, const char*func, int line) {
+	struct lock_t* lock = &state->base->lock;
+	mutex_lock(&lock->m);
+	lock->func = func;
+	lock->line = line;
+	lock->lock_time =  ktime_get_boottime();
+}
+
+int state_trylock_(struct stv* state, const char*func, int line) {
+	struct lock_t* lock = &state->base->lock;
+	int ret = mutex_trylock(&lock->m);
+	lock->func = func;
+	lock->line = line;
+	lock->lock_time =  ktime_get_boottime();
+	return ret;
+}
+
+void state_unlock_(struct stv* state, const char* func, int line) {
+	struct lock_t* lock = &state->base->lock;
+	int64_t delta=ktime_ms_delta(ktime_get_boottime(), lock->lock_time);
+	mutex_unlock(&lock->m);
+	if(delta > 500)
+		printk(KERN_DEBUG pr_fmt("%s:%d->%s:%d " "demod %d Long locktime: %d ms\n"), lock->func, lock->line,
+					 func, line, state->nr, (int)delta);
+}
+
