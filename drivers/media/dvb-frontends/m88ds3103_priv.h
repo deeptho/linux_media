@@ -15,6 +15,7 @@
 #include <linux/i2c-mux.h>
 #include <linux/regmap.h>
 #include <linux/math64.h>
+#include <neumo-scan.h>
 
 #define M88DS3103B_FIRMWARE "dvb-demod-m88ds3103b.fw"
 #define M88DS3103_FIRMWARE  "dvb-demod-m88ds3103.fw"
@@ -33,21 +34,6 @@ struct fe_tp_info
 {
 	u32 frequency;
 	u32 symbol_rate;
-};
-
-struct m88ds3103_spectrum_scan_state {
-	bool spectrum_present;
-	bool scan_in_progress;
-	int fft_size;
-	s32 start_frequency;
-	s32 end_frequency;
-	s32 frequency_step;
-	s32 range;
-	struct spectral_peak_t *candidates;
-	int num_candidates;
-	s32 *freq;
-	s32 *spectrum;
-	int spectrum_len;
 };
 
 struct m88ds3103_dev {
@@ -74,7 +60,7 @@ struct m88ds3103_dev {
 	u64 post_bit_count;
 	u8 dt_addr;
 	u16 prevUCBS2;
-	struct m88ds3103_spectrum_scan_state spectrum_scan_state;
+	struct spectrum_scan_state spectrum_scan_state;
 };
 
 struct m88ds3103_reg_val {
