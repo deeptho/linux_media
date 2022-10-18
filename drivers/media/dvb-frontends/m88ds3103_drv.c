@@ -1588,7 +1588,7 @@ static int m88ds3103_set_frontend(struct dvb_frontend *fe)
 		goto err;
 	}
 
-	blind = (c->algorithm == ALGORITHM_BLIND || c->algorithm == ALGORITHM_BLIND_BEST_GUESS);
+	blind = (c->algorithm == ALGORITHM_BLIND || c->algorithm == ALGORITHM_SPECTRUM);
 
 	if (c->delivery_system == SYS_DVBS2)
 		m88ds3103_set_delsys(fe, SYS_DVBS2);
@@ -1938,28 +1938,28 @@ err:
 int m88ds3103_get_spectrum_scan_fft(struct dvb_frontend *fe, unsigned int *delay, enum fe_status *status)
 {
 
-	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
+	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
 	struct m88ds3103_dev *dev = fe->demodulator_priv;
 	struct i2c_client *client = dev->client;
-	struct m88ds3103_spectrum_scan_state *ss = &dev->spectrum_scan_state;
+	struct spectrum_scan_state *ss = &dev->spectrum_scan_state;
 	s32 useable_samples2, lost_samples2, sum_len, sum_correction, min_correction[2], max_correction[2];
-	s32 start_frequency = p->scan_start_frequency, end_frequency = p->scan_end_frequency;
 	s32 last_avg = 0, current_avg = 0, correction = 0, *temp_rf_level = NULL;
 	u32 idx = 0, *temp_freq = NULL;
 	int i, ret, error = 0;
 
 	ss->spectrum_present = false;
+	c->algorithm = ALGORITHM_SPECTRUM;
 
-	if (p->scan_end_frequency < p->scan_start_frequency)
+	if (c->scan_end_frequency < c->scan_start_frequency)
 		return -1;
 
-	ss->start_frequency = start_frequency;
-	ss->end_frequency = end_frequency;
+	ss->start_frequency = c->scan_start_frequency;
+	ss->end_frequency = c->scan_end_frequency;
 	ss->range = 96000;
 	ss->fft_size = 512;
 	ss->frequency_step = ss->range / ss->fft_size;
  	ss->range = ss->frequency_step * ss->fft_size;
-	ss->spectrum_len = (end_frequency - start_frequency + ss->frequency_step - 1) / ss->frequency_step;
+	ss->spectrum_len = (ss->end_frequency - ss->start_frequency + ss->frequency_step - 1) / ss->frequency_step;
 	useable_samples2 = ((ss->fft_size * 6) / 10 + 1) / 2;
 	lost_samples2 = ss->fft_size / 2 - useable_samples2;
 
@@ -1992,9 +1992,9 @@ int m88ds3103_get_spectrum_scan_fft(struct dvb_frontend *fe, unsigned int *delay
 		if (kthread_should_stop() || dvb_frontend_task_should_stop(fe))
 			break;
 	
-		p->frequency = start_frequency + (idx + useable_samples2) * ss->frequency_step;
-		p->symbol_rate = 40000000;
-		p->bandwidth_hz = p->symbol_rate / 100 * 135;
+		c->frequency = ss->start_frequency + (idx + useable_samples2) * ss->frequency_step;
+		c->symbol_rate = 40000000;
+		c->bandwidth_hz = c->symbol_rate / 100 * 135;
 
 		if (fe->ops.tuner_ops.set_params) {
 			ret = fe->ops.tuner_ops.set_params(fe);
@@ -2006,7 +2006,7 @@ int m88ds3103_get_spectrum_scan_fft(struct dvb_frontend *fe, unsigned int *delay
 		if (ret)
 			goto err;
 
-		error = m88ds3103_get_fft_one_band(fe, p->frequency, ss->range, temp_freq, temp_rf_level, ss->fft_size);
+		error = m88ds3103_get_fft_one_band(fe, c->frequency, ss->range, temp_freq, temp_rf_level, ss->fft_size);
 
 		if (error)
 			goto _end;
@@ -2079,7 +2079,7 @@ err:
 static int m88ds3103_stop_task(struct dvb_frontend *fe)
 {
 	struct m88ds3103_dev *dev = fe->demodulator_priv;
-	struct m88ds3103_spectrum_scan_state *ss = &dev->spectrum_scan_state;
+	struct spectrum_scan_state *ss = &dev->spectrum_scan_state;
 
 	if (ss->freq)
 		kfree(ss->freq);
@@ -2096,7 +2096,7 @@ static int m88ds3103_spectrum_start(struct dvb_frontend *fe, struct dtv_fe_spect
 {
 	struct m88ds3103_dev *dev = fe->demodulator_priv;
 	struct i2c_client *client = dev->client;
-	struct m88ds3103_spectrum_scan_state *ss = &dev->spectrum_scan_state;
+	struct spectrum_scan_state *ss = &dev->spectrum_scan_state;
 	int ret;
 
 	ret = m88ds3103_stop_task(fe);
@@ -2111,7 +2111,7 @@ static int m88ds3103_spectrum_start(struct dvb_frontend *fe, struct dtv_fe_spect
 
 	s->num_freq = ss->spectrum_len;
 
-	return 0;
+	return neumo_scan_spectrum(ss);
 err:
 	dev_dbg(&client->dev, "failed=%d\n", ret);
 	return ret;
@@ -2122,7 +2122,7 @@ static int m88ds3103_spectrum_get(struct dvb_frontend *fe, struct dtv_fe_spectru
 	struct m88ds3103_dev *dev = fe->demodulator_priv;
 	int error = 0;
 
-	if (user->num_freq> dev->spectrum_scan_state.spectrum_len)
+	if (user->num_freq > dev->spectrum_scan_state.spectrum_len)
 		user->num_freq = dev->spectrum_scan_state.spectrum_len;
 
 	if (user->num_candidates > dev->spectrum_scan_state.num_candidates)
@@ -2702,9 +2702,9 @@ static const struct dvb_frontend_ops m88ds3103_ops = {
 			FE_CAN_FEC_AUTO |
 			FE_CAN_QPSK |
 			FE_CAN_RECOVER |
-			FE_CAN_2G_MODULATION |
-			FE_HAS_EXTENDED_CAPS,
-		.extended_caps = FE_CAN_SPECTRUMSCAN | FE_CAN_BLINDSEARCH
+			FE_CAN_2G_MODULATION,
+		.extended_caps = FE_CAN_SPECTRUM_FFT | FE_CAN_BLINDSEARCH,
+		.supports_neumo = 1
 	},
 
 	.release = m88ds3103_release,
