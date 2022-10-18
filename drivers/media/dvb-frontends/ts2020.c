@@ -187,6 +187,7 @@ static int ts2020_set_params(struct dvb_frontend *fe)
 	u32 utmp, f3db, gdiv28, f_ref_khz, f_vco_khz, div_ref, div_out, pll_n;
 	u16 u16tmp, lpf_coeff = 2766;
 	u8 buf[3], reg10, lpf_mxdiv, mlpf_max, mlpf_min, nlpf;
+	bool spectrum = (c->algorithm == ALGORITHM_SPECTRUM);
 
 	/*
 	 * Integer-N PLL synthesizer
@@ -304,7 +305,7 @@ static int ts2020_set_params(struct dvb_frontend *fe)
 			ts2020_tuner_gate_ctrl(fe, 0x01);
 	}
 
-	if (c->frequency > 1700000)
+	if (spectrum)
 		msleep(60);
 
 	return 0;
