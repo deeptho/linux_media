@@ -2860,6 +2860,7 @@ fe_lla_error_t	fe_stid135_search(struct stv* state,
 	state->demod_search_algo = pSearch->search_algo;
 	state->demod_search_iq_inv = pSearch->iq_inversion;
 	state->mis_mode = FALSE; /* Disable memorisation of MIS mode */
+	dprintk("ISI mis_mode reset to %d\n", state->mis_mode);
 
 	/* Set default register values to start a clean search */
 	error |= (error1=fe_stid135_set_reg_init_values(state)); //XXOK
@@ -2913,7 +2914,7 @@ fe_lla_error_t	fe_stid135_search(struct stv* state,
 	}
 
 	if(pSearch->symbol_rate >= pParams->master_clock) { /* if SR >= MST_CLK */
-		vprintk("[%d] Wideband code called; warm start forced\n", state->nr+1);
+		dprintk("[%d] Wideband code called; warm start forced\n", state->nr+1);
 		state->demod_search_algo = FE_SAT_WARM_START; // we force warm algo if SR > MST_CLK
 		error |= (error1=fe_stid135_set_reg_values_wb(state));
 		if(error1)
@@ -5801,6 +5802,7 @@ static fe_lla_error_t fe_stid135_manage_matype_info_raw_bbframe(struct stv* stat
 			/* Check if MIS stream (Multi Input Stream). If yes then set the MIS Filter to get the Min ISI */
 			if (!fe_stid135_check_sis_or_mis(matype_info)) {
 				state->mis_mode = TRUE;
+				dprintk("ISI mis_mode set to %d\n", state->mis_mode);
 				/* Get Min ISI and activate the MIS Filter */
 				error |= fe_stid135_select_min_isi(state);
 				error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG0_TSFIFO_BITSPEED(Demod), 0);
@@ -10297,11 +10299,12 @@ static fe_lla_error_t fe_stid135_select_min_isi(struct stv* state)
 			/*Set the MIS filter*/
 			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_PKTDELIN_ISIENTRY(demod), (u32)min_isi);
 			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_PKTDELIN_ISIBITENA(demod), (u32)0xFF);
-
+			dprintk("set mis_filter min_isi=0x%x error=%d\n", min_isi, error);
+			state->demod_search_stream_id = min_isi;
+			state->signal_info.isi = min_isi;
 			/* Reset the packet delineator */
 			error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL1_ALGOSWRST(demod), 1);
 			error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL1_ALGOSWRST(demod), 0);
-
 			/* Setup HW to store Current ISI */
 			error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL0_ISIOBS_MODE(demod), 0);
 		}
@@ -10510,7 +10513,7 @@ fe_lla_error_t  set_stream_index(struct stv *state, int mis)
 		//dev_dbg(&state->base->i2c->dev, "%s: disable ISI filtering !\n", __func__);
 		set_pls_mode_code(state, 0, 1);
 		err |= fe_stid135_set_mis_filtering(state,  FALSE, 0, 0xFF);
-		dprintk("SET stream_id=%d mis=0x%x",  mis &0xff, mis);
+		dprintk("SET stream_id=%d mis=%d",  mis &0xff, mis);
 		state->signal_info.isi = 0xff;
 	} else  {
 		dev_warn(&state->base->i2c->dev, "%s: set ISI %d ! demod=%d tuner=%d\n", __func__, mis & 0xFF,

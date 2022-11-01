@@ -418,6 +418,7 @@ static bool pls_search_list(struct dvb_frontend* fe)
 			if(locked) {
 				error = fe_stid135_read_hw_matype(state, &matype_info, &isi);
 				state->mis_mode= !fe_stid135_check_sis_or_mis(matype_info);
+				dprintk("ISI mis_mode set to %d\n", state->mis_mode);
 				dprintk("selecting stream_id=%d\n", isi);
 				signal_info->isi = isi;
 				//p->matype = matype_info;
@@ -498,10 +499,10 @@ static bool pls_search_range(struct dvb_frontend* fe)
 		if(locked) {
 			error = fe_stid135_read_hw_matype(state, &matype_info, &isi);
 			state->mis_mode= !fe_stid135_check_sis_or_mis(matype_info);
-			dprintk("selecting stream_id=%d\n", isi);
+			dprintk("ISI mis_mode set to %d; selecting stream_id=%d\n", state->mis_mode, isi);
 			signal_info->isi = isi;
 			p->stream_id = 	(state->mis_mode? (isi&0xff):0xff) | (pls_code & ~0xff);
-			dprintk("mis_mode=%d isi=0x%x pls_code=0x%x stream_id=0x%x",
+			dprintk("ISI mis_mode=%d isi=0x%x pls_code=0x%x stream_id=0x%x",
 								state->mis_mode, isi, pls_code, p->stream_id);
 
 		  //p->matype = matype_info;
@@ -695,7 +696,10 @@ static int stid135_set_parameters(struct dvb_frontend* fe)
 		}
 	} else {
 		state->signal_info.has_lock=true;
-	set_stream_index(state, p->stream_id);
+		if(p->stream_id != NO_STREAM_ID_FILTER) {
+			dprintk("calling set_stream_index");
+			set_stream_index(state, p->stream_id);
+		}
 	}
 
 	//state->DemodLockTime += TUNING_DELAY;
@@ -778,7 +782,7 @@ static int stid135_set_parameters(struct dvb_frontend* fe)
 		dev_dbg(&state->base->i2c->dev, "%s: disable ISI filtering !\n", __func__);
 		err |= fe_stid135_set_mis_filtering(state, FALSE, 0, 0xFF);
 	}
-	if(p->stream_id == -1) {
+	if(p->stream_id == NO_STREAM_ID_FILTER) {
 		state->signal_info.pls_mode = 0x00; //ROOT
 		state->signal_info.pls_code = 1;
 	} else {
@@ -1075,8 +1079,9 @@ static int stid135_read_status_(struct dvb_frontend* fe, enum fe_status *status)
 		dev_warn(&state->base->i2c->dev, "%s: fe_stid135_filter_forbidden_modcodes error %d !\n", __func__, err);
 
 	//update isi list
-	if(state->mis_mode)
+	if(state->mis_mode) {
 		err = fe_stid135_isi_scan(state, &state->signal_info.isi_list);
+	}
 	memcpy(p->isi_bitset, state->signal_info.isi_list.isi_bitset, sizeof(p->isi_bitset));
 	memcpy(p->matypes, state->signal_info.isi_list.matypes, sizeof(p->matypes));
 	//for the tbs6912 ts setting
@@ -1813,10 +1818,10 @@ static int stid135_scan_sat(struct dvb_frontend* fe, bool init,
 		*/
 #if 1
 		p->symbol_rate = p->symbol_rate==0? 1000000: p->symbol_rate;
-		p->stream_id = -1;
+		p->stream_id = NO_STREAM_ID_FILTER;
 #else
 		p->symbol_rate = 1000000; //otherwise it may be set too low based on last transponder
-		p->stream_id = -1;
+		p->stream_id = NO_STREAM_ID_FILTER;
 #endif
 		dprintk("FREQ=%d search_range=%dkHz fft=%d res=%dkHz srate=%dkS/s\n",
 						p->frequency, p->search_range/1000,
