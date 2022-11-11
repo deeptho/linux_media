@@ -140,9 +140,10 @@ static void dvb_frontend_invoke_release(struct dvb_frontend *fe,
 
 static void release_dtv_fe_spectrum_scan(struct dvb_frontend* fe)
 {
-
+#if 0
 	if (fe->ops.stop_task)
 		fe->ops.stop_task(fe);
+#endif
 }
 
 static void __dvb_frontend_free(struct dvb_frontend *fe)
@@ -178,7 +179,9 @@ static void dvb_frontend_put(struct dvb_frontend *fe)
 	 */
 	if (fe->frontend_priv) {
 		dprintk("refcount %p=%d fe=%p\n", &fe->refcount, fe->refcount, fe);
+#if 0
 		release_dtv_fe_spectrum_scan(fe);
+#endif
 		kref_put(&fe->refcount, dvb_frontend_free);
 	}
 	else {
@@ -2434,8 +2437,10 @@ static int dvb_frontend_handle_algo_ctrl_ioctl(struct file *file,
 		if (fe->ops.stop_task)
 			fe->ops.stop_task(fe);
 		fepriv->state = FESTATE_IDLE;
+#if 0
 
 		dprintk("DTV_STOP done stop_task\n");
+#endif
 
 		atomic_set(&fe->algo_state.task_should_stop, false);
 
@@ -2931,11 +2936,11 @@ static int dtv_get_constellation(struct dvb_frontend *fe, struct dtv_fe_constell
 
 	if(fe->ops.constellation_get) {
 		fe->ops.constellation_get(fe, user);
-		dprintk("constellation retrieved user->num_samples=%d\n", user->num_samples);
+		//dprintk("constellation retrieved user->num_samples=%d\n", user->num_samples);
 	}
 	else if(user) {
 		user->num_samples = 0;
-		dprintk("constellation retrieved user->num_samples=%d\n", user->num_samples);
+		//dprintk("constellation retrieved user->num_samples=%d\n", user->num_samples);
 	}
 	return err;
 }
