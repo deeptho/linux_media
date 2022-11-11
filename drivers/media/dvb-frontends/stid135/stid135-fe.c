@@ -2064,7 +2064,8 @@ struct dvb_frontend* stid135_attach(struct i2c_adapter *i2c,
 		base->vglna		=	cfg->vglna;    //for stvvglna 6909x v2 6903x v2
 
 		mutex_init(&base->lock.m);
-
+		extern struct stv_base *proc_base;
+		proc_base = base;
 		state->base = base;
 		if (stid135_probe(state) < 0) {
 			dev_warn(&i2c->dev, "No demod found at adr %02X on %s\n",

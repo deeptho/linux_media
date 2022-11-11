@@ -42,15 +42,20 @@
 #include <linux/seq_file.h>
 #include "i2c.h"
 #include "chip.h"
+#include "stid135_drv.h"
+
+#define dprintk(fmt, arg...)																					\
+	printk(KERN_DEBUG pr_fmt("%s:%d " fmt),  __func__, __LINE__, ##arg)
 
 STCHIP_Info_t* hChipHandle_stid135;
 STCHIP_Info_t* hChipHandle_soc;
 STCHIP_Info_t* hChipHandle_vglna;
 
+struct stv_base *proc_base;
 
 static int open_stid135(struct inode *inode, struct file *filp)
 {
-    pr_info("open\n");
+    dprintk("open\n");
 		//pr_info("virt_to_phys = 0x%llx\n", (unsigned long long)virt_to_phys((void *)info));
     filp->private_data = (char*) hChipHandle_stid135;
     return 0;
@@ -73,7 +78,7 @@ static int open_vglna(struct inode *inode, struct file *filp)
 }
 
 
-static ssize_t read(struct file *filp, char __user *buf, size_t len, loff_t *off)
+static ssize_t proc_read_cache(struct file *filp, char __user *buf, size_t len, loff_t *off)
 {
     int ret;
 		STCHIP_Info_t* hChipHandle = filp->private_data;
@@ -92,8 +97,58 @@ static ssize_t read(struct file *filp, char __user *buf, size_t len, loff_t *off
     return ret;
 }
 
+static ssize_t proc_read(struct file *filp, char __user *buf, size_t len, loff_t *off)
+{
+    int ret;
+		STCHIP_Info_t* hChipHandle = filp->private_data;
+		size_t hChipSize = hChipHandle->NbRegs*sizeof(STCHIP_Register_t);
+		int num_regs;
+		struct lock_t* lock = &proc_base->lock;
+		pr_info("hCip proc read\n");
+		if(*off>0)
+			return 0;
+		pr_info("read off=%lld len=%ld\n", *off, len);
+		mutex_lock(&lock->m);
+    ret = min(len, hChipSize);
+		num_regs = ret/sizeof(STCHIP_Register_t);
+		ChipGetRegisters(hChipHandle, 0, num_regs);
+		if (copy_to_user(buf, hChipHandle->pRegMapImage, ret)) {
+        ret = -EFAULT;
+    }
+		*off=ret;
+		mutex_unlock(&lock->m);
+    return ret;
+}
 
-static int release(struct inode *inode, struct file *filp)
+
+static ssize_t proc_write(struct file *filp, const char __user *buf, size_t len, loff_t *off) {
+	char kbuf[128];
+	STCHIP_Register_t* regdesc = (void*) & kbuf[0];
+	int ret;
+	//dprintk("Request of size %ld buf=%p\n", len, buf);
+	if(len != sizeof(STCHIP_Register_t)) {
+		dprintk("Incorrect len: %ld\n", len);
+		return len;
+	}
+	STCHIP_Info_t* hChipHandle = filp->private_data;
+
+	ret=copy_from_user(kbuf, buf,len);
+	//dprintk("Asked to set %d-byte register 0x%04x to value 0x%08x ret=%d\n", regdesc->Size, regdesc->Addr, regdesc->Value, ret);
+	if(ret)
+		return -EFAULT;
+	struct lock_t* lock = &proc_base->lock;
+	mutex_lock(&lock->m);
+	ChipSetOneRegister(hChipHandle, regdesc->Addr, regdesc->Value);
+	mutex_unlock(&lock->m);
+	return len;
+}
+
+loff_t proc_lseek(struct file *, loff_t offset, int) {
+	dprintk("lseek\n");
+	return offset;
+}
+
+static int proc_release(struct inode *inode, struct file *filp)
 {
     pr_info("release\n");
     //free_page((unsigned long)info->data);
@@ -103,26 +158,29 @@ static int release(struct inode *inode, struct file *filp)
 }
 
 static const struct proc_ops fops_stid135 = {
-	.proc_lseek = seq_lseek,
+	.proc_lseek = proc_lseek,
 	.proc_open = open_stid135,
-	.proc_release = release,
-    .proc_read = read,
+	.proc_release = proc_release,
+	.proc_read = proc_read,
+	.proc_write = proc_write,
 };
 
 
 static const struct proc_ops fops_soc = {
-	.proc_lseek = seq_lseek,
+	.proc_lseek = proc_lseek,
 	.proc_open = open_soc,
-	.proc_release = release,
-    .proc_read = read,
+	.proc_release = proc_release,
+	.proc_read = proc_read,
+	.proc_write = proc_write,
 };
 
 
 static const struct proc_ops fops_vglna = {
-	.proc_lseek = seq_lseek,
+	.proc_lseek = proc_lseek,
 	.proc_open = open_vglna,
-	.proc_release = release,
-    .proc_read = read,
+	.proc_release = proc_release,
+	.proc_read = proc_read,
+	.proc_write = proc_write,
 };
 
 

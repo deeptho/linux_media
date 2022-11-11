@@ -636,6 +636,7 @@ STCHIP_Error_t ChipGetOneRegister(STCHIP_Info_t* hChip, u16 RegAddr, u32* data_p
 }
 
 
+static int modified=0;
 /*****************************************************
 **FUNCTION	::	ChipSetRegisters
 **ACTION	::	Set values of consecutive's registers (values are taken in RegMap)
@@ -672,11 +673,12 @@ STCHIP_Error_t  ChipSetRegisters(STCHIP_Info_t* hChip, u16 FirstReg, s32 NbRegs)
 						data[nbdata++]=(u8)(MSB(hChip->pRegMapImage[firstRegIndex].Addr));	            /*   Hi sub address        */
 						data[nbdata++]=(u8)(LSB(hChip->pRegMapImage[firstRegIndex].Addr));	            /*   Lo sub address        */
 
-						for(i=0;i<NbRegs;i++)								            /* register's loop */
+						for(i=0;i<NbRegs;i++)	{							            /* register's loop */
 							/* FIXME: new for 32-bit access */
+							hChip->pRegMapImage[firstRegIndex+i].modified = ++modified;
 							for(j=(s32)(hChip->pRegMapImage[firstRegIndex+i].Size - 1); j>=0;j--)	    /* byte's loop     */
 								data[nbdata++]=0xff&(hChip->pRegMapImage[firstRegIndex+i].Value>>(8*j));	/*   fill data buffer (MSB first) */
-
+						}
 					break;
 
 					case STCHIP_MODE_SUBADR_16:
@@ -767,7 +769,7 @@ STCHIP_Error_t ChipGetRegisters(STCHIP_Info_t* hChip, u16 FirstReg, s32 NbRegs)
 								if (NbRegs > 1)
 									data[nbdata]  = (U8)(hChip->WrStart + STBUS_READ + STBUS_STREAM_INCR_1);
 								else data[nbdata] = (U8)(hChip->WrStart + STBUS_READ);
-				                                nbdata = (u8)(nbdata + 1);
+								nbdata = (u8)(nbdata + 1);
 
 							case STCHIP_MODE_SUBADR_16:
 								data[nbdata++]=(u8)(MSB(hChip->pRegMapImage[firstRegIndex].Addr));	/* for 16 bits sub addresses */

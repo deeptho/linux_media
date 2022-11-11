@@ -214,6 +214,7 @@ typedef enum
 		u32	Value;    		 /* Current value         */
 		//u16	Attr;     /* tag for slices */
 		STCHIP_RegSize_t Size;	         /* register size         */
+		u32 modified; //non-zero when changed
 	}
 	STCHIP_Register_t;
 
