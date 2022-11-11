@@ -147,7 +147,6 @@ static int stid135_probe(struct stv *state)
 	init_params.rf_input_type	=	0xF; // Single ended RF input on Oxford valid board rev2
 	init_params.roll_off		=  	FE_SAT_35; // NYQUIST Filter value (used for DVBS1/DSS, DVBS2 is automatic)
 	init_params.tuner_iq_inversion	=	FE_SAT_IQ_NORMAL;
-
 	err = fe_stid135_init(&init_params, &state->base->ip);
 
 	if (err != FE_LLA_NO_ERROR) {
@@ -313,12 +312,15 @@ static int stid135_select_rf_in_(struct stv* state, int rf_in)
 		state->rf_in = -1;
 		state->tuner_active = false;
 		if(state->base->tuner_use_count[state->rf_in] == 0) {
-			dprintk("Calling TunerStandby 0\n");
+			dprintk("Calling TunerStandby 0 state->base=%p\n", state->base);
 			err = fe_stid135_set_22khz_cont(&state->base->ip, state->rf_in + 1, false);
+			dprintk("Calling TunerStandby 0 done: state->base->i2c=%p\n", state->base->i2c);
 			if(state->base->set_voltage) {
 				state->base->set_voltage(state->base->i2c, SEC_VOLTAGE_OFF, state->rf_in);
 			}
+			dprintk("Set voltage OFF done\n");
 			err |= FE_STiD135_TunerStandby(state->base->ip.handle_demod, state->rf_in + 1, 0);
+			dprintk("Tuner standby done done\n");
 		}
 	}
 
@@ -647,6 +649,10 @@ static int stid135_set_parameters(struct dvb_frontend* fe)
 						search_params.frequency,	search_params.lo_frequency  );
 	}
 
+#if 0
+	if(reserve_llr_for_symbolrate(state, p->symbol_rate) == FE_LLA_OUT_OF_LLR)
+		return FE_LLA_OUT_OF_LLR;
+#endif
 	dev_dbg(&state->base->i2c->dev, "%s: demod %d + tuner %d\n", __func__, state->nr, state->rf_in);
 	vprintk("[%d] demod %d + tuner %d\n",
 					state->nr+1,state->nr, state->rf_in);
@@ -725,7 +731,11 @@ static int stid135_set_parameters(struct dvb_frontend* fe)
 		dev_dbg(&state->base->i2c->dev, "%s: locked !\n", __func__);
 		//set maxllr,when the  demod locked ,allocation of resources
 		//err |= fe_stid135_set_maxllr_rate(state, 180);
-		get_current_llr(state, &current_llr);
+		if(get_current_llr(state, &current_llr) == FE_LLA_OUT_OF_LLR) {
+			state->signal_info.has_llr = false;
+			return -1;
+		} else
+			state->signal_info.has_llr = true;
 
 		//for tbs6912
 		state->newTP = true;
@@ -1011,6 +1021,8 @@ static int stid135_read_status_(struct dvb_frontend* fe, enum fe_status *status)
 		*status |= FE_HAS_SYNC|FE_HAS_LOCK;
 	if(state->signal_info.has_timing_lock)
 		*status |= FE_HAS_TIMING_LOCK;
+	if(!state->signal_info.has_llr)
+		*status |= FE_OUT_OF_RESOURCES;
 	//dprintk("set *status=0x%x\n", *status);
 	if (err != FE_LLA_NO_ERROR) {
 		dev_err(&state->base->i2c->dev, "fe_stid135_get_lock_status error\n");
@@ -1131,7 +1143,7 @@ static int stid135_tune_(struct dvb_frontend* fe, bool re_tune,
 		r = stid135_set_parameters(fe);
 		if (r) {
 			state->signal_info.has_error = true;
-			*status = FE_TIMEDOUT;
+			*status = state->signal_info.has_llr ? FE_TIMEDOUT : FE_OUT_OF_RESOURCES;
 			return r;
 		}
 		state->tune_time = jiffies;
@@ -1648,6 +1660,10 @@ static int stid135_stop_task(struct dvb_frontend* fe)
 	*/
 	base_lock(state);
 #endif
+#if 0
+	if(state)
+		release_llr(state);
+#endif
 	if(ss->freq)
 		kfree(ss->freq);
 	if(ss->candidates)
@@ -1683,8 +1699,11 @@ static int stid135_spectrum_start(struct dvb_frontend* fe,
 		dprintk("Set rf_in to %d; tuner_active=%d  state->rf_in=%d default_rf_in=%d\n",
 						p->rf_in, state->tuner_active, state->rf_in, state->fe.ops.info.default_rf_input);
 	}
-	dprintk("Setting rf_in: %d\n", p->rf_in);
-	err |= stid135_select_rf_in_(state, p->rf_in);
+#if 0
+	dprintk("Setting rf_in: %d\n", state->rf_in);
+	err |= stid135_select_rf_in_(state, state->rf_in);
+	p->rf_in = state->rf_in;
+#endif
 	base_unlock(state);
 	if(err) {
 		dprintk("Could not set rfpath error=%d\n", err);

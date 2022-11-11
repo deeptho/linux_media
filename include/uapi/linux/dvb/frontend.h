@@ -175,7 +175,7 @@ struct dvb_frontend_extended_info {
 	u8       supports_neumo; /*historically we relied on FE_CAN... to indicate supported features,
 														 but in future we will rely on data returned by FE_GET_EXTENDED_INFO
 														 Note that FE_GET_EXTENDED_INFO works on all drivers, even non neumo ones:
-														 it is available as soon as neumo suppoprt is activated in dvb_api. Legacy
+														 it is available as soon as neumo support is activated in dvb_api. Legacy
 														 drivers will initialize fields thet don;t know to zero, but in some case
 														 (e.g., rf_in) 0 is a valid value. The fe_info.supports_neumo flag, when
 														 set - indicates that such fields have been properly initialized anyway
@@ -292,7 +292,7 @@ enum fe_sec_mini_cmd {
  * @FE_TIMEDOUT:	Fo lock within the last about 2 seconds.
  * @FE_HAS_TIMING_LOCK:		TIming loop has locked
  * @FE_IDLE:		Frontend has gone idle
- *
+ * size: 4 byes
  */
 enum fe_status {
 	FE_NONE			= 0x00,
@@ -304,6 +304,7 @@ enum fe_status {
 	FE_TIMEDOUT		= 0x20,
 	FE_HAS_TIMING_LOCK		= 0x40, //was FE_REINIT; not used anyway
 	FE_IDLE		= 0x80,
+	FE_OUT_OF_RESOURCES = 0x100 //e.g., No LLR for stid135
 };
 
 /**

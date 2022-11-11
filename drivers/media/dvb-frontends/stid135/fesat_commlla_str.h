@@ -339,6 +339,7 @@ struct fe_sat_signal_info {
 	bool        has_timedout;
 	bool        has_timing_lock; /*timing loop locked*/
 	bool        has_lock;       /* fully locked*/
+	bool        has_llr;       /* llr budget available*/
 	u32 				frequency;	/* Transponder frequency (in KHz)			*/
 	u32 				symbol_rate;	/* Transponder symbol rate  (in Mbds)			*/
 

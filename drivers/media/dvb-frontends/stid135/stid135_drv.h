@@ -327,7 +327,7 @@ struct stv_base {
 	int (*set_voltage)(struct i2c_adapter *i2c,
 		enum fe_sec_voltage voltage, u8 rf_in);
 	u8                   mode;
-
+	s32 llr_in_use;
 	struct fe_stid135_internal_param ip;
 	u8 tuner_use_count[4];
 	void (*write_properties) (struct i2c_adapter *i2c,u8 reg, u32 buf);
@@ -362,7 +362,7 @@ struct stv {
 
 	s32 scan_next_frequency;
 	s32 scan_end_frequency;
-
+	s32 llr_in_use;
 	enum fe_sat_rolloff roll_off; /* manual RollOff for DVBS1/DSS only */
 
 	/* Demod */
@@ -747,8 +747,10 @@ int stid135_spectral_scan_next(struct dvb_frontend *fe,
 															 s32 *frequency_ret,
 															 s32* symbol_rate_ret);
 int get_spectrum_scan_fft(struct dvb_frontend *fe);
-
-
+fe_lla_error_t reserve_llr(struct stv* state, s32 required_llr);
+fe_lla_error_t reserve_llr_for_symbolrate(struct stv* state, s32 symbolrate);
+fe_lla_error_t release_llr(struct stv* state);
+void dump_llr(struct stv* state);
 void print_spectrum_scan_state_(struct spectrum_scan_state*ss,
 																const char* func, int line);
 #define print_spectrum_scan_state(ss)		\
