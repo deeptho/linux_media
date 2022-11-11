@@ -143,7 +143,7 @@ static ssize_t proc_write(struct file *filp, const char __user *buf, size_t len,
 	return len;
 }
 
-loff_t proc_lseek(struct file *, loff_t offset, int) {
+loff_t proc_lseek(struct file* filp, loff_t offset, int x) {
 	dprintk("lseek\n");
 	return offset;
 }
