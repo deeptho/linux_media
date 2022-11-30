@@ -1503,9 +1503,13 @@ static int stv091x_isi_scan(struct dvb_frontend *fe)
 		mask = ((uint32_t)1)<< (CurrentISI%32);
 		p->isi_bitset[j] |= mask;
 #ifdef TODO
-		if(CurrentISI == state->signal_info.isi)
+		if(CurrentISI == state->signal_info.isi) {
 #endif
-			p->matype = matype;
+			p->matype_val = matype;
+			p->matype_valid = true;
+#ifdef TODO
+		}
+#endif
 		dprintk("XXXX i=%d matype=%d currentISI=%d state->signal_info.isi=%d\n",
 						i, matype, CurrentISI, state->signal_info.isi);
 

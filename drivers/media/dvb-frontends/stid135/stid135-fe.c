@@ -830,7 +830,8 @@ static int stid135_get_frontend(struct dvb_frontend* fe, struct dtv_frontend_pro
 		memcpy(p->matypes, state->signal_info.isi_list.matypes,
 					 state->signal_info.isi_list.num_matypes*sizeof(p->matypes[0]));
 		p->num_matypes = state->signal_info.isi_list.num_matypes;
-		p->matype = state->signal_info.matype;
+		p->matype_val = state->signal_info.matype;
+		p->matype_valid = true;
 		p->frequency = state->signal_info.frequency;
 		p->symbol_rate = state->signal_info.symbol_rate;
 	}
@@ -1862,7 +1863,8 @@ static int stid135_scan_sat(struct dvb_frontend* fe, bool init,
 			fe_stid135_get_signal_info(state,  &state->signal_info, 0);
 			memcpy(p->isi_bitset, state->signal_info.isi_list.isi_bitset, sizeof(p->isi_bitset));
 			memcpy(p->matypes, state->signal_info.isi_list.matypes, sizeof(p->matypes));
-			p->matype =  state->signal_info.matype;
+			p->matype_val =  state->signal_info.matype;
+			p->matype_valid = true;
 			p->frequency = state->signal_info.frequency;
 			p->symbol_rate = state->signal_info.symbol_rate;
 		}

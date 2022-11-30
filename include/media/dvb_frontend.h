@@ -711,7 +711,8 @@ struct dtv_frontend_properties {
 #endif
 	u32			stream_id;
 #if 1 // neumo
-	u32			matype;
+	u16			matype_val;
+	u16     matype_valid;
 
 	u32			modcode;
 

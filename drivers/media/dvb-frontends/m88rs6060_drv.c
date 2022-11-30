@@ -1519,7 +1519,7 @@ static int m88rs6060_get_channel_info_(struct m88rs6060_state* state, struct MT_
 	return 0;
 }
 
-static int m88rs6060_get_matype(struct m88rs6060_state* state, u32* matype)
+static int m88rs6060_get_matype(struct m88rs6060_state* state, u16* matype)
 {
 	u32 tmp;
 	int i;
@@ -1567,10 +1567,11 @@ static int m88rs6060_get_channel_info(struct m88rs6060_state* state, struct dtv_
 	p->rolloff = info.roll_off;
 	p->fec_inner = info.code_rate;
 	p->pilot = info.is_pilot_on;
-	if(m88rs6060_get_matype(state, &p->matype)<0)
+	p->matype_valid = (m88rs6060_get_matype(state, &p->matype_val)>=0);
+	if(!p->matype_valid)
 		dprintk("No matype\n");
 
-	dprintk("matype=0x%x/0x%x cycle=%d\n", p->matype, info.iPlsCode, info.iVcmCycle);
+	dprintk("matype=0x%x/0x%x cycle=%d\n", p->matype_val, info.iPlsCode, info.iVcmCycle);
 	return ret;
 }
 
@@ -1868,7 +1869,7 @@ static void m88rs6060_select_stream(struct m88rs6060_state* state, u8 stream_id)
 
 static bool m88rs6060_detect_mis(struct m88rs6060_state* state)
 {
-	u32 matype;
+	u16 matype;
 	if(m88rs6060_get_matype(state, &matype)>=0) {
 		return ((matype & 0x20) != 0x20);
 	}
@@ -2934,7 +2935,8 @@ static int m88rs6060_read_status(struct dvb_frontend* fe, enum fe_status* status
 		state->has_timing_lock = (reg0d>>1) & 1;
 		state->has_signal = (reg0d & 1); //analog agc lock
 		state->demod_locked = reg0d == 0x8f;
-		if(m88rs6060_get_matype(state, &p->matype)<0)
+		p->matype_valid = (m88rs6060_get_matype(state, &p->matype_val)>=0);
+		if(! p->matype_valid)
 			dprintk("No matype\n");
 		break;
 	default:

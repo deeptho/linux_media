@@ -384,7 +384,8 @@ int si2183_read_status(struct dvb_frontend *fe, enum fe_status *status)
 			c->guard_interval = ((cmd.args[9]<<4)&0x7);
 			c->fec_inner = si2183_code_rate(cmd.args[12] & 0x0f);
 			c-> plp_id = cmd.args[13];
-			c->matype = (cmd.args[14]&0x3);
+			c->matype_val = (cmd.args[14]&0x3);
+			c->matype_valid = false; //the preceeding line is probably incorrect
 			break;
 		case SYS_DVBS:
 		case SYS_DVBS2:
@@ -420,14 +421,15 @@ int si2183_read_status(struct dvb_frontend *fe, enum fe_status *status)
 				bit 5,6,7: stream_type
 				Following value is compatible with stid135; //need some extension later
 			*/
-			c->matype = (c->rolloff &0x3) | //msb not used
+			c->matype_val = (c->rolloff &0x3) | //msb not used
 				(npd &0x1)<<2 |
 				(issyi &0x1)<<3 |
 				(c->vcm &0x1)<<4 |
 				(is_mis &0x1)<<5 |
 				(stream_type&0x3) <<6l //msb not used
 				;
-			vprintk("num_is =%d is_mis=%d matype=%d", cmd.args[11], is_mis, c->matype);
+			c->matype_valid = true;
+			vprintk("num_is =%d is_mis=%d matype=%d", cmd.args[11], is_mis, c->matype_val);
 			if(is_mis) {
 				int pls_mode = (c->stream_id >> 26) & 3;
 				int pls_code = (c->stream_id >> 8) & 0x3FFFF;
