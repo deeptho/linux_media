@@ -732,10 +732,13 @@ static int stid135_set_parameters(struct dvb_frontend* fe)
 		//set maxllr,when the  demod locked ,allocation of resources
 		//err |= fe_stid135_set_maxllr_rate(state, 180);
 		if(get_current_llr(state, &current_llr) == FE_LLA_OUT_OF_LLR) {
-			state->signal_info.has_llr = false;
+			dprintk("setting state->signal_info.out_of_llr = true");
+			state->signal_info.out_of_llr = true;
 			return -1;
-		} else
-			state->signal_info.has_llr = true;
+		} else {
+			dprintk("setting state->signal_info.out_of_llr = false");
+			state->signal_info.out_of_llr = false;
+		}
 
 		//for tbs6912
 		state->newTP = true;
@@ -1021,8 +1024,10 @@ static int stid135_read_status_(struct dvb_frontend* fe, enum fe_status *status)
 		*status |= FE_HAS_SYNC|FE_HAS_LOCK;
 	if(state->signal_info.has_timing_lock)
 		*status |= FE_HAS_TIMING_LOCK;
-	if(!state->signal_info.has_llr)
+	if(state->signal_info.out_of_llr) {
+		dprintk("setting FE_OUT_OF_RESOURCES\n");
 		*status |= FE_OUT_OF_RESOURCES;
+	}
 	//dprintk("set *status=0x%x\n", *status);
 	if (err != FE_LLA_NO_ERROR) {
 		dev_err(&state->base->i2c->dev, "fe_stid135_get_lock_status error\n");
@@ -1140,10 +1145,15 @@ static int stid135_tune_(struct dvb_frontend* fe, bool re_tune,
 	struct stv *state = fe->demodulator_priv;
 	int r;
 	if (re_tune) {
+		dprintk("setting state->signal_info.has_llr = true");
+		state->signal_info.out_of_llr = false;
 		r = stid135_set_parameters(fe);
 		if (r) {
 			state->signal_info.has_error = true;
-			*status = state->signal_info.has_llr ? FE_TIMEDOUT : FE_OUT_OF_RESOURCES;
+			if(state->signal_info.out_of_llr) {
+				dprintk("setting FE_OUT_OF_RESOURCES\n");
+			}
+			*status = state->signal_info.out_of_llr ? FE_OUT_OF_RESOURCES : FE_TIMEDOUT;
 			return r;
 		}
 		state->tune_time = jiffies;
