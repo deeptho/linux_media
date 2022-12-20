@@ -1753,7 +1753,7 @@ static int dtv_property_process_get(struct dvb_frontend *fe,
 		break;
 
 	case DTV_MATYPE:
-		tvp->u.data = c->matype;
+		tvp->u.data = c->matype_valid ? c->matype_val : -1;
 		break;
 #ifdef TODO
 	case DTV_FRAME_LEN:
