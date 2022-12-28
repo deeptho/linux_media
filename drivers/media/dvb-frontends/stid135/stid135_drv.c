@@ -6353,7 +6353,7 @@ fe_lla_error_t fe_stid135_set_22khz_cont(struct fe_stid135_internal_param* pPara
 	//struct fe_stid135_internal_param *pParams = NULL;
 
 	//pParams = (struct fe_stid135_internal_param*) handle;
-	vprintk("DISEQC[%d] errror=%d abort=%d", tuner_nb, pParams->handle_demod->Error,
+	vprintk("DISEQC[%d] errror=%d abort=%d\n", tuner_nb, pParams->handle_demod->Error,
 					pParams->handle_demod->Abort);
 	if (pParams->handle_demod->Error) {
 		dprintk("BUG!!!!!! ignoring error!");
@@ -6367,9 +6367,9 @@ fe_lla_error_t fe_stid135_set_22khz_cont(struct fe_stid135_internal_param* pPara
 
 	error |= ChipSetField(pParams->handle_demod,
 		FLD_FC8CODEW_DVBSX_DISEQC_DISTXCFG_DISEQC_MODE(tuner_nb), tone ? FE_SAT_22KHZ_Continues : FE_SAT_DISEQC_2_3_PWM);
-	dprintk("DISEQC[%d] tone=%d errror=%d", tuner_nb, tone, pParams->handle_demod->Error);
+	dprintk("DISEQC[%d] tone=%d errror=%d\n", tuner_nb, tone, pParams->handle_demod->Error);
 	/* Check the error at the end of the function */
-	vprintk("DISEQC[%d] error=%d %d", tuner_nb, pParams->handle_demod->Error, error);
+	vprintk("DISEQC[%d] error=%d %d\n", tuner_nb, pParams->handle_demod->Error, error);
 	if(pParams->handle_demod->Error)
 		error = FE_LLA_I2C_ERROR;
 	return error;
