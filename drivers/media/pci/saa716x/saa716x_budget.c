@@ -1393,7 +1393,7 @@ static int saa716x_tbs6922_frontend_attach(
 	msleep(120);
 
 	adapter->fe = dvb_attach(tas2101_attach, &tbs6922_cfg,
-				&dev->i2c[SAA716x_I2C_BUS_A].i2c_adapter);
+													 &dev->i2c[SAA716x_I2C_BUS_A].i2c_adapter, 0);
 	if (adapter->fe == NULL)
 		goto err;
 
@@ -1495,7 +1495,7 @@ static int saa716x_tbs6923_frontend_attach(
 	msleep(120);
 
 	adapter->fe = dvb_attach(tas2101_attach, &tbs6923_cfg,
-				&dev->i2c[SAA716x_I2C_BUS_A].i2c_adapter);
+													 &dev->i2c[SAA716x_I2C_BUS_A].i2c_adapter, count);
 	if (adapter->fe == NULL)
 		goto err;
 
@@ -1772,7 +1772,7 @@ static int saa716x_tbs6982_frontend_attach(
 	msleep(120);
 
 	adapter->fe = dvb_attach(tas2101_attach, &tbs6982_cfg[count],
-				&dev->i2c[1 - count].i2c_adapter);
+													 &dev->i2c[1 - count].i2c_adapter, count);
 	if (adapter->fe == NULL)
 		goto err;
 
@@ -1917,7 +1917,7 @@ static int saa716x_tbs6982se_frontend_attach(
 		goto err;
 
 	adapter->fe = dvb_attach(tas2101_attach, &tbs6982se_cfg[count],
-				&dev->i2c[count].i2c_adapter);
+													 &dev->i2c[count].i2c_adapter, count);
 	if (adapter->fe == NULL)
 		goto err;
 
@@ -2299,7 +2299,7 @@ static int saa716x_tbs6985_frontend_attach(struct saa716x_adapter *adapter, int 
 		goto err;
 
 	adapter->fe = dvb_attach(tas2101_attach, &tbs6985_cfg[count],
-				&dev->i2c[1 - (count >> 1)].i2c_adapter);
+													 &dev->i2c[1 - (count >> 1)].i2c_adapter, count);
 	if (adapter->fe == NULL)
 		goto err;
 
@@ -2466,7 +2466,7 @@ static int saa716x_tbs6991_frontend_attach(
 		goto err;
 
 	adapter->fe = dvb_attach(tas2101_attach, &tbs6991_cfg[count],
-				&dev->i2c[1-count].i2c_adapter);
+													 &dev->i2c[1-count].i2c_adapter, count);
 	if (adapter->fe == NULL)
 		goto err;
 
@@ -2565,7 +2565,7 @@ static int saa716x_tbs6991se_frontend_attach(
 		goto err;
 
 	adapter->fe = dvb_attach(tas2101_attach, &tbs6991se_cfg[count],
-				&dev->i2c[1-count].i2c_adapter);
+													 &dev->i2c[1-count].i2c_adapter, count);
 	if (adapter->fe == NULL)
 		goto err;
 

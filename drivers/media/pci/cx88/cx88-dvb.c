@@ -1550,7 +1550,7 @@ static int dvb_register(struct cx8802_dev *dev)
 		break;
 	case CX88_BOARD_TBS_8922:
                 dev->ts_gen_cntrl = 0x04;
-		fe0->dvb.frontend = dvb_attach(tas2101_attach, &tbs8922_demod_cfg, &core->i2c_adap);
+								fe0->dvb.frontend = dvb_attach(tas2101_attach, &tbs8922_demod_cfg, &core->i2c_adap, 0);
 
 		if (fe0->dvb.frontend != NULL)
 			if (dvb_attach(av201x_attach, fe0->dvb.frontend, &tbs8922_av201x_cfg,

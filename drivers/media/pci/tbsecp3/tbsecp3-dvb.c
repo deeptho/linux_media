@@ -595,7 +595,7 @@ static int set_mac_address(struct tbsecp3_adapter *adap)
 		if (dev->adapter_mac_address == 0xffffffffffff)
 			dev->adapter_mac_address =0 ; 			//card which has not been initialised properly
 		if(dev->card_mac_address ==0)
-			dev->card_mac_address = dev->adapter_mac_address; //Seelect mac of first adapter as card mac_address
+			dev->card_mac_address = dev->adapter_mac_address; //Select mac of first adapter as card mac_address
 	}
 
 	return 0;
@@ -2090,7 +2090,7 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 
 	case TBSECP3_BOARD_TBS6902:
 		if(pci->subsystem_device!=0x0003){
-			adapter->fe = dvb_attach(tas2101_attach, &tbs6902_demod_cfg[adapter->nr], i2c);
+			adapter->fe = dvb_attach(tas2101_attach, &tbs6902_demod_cfg[adapter->nr], i2c, adapter->nr);
 
 		if (adapter->fe == NULL)
 		    goto frontend_atach_fail;
@@ -2154,7 +2154,7 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 		break;
 
 	case TBSECP3_BOARD_TBS6904:
-		adapter->fe = dvb_attach(tas2101_attach, &tbs6904_demod_cfg[adapter->nr], i2c);
+		adapter->fe = dvb_attach(tas2101_attach, &tbs6904_demod_cfg[adapter->nr], i2c, adapter->nr);
 		if (adapter->fe == NULL)
 				goto frontend_atach_fail;
 
@@ -2206,7 +2206,7 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 		break;
 
 	case TBSECP3_BOARD_TBS6910:
-		adapter->fe = dvb_attach(tas2101_attach, &tbs6910_demod_cfg[adapter->nr], i2c);
+		adapter->fe = dvb_attach(tas2101_attach, &tbs6910_demod_cfg[adapter->nr], i2c, adapter->nr);
 		if (adapter->fe == NULL)
 				goto frontend_atach_fail;
 

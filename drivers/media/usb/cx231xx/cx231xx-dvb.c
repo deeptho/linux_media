@@ -693,6 +693,7 @@ static int register_dvb(struct cx231xx_dvb *dvb,
 	}
 
 	memcpy(dvb->adapter.proposed_mac,dvb->mac,6);
+
 	/* register network adapter */
 	dvb_net_init(&dvb->adapter, &dvb->net, &dvb->demux.dmx);
 #if 0
@@ -755,32 +756,32 @@ static void unregister_dvb(struct cx231xx_dvb *dvb)
 
 static int tbs_cx_mac(struct i2c_adapter *i2c_adap, u8 count, u8 *mac)
 {
-    u8 b[64], e[256];
-    int ret, i;
+	u8 b[64], e[256];
+	int ret, i;
 
-    struct i2c_msg msg[] = {
-	{ .addr = 0x50, .flags = 0,
+	struct i2c_msg msg[] = {
+		{ .addr = 0x50, .flags = 0,
 	    .buf = b, .len = 1 },
-	{ .addr = 0x50, .flags = I2C_M_RD,
+		{ .addr = 0x50, .flags = I2C_M_RD,
 	    .buf = b, .len = 64 }
-    };
+	};
 
-    for (i = 0; i < 4; i++) {
-	b[0] = 64 * i;
+	for (i = 0; i < 4; i++) {
+		b[0] = 64 * i;
 
-	ret = i2c_transfer(i2c_adap, msg, 2);
+		ret = i2c_transfer(i2c_adap, msg, 2);
 
-	if (ret != 2) {
+		if (ret != 2) {
 	    printk("TBS CX read MAC failed\n");
 	    return -1;
+		}
+
+		memcpy(&e[64 * i], b , 64);
 	}
 
-	memcpy(&e[64 * i], b , 64);
-    }
+	memcpy(mac, &e[0x5e + 16*count], 6);
 
-    memcpy(mac, &e[0xa0 + 16*count], 6);
-
-    return 0;
+	return 0;
 }
 
 static int dvb_init(struct cx231xx *dev)
@@ -791,7 +792,7 @@ static int dvb_init(struct cx231xx *dev)
 	struct i2c_adapter *demod_i2c;
 	struct i2c_client *client;
 	struct i2c_adapter *adapter;
-
+	uint64_t card_mac_address = 0;
 	if (!dev->board.has_dvb) {
 		/* This device does not support the extension */
 		return 0;
@@ -1254,7 +1255,7 @@ static int dvb_init(struct cx231xx *dev)
 	{
 		tbs_reset_fe(dev, i ? 20 : 24);
 		dvb->frontend[0] = dvb_attach(tas2101_attach, &tbs5990_tas2101_cfg[i],
-						demod_i2c);
+																	demod_i2c, i);
 
 		if (!dvb->frontend[0]) {
 			dev_err(dev->dev,
@@ -1283,6 +1284,20 @@ static int dvb_init(struct cx231xx *dev)
 		strlcpy(dvb->frontend[0]->ops.info.card_short_name, "TBS 5990",
 						sizeof(dvb->frontend[0]->ops.info.card_short_name));
 
+		if(dvb->frontend[0]) {
+			if (card_mac_address == 0) {
+				uint64_t proposed_mac=0;
+				memcpy(&proposed_mac, dvb->mac, 6);
+				if (proposed_mac == 0xffffffffffff)
+					proposed_mac = 0 ; 			//card which has not been initialised properly
+				card_mac_address = proposed_mac;
+			}
+			printk("XXXXX proposed=0x%llx, old ==0x%llx\n", card_mac_address, dvb->frontend[0]->ops.info.card_mac_address );
+			if(dvb->frontend[0]->ops.info.card_mac_address == 0 )
+				dvb->frontend[0]->ops.info.card_mac_address = card_mac_address; //Select mac of first adapter as card mac_address
+		} else {
+			printk("XXXXX No frontend yet\n");
+		}
 		break;
 	}
 	case CX231XX_BOARD_HAUPPAUGE_935C:

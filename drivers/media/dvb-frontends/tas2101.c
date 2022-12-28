@@ -794,7 +794,7 @@ err:
 static struct dvb_frontend_ops tas2101_ops;
 
 struct dvb_frontend *tas2101_attach(const struct tas2101_config *cfg,
-	struct i2c_adapter *i2c)
+																		struct i2c_adapter *i2c, int rf_in)
 {
 	struct tas2101_priv *priv = NULL;
 	int ret;
@@ -851,6 +851,9 @@ struct dvb_frontend *tas2101_attach(const struct tas2101_config *cfg,
 	/* create dvb_frontend */
 	memcpy(&priv->fe.ops, &tas2101_ops,
 		sizeof(struct dvb_frontend_ops));
+	priv->fe.ops.info.rf_inputs[0] = rf_in;
+	priv->fe.ops.info.num_rf_inputs = 1;
+	priv->fe.ops.info.default_rf_input = rf_in;
 	priv->fe.demodulator_priv = priv;
 
 	/* reset demod */
