@@ -793,6 +793,7 @@ static int dvb_init(struct cx231xx *dev)
 	struct i2c_client *client;
 	struct i2c_adapter *adapter;
 	uint64_t card_mac_address = 0;
+
 	if (!dev->board.has_dvb) {
 		/* This device does not support the extension */
 		return 0;
@@ -1284,20 +1285,6 @@ static int dvb_init(struct cx231xx *dev)
 		strlcpy(dvb->frontend[0]->ops.info.card_short_name, "TBS 5990",
 						sizeof(dvb->frontend[0]->ops.info.card_short_name));
 
-		if(dvb->frontend[0]) {
-			if (card_mac_address == 0) {
-				uint64_t proposed_mac=0;
-				memcpy(&proposed_mac, dvb->mac, 6);
-				if (proposed_mac == 0xffffffffffff)
-					proposed_mac = 0 ; 			//card which has not been initialised properly
-				card_mac_address = proposed_mac;
-			}
-			printk("XXXXX proposed=0x%llx, old ==0x%llx\n", card_mac_address, dvb->frontend[0]->ops.info.card_mac_address );
-			if(dvb->frontend[0]->ops.info.card_mac_address == 0 )
-				dvb->frontend[0]->ops.info.card_mac_address = card_mac_address; //Select mac of first adapter as card mac_address
-		} else {
-			printk("XXXXX No frontend yet\n");
-		}
 		break;
 	}
 	case CX231XX_BOARD_HAUPPAUGE_935C:
@@ -1426,6 +1413,19 @@ static int dvb_init(struct cx231xx *dev)
 		result = -EINVAL;
 		goto out_free;
 	}
+
+	if (card_mac_address == 0) {
+		uint64_t proposed_mac=0;
+		memcpy(&proposed_mac, dvb->mac, 6);
+		if (proposed_mac == 0xffffffffffff)
+			proposed_mac = 0 ; 			//card which has not been initialised properly
+		card_mac_address = proposed_mac;
+	}
+
+	if(dvb->frontend[0]->ops.info.card_mac_address == 0 )
+		dvb->frontend[0]->ops.info.card_mac_address = card_mac_address; //Select mac of first adapter as card mac_address
+
+
 
 	/* register everything */
 	result = register_dvb(dvb, THIS_MODULE, dev, dev->dev);
