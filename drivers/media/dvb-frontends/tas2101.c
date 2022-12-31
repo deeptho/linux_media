@@ -248,7 +248,7 @@ static int tas2101_signal_power_dbm(struct dvb_frontend *fe, long* val)
 	if(fe->ops.tuner_ops.agc_to_gain_dbm) {
 		*val = fe->ops.tuner_ops.agc_to_gain_dbm(fe, raw);
 
-		dprintk("freq=%d.%d dbm=%ld MSB=0x%0x LSB=0x%0x", (9750000 +state->tuner_freq)/1000, (9750000 +state->tuner_freq)%1000,
+		vprintk("freq=%d.%d dbm=%ld MSB=0x%0x LSB=0x%0x", (9750000 +state->tuner_freq)/1000, (9750000 +state->tuner_freq)%1000,
 						*val, buf[1], buf[0]);
 
 	}
@@ -1566,8 +1566,8 @@ static int tas2101_constellation_start(struct dvb_frontend *fe,
 			}
 			buff[0] &= 0x7F;
 			buff[1] &= 0x7F;
-			buff[0] *=2;
-			buff[1] *=2;
+			buff[0] *=4;
+			buff[1] *=4;
 
 			cs->samples[cs->num_samples].imag = buff[0];
 			cs->samples[cs->num_samples].real = buff[1];
