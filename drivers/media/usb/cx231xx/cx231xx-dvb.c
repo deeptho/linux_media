@@ -51,6 +51,9 @@ DVB_DEFINE_MOD_OPT_ADAPTER_NR(adapter_nr);
 #define CX231XX_DVB_MAX_PACKETSIZE 564
 #define CX231XX_DVB_MAX_PACKETS 64
 
+#define dprintk(fmt, arg...)																					\
+	printk(KERN_DEBUG pr_fmt("%s:%d " fmt),  __func__, __LINE__, ##arg)
+
 static struct s5h1432_config dvico_s5h1432_config = {
 	.output_mode   = S5H1432_SERIAL_OUTPUT,
 	.gpio          = S5H1432_GPIO_ON,
@@ -692,7 +695,7 @@ static int register_dvb(struct cx231xx_dvb *dvb,
 		goto fail_fe_conn;
 	}
 
-	memcpy(dvb->adapter.proposed_mac,dvb->mac,6);
+	memcpy(dvb->adapter.proposed_mac, dvb->mac, 6);
 
 	/* register network adapter */
 	dvb_net_init(&dvb->adapter, &dvb->net, &dvb->demux.dmx);
@@ -757,13 +760,12 @@ static void unregister_dvb(struct cx231xx_dvb *dvb)
 static int tbs_cx_mac(struct i2c_adapter *i2c_adap, u8 count, u8 *mac)
 {
 	u8 b[64], e[256];
-	int ret, i;
-
+	int ret, i, start0, start1, end0, end1;
 	struct i2c_msg msg[] = {
 		{ .addr = 0x50, .flags = 0,
-	    .buf = b, .len = 1 },
+			.buf = b, .len = 1 },
 		{ .addr = 0x50, .flags = I2C_M_RD,
-	    .buf = b, .len = 64 }
+			.buf = b, .len = 64 }
 	};
 
 	for (i = 0; i < 4; i++) {
@@ -772,14 +774,47 @@ static int tbs_cx_mac(struct i2c_adapter *i2c_adap, u8 count, u8 *mac)
 		ret = i2c_transfer(i2c_adap, msg, 2);
 
 		if (ret != 2) {
-	    printk("TBS CX read MAC failed\n");
-	    return -1;
-		}
+			printk("TBS CX read MAC failed\n");
+			return -1;
+			}
 
 		memcpy(&e[64 * i], b , 64);
 	}
 
-	memcpy(mac, &e[0x5e + 16*count], 6);
+	start0 = end0  = -1;
+	start1 = end1  = -1;
+
+	for(i=0; i <256; ++i) {
+		if(e[i] == 0xff)
+			continue;
+		start0 = i;
+		break;
+	}
+	for(; i <256; ++i) {
+		if(e[i] != 0xff)
+			continue;
+		end0 = i;
+		break;
+	}
+	for(; i <256; ++i) {
+		if(e[i] == 0xff)
+			continue;
+		start1 = i;
+		break;
+	}
+
+	for(; i <256; ++i) {
+		if(e[i] != 0xff)
+			continue;
+		end1 = i;
+		break;
+	}
+	dprintk("MAX offsets: %d %d %d %d\n", start0, end0, start1, end1);
+	if(end0-start0 == 6)
+		dprintk("mac0 found at offset %d\n", start0);
+	if(end1-start1 == 6)
+		dprintk("mac1 found at offset %d\n", start1);
+	memcpy(mac, &e[count ? start1: start0], 6);
 
 	return 0;
 }
@@ -1422,8 +1457,10 @@ static int dvb_init(struct cx231xx *dev)
 		card_mac_address = proposed_mac;
 	}
 
-	if(dvb->frontend[0]->ops.info.card_mac_address == 0 )
+	if(dvb->frontend[0]->ops.info.card_mac_address == 0 ) {
+		dprintk("setting mac=0x%llx\n", card_mac_address);
 		dvb->frontend[0]->ops.info.card_mac_address = card_mac_address; //Select mac of first adapter as card mac_address
+	}
 
 	strlcpy(dvb->frontend[0]->ops.info.card_address, dev_name(&dev->udev->dev),
 					sizeof(dvb->frontend[0]->ops.info.card_address));
