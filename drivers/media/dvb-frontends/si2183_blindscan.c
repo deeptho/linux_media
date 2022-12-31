@@ -873,7 +873,7 @@ int si2183_scan_sat(struct dvb_frontend *fe, bool init, unsigned int *delay, enu
 }
 
 /*
-	Retrieve fft data for basenad frequencies starting at 0 and ending at 70.475700Mhz
+	Retrieve fft data for baseband frequencies starting at 0 and ending at 70.475700Mhz
 	In input:
   caller must allocate freq[max_fft_size] and rf_level[max_fft_size]
 	max_fft_size >= 677
