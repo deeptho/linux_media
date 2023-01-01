@@ -330,7 +330,7 @@ static int tas2101_read_status(struct dvb_frontend *fe, enum fe_status* status)
 	}
 
 	if ((buf[0]&0x75)==0x75)
-		*status |= FE_HAS_LOCK | FE_HAS_CARRIER | FE_HAS_VITERBI | FE_HAS_SYNC; //really only viterbi...
+		*status |= FE_HAS_LOCK | FE_HAS_CARRIER | FE_HAS_VITERBI | FE_HAS_TIMING_LOCK | FE_HAS_SYNC; //really only viterbi...
 	else if((buf[0]&0x35)==0x35)
 		*status |= FE_HAS_CARRIER;
 	else if((buf[0]&0x15)==0x15 )
@@ -1499,7 +1499,7 @@ static int tas2101_spectrum_start(struct dvb_frontend *fe,
 
 	tas2101_regmask(state, 0x40, agc_speed, 0xff);
 
-	*status =  FE_HAS_SIGNAL|FE_HAS_CARRIER|FE_HAS_VITERBI|FE_HAS_SYNC|FE_HAS_LOCK;
+	*status =  FE_HAS_SIGNAL|FE_HAS_CARRIER|FE_HAS_VITERBI|FE_HAS_SYNC|FE_HAS_LOCK|FE_HAS_TIMING_LOCK;
 	return 0;
 }
 
