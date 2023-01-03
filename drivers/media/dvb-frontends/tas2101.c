@@ -346,9 +346,11 @@ static int tas2101_read_status(struct dvb_frontend *fe, enum fe_status* status)
 
 	//check sleep status
 	ret = tas2101_rd(state, REG_04, buf);
-	if (buf[0] & 0x08)
+	if (buf[0] & 0x08) {
+		dprintk("waking up demod from sleep\n");
 		ret = tas2101_wr(state, REG_04, buf[0] & ~0x08);
-
+		msleep(200);
+	}
 	if (ret) {
 		dprintk("Could not wakeup demod from sleep: ret=%d", ret);
 		return ret;
