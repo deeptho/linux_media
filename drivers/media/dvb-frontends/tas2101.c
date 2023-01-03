@@ -330,20 +330,21 @@ static int tas2101_read_status(struct dvb_frontend *fe, enum fe_status* status)
 	}
 
 	if ((buf[0]&0x75)==0x75)
-		*status |= FE_HAS_LOCK | FE_HAS_CARRIER | FE_HAS_VITERBI | FE_HAS_TIMING_LOCK | FE_HAS_SYNC; //really only viterbi...
-	else if((buf[0]&0x35)==0x35)
+		*status |= (FE_HAS_SYNC | FE_HAS_LOCK | FE_HAS_VITERBI | FE_HAS_SYNC);
+	if ((buf[0]&0x15)==0x15 )
 		*status |= FE_HAS_CARRIER;
-	else if((buf[0]&0x15)==0x15 )
-		*status |= FE_HAS_CARRIER;
-	if(state->timedout)
-		*status |= FE_TIMEDOUT;
+	if ((buf[0]&0x05)==0x05)
+		*status |= FE_HAS_TIMING_LOCK;
+
 
 	if(! (*status & FE_HAS_LOCK)) {
 		*status |= FE_TIMEDOUT;
 		dprintk("returning -1 because of timeout");
 		return -1;
 	}
+	dprintk("lock status = 0x%02x\n", buf[0]);
 
+	//check sleep status
 	ret = tas2101_rd(state, REG_04, buf);
 	if (buf[0] & 0x08)
 		ret = tas2101_wr(state, REG_04, buf[0] & ~0x08);
