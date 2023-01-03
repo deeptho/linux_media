@@ -302,9 +302,10 @@ enum fe_status {
 	FE_HAS_SYNC		= 0x08,
 	FE_HAS_LOCK		= 0x10,
 	FE_TIMEDOUT		= 0x20,
-	FE_HAS_TIMING_LOCK		= 0x40, //was FE_REINIT; not used anyway
+	FE_REINIT		= 0x40, //not used internally, but checked by dvblast, so must remain 0
 	FE_IDLE		= 0x80,
-	FE_OUT_OF_RESOURCES = 0x100 //e.g., No LLR for stid135
+	FE_OUT_OF_RESOURCES = 0x100, //e.g., No LLR for stid135
+	FE_HAS_TIMING_LOCK		= 0x200, //was FE_REINIT; not used anyway
 };
 
 /**
