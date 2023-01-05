@@ -5678,9 +5678,14 @@ fe_lla_error_t fe_stid135_manage_matype_info(struct stv* state)
 				state->mis_mode = TRUE;
 				dprintk("ISI mis_mode set to %d\n", state->mis_mode);
 				/* Get Min ISI and activate the MIS Filter */
+#if 0
 				error |= (error1=fe_stid135_select_min_isi(state));
 				if(error1)
 					dprintk("[%d] error=%d\n", state->nr+1, error1);
+#else
+				state->demod_search_stream_id = isi;
+				state->signal_info.isi = isi;
+#endif
 
 				error |= (error1=ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG0_TSFIFO_BITSPEED(Demod), 0));
 				if(error1)
@@ -10486,7 +10491,7 @@ fe_lla_error_t fe_stid135_isi_scan(struct stv* state, struct fe_sat_isi_struct_t
 					if(p_isi_struct->num_matypes < sizeof(p_isi_struct->matypes)/sizeof(p_isi_struct->matypes[0]))
 						p_isi_struct->matypes[p_isi_struct->num_matypes++] = (matype<<(int)8)|CurrentISI;
 				}
-					p_isi_struct->isi_bitset[j] |= mask;
+				p_isi_struct->isi_bitset[j] |= mask;
 #if 1
 				if(CurrentISI == state->signal_info.isi) {
 				state->signal_info.matype = matype;
