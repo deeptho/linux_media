@@ -374,8 +374,6 @@ static void stid135_release(struct dvb_frontend* fe)
 }
 
 
-
-
 static bool pls_search_list(struct dvb_frontend* fe)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
@@ -430,6 +428,7 @@ static bool pls_search_list(struct dvb_frontend* fe)
 				dprintk("SET stream_id=0x%x isi=0x%x\n",p->stream_id, isi);
 				break;
 			}
+
 			if (kthread_should_stop() || dvb_frontend_task_should_stop(fe)) {
 				dprintk("exiting on should stop\n");
 			break;
@@ -699,6 +698,8 @@ static int stid135_set_parameters(struct dvb_frontend* fe)
 			state->signal_info.has_lock=true;
 			dprintk("PLS locked=%d\n", locked);
 			print_signal_info("(PLS)", &state->signal_info);
+		} else {
+			set_pls_mode_code(state, 0, 1);
 		}
 	} else {
 		state->signal_info.has_lock=true;
