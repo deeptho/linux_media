@@ -342,7 +342,6 @@ static int stid135_init(struct dvb_frontend* fe)
 {
 	struct stv *state = fe->demodulator_priv;
 	fe_lla_error_t err = FE_LLA_NO_ERROR;
-	struct fe_stid135_internal_param *p_params = &state->base->ip;
 
 	if (state->base->mode == 0)
 		return 0;
@@ -396,7 +395,8 @@ static bool pls_search_list(struct dvb_frontend* fe)
 		if(p->stream_id !=  NO_STREAM_ID_FILTER)
 			fe_stid135_set_mis_filtering(state,  TRUE, p->stream_id & 0xFF, 0xFF);
 		else
-			fe_stid135_set_mis_filtering(state,  FALSE, 0, 0xFF);
+			fe_stid135_set_mis_filtering(state,  TRUE, state->signal_info.isi & 0xFF, 0xFF);
+		//fe_stid135_set_mis_filtering(state,  FALSE, 0, 0xFF);
 #endif
 		//write_reg(state, RSTV0910_P2_DMDISTATE + state->regoff, 0x15);
 		//write_reg(state, RSTV0910_P2_DMDISTATE + state->regoff, 0x18);
@@ -691,6 +691,7 @@ static int stid135_set_parameters(struct dvb_frontend* fe)
 	if(!state->signal_info.has_viterbi && p->algorithm != ALGORITHM_WARM && p->algorithm != ALGORITHM_COLD) {
 		bool locked=false;
 		print_signal_info("(before trying pls)", &state->signal_info);
+		vprintk("Trying pls: p->stream_id=%d state->signal_info.isi=0x%x\n", p->stream_id, state->signal_info.isi);
 		locked = pls_search_list(fe);
 		if(!locked)
 			locked = pls_search_range(fe);
@@ -701,10 +702,12 @@ static int stid135_set_parameters(struct dvb_frontend* fe)
 		} else {
 			set_pls_mode_code(state, 0, 1);
 		}
+		vprintk("After Trying pls: p->stream_id=%d locked=%d\n", p->stream_id, locked);
 	} else {
 		state->signal_info.has_lock=true;
+		vprintk("now stream_id=0x%x\n", p->stream_id);
 		if(p->stream_id != NO_STREAM_ID_FILTER) {
-			dprintk("calling set_stream_index");
+			vprintk("calling set_stream_index");
 			set_stream_index(state, p->stream_id);
 		}
 	}
@@ -2052,7 +2055,7 @@ struct dvb_frontend* stid135_attach(struct i2c_adapter *i2c,
 	int i;
 	struct stv *state;
 	struct stv_base *base=NULL;
-
+		extern struct stv_base *proc_base;
 	state = kzalloc(sizeof(struct stv), GFP_KERNEL);
 	if (!state)
 		return NULL;
@@ -2083,7 +2086,6 @@ struct dvb_frontend* stid135_attach(struct i2c_adapter *i2c,
 		base->vglna		=	cfg->vglna;    //for stvvglna 6909x v2 6903x v2
 
 		mutex_init(&base->lock.m);
-		extern struct stv_base *proc_base;
 		proc_base = base;
 		state->base = base;
 		if (stid135_probe(state) < 0) {
