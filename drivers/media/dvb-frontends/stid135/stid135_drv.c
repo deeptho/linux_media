@@ -1423,7 +1423,6 @@ static  fe_lla_error_t FE_STiD135_GetViterbiPunctureRate(struct stv* state, enum
 --RETURN	::	error
 *****************************************************/
 
-
 static fe_lla_error_t FE_STiD135_GetBer(struct stv* state, u32* ber_p)
 {
 	enum fe_stid135_demod Demod = state->nr+1;
@@ -1499,7 +1498,6 @@ static fe_lla_error_t FE_STiD135_GetBer(struct stv* state, u32* ber_p)
 
 	return error;		 //ber/per scaled to 1e7
 }
-
 
 
 /*****************************************************
@@ -4330,13 +4328,8 @@ fe_lla_error_t FE_STiD135_Algo(struct stv* state, BOOL satellite_scan, enum fe_s
 			/* Manage Matype Information if DVBS2 signal */
 			if (state->signal_info.standard == FE_SAT_DVBS2_STANDARD) {
 				/* Before reading MATYPE value, we need to wait for packet delin locked */
-#if 1
 				//stv09x1 checks bit 1 (PKTDELIN_LOCK)  whereas this code checks bit 0 ( FIRST_LOCK)
 				error |= (error1=ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELSTATUS1_FIRST_LOCK(Demod), &fld_value));
-#else
-				//stv09x1 checks bit 1 (PKTDELIN_LOCK)  whereas this code checks bit 0 ( FIRST_LOCK)
-				error |= (error1=ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELSTATUS1_PKTDELIN_LOCK(Demod), &fld_value));
-#endif
 				if(error1)
 					dprintk("[%d] ERROR=%d\n", state->nr+1, error1);
 				vprintk("[%d] here first_lock=%d\n", state->nr+1, fld_value);
@@ -4344,13 +4337,8 @@ fe_lla_error_t FE_STiD135_Algo(struct stv* state, BOOL satellite_scan, enum fe_s
 				while ((fld_value != TRUE) && (pdel_status_timeout < 220)) {
 					state_sleep(state, 5);
 					pdel_status_timeout = (u8)(pdel_status_timeout + 5);
-#if 1
 					//stv09x1 checks bit 1 (PKTDELIN_LOCK)  whereas this code checks bit 0 ( FIRST_LOCK)
 					error |= (error1=ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELSTATUS1_FIRST_LOCK(Demod), &fld_value));
-#else
-					//stv09x1 checks bit 1 (PKTDELIN_LOCK)  whereas this code checks bit 0 ( FIRST_LOCK)
-					error |= (error1=ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELSTATUS1_PKTDELIN_LOCK(Demod), &fld_value));
-#endif
 					if(error1)
 						dprintk("[%d] ERROR=%d\n", state->nr+1, error1);
 				}
@@ -5658,42 +5646,20 @@ fe_lla_error_t fe_stid135_manage_matype_info(struct stv* state)
 			if(error1)
 				dprintk("[%d] error=%d\n", state->nr+1, error1);
 			/* Read Matype */
-			error = (error1=fe_stid135_read_hw_matype(state, &matype_info, &isi));
+			error = (error1 = fe_stid135_read_hw_matype(state, &matype_info, &isi));
+			dprintk("isi=0x%x matype=0x%x\n", isi, matype_info);
 			if(error1)
 				dprintk("[%d] error=%d\n", state->nr+1, error1);
 			genuine_matype = matype_info;
 			state->signal_info.matype = genuine_matype;
 			/* Check if MIS stream (Multi Input Stream). If yes then set the MIS Filter to get the Min ISI */
 			if (!fe_stid135_check_sis_or_mis(matype_info)) {
-#if 0
-				if (state->demod_search_algo == FE_SAT_BLIND_SEARCH ||
-						state->demod_search_algo == FE_SAT_NEXT) {
-					fe_lla_error_t error1 = FE_LLA_NO_ERROR;
-					struct fe_sat_isi_struct_t isi;
-					int i;
-					error1 |=fe_stid135_isi_scan(handle, Demod, &isi);
-
-					dprintk("MIS DETECTION: error=%d nb_isi=%d\n", error1, isi.nb_isi);
-					BUG_ON(isi.nb_isi<0 || isi.nb_isi>sizeof(isi.isi(isi.isi[0]));
-					for(i=0;i< isi.nb_isi;++i) {
-						dprintk("MIS DETECTION: isi[%d]=%d\n", i, isi.isi[i]);
-					}
-				} else {
-					dprintk("MIS DETECTED algo=%d\n", state->demod_search_algo);
-				}
-#endif
 				mis = TRUE;
 				state->mis_mode = TRUE;
 				dprintk("ISI mis_mode set to %d\n", state->mis_mode);
 				/* Get Min ISI and activate the MIS Filter */
-#if 0
-				error |= (error1=fe_stid135_select_min_isi(state));
-				if(error1)
-					dprintk("[%d] error=%d\n", state->nr+1, error1);
-#else
 				state->demod_search_stream_id = isi;
 				state->signal_info.isi = isi;
-#endif
 
 				error |= (error1=ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG0_TSFIFO_BITSPEED(Demod), 0));
 				if(error1)
