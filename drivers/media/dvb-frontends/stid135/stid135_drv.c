@@ -2618,6 +2618,7 @@ u32 FE_STiD135_CarrierWidth(u32 SymbolRate, enum fe_sat_rolloff roll_off)
 	case FE_SAT_05:  rolloff = 05;  break;
 	case FE_SAT_10:  rolloff = 10;  break;
 	case FE_SAT_15:  rolloff = 15;  break;
+	case FE_SAT_LOW: rolloff = 15; break;
 	case FE_SAT_20:  rolloff = 20;  break;
 	case FE_SAT_25:  rolloff = 25;  break;
 	case FE_SAT_35:

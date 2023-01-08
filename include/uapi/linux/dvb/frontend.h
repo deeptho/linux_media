@@ -686,6 +686,7 @@ enum fe_pilot {
  * @ROLLOFF_35:		Roloff factor: α=35%
  * @ROLLOFF_20:		Roloff factor: α=20%
  * @ROLLOFF_25:		Roloff factor: α=25%
+ * @ROLLOFF_LOW:	Roloff lower than 20%.
  * @ROLLOFF_AUTO:	Auto-detect the roloff factor.
  *
  * .. note:
@@ -700,6 +701,7 @@ enum fe_rolloff {
 	ROLLOFF_15,
 	ROLLOFF_10,
 	ROLLOFF_5,
+	ROLLOFF_LOW
 };
 
 /**

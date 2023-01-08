@@ -240,7 +240,8 @@ enum fe_sat_rolloff {
 		FE_SAT_20,
 		FE_SAT_10,
 		FE_SAT_05,
-		FE_SAT_15
+		FE_SAT_15,
+		FE_SAT_LOW //not yet know which rolloff, but low
 };
 
 
@@ -350,18 +351,19 @@ struct fe_sat_signal_info {
 	enum fe_sat_modulation		modulation;	/* Modulation type					*/
 	enum fe_sat_pilots		pilots;		/* pilots on,off only for DVB-S2			*/
 	enum fe_sat_frame		frame_length;	/* Found frame length only for DVB-S2			*/
-		enum fe_sat_rolloff		roll_off;	/* Rolloff factor (0.2, 0.25 or 0.35)			*/
-		s32 				power;		/* Power of the RF signal (dBm x1000)			*/
-		s32 				powerdBmx10;	/* Power of the RF signal (dBm x10000)			*/
-		s32				band_power;	/* Power of the whole freq range signal (dBm x1000)	*/
-		s32				C_N;		/* Carrier to noise ratio (dB x10) 	*/
-		u32				ber;		/* Bit error rate	(x10^7)				*/
-		enum fe_sat_iq_inversion	spectrum;	/* IQ specrum swap setting				*/
-		u8				matype;
-		u8 				isi;		/* Current value of ISI 				*/
-		u8        pls_mode;
- 		u32       pls_code;
-		fe_sat_isi_struct isi_list;
+	enum fe_sat_rolloff		roll_off;	/* Rolloff factor (0.2, 0.25 or 0.35)			*/
+	s32 				power;		/* Power of the RF signal (dBm x1000)			*/
+	s32 				powerdBmx10;	/* Power of the RF signal (dBm x10000)			*/
+	s32				band_power;	/* Power of the whole freq range signal (dBm x1000)	*/
+	s32				C_N;		/* Carrier to noise ratio (dB x10) 	*/
+	u32				ber;		/* Bit error rate	(x10^7)				*/
+	enum fe_sat_iq_inversion	spectrum;	/* IQ specrum swap setting				*/
+	u8				matype; //matype of current frame
+	bool low_roll_off_detected;
+	u8 				isi;		/* Current value of ISI 				*/
+	u8        pls_mode;
+	u32       pls_code;
+	fe_sat_isi_struct isi_list;
 
 	ktime_t carrier_time;
 	ktime_t timing_lock_time;

@@ -82,6 +82,35 @@ MODULE_PARM_DESC(mis,"someone search the multi-stream signal lose packets,please
 	if(stid135_verbose) printk(KERN_DEBUG pr_fmt("%s:%d " fmt),  __func__, __LINE__, ##arg)
 
 
+static inline
+enum fe_rolloff dvb_rolloff(struct stv*state) {
+	switch (state->signal_info.roll_off) {
+	case FE_SAT_05:
+		return ROLLOFF_5;
+		break;
+	case FE_SAT_10:
+		return ROLLOFF_10;
+		break;
+	case FE_SAT_15:
+		return ROLLOFF_15;
+		break;
+	case FE_SAT_20:
+		return ROLLOFF_20;
+		break;
+	case FE_SAT_25:
+		return ROLLOFF_25;
+		break;
+	case FE_SAT_35:
+		return ROLLOFF_35;
+		break;
+	case FE_SAT_LOW:
+		return ROLLOFF_LOW;
+	default:
+		break;
+	}
+	return ROLLOFF_AUTO;
+}
+
 void print_signal_info(const char* prefix, struct fe_sat_signal_info* i)
 {
 	#if 1
@@ -1120,6 +1149,35 @@ static int stid135_read_status_(struct dvb_frontend* fe, enum fe_status *status)
 	memcpy(p->isi_bitset, state->signal_info.isi_list.isi_bitset, sizeof(p->isi_bitset));
 	memcpy(p->matypes, state->signal_info.isi_list.matypes, sizeof(p->matypes));
 	p->num_matypes = state->signal_info.isi_list.num_matypes;
+
+	{
+		u8 matype;
+		u8 isi_read;
+		int rolloff;
+		fe_stid135_read_hw_matype(state, &matype, &isi_read);
+		if ( !!((matype &0x3) == 0x3) != !!((state->signal_info.matype &0x3) == 0x3)) {
+			state->signal_info.low_roll_off_detected = true;
+		}
+
+		if(!((matype &0x3) == 0x3))
+			state->signal_info.matype = matype;
+
+		switch(state->signal_info.matype) {
+		case 0:
+			state->signal_info.roll_off = state->signal_info.low_roll_off_detected ? FE_SAT_15: FE_SAT_35;
+			break;
+		case 1:
+			state->signal_info.roll_off = state->signal_info.low_roll_off_detected ? FE_SAT_10: FE_SAT_25;
+			break;
+		case 2:
+			state->signal_info.roll_off = state->signal_info.low_roll_off_detected ? FE_SAT_05: FE_SAT_20;
+			break;
+		case 3:
+			state->signal_info.roll_off = FE_SAT_LOW;
+			break;
+		}
+	}
+	p->rolloff = dvb_rolloff(state);
 	p->matype_val = state->signal_info.matype;
 	p->matype_valid = true;
 
