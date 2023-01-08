@@ -2174,5 +2174,5 @@ EXPORT_SYMBOL_GPL(stid135_attach);
 module_init(stid135_module_init);
 module_exit(stid135_module_exit);
 MODULE_DESCRIPTION("STiD135 driver");
-MODULE_AUTHOR("CrazyCat");
+MODULE_AUTHOR("Crazycat (modified by DeepThought)");
 MODULE_LICENSE("GPL");
