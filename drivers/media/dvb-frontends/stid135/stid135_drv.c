@@ -2943,6 +2943,15 @@ fe_lla_error_t	fe_stid135_search(struct stv* state,
 			dprintk("[%d] error=%d\n", state->nr+1, error1);
 	}
 #endif //TOTEST
+
+	//for wideband such as 200Msymbol/s
+	if(pSearch->symbol_rate >= pParams->master_clock) { /* if SR >= MST_CLK */
+		if(demod == FE_SAT_DEMOD_1)
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_HDEBITCFG2(FE_SAT_DEMOD_2), 0xD4);
+		if(demod == FE_SAT_DEMOD_3)
+			error |= ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_HDEBITCFG2(FE_SAT_DEMOD_4), 0xD4);
+	}
+
 	state->demod_puncture_rate = pSearch->puncture_rate;
 	state->demod_modulation = pSearch->modulation;
 	state->demod_modcode = pSearch->modcode;
@@ -3577,7 +3586,6 @@ static fe_lla_error_t estimate_band_power_demod_not_locked(struct stv* state,
 	}
 	return error;
 }
-
 
 
 /*****************************************************
