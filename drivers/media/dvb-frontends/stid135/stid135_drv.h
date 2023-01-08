@@ -244,19 +244,8 @@ struct fe_stid135_internal_param {
 	u32				master_clock, /* Master clock frequency */
 					lo_frequency; /* Temporary definition
 					for LO frequency   */
-#if 0 //TEST
-	enum fe_sat_iq_inversion	tuner_global_iqv_inv[8]; /* Global I,Q
-					inversion I,Q conection from tuner to
-					demod */
-	tuner_handle		h_tuner; /* Handle to the tuner 1 */
-		u32				tuner_bw[8];
-	s32				tuner_frequency[8]; /* Current tuner frequency (Hz) */
-	s32	tuner_index_jump[8];
-	struct ram_byte			pid_flt[8];
-	struct gse_ram_byte		gse_flt[8];
-	BOOL				mis_mode[8]; /* Memorisation of MIS mode */
-	struct modcod_data		mc_flt[NB_SAT_MODCOD];
-#endif
+	BOOL			ts_nosync;
+	BOOL	 mis_fix;
 };
 
 
@@ -391,6 +380,8 @@ struct stv {
 
 	struct spectrum_scan_state spectrum_scan_state;
 	struct constellation_scan_state constellation_scan_state;
+
+	bool modcode_filter; //for set the modcode
 };
 
 void state_lock_(struct stv* state, const char* func, int line);

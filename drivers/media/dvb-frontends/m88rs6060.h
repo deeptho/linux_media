@@ -145,17 +145,24 @@ struct m88rs6060_cfg {
 	u8 envelope_mode;	//for diseqc   default 0
 	//0x11 or 0x12 0x11 : there is only one i2c_STOP flag. 0x12 ther are two I2C_STOP flag.
 	u8 repeater_value;
-
+	bool disable_22k; //for 6909se tuner 1,3,5,7
 	u8 num; // for ci setting;
 	bool HAS_CI; // for 6910se ci
 
+	int clk_port; //for si5351
+
+
 	void (*SetSpeedstatus)(struct i2c_adapter * i2c, int tuner);
-	void (*SetTimes)(struct i2c_adapter * i2c, int tuner,int times);
 	int  (*GetSpeedstatus)(struct i2c_adapter * i2c, int tuner);
 	int (*GetSpeed)(struct i2c_adapter * i2c, int tuner);
 
+	int (*SetCIClock)(struct i2c_adapter *i2c, int tuner);  //set the CI clock for 6910se
+	void (*SetTimes)(struct i2c_adapter * i2c, int tuner,int times);
+
 	void (*write_properties)(struct i2c_adapter * i2c, u8 reg, u32 buf);
 	void (*read_properties)(struct i2c_adapter * i2c, u8 reg, u32 * buf);
+	void (*write_eeprom) (struct i2c_adapter *i2c,u8 reg, u8 buf);
+	void (*read_eeprom) (struct i2c_adapter *i2c,u8 reg, u8 *buf);
 };
 
 extern struct i2c_client*  m88rs6060_attach(struct i2c_adapter *i2c, struct i2c_board_info* board_info, int adapterno);

@@ -70,6 +70,13 @@ static int blindscan_always=0; //always use blindscan
 module_param(blindscan_always, int, 0644);
 MODULE_PARM_DESC(blidscan_always, "Always tune using blindscan (default:0 - disabled)");
 
+static unsigned int ts_nosync;
+module_param(ts_nosync, int, 0644);
+MODULE_PARM_DESC(ts_nosync, "TS FIFO Minimum latence mode (default:off)");
+
+static unsigned int mis;
+module_param(mis,int,0644);
+MODULE_PARM_DESC(mis,"someone search the multi-stream signal lose packets,please turn on it(default:off)");
 
 #define vprintk(fmt, arg...)																					\
 	if(stid135_verbose) printk(KERN_DEBUG pr_fmt("%s:%d " fmt),  __func__, __LINE__, ##arg)
@@ -93,8 +100,6 @@ void print_signal_info(const char* prefix, struct fe_sat_signal_info* i)
 }
 
 static int stid135_stop_task(struct dvb_frontend* fe);
-
-
 
 
 I2C_RESULT I2cReadWrite(void *pI2CHost, I2C_MODE mode, u8 ChipAddress, u8 *Data, int NbData)
@@ -148,6 +153,8 @@ static int stid135_probe(struct stv *state)
 	init_params.roll_off		=  	FE_SAT_35; // NYQUIST Filter value (used for DVBS1/DSS, DVBS2 is automatic)
 	init_params.tuner_iq_inversion	=	FE_SAT_IQ_NORMAL;
 	err = fe_stid135_init(&init_params, &state->base->ip);
+	init_params.ts_nosync		=	ts_nosync;
+	init_params.mis_fix		= mis;
 
 	if (err != FE_LLA_NO_ERROR) {
 		dev_err(&state->base->i2c->dev, "%s: fe_stid135_init error %d !\n", __func__, err);
@@ -665,19 +672,22 @@ static int stid135_set_parameters(struct dvb_frontend* fe)
 	err |= stid135_select_rf_in_(state, p->rf_in);
 	if (err != FE_LLA_NO_ERROR)
 		dev_err(&state->base->i2c->dev, "%s: fe_stid135_set_rfmux_math error %d !\n", __func__, err);
-#if 1 /*Deep Thought: keeping filters ensures that  a demod does not cause a storm of data when demodulation is
-				failing (e.g., ran fade) This could cause other demods to fail as well as they share resources.
-				filter_forbidden_modcodes may be better
+	if(state->modcode_filter){
+
+		/*Deep Thought: keeping filters ensures that  a demod does not cause a storm of data when demodulation is
+			failing (e.g., ran fade) This could cause other demods to fail as well as they share resources.
+			filter_forbidden_modcodes may be better
 
 				There could be reasons why  fe_stid135_reset_modcodes_filter is still needed, e.g., when  too strict filters
 				are left from an earlier tune?
-			*/
-	err |= fe_stid135_reset_modcodes_filter(state);
-	if (err != FE_LLA_NO_ERROR) {
-		dev_err(&state->base->i2c->dev, "%s: fe_stid135_reset_modcodes_filter error %d !\n", __func__, err);
-		vprintk("[%d]: fe_stid135_reset_modcodes_filter error %d !\n", state->nr+1, err);
+		*/
+		err |= fe_stid135_reset_modcodes_filter(state);
+		if (err != FE_LLA_NO_ERROR) {
+			dev_err(&state->base->i2c->dev, "%s: fe_stid135_reset_modcodes_filter error %d !\n", __func__, err);
+			vprintk("[%d]: fe_stid135_reset_modcodes_filter error %d !\n", state->nr+1, err);
+		}
 	}
-#endif
+
 
 	err |= (error1=fe_stid135_search(state, &search_params, 0));
 	if(error1!=0)
@@ -785,6 +795,7 @@ static int stid135_set_parameters(struct dvb_frontend* fe)
             }
             m >>= 1;
         }
+				state->modcode_filter = true;
         err |= fe_stid135_set_modcodes_filter(state, modcode_mask, j);
         if (err != FE_LLA_NO_ERROR)
             dev_err(&state->base->i2c->dev, "%s: fe_stid135_set_modcodes_filter error %d !\n", __func__, err);
@@ -818,6 +829,7 @@ static int stid135_set_parameters(struct dvb_frontend* fe)
 	return err != FE_LLA_NO_ERROR ? -1 : 0;
 }
 
+#if 0
 static int stid135_get_frontend(struct dvb_frontend* fe, struct dtv_frontend_properties *p)
 {
 	struct stv *state = fe->demodulator_priv;
@@ -996,6 +1008,7 @@ static int stid135_get_frontend(struct dvb_frontend* fe, struct dtv_frontend_pro
 	vprintk("READ stream_id=0x%x isi=0x%x\n",p->stream_id, state->signal_info.isi);
 	return 0;
 }
+#endif
 
 static int stid135_read_status_(struct dvb_frontend* fe, enum fe_status *status)
 {
@@ -2129,9 +2142,8 @@ struct dvb_frontend* stid135_attach(struct i2c_adapter *i2c,
 	state->newTP = false;
 	state->bit_rate  = 0;
 	state->loops = 15;
-	//state->current_max_llr_rate = 0;
-	//state->current_llr_rate = 0;
-	//error |= fe_stid135_set_maxllr_rate(state, 90);
+
+	state->modcode_filter = false;
 
 	if (rfsource > 0 && rfsource < 5)
 		rf_in = rfsource - 1;

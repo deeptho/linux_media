@@ -432,6 +432,7 @@ static struct fe_sat_car_loop_vs_mode_code FE_STiD135_S2CarLoop[NB_SAT_MODCOD] =
 #define NB_128APSK_COEFF 2
 #define NB_256APSK_COEFF 6
 
+#if 0
 static struct fe_sat_car_loop_vs_cnr fe_stid135_qpsk_car_loop[NB_QPSK_COEFF] =
 {/* QPSK */
 	/* CNRx10	0.5Msps	10Msps	30Msps	62.5Msps	125Msps	300Msps	400Msps	500Msps */
@@ -522,6 +523,7 @@ static struct fe_sat_car_loop_vs_cnr fe_stid135_32apsk_car_loop[NB_32APSK_COEFF]
 	{170,	0x09,	0x09,	0x09,	0x09,	0x09,	0x09,	0x09,	0x09}	/* FE_SAT_32APSK_910 */
 };
 
+
 static struct fe_sat_car_loop_vs_cnr fe_stid135_64apsk_car_loop[NB_64APSK_COEFF] =
 {/* 64APSK */
 	/* CNRx10	0.5Msps	10Msps	30Msps	62.5Msps	125Msps	300Msps	400Msps	500Msps */
@@ -532,12 +534,15 @@ static struct fe_sat_car_loop_vs_cnr fe_stid135_64apsk_car_loop[NB_64APSK_COEFF]
 	{183,	0x09,	0x09,	0x09,	0x09,	0x09,	0x09,	0x09,	0x09}	/* FE_SATX_64APSK_5_6 */
 };
 
+
+
 static struct fe_sat_car_loop_vs_cnr fe_stid135_128apsk_car_loop[NB_128APSK_COEFF] =
 {/* 128APSK */
 	/* CNRx10	0.5Msps	10Msps	30Msps	62.5Msps	125Msps	300Msps	400Msps	500Msps */
 	{193,	0x09,	0x09,	0x09,	0x09,	0x09,	0x09,	0x09,	0x09},	/* FE_SATX_128APSK_3_4 */
 	{198,	0x09,	0x09,	0x09,	0x09,	0x09,	0x09,	0x09,	0x09}	/* FE_SATX_128APSK_7_9 */
 };
+
 
 static struct fe_sat_car_loop_vs_cnr fe_stid135_256apsk_car_loop[NB_256APSK_COEFF] =
 {/* 256APSK */
@@ -549,7 +554,7 @@ static struct fe_sat_car_loop_vs_cnr fe_stid135_256apsk_car_loop[NB_256APSK_COEF
 	{204,	0x09,	0x09,	0x09,	0x09,	0x09,	0x09,	0x09,	0x09},	/* FE_SATX_256APSK_11_15_L */
 	{207,	0x09,	0x09,	0x09,	0x09,	0x09,	0x09,	0x09,	0x09}	/* FE_SATX_256APSK_3_4 */
 };
-
+#endif
 
 static  u16 dvbs2_modcode_for_llr_x100[131] = {
 	0,	//FE_SAT_DUMMY_PLF,
@@ -725,7 +730,9 @@ static fe_lla_error_t fe_stid135_get_agcrf_path(struct stv* state, s32* agcrf_pa
 fe_lla_error_t FE_STiD135_GetFECLock (struct stv* state,
 	u32 TimeOut, BOOL* lock_bool_p);
 fe_lla_error_t fe_stid135_manage_matype_info(struct stv* state);
+#if 0
 static fe_lla_error_t fe_stid135_manage_matype_info_raw_bbframe(struct stv* state);
+#endif
 static fe_lla_error_t fe_stid135_flexclkgen_init(struct fe_stid135_internal_param* pParams);
 static fe_lla_error_t fe_stid135_set_reg_init_values(struct stv* state);
 static fe_lla_error_t fe_stid135_set_reg_values_wb(struct stv* state);
@@ -742,7 +749,9 @@ fe_lla_error_t FE_STiD135_TunerStandby(STCHIP_Info_t* TunerHandle,
 							 FE_OXFORD_TunerPath_t TunerNb, u8 Enable);
 
 fe_lla_error_t fe_stid135_set_vcore_supply(struct fe_stid135_internal_param* pParams);
+#if 0
 static fe_lla_error_t fe_stid135_select_min_isi(struct stv* state);
+#endif
 void fe_stid135_modcod_flt_reg_init(void);
 
 //==============================================================================
@@ -1975,6 +1984,7 @@ fe_lla_error_t FE_STiD135_WaitForLock(struct stv* state,
 	return error;
 }
 
+#if 0
 static fe_lla_error_t CarrierLoopAutoAdjust(struct stv* state, s32 cnr)
 {
 	struct fe_stid135_internal_param *pParams;
@@ -2167,6 +2177,7 @@ static fe_lla_error_t CarrierLoopAutoAdjust(struct stv* state, s32 cnr)
 
 	return(error);
 }
+#endif
 
 /*****************************************************
 --FUNCTION	::	FE_STiD135_GetOptimCarrierLoop
@@ -3074,6 +3085,7 @@ fe_lla_error_t	fe_stid135_search(struct stv* state,
 			case FE_LLA_TERM_FAILED:
 			case FE_LLA_DISEQC_FAILED:
 			case FE_LLA_NOT_SUPPORTED:
+		case FE_LLA_OUT_OF_LLR:
 				error = FE_LLA_SEARCH_FAILED;
 				dprintk("[%d] error=%d\n", state->nr+1, error);
 				break;
@@ -4012,10 +4024,8 @@ fe_lla_error_t fe_stid135_init(struct fe_sat_init_params *pInit,
 		pParams->internal_dcdc = pInit->internal_dcdc;
 		pParams->internal_ldo = pInit->internal_ldo;
 		pParams->rf_input_type = pInit->rf_input_type;
-
-		//DANGER: &(pParams->handle_demod) or (pParams->handle_demod)
-		//	error |= fe_stid135_apply_custom_qef_for_modcod_filter(pParams, NULL);
-		//fe_stid135_modcod_flt_reg_init(); XXX now done in module init
+		pParams->ts_nosync = pInit->ts_nosync;
+		pParams->mis_fix = pInit->mis_fix;
 
 		TunerError = FE_STiD135_TunerInit(pParams);
 
@@ -5680,7 +5690,7 @@ fe_lla_error_t fe_stid135_manage_matype_info(struct stv* state)
 				if(((genuine_matype>>6) & 0x3) == 0x3) {
 				/* "TS FIFO Minimum latency mode */
 #ifdef TS_NOSYNC //def LASTCHANGE
-				if(!state->mis_mode)
+				if(!state->mis)
 					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSSTATE1_TSOUT_NOSYNC(Demod),
 																pParams->ts_nosync ? 1 : 0);
 #endif
@@ -5864,6 +5874,8 @@ fe_lla_error_t fe_stid135_manage_matype_info(struct stv* state)
 	return error;
 }
 
+
+#if 0
 /*****************************************************
 --FUNCTION	::	fe_stid135_manage_matype_info_raw_bbframe
 --ACTION	::	Manage all action depending on Matype Information
@@ -5921,6 +5933,7 @@ static fe_lla_error_t fe_stid135_manage_matype_info_raw_bbframe(struct stv* stat
 		}
 	return error;
 }
+#endif
 
 /*****************************************************
 --FUNCTION	::	fe_stid135_get_matype_infos
@@ -10363,6 +10376,7 @@ bool fe_stid135_check_sis_or_mis(u8 matype)
 	return (sis_or_mis);
 }
 
+#if 0
 /*****************************************************
 --FUNCTION	::	fe_stid135_select_min_isi
 --ACTION	::	Returns the MIS or SIS stream info
@@ -10410,6 +10424,7 @@ static fe_lla_error_t fe_stid135_select_min_isi(struct stv* state)
 		}
 	return error;
 }
+#endif
 
 /*****************************************************
 --FUNCTION	::	fe_stid135_get_isi
@@ -10531,7 +10546,7 @@ fe_lla_error_t fe_stid135_select_isi(struct stv* state, u8 isi_wanted)
 {
 	enum fe_stid135_demod demod = state->nr+1;
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
-	fe_lla_error_t error1 = FE_LLA_NO_ERROR;
+	//fe_lla_error_t error1 = FE_LLA_NO_ERROR;
 	//struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
 
 	if (state->base->ip.handle_demod->Error) {
@@ -12438,7 +12453,8 @@ static int bits_per_sample(int modcode) {
 
 fe_lla_error_t get_current_llr(struct stv* state, s32 *current_llr)
 {
-	s32 max_llr_allowed, raw_bit_rate;
+	//s32 max_llr_allowed;
+	s32 raw_bit_rate;
 	s32 fld_value[2];
 	s32 required_llr = 0;
 	bool vcm;
@@ -12604,8 +12620,7 @@ fe_lla_error_t reserve_llr(struct stv* state, s32 required_llr)
  */
 fe_lla_error_t reserve_llr_for_symbolrate(struct stv* state, s32 symbolrate)
 {
-	return FE_LLA_NO_ERROR;
-
+#if 0
 	s32 llr = (symbolrate*3)/1000;
 	if(llr <90)
 		llr =90;
@@ -12622,14 +12637,14 @@ fe_lla_error_t reserve_llr_for_symbolrate(struct stv* state, s32 symbolrate)
 		state->llr_in_use = llr;
 		dump_llr(state);
 	}
+#endif
 	return FE_LLA_NO_ERROR;
 }
 
 
 fe_lla_error_t release_llr(struct stv* state)
 {
- return FE_LLA_NO_ERROR;
-
+#if 0
 	s32 required_llr = 0;
 	if(state && state->base) {
 		fe_stid135_set_maxllr_rate(state, 90); //set to lowest possible value
@@ -12639,6 +12654,7 @@ fe_lla_error_t release_llr(struct stv* state)
 	} else {
 		dprintk("ERROR");
 	}
+#endif
  return FE_LLA_NO_ERROR;
 }
 

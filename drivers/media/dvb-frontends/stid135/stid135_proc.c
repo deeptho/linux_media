@@ -125,18 +125,18 @@ static ssize_t proc_write(struct file *filp, const char __user *buf, size_t len,
 	char kbuf[128];
 	STCHIP_Register_t* regdesc = (void*) & kbuf[0];
 	int ret;
+	STCHIP_Info_t* hChipHandle = filp->private_data;
+	struct lock_t* lock = &proc_base->lock;
 	//dprintk("Request of size %ld buf=%p\n", len, buf);
 	if(len != sizeof(STCHIP_Register_t)) {
 		dprintk("Incorrect len: %ld\n", len);
 		return len;
 	}
-	STCHIP_Info_t* hChipHandle = filp->private_data;
 
 	ret=copy_from_user(kbuf, buf,len);
 	//dprintk("Asked to set %d-byte register 0x%04x to value 0x%08x ret=%d\n", regdesc->Size, regdesc->Addr, regdesc->Value, ret);
 	if(ret)
 		return -EFAULT;
-	struct lock_t* lock = &proc_base->lock;
 	mutex_lock(&lock->m);
 	ChipSetOneRegister(hChipHandle, regdesc->Addr, regdesc->Value);
 	mutex_unlock(&lock->m);

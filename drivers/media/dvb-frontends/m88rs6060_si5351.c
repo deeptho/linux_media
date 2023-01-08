@@ -4,7 +4,7 @@
  * Copyright (c) 2021 Davin zhang <Davin@tbsdtv.com> www.Turbosight.com
  *
  *
- * Copyright (C) 2022 Deep Thought <deeptho@gmail.com>: blindscan, spectrum, constellation code
+ * Copyright (C) 2023 Deep Thought <deeptho@gmail.com>: blindscan, spectrum, constellation code
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * version 2 only, as published by the Free Software Foundation.
@@ -33,10 +33,10 @@ static int si5351_write(struct m88rs6060_state *dev,u8 reg,u8 data)
 	u8 buf[] = { reg, data };
 	int ret;
 	struct i2c_msg msg = {
-		.addr = SI5351_BUS_BASE_ADDR/2,.flags = 0,.buf = buf,.len = 2
+		.addr = SI5351_BUS_BASE_ADDR,.flags = 0,.buf = buf,.len = 2
 	};
 
-	ret = i2c_transfer(dev->tuner_client->adapter, &msg, 1);
+	ret = i2c_transfer(dev->demod_client->adapter, &msg, 1);
 	if (ret != 1) {
 		dev_err(&client->dev,
 			"si5351(ret=%i, reg=0x%02x, value=0x%02x)\n",
@@ -76,7 +76,7 @@ static u8 si5351_read(struct m88rs6060_state *dev,u8 reg,u8 *data)
 	u8 b0[] = { reg };
 	struct i2c_msg msg[] = {
 		{
-		 .addr = SI5351_BUS_BASE_ADDR/2,
+		 .addr = SI5351_BUS_BASE_ADDR,
 		 .flags = 0,
 		 .buf = b0,
 		 .len = 1},

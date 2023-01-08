@@ -393,15 +393,15 @@ static int si2168_set_frontend(struct dvb_frontend *fe)
 		goto err;
 
 	/* that has no big effect */
-	if (c->delivery_system == SYS_DVBT)
-		cmd_init(&cmd, "\x89\x21\x06\x11\xff\x98", 6, 3);
-	else if (c->delivery_system == SYS_DVBC_ANNEX_A)
-		cmd_init(&cmd, "\x89\x21\x06\x11\x89\xf0", 6, 3);
-	else if (c->delivery_system == SYS_DVBT2)
-		cmd_init(&cmd, "\x89\x21\x06\x11\x89\x20", 6, 3);
-	ret = si2168_cmd_execute(client, &cmd);
-	if (ret)
-		goto err;
+	//if (c->delivery_system == SYS_DVBT)
+	//	cmd_init(&cmd, "\x89\x21\x06\x11\xff\x98", 6, 3);
+	//else if (c->delivery_system == SYS_DVBC_ANNEX_A)
+	//	cmd_init(&cmd, "\x89\x21\x06\x11\x89\xf0", 6, 3);
+	//else if (c->delivery_system == SYS_DVBT2)
+	//	cmd_init(&cmd, "\x89\x21\x06\x11\x89\x20", 6, 3);
+	//ret = si2168_cmd_execute(client, &cmd);
+	//if (ret)
+	//	goto err;
 
 	if (c->delivery_system == SYS_DVBT2) {
 		/* select PLP */

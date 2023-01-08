@@ -773,15 +773,15 @@ static void m88rs6060_hard_reset(struct m88rs6060_state* state)
 {
 	unsigned val;
 
-	m88rs6060_set_tuner_reg(state, 0x4, 0x1);
-	m88rs6060_set_tuner_reg(state, 0x4, 0x0);
+	m88rs6060_set_tuner_reg(state, 0x04, 0x01);
+	m88rs6060_set_tuner_reg(state, 0x04, 0x00);
 
 	msleep(1);
 	m88rs6060_wakeup(state);
 
 
 	regmap_read(state->demod_regmap, 0x08, &val);
-	regmap_write(state->demod_regmap, 0x08, (val | 0x1));
+	regmap_write(state->demod_regmap, 0x08, (val | 0x01));
 
 	regmap_read(state->demod_regmap, 0x0b, &val);
 	regmap_write(state->demod_regmap, 0x0b, (val | 0x1));
@@ -3393,6 +3393,29 @@ static void m88rs6060_spi_write(struct dvb_frontend *fe,
 	return;
 }
 
+static void m88rs6060_eeprom_read(struct dvb_frontend *fe, struct eeprom_info *eepinf)
+{
+
+	struct m88rs6060_state* state = fe->demodulator_priv;
+	struct i2c_client *client = state->demod_client;
+	struct i2c_adapter* i2c = client->adapter;
+
+	if (state->read_eeprom)
+		state->read_eeprom(i2c, eepinf->reg, &(eepinf->data));
+	return ;
+}
+
+static void m88rs6060_eeprom_write(struct dvb_frontend *fe,struct eeprom_info *eepinf)
+{
+	struct m88rs6060_state* state = fe->demodulator_priv;
+	struct i2c_client *client = state->demod_client;
+	struct i2c_adapter* i2c = client->adapter;
+
+	if (state->write_eeprom)
+		state->write_eeprom(i2c, eepinf->reg, eepinf->data);
+	return ;
+}
+
 static int m88rs6060_stop_task(struct dvb_frontend *fe)
 {
 	struct m88rs6060_state* state = fe->demodulator_priv;
@@ -3764,7 +3787,10 @@ static const struct dvb_frontend_ops m88rs6060_ops = {
 	.scan =  m88rs6060_scan_sat,
 	.spectrum_start = m88rs6060_spectrum_start,
 	.spectrum_get = m88rs6060_spectrum_get,
+	.eeprom_read = m88rs6060_eeprom_read,
+	.eeprom_write = m88rs6060_eeprom_write,
 };
+
 
 static int m88rs6060_ready(struct m88rs6060_state* state)
 {
@@ -3914,6 +3940,8 @@ struct i2c_client* m88rs6060_attach(struct i2c_adapter* i2c, struct i2c_board_in
 	state->config.repeater_value = cfg->repeater_value;
 	state->config.read_properties = cfg->read_properties;
 	state->config.write_properties = cfg->write_properties;
+	state->config.read_eeprom = cfg->read_eeprom;
+	state->config.write_eeprom = cfg->write_eeprom;
 	state->config.envelope_mode = cfg->envelope_mode;
 	state->demod_client = client;
 	state->TsClockChecked = false;
@@ -3957,6 +3985,8 @@ struct i2c_client* m88rs6060_attach(struct i2c_adapter* i2c, struct i2c_board_in
 	state->fe_status = 0;
 	state->write_properties = cfg->write_properties;
 	state->read_properties = cfg->read_properties;
+	state->write_eeprom = cfg->write_eeprom;
+	state->read_eeprom = cfg->read_eeprom;
 
 	state->fe.demodulator_priv = state;
 	i2c_set_clientdata(client, state);

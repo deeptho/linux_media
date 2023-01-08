@@ -2483,7 +2483,16 @@ err:
 	return ret;
 
 }
-
+//GPIO2 for output lock_flag 1:locked 0:unlocked
+static void cxd2878_lock_flag(struct cxd2878_dev *dev,bool enable)  
+{
+	
+	cxd2878_SetBankAndRegisterBits(dev,dev->slvx,0x00, 0xA5, 0x00, 0x0F); 
+	cxd2878_SetBankAndRegisterBits(dev,dev->slvx,0x00, 0x82, 1, 0x4);
+	cxd2878_SetBankAndRegisterBits(dev,dev->slvx,0x00, 0xA2, enable?0x07:0x00, 0x4); 
+	
+	return;
+}
 static int cxd2878_init(struct dvb_frontend *fe)
 {
 	struct cxd2878_dev*dev = fe->demodulator_priv;
@@ -2539,13 +2548,24 @@ static int cxd2878_init(struct dvb_frontend *fe)
 	ascot3_init(dev);
 	cxd2878_i2c_repeater(dev,0);
 
+
 	//set the ts mode
+	
     cxd2878_SetBankAndRegisterBits(dev,dev->slvt, 0x00, 0xC4,  (dev->base->config->ts_mode? 0x00 : 0x80), 0x80);
     cxd2878_SetBankAndRegisterBits(dev,dev->slvt, 0x02, 0xE4,  ((dev->base->config->ts_mode == 2) ? 0x01 : 0x00), 0x01);
-    cxd2878_SetBankAndRegisterBits(dev,dev->slvt,0x00, 0xC4,  (dev->base->config->ts_ser_data ? 0x08 : 0x00), 0x08);
+    if(dev->base->config->ts_mode==0){
+    cxd2878_SetBankAndRegisterBits(dev,dev->slvt,0x00, 0xC4,  (dev->base->config->ts_ser_data ? 0x08 : 0x00), 0x08);   
     cxd2878_SetBankAndRegisterBits(dev,dev->slvt,0x00, 0xC4, 0x00, 0x10);
+}
+    if(dev->base->config->ts_clk_mask){
+     cxd2878_SetBankAndRegisterBits(dev,dev->slvt,0x00, 0xC6, dev->base->config->ts_clk_mask, 0x1F); 
+     cxd2878_SetBankAndRegisterBits(dev,dev->slvt,0x60, 0x52, dev->base->config->ts_clk_mask, 0x1F);
+    }
 
-
+    if(dev->base->config->lock_flag)//for usb device led light
+    {
+    	cxd2878_lock_flag(dev,0);//unlocked 
+    }
 	//cxd2878_wr(dev,dev->slvt,0xC4,0xa1);
 warm_start:	
 	dev->warm = 1;
@@ -2670,17 +2690,26 @@ static int cxd2878_read_status(struct dvb_frontend *fe,
 	}
 
 //	printk("syncstat=0x%x ,tslockstat=0x%x,unlockdetected =0x%x\n",syncstat ,tslockstat,unlockdetected);
+
+	//lock flag
+
+	   if(dev->base->config->lock_flag){	   
+	   if(*status &FE_HAS_LOCK)
+  	    	cxd2878_lock_flag(dev,1);//locked 
+  	    else
+  	    	cxd2878_lock_flag(dev,0);//unlocked 
+	  }
 	/*rf signal*/	
 	ret |= cxd2878_i2c_repeater(dev,1);
 	ret |= ascot3_read_rssi(dev,c->frequency/1000,&rflevel); //unit khz
 	ret |= cxd2878_i2c_repeater(dev,0);
 	rflevel-=ifout;
-	rflevel-=1000;
+	rflevel+=200;
 	c->strength.len = 2;
 	c->strength.stat[0].scale = FE_SCALE_DECIBEL;
 	c->strength.stat[0].svalue = rflevel*10;
 	c->strength.stat[1].scale = FE_SCALE_RELATIVE;
-	c->strength.stat[1].svalue = min(max(2*(rflevel/100+69),0),100);
+	c->strength.stat[1].svalue = min(max(2*(rflevel/100+90),0),100);
 	c->cnr.len =1;
 	c->cnr.stat[0].scale = FE_SCALE_NOT_AVAILABLE;
 
@@ -3013,8 +3042,8 @@ static int cxd2878_read_signal_strength(struct dvb_frontend*fe,
 	*strength = 0;
 	for (i=0; i < p->strength.len; i++)
 		if (p->strength.stat[i].scale == FE_SCALE_RELATIVE)
-			*strength = (u16)p->strength.stat[i].uvalue*655;
-
+			*strength = (u16)p->strength.stat[i].uvalue*656;
+	
 	return 0;
 }
 static int cxd2878_read_snr(struct dvb_frontend *fe,

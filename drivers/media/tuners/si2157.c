@@ -181,7 +181,7 @@ static int si2157_find_and_load_firmware(struct dvb_frontend *fe)
 		}
 	}
 
-	if (!fw_name && !fw_alt_name) {
+	if (required && !fw_name && !fw_alt_name) {
 		dev_err(&client->dev,
 			"unknown chip version Si21%d-%c%c%c ROM 0x%02x\n",
 			part_id, cmd.args[1], cmd.args[3], cmd.args[4], rom_id);
@@ -228,7 +228,7 @@ static int si2157_init(struct dvb_frontend *fe)
 	dev_dbg(&client->dev, "\n");
 
 	if (dev->active)
-		return 0;	
+		return 0;
 
 	/* Try to get Xtal trim property, to verify tuner still running */
 	memcpy(cmd.args, "\x15\x00\x02\x04", 4);
@@ -452,33 +452,35 @@ static int si2157_set_params(struct dvb_frontend *fe)
 	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
 	int ret;
 	struct si2157_cmd cmd;
-	u8 bandwidth, delivery_system;
+	u8 bw, delivery_system;
+	u32 bandwidth;
 	u32 if_frequency = 5000000;
 
 	dev_dbg(&client->dev,
 			"delivery_system=%d frequency=%u bandwidth_hz=%u\n",
 			c->delivery_system, c->frequency, c->bandwidth_hz);
 
-	if (!dev->active)
-		si2157_init(fe);
-
 	if (!dev->active) {
 		ret = -EAGAIN;
 		goto err;
 	}
 
-	if (SUPPORTS_1700KHz(dev) && c->bandwidth_hz <= 1700000)
-		bandwidth = 0x09;
-	if (c->bandwidth_hz <= 6000000)
-		bandwidth = 0x06;
-	if (SUPPORTS_1700KHz(dev) && c->bandwidth_hz <= 6100000)
-		bandwidth = 0x10;
-	else if (c->bandwidth_hz <= 7000000)
-		bandwidth = 0x07;
-	else if (c->bandwidth_hz <= 8000000)
-		bandwidth = 0x08;
-	else
-		bandwidth = 0x0f;
+	if (SUPPORTS_1700KHz(dev) && c->bandwidth_hz <= 1700000) {
+		bandwidth = 1700000;
+		bw = 9;
+	} else if (c->bandwidth_hz <= 6000000) {
+		bandwidth = 6000000;
+		bw = 6;
+	} else if (SUPPORTS_1700KHz(dev) && c->bandwidth_hz <= 6100000) {
+		bandwidth = 6100000;
+		bw = 10;
+	} else if (c->bandwidth_hz <= 7000000) {
+		bandwidth = 7000000;
+		bw = 7;
+	} else {
+		bandwidth = 8000000;
+		bw = 8;
+	}
 
 	switch (c->delivery_system) {
 	case SYS_ATSC:
@@ -490,6 +492,7 @@ static int si2157_set_params(struct dvb_frontend *fe)
 		delivery_system = 0x20; //DVBT
 		break;
 	case SYS_DVBC_ANNEX_A:
+	case SYS_DVBC_ANNEX_C:
 		delivery_system = 0x30; //DVBC
 		break;
 	case SYS_DVBC_ANNEX_B:
@@ -513,7 +516,7 @@ static int si2157_set_params(struct dvb_frontend *fe)
 																										 last_byte = spectral_inversion&1
 																										*/
 
-	cmd.args[4] = delivery_system | bandwidth;
+	cmd.args[4] = delivery_system | bw;
 	if (dev->inversion)
 		cmd.args[5] = 0x01;
 	cmd.wlen = 6;
@@ -535,6 +538,16 @@ static int si2157_set_params(struct dvb_frontend *fe)
 	ret = si2157_cmd_execute(client, &cmd);
 	if (ret)
 		goto err;
+
+#if 0	/* set LIF out amp */
+	memcpy(cmd.args, "\x14\x00\x07\x07\x94\x20", 6);
+	cmd.args[5] = delivery_system == 0x30 ? 0x2B : 0x20;
+	cmd.wlen = 6;
+	cmd.rlen = 4;
+	ret = si2157_cmd_execute(client, &cmd);
+	if (ret)
+		goto err;
+#endif
 
 	/* set digital if frequency if needed */
 	if (if_frequency != dev->if_frequency) {
@@ -887,13 +900,17 @@ static void si2157_stat_work(struct work_struct *work)
 	if (ret)
 		goto err;
 
-	c->strength.len = 1;
+	c->strength.len = 2;
 	c->strength.stat[0].scale = FE_SCALE_DECIBEL;
-	c->strength.stat[0].svalue = (s8) cmd.args[3] * 1000;
+	c->strength.stat[0].svalue = (s8)cmd.args[3] * 1000;
+
+	c->strength.stat[1].scale = FE_SCALE_RELATIVE;
+	c->strength.stat[1].uvalue = (100 + (s8)cmd.args[3]) * 656;
 
 	schedule_delayed_work(&dev->stat_work, msecs_to_jiffies(2000));
 	return;
 err:
+	c->strength.len = 1;
 	c->strength.stat[0].scale = FE_SCALE_NOT_AVAILABLE;
 	dev_dbg(&client->dev, "failed=%d\n", ret);
 }
@@ -1031,6 +1048,7 @@ module_i2c_driver(si2157_driver);
 MODULE_DESCRIPTION("Silicon Labs Si2141/Si2146/2147/2148/2157/2158 silicon tuner driver");
 MODULE_AUTHOR("Antti Palosaari <crope@iki.fi>");
 MODULE_LICENSE("GPL");
+MODULE_FIRMWARE(SI2157_A30_FIRMWARE);
 MODULE_FIRMWARE(SI2158_A20_FIRMWARE);
 MODULE_FIRMWARE(SI2141_A10_FIRMWARE);
 MODULE_FIRMWARE(SI2157_A30_FIRMWARE);
