@@ -710,12 +710,12 @@ static int stid135_set_parameters(struct dvb_frontend* fe)
 	}
 
 	//state->DemodLockTime += TUNING_DELAY;
-	vprintk("[%d] setting timedout=%d\n", state->nr+1, !state->signal_info.has_viterbi);
+	vprintk("[%d] setting timedout=%d\n", state->nr+1, !state->signal_info.has_timing_lock);
 	/*
 		has_viterbi: correctly tuned
 		has_sync: received packets without errors
 	 */
-	state->signal_info.has_timedout = !state->signal_info.has_viterbi;
+	state->signal_info.has_timedout = !state->signal_info.has_timing_lock;
 
 
 	vprintk("[%d] set_parameters: error=%d locked=%d vit=%d sync=%d timeout=%d\n",
@@ -823,7 +823,6 @@ static int stid135_get_frontend(struct dvb_frontend* fe, struct dtv_frontend_pro
 		vprintk("no viterbi\n");
 		return 0;
 	}
-
 
 	if(true || state->demod_search_algo == FE_SAT_BLIND_SEARCH ||
 							state->demod_search_algo == FE_SAT_NEXT) {
@@ -1099,10 +1098,16 @@ static int stid135_read_status_(struct dvb_frontend* fe, enum fe_status *status)
 
 	//update isi list
 	if(state->mis_mode) {
+		vprintk("ISI calling isi_scan\n");
 		err = fe_stid135_isi_scan(state, &state->signal_info.isi_list);
 	}
 	memcpy(p->isi_bitset, state->signal_info.isi_list.isi_bitset, sizeof(p->isi_bitset));
 	memcpy(p->matypes, state->signal_info.isi_list.matypes, sizeof(p->matypes));
+	p->num_matypes = state->signal_info.isi_list.num_matypes;
+	p->matype_val = state->signal_info.matype;
+	p->matype_valid = true;
+
+	vprintk("p->num_matypes=%d %d\n", p->num_matypes, state->signal_info.isi_list.num_matypes);
 	//for the tbs6912 ts setting
 	if((state->base->set_TSparam)&&(state->newTP)) {
 		speed = state->base->set_TSparam(state->base->i2c,state->nr/2,4,0);
@@ -1178,7 +1183,7 @@ static int stid135_tune_(struct dvb_frontend* fe, bool re_tune,
 	if(re_tune)
 		dprintk("LOCK TIME %lldms locked=%d\n", ktime_to_ns(state->signal_info.lock_time)/1000000, state->signal_info.has_lock);
 	vprintk("[%d] setting timedout=%d\n", state->nr+1, !state->signal_info.has_viterbi);
-	state->signal_info.has_timedout = !state->signal_info.has_viterbi;
+	state->signal_info.has_timedout = !state->signal_info.has_timing_lock;
 	if(state->signal_info.has_timedout) {
 		*status |= FE_TIMEDOUT;
 		*status &= ~FE_HAS_LOCK;
@@ -1864,6 +1869,7 @@ static int stid135_scan_sat(struct dvb_frontend* fe, bool init,
 			fe_stid135_get_signal_info(state,  &state->signal_info, 0);
 			memcpy(p->isi_bitset, state->signal_info.isi_list.isi_bitset, sizeof(p->isi_bitset));
 			memcpy(p->matypes, state->signal_info.isi_list.matypes, sizeof(p->matypes));
+			p->num_matypes = state->signal_info.isi_list.num_matypes;
 			p->matype_val =  state->signal_info.matype;
 			p->matype_valid = true;
 			p->frequency = state->signal_info.frequency;
