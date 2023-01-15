@@ -761,7 +761,7 @@ static int dvb_frontend_thread(void *data)
 	struct dvb_frontend *fe = data;
 	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
 	struct dvb_frontend_private *fepriv = fe->frontend_priv;
-	enum fe_status s = FE_NONE;
+	enum fe_status status = FE_NONE;
 	enum dvbfe_algo algo;
 	bool re_tune = false;
 	bool semheld = false;
@@ -826,16 +826,16 @@ restart:
 				dev_dbg(fe->dvb->device, "%s: Frontend ALGO = DVBFE_ALGO_HW\n", __func__);
 
 				if (fepriv->state & FESTATE_SCANNING) {
-					dev_dbg(fe->dvb->device, "%s: Sscan requested, FESTATE_SCANNING\n", __func__);
+					dprintk("Sscan requested, FESTATE_SCANNING state=%d\n", fepriv->state);
 					if (fe->ops.scan)
-						fe->ops.scan(fe, fepriv->state & FESTATE_SCAN_NEXT , &fepriv->delay, &s);
+						fe->ops.scan(fe, fepriv->state & FESTATE_SCAN_NEXT , &fepriv->delay, &status);
 					fepriv->state = FESTATE_IDLE;
 				}	 else if (fepriv->state & FESTATE_GETTING_SPECTRUM) {
 					dev_dbg(fe->dvb->device, "%s: Spectrum requested, DTV_SPECTRUM\n", __func__);
 					dprintk("starting spectrum scan\n");
 					if (fe->ops.spectrum_start)
-						fe->ops.spectrum_start(fe,  &fepriv->spectrum, &fepriv->delay, &s);
-					dprintk("spectrum scan ended s=0x%x\n", s);
+						fe->ops.spectrum_start(fe,  &fepriv->spectrum, &fepriv->delay, &status);
+					dprintk("spectrum scan ended s=0x%x\n", status);
 					fepriv->state = FESTATE_IDLE;
 				} else {
 					if (fepriv->state & FESTATE_RETUNE) {
@@ -847,15 +847,15 @@ restart:
 					}
 
 					if (fe->ops.tune)
-						fe->ops.tune(fe, re_tune, fepriv->tune_mode_flags, &fepriv->delay, &s);
+						fe->ops.tune(fe, re_tune, fepriv->tune_mode_flags, &fepriv->delay, &status);
 					//dprintk("read_status event: s=0x%x old=0x%x", s,  fepriv->status);
 				}
-				if ((s != fepriv->status && !(fepriv->tune_mode_flags & FE_TUNE_MODE_ONESHOT))
+				if ((status != fepriv->status && !(fepriv->tune_mode_flags & FE_TUNE_MODE_ONESHOT))
 						|| (fepriv->heartbeat_interval>0)) {
 					//dprintk("Adding event val=0x%x\n", s);
 					dev_dbg(fe->dvb->device, "%s: state changed, adding current state\n", __func__);
-					dvb_frontend_add_event(fe, s);
-					fepriv->status = s;
+					dvb_frontend_add_event(fe, status);
+					fepriv->status = status;
 				}
 				atomic_set(&fe->algo_state.task_should_stop, false);
 				break;
@@ -889,11 +889,11 @@ restart:
 					fepriv->delay = HZ / 2;
 				}
 				dtv_property_legacy_params_sync(fe, c, &fepriv->parameters_out);
-				fe->ops.read_status(fe, &s);
-				if (s != fepriv->status) {
-					dvb_frontend_add_event(fe, s); /* update event list */
-					fepriv->status = s;
-					if (!(s & FE_HAS_LOCK)) {
+				fe->ops.read_status(fe, &status);
+				if (status != fepriv->status) {
+					dvb_frontend_add_event(fe, status); /* update event list */
+					fepriv->status = status;
+					if (!(status & FE_HAS_LOCK)) {
 						fepriv->delay = HZ / 10;
 						fepriv->algo_status |= DVBFE_ALGO_SEARCH_AGAIN;
 					} else {
@@ -1939,7 +1939,7 @@ static int dvbv5_set_delivery_system(struct dvb_frontend *fe,
 	u32 delsys = SYS_UNDEFINED;
 	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
 	enum dvbv3_emulation_type type;
-	dprintk("desired_system=%d\n", desired_system);
+	dprintk("adapter=%d desired_system=%d\n", fe->dvb->num, desired_system);
 	/*
 	 * It was reported that some old DVBv5 applications were
 	 * filling delivery_system with SYS_UNDEFINED. If this happens,
@@ -2341,11 +2341,12 @@ static int dtv_property_process_set(struct dvb_frontend *fe,
 		 * frontend
 		 */
 		dprintk("cmd=DTV_SCAN");
-		dprintk("sat scan called\n");
+		dprintk("calling sat scan\n");
 		dev_dbg(fe->dvb->device,
 			"%s: Setting the frontend from property cache\n",
 			__func__);
 		r = dtv_set_sat_scan(fe, tvp->u.data);
+		dprintk("called sat scan r=%d\n", r);
 		break;
 	case DTV_SPECTRUM:
 		/*
@@ -2387,7 +2388,7 @@ static int dtv_property_process_set(struct dvb_frontend *fe,
 		break;
 	default:
 		r = dtv_property_process_set_int(fe, file, cmd, tvp->u.data);
-		dprintk("cmd=%d data=%d ret=%d", cmd, tvp->u.data, r);
+		dprintk("adapter=%d: cmd=%d data=%d ret=%d", fe->dvb->num, cmd, tvp->u.data, r);
 	}
 
 	return r;
@@ -2437,10 +2438,6 @@ static int dvb_frontend_handle_algo_ctrl_ioctl(struct file *file,
 		if (fe->ops.stop_task)
 			fe->ops.stop_task(fe);
 		fepriv->state = FESTATE_IDLE;
-#if 0
-
-		dprintk("DTV_STOP done stop_task\n");
-#endif
 
 		atomic_set(&fe->algo_state.task_should_stop, false);
 
@@ -3328,6 +3325,7 @@ static int dvb_frontend_handle_ioctl(struct file *file,
 				break;
 			}
 			err = fe->ops.diseqc_send_master_cmd(fe, cmd);
+			dprintk("sending master_cmd done err=%d\n", err);
 			fepriv->state = FESTATE_DISEQC;
 			fepriv->status = 0;
 		}
