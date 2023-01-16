@@ -41,7 +41,6 @@
 #include <linux/kthread.h>
 #include "stid135_drv.h"
 #include "stid135_init.h"
-#include "stid135-fft.h"
 #include "stid135_initLLA_cut2.h"
 #include "c8codew_addr_map.h"
 #include "stid135_addr_map.h"
@@ -211,7 +210,7 @@ static fe_lla_error_t fe_stid135_fft_save_registers(struct stv* state, FE_OXFORD
 --PARAMS OUT	::	Reg[] -> table of stored registers
 --RETURN	::	Error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_init_fft(struct stv*state, int fft_mode, s32 Reg[60])
+static fe_lla_error_t fe_stid135_init_fft(struct stv*state, int fft_mode, s32 Reg[60])
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	struct fe_stid135_internal_param *pParams = &state->base->ip;
@@ -399,7 +398,7 @@ fe_lla_error_t fe_stid135_init_fft(struct stv*state, int fft_mode, s32 Reg[60])
 --PARAMS OUT	::	NONE
 --RETURN	::	Error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_term_fft(struct stv* state, s32 Reg[60])
+static fe_lla_error_t fe_stid135_term_fft(struct stv* state, s32 Reg[60])
 {
 	u32 i=0;
 
@@ -628,7 +627,7 @@ static fe_lla_error_t fe_stid135_read_psd_mem(struct stv* state, s32* rf_level,
 			Begin -> first value on table of data
 --RETURN	::	Error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_fft(struct stv* state, u32 mode, u32 nb_acquisition, s32 freq,
+static fe_lla_error_t fe_stid135_fft(struct stv* state, u32 mode, u32 nb_acquisition, s32 freq,
 															u32 range, s32* rf_level, s32 buffer_size,
 															s32 start_idx, s32 end_idx)
 {
@@ -819,7 +818,7 @@ static int stid135_get_spectrum_scan_fft_one_band(struct stv *state,
 }
 
 
-int get_spectrum_scan_fft(struct dvb_frontend *fe)
+static int get_spectrum_scan_fft(struct dvb_frontend *fe)
 {
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
 	struct stv *state = fe->demodulator_priv;

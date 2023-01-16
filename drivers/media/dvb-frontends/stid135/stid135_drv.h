@@ -742,7 +742,7 @@ int stid135_spectral_scan_start(struct dvb_frontend *fe);
 int stid135_spectral_scan_next(struct dvb_frontend *fe,
 															 s32 *frequency_ret,
 															 s32* symbol_rate_ret);
-int get_spectrum_scan_fft(struct dvb_frontend *fe);
+//int get_spectrum_scan_fft(struct dvb_frontend *fe);
 fe_lla_error_t reserve_llr(struct stv* state, s32 required_llr);
 fe_lla_error_t reserve_llr_for_symbolrate(struct stv* state, s32 symbolrate);
 fe_lla_error_t release_llr(struct stv* state);
