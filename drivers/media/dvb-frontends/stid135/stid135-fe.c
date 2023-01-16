@@ -395,7 +395,9 @@ static int stid135_init(struct dvb_frontend* fe)
 
 	dev_dbg(&state->base->i2c->dev, "%s: demod %d + tuner %d\n", __func__, state->nr, state->rf_in);
 	if(state->base->mode == 0) {
+		base_lock(state);
 		err |= stid135_select_rf_in_(state, state->rf_in);
+		base_unlock(state);
 	} else {
 
 		dprintk("state->rf_in_selected=%d adapter=%d state->rf_in=%d\n", state->rf_in_selected, state->nr, state->rf_in);
@@ -410,13 +412,14 @@ static void stid135_release(struct dvb_frontend* fe)
 
 	state->base->count--;
 	if (state->base->count == 0) {
+		base_lock(state);
 		FE_STiD135_Term (&state->base->ip);
+		base_unlock(state);
 		list_del(&state->base->stvlist);
 		kfree(state->base);
 	}
 	kfree(state);
 }
-
 
 static bool pls_search_list(struct dvb_frontend* fe)
 {
@@ -1662,7 +1665,7 @@ static int stid135_read_temp(struct dvb_frontend* fe, s16 *temp)
 	return 0;
 }
 
-
+//to be called with base locked
 static int stid135_get_spectrum_scan_fft(struct dvb_frontend* fe, unsigned int *delay,  enum fe_status *status)
 {
 	int error = stid135_spectral_scan_start(fe);
@@ -1705,7 +1708,7 @@ static int stid135_get_spectrum_scan_sweep(struct dvb_frontend* fe,
 		return  -ENOMEM;
 	}
 	ss->spectrum_present = true;
-	base_lock(state);
+
 #ifdef TODO
 	state->tuner_bw = stv091x_bandwidth(ROLLOFF_AUTO, bandwidth);
 #endif
@@ -1809,14 +1812,14 @@ static int stid135_get_spectrum_scan_sweep(struct dvb_frontend* fe,
 		if(error)
 			goto __onerror;
 
-		usleep_range(12000, 13000);
+		state_sleep(state, 12);
 
 	}
-	base_unlock(state);
+
 	*status =  FE_HAS_SIGNAL|FE_HAS_CARRIER|FE_HAS_VITERBI|FE_HAS_SYNC|FE_HAS_LOCK;
 	return 0;
  __onerror:
-	base_unlock(state);
+
 	dprintk("encountered error at %d/%d\n", i, ss->spectrum_len);
 	*status =  FE_TIMEDOUT|FE_HAS_SIGNAL|FE_HAS_CARRIER|FE_HAS_VITERBI|FE_HAS_SYNC|FE_HAS_LOCK;
 	return 0;
@@ -1877,6 +1880,9 @@ static int stid135_spectrum_start(struct dvb_frontend* fe,
 		dprintk("Could not set rfpath error=%d\n", err);
 	}
 	s->scale =  FE_SCALE_DECIBEL; //in units of 0.001dB
+
+	base_lock(state);
+
 	switch(s->spectrum_method) {
 	case SPECTRUM_METHOD_SWEEP:
 	default:
@@ -1888,6 +1894,8 @@ static int stid135_spectrum_start(struct dvb_frontend* fe,
 		s->num_freq = ss->spectrum_len;
 		break;
 	}
+
+	base_unlock(state);
 	return -1;
 }
 
@@ -1928,6 +1936,7 @@ fe_lla_error_t FE_STiD135_GetCarrierFrequency(struct stv* state, u32 MasterClock
 	init = 1: start the scan at the search range specified by the user
 	init = 0: start the scan just beyond the last found frequency
  */
+
 static int stid135_scan_sat(struct dvb_frontend* fe, bool init,
 														unsigned int *delay,  enum fe_status *status)
 {
@@ -1943,6 +1952,7 @@ static int stid135_scan_sat(struct dvb_frontend* fe, bool init,
 	int ret=0;
 	bool found=false;
 	s32 minfreq=0;
+
 	if(init) {
 		if(state->spectrum_scan_state.scan_in_progress) {
 			stid135_stop_task(fe); //cleanup older scan
@@ -1957,9 +1967,10 @@ static int stid135_scan_sat(struct dvb_frontend* fe, bool init,
 
 		base_lock(state);
 		ret = stid135_spectral_scan_start(fe);
+		base_unlock(state);
+
 		if(ret<0) {
 			dprintk("Could not start spectral scan\n");
-			base_unlock(state);
 			return -1; //
 		}
 	} else {
@@ -1968,12 +1979,14 @@ static int stid135_scan_sat(struct dvb_frontend* fe, bool init,
 
 			base_lock(state);
 			ret = stid135_spectral_scan_start(fe);
+			base_unlock(state);
 
 			if(ret<0) {
 				dprintk("Could not start spectral scan\n");
 				return -1; //
 			}
 		}
+
 		minfreq= state->spectrum_scan_state.next_frequency;
 		dprintk("SCAN SAT next_freq=%dkHz\n", state->spectrum_scan_state.next_frequency);
 	}
@@ -1985,11 +1998,13 @@ static int stid135_scan_sat(struct dvb_frontend* fe, bool init,
 		}
 
 		*status = 0;
+		base_lock(state);
 		ret=stid135_spectral_scan_next(fe,  &p->frequency, &p->symbol_rate);
+		base_unlock(state);
+
 		if(ret<0) {
 			dprintk("reached end of scan range\n");
 			*status =  FE_TIMEDOUT;
-			base_unlock(state);
 			return error;
 		}
 
@@ -2027,12 +2042,18 @@ static int stid135_scan_sat(struct dvb_frontend* fe, bool init,
 						p->frequency, p->search_range/1000,
 						p->scan_fft_size, p->scan_resolution, p->symbol_rate/1000);
 
+		base_lock(state);
 		ret = stid135_tune_(fe, retune, mode_flags, delay, status);
+		base_unlock(state);
+
 		old = *status;
 		{
 			state->base->ip.handle_demod->Error = FE_LLA_NO_ERROR;
 
+			base_lock(state);
 			fe_stid135_get_signal_info(state,  &state->signal_info, 0);
+			base_unlock(state);
+
 			memcpy(p->isi_bitset, state->signal_info.isi_list.isi_bitset, sizeof(p->isi_bitset));
 			memcpy(p->matypes, state->signal_info.isi_list.matypes, sizeof(p->matypes));
 			p->num_matypes = state->signal_info.isi_list.num_matypes;
@@ -2053,7 +2074,7 @@ static int stid135_scan_sat(struct dvb_frontend* fe, bool init,
 			state->spectrum_scan_state.num_bad++;
 		}
 	}
-	base_unlock(state);
+
 	return ret;
 }
 
