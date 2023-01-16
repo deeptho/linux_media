@@ -5,6 +5,7 @@
  * Copyright (c) <2014>-<2018>, STMicroelectronics - All Rights Reserved
  * Author(s): Mathias Hilaire (mathias.hilaire@st.com), Thierry Delahaye (thierry.delahaye@st.com) for STMicroelectronics.
  *
+ * Copyright (C) Deep Thought <deeptho@gmail.com> - blindscan, spectrum and constellation scan
  * License terms: BSD 3-clause "New" or "Revised" License.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -1736,7 +1737,7 @@ fe_lla_error_t fe_stid135_get_lock_status(struct stv* state, bool*carrier_lock, 
 	case FE_SAT_SEARCH:
 	case FE_SAT_PLH_DETECTED :
 		//dprintk("FIRST PLHEADER DETECTED\n");
-
+		state->signal_info.has_lock = false;
 		state->signal_info.has_carrier = false;
 		state->signal_info.has_viterbi = false;
 		state->signal_info.has_sync = false;
@@ -1783,7 +1784,6 @@ fe_lla_error_t fe_stid135_get_lock_status(struct stv* state, bool*carrier_lock, 
 																				 state->signal_info.has_carrier &&
 																				 state->signal_info.has_viterbi &&
 																				 state->signal_info.has_sync)) {
-			dprintk("demod=%d QQQQQ error=%d\n", state->nr, error);
 			print_signal_info(state);
 		}
 		//dprintk("demod=%d setting has_lock=%d error=%d\n", state->nr, fld_value[0], error);
@@ -1796,7 +1796,6 @@ fe_lla_error_t fe_stid135_get_lock_status(struct stv* state, bool*carrier_lock, 
 		if(error1)
 			dprintk("error=%d\n", error1);
 		state->signal_info.has_lock = fld_value[0];
-
 		error |= (error1=ChipGetField(state->base->ip.handle_demod,
 																	FLD_FC8CODEW_DVBSX_VITERBI_VSTATUSVIT_LOCKEDVIT(state->nr+1), &(fld_value[1])));
 		if(error1)
@@ -1838,11 +1837,11 @@ fe_lla_error_t fe_stid135_get_lock_status(struct stv* state, bool*carrier_lock, 
 																				 state->signal_info.has_carrier &&
 																				 state->signal_info.has_viterbi &&
 																				 state->signal_info.has_sync)) {
-			dprintk("demod=%d QQQQQ1 error=%d\n", state->nr, error);
 			print_signal_info(state);
 		}
 		break;
 	}
+	state->signal_info.has_timedout = !state->signal_info.has_lock;
 	return error;
 }
 
@@ -2490,7 +2489,7 @@ static fe_lla_error_t FE_STiD135_GetDemodLock (struct stv* state, u32 TimeOutUNU
 			timeout += 3000;
 		}
 
-	if( !state->signal_info.has_lock ) {
+	if( !state->signal_info.has_lock) {
 			state_sleep(state, 10);	/* wait 10ms */
 	}
 	run_time = ktime_to_ns(ktime_sub(ktime_get_coarse(), start_time))/1000000;
@@ -4432,9 +4431,7 @@ fe_lla_error_t FE_STiD135_Algo(struct stv* state, BOOL satellite_scan, enum fe_s
 		state->signal_info.fec_locked = fec_lock;
 		if (lockstatus == TRUE) {
 			lock = TRUE;
-
-			state->signal_info.has_lock = TRUE;
-
+			//dprintk("demod=%d setting has_lock=%d\n", , state->nr, 1);
 			if (state->signal_info.standard == FE_SAT_DVBS2_STANDARD) {
 				/*reset DVBS2 packet delinator error
 				counter */
@@ -4521,7 +4518,7 @@ fe_lla_error_t FE_STiD135_Algo(struct stv* state, BOOL satellite_scan, enum fe_s
 			/*if the demod is locked and not the FEC signal
 			type is no DATA*/
 			*signalType_p = FE_SAT_NODATA;
-			state->signal_info.has_lock = FALSE;
+			//dprintk("demod=%d setting has_lock=%d\n", state->nr, 0);
 		}
 
 		}

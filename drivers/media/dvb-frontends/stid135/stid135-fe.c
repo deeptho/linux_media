@@ -747,15 +747,12 @@ static int stid135_set_parameters(struct dvb_frontend* fe)
 		if(!locked)
 			locked = pls_search_range(fe);
 		if(locked) {
-			state->signal_info.has_lock=true;
-			dprintk("PLS locked=%d\n", locked);
-			print_signal_info("(PLS)", &state->signal_info);
+			dprintk("demod=%d: PLS locked=%d\n", state->nr, locked);
 		} else {
 			set_pls_mode_code(state, 0, 1);
 		}
 		vprintk("After Trying pls: p->stream_id=%d locked=%d\n", p->stream_id, locked);
 	} else {
-		state->signal_info.has_lock=true;
 		vprintk("now stream_id=0x%x\n", p->stream_id);
 		if(p->stream_id != NO_STREAM_ID_FILTER) {
 			vprintk("calling set_stream_index");
@@ -1077,8 +1074,12 @@ static int stid135_read_status_(struct dvb_frontend* fe, enum fe_status *status)
 		*status |= FE_HAS_VITERBI|FE_HAS_LOCK;
 	if(state->signal_info.has_sync)
 		*status |= FE_HAS_SYNC|FE_HAS_LOCK;
+	if(state->signal_info.has_lock)
+		*status |= FE_HAS_LOCK;
 	if(state->signal_info.has_timing_lock)
 		*status |= FE_HAS_TIMING_LOCK;
+	if(state->signal_info.has_timedout)
+		*status |= FE_TIMEDOUT;
 	if(state->signal_info.out_of_llr) {
 		dprintk("setting FE_OUT_OF_RESOURCES\n");
 		*status |= FE_OUT_OF_RESOURCES;
