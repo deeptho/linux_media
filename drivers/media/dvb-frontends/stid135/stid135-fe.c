@@ -2,6 +2,7 @@
  * Driver for the STm STiD135 DVB-S/S2/S2X demodulator.
  *
  * Copyright (C) CrazyCat <crazycat69@narod.ru>
+ * Copyright (C) Deep Thought <deeptho@gmail.com> - blindscan, spectrum and constellation scan
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -35,7 +36,6 @@
 #include "stid135.h"
 #include "i2c.h"
 #include "stid135_drv.h"
-#include "stid135-fft.h"
 #define MAX_FFT_SIZE 8192
 LIST_HEAD(stvlist);
 
@@ -329,37 +329,38 @@ static int stid135_probe(struct stv *state)
 static int stid135_select_rf_in_(struct stv* state, int rf_in)
 {
 	fe_lla_error_t err = FE_LLA_NO_ERROR;
-	dprintk("rf_in=%d old=%d tuner_active=%d; use counts: %d old=%d\n", rf_in, state->rf_in,
-					state->tuner_active, state->base->tuner_use_count[rf_in], state->base->tuner_use_count[state->rf_in]);
+	dprintk("demod=%d rf_in=%d old=%d rf_in_selected=%d; use counts: %d old=%d\n", state->nr, rf_in, state->rf_in,
+					state->rf_in_selected, state->base->tuner_use_count[rf_in], state->base->tuner_use_count[state->rf_in]);
 	BUG_ON((state->rf_in < 0 || state->rf_in >= 4));
-	BUG_ON(rf_in <0);
+	BUG_ON(rf_in < 0);
 	if(rf_in >= 4) {
 		dprintk("rf_in=%d out of range\n", rf_in);
 		return -EINVAL;
 	}
-	if(rf_in == state->rf_in && state->tuner_active)
+	if(rf_in == state->rf_in && state->rf_in_selected)
 		return 0;  //already active
 
-	if(rf_in != state->rf_in && state->tuner_active) {
-
+	if(rf_in != state->rf_in && state->rf_in_selected) {
+		//change in rf_in
 		BUG_ON(state->base->tuner_use_count[state->rf_in] < 0 || state->base->tuner_use_count[state->rf_in] > 4 );
 		BUG_ON(state->base->tuner_use_count[rf_in] < 0 || state->base->tuner_use_count[rf_in] > 3 );
 		state->base->tuner_use_count[state->rf_in]--;
 		state->rf_in = -1;
-		state->tuner_active = false;
+		state->rf_in_selected = false;
 		if(state->base->tuner_use_count[state->rf_in] == 0) {
-			dprintk("Calling TunerStandby 0 state->base=%p\n", state->base);
+			dprintk("demod=%d: Calling TunerStandby 0 state->base=%p\n", state->nr, state->base);
 			err = fe_stid135_set_22khz_cont(&state->base->ip, state->rf_in + 1, false);
-			dprintk("Calling TunerStandby 0 done: state->base->i2c=%p\n", state->base->i2c);
+			dprintk("demod=%d: Calling TunerStandby 0 done: state->base->i2c=%p\n", state->nr, state->base->i2c);
 			if(state->base->set_voltage) {
 				state->base->set_voltage(state->base->i2c, SEC_VOLTAGE_OFF, state->rf_in);
 			}
-			dprintk("Set voltage OFF done\n");
+			dprintk("demod=%d: Set voltage OFF done\n", state->nr);
 			err |= FE_STiD135_TunerStandby(state->base->ip.handle_demod, state->rf_in + 1, 0);
-			dprintk("Tuner standby done done\n");
+			dprintk("demod=%d: Tuner standby done done\n", state->nr);
 		}
 	}
 
+	//increase use count of new tuner; do not take ownership until the next operation (voltage/tone/diseqc)
 	if(state->base->tuner_use_count[rf_in]++ == 0) {
 		dprintk("Enabling tuner demod=%d rf_in=%d\n", state->nr, rf_in);
 		err |= fe_stid135_tuner_enable(state->base->ip.handle_demod, rf_in + 1);
@@ -369,10 +370,9 @@ static int stid135_select_rf_in_(struct stv* state, int rf_in)
 	dprintk("Setting rf_mux_path demod=%d rf_in=%d\n", state->nr, rf_in);
 	err |= fe_stid135_set_rfmux_path(state, rf_in + 1);
 	state->rf_in = rf_in;
-	state->tuner_active = true;
+	state->rf_in_selected = true;
 	return err;
 }
-
 
 static int stid135_init(struct dvb_frontend* fe)
 {
@@ -387,10 +387,8 @@ static int stid135_init(struct dvb_frontend* fe)
 		err |= stid135_select_rf_in_(state, state->rf_in);
 	} else {
 
-		dprintk("state->tuner_active=%d adapter=%d state->rf_in=%d\n", state->tuner_active, state->nr, state->rf_in);
-		state->tuner_active = false;
+		dprintk("state->rf_in_selected=%d adapter=%d state->rf_in=%d\n", state->rf_in_selected, state->nr, state->rf_in);
 	}
-
 	return err != FE_LLA_NO_ERROR ? -1 : 0;
 }
 
@@ -454,8 +452,8 @@ static bool pls_search_list(struct dvb_frontend* fe)
 			if(locked) {
 				error = fe_stid135_read_hw_matype(state, &matype_info, &isi);
 				state->mis_mode= !fe_stid135_check_sis_or_mis(matype_info);
-				dprintk("ISI mis_mode set to %d\n", state->mis_mode);
-				dprintk("selecting stream_id=%d\n", isi);
+				dprintk("demod=%d: ISI mis_mode set to %d\n", state->nr, state->mis_mode);
+				dprintk("demod=%d: selecting stream_id=%d\n", state->nr, isi);
 				signal_info->isi = isi;
 				//p->matype = matype_info;
 				p->stream_id = 	(state->mis_mode? (isi&0xff):0xff) | (pls_code & ~0xff);
@@ -536,10 +534,10 @@ static bool pls_search_range(struct dvb_frontend* fe)
 		if(locked) {
 			error = fe_stid135_read_hw_matype(state, &matype_info, &isi);
 			state->mis_mode= !fe_stid135_check_sis_or_mis(matype_info);
-			dprintk("ISI mis_mode set to %d; selecting stream_id=%d\n", state->mis_mode, isi);
+			dprintk("demod=%d: ISI mis_mode set to %d; selecting stream_id=%d\n", state->nr, state->mis_mode, isi);
 			signal_info->isi = isi;
 			p->stream_id = 	(state->mis_mode? (isi&0xff):0xff) | (pls_code & ~0xff);
-			dprintk("ISI mis_mode=%d isi=0x%x pls_code=0x%x stream_id=0x%x",
+			dprintk("demod=%d: ISI mis_mode=%d isi=0x%x pls_code=0x%x stream_id=0x%x", state->nr,
 								state->mis_mode, isi, pls_code, p->stream_id);
 
 		  //p->matype = matype_info;
@@ -585,7 +583,7 @@ static int stid135_set_parameters(struct dvb_frontend* fe)
 			"delivery_system=%u modulation=%u frequency=%u symbol_rate=%u inversion=%u stream_id=%d\n",
 			p->delivery_system, p->modulation, p->frequency,
 					p->symbol_rate, p->inversion, p->stream_id);
-	dprintk("user set stream_id=0x%x", p->stream_id);
+	dprintk("demod=%d: user set stream_id=0x%x", state->nr, p->stream_id);
 
 	if(blindscan_always) {
 		p->algorithm = ALGORITHM_WARM;
@@ -692,12 +690,12 @@ static int stid135_set_parameters(struct dvb_frontend* fe)
 	vprintk("[%d] demod %d + tuner %d\n",
 					state->nr+1,state->nr, state->rf_in);
 	if(p->rf_in < 0  || !p->rf_in_valid)  {
-		p->rf_in = state->tuner_active ? state->rf_in : state->fe.ops.info.default_rf_input;
+		p->rf_in = state->rf_in_selected ? state->rf_in : state->fe.ops.info.default_rf_input;
 		p->rf_in_valid = true;
-		dprintk("Set rf_in to %d; tuner_active=%d  state->rf_in=%d default_rf_in=%d\n",
-						p->rf_in, state->tuner_active, state->rf_in, state->fe.ops.info.default_rf_input);
+		dprintk("demod=%d: Set rf_in to %d; rf_in_selected=%d  state->rf_in=%d default_rf_in=%d\n",
+						state->nr, p->rf_in, state->rf_in_selected, state->rf_in, state->fe.ops.info.default_rf_input);
 	}
-	dprintk("Setting rf_in: %d\n", p->rf_in);
+	dprintk("demod=%d: Setting rf_in: %d\n", state->nr, p->rf_in);
 	err |= stid135_select_rf_in_(state, p->rf_in);
 	if (err != FE_LLA_NO_ERROR)
 		dev_err(&state->base->i2c->dev, "%s: fe_stid135_set_rfmux_math error %d !\n", __func__, err);
@@ -717,20 +715,20 @@ static int stid135_set_parameters(struct dvb_frontend* fe)
 		}
 	}
 
-
 	err |= (error1=fe_stid135_search(state, &search_params, 0));
 	if(error1!=0)
-		dprintk("[%d] fe_stid135_search returned error=%d\n", state->nr+1, error1);
+		dprintk("demod=%d: fe_stid135_search returned error=%d\n", state->nr, error1);
 	if (err != FE_LLA_NO_ERROR) {
 		dev_err(&state->base->i2c->dev, "%s: fe_stid135_search error %d !\n", __func__, err);
-		dprintk("[%d[ fe_stid135_search error %d !\n", state->nr+1, err);
+		dprintk("demod=%d: fe_stid135_search error %d !\n", state->nr, err);
 		return -1;
 	}
 #if 1 //missing in official driver, but only called during blindscan
 	if(!state->signal_info.has_viterbi && p->algorithm != ALGORITHM_WARM && p->algorithm != ALGORITHM_COLD) {
 		bool locked=false;
-		print_signal_info("(before trying pls)", &state->signal_info);
-		vprintk("Trying pls: p->stream_id=%d state->signal_info.isi=0x%x\n", p->stream_id, state->signal_info.isi);
+		//print_signal_info(state, "(before trying pls)");
+		vprintk("demod=%d: Trying pls: p->stream_id=%d state->signal_info.isi=0x%x\n", state->nr,
+						p->stream_id, state->signal_info.isi);
 		locked = pls_search_list(fe);
 		if(!locked)
 			locked = pls_search_range(fe);
@@ -751,14 +749,11 @@ static int stid135_set_parameters(struct dvb_frontend* fe)
 		}
 	}
 
-	//state->DemodLockTime += TUNING_DELAY;
-	vprintk("[%d] setting timedout=%d\n", state->nr+1, !state->signal_info.has_timing_lock);
+	vprintk("[%d] setting timedout=%d\n", state->nr+1, !state->signal_info.has_lock);
 	/*
 		has_viterbi: correctly tuned
 		has_sync: received packets without errors
 	 */
-	state->signal_info.has_timedout = !state->signal_info.has_timing_lock;
-
 
 	vprintk("[%d] set_parameters: error=%d locked=%d vit=%d sync=%d timeout=%d\n",
 					state->nr +1,
@@ -1080,7 +1075,7 @@ static int stid135_read_status_(struct dvb_frontend* fe, enum fe_status *status)
 		return -EIO;
 	}
 
-	if (!state->signal_info.has_carrier) { //should perhaps be has_sync instead
+	if (!state->signal_info.has_carrier) {
 		/* demod not locked */
 		*status |= FE_HAS_SIGNAL;
 		vprintk("HAS_SIGNAL AND TUNED/no viterbi sync=%d status=%d\n", state->signal_info.has_sync, *status);
@@ -1153,7 +1148,6 @@ static int stid135_read_status_(struct dvb_frontend* fe, enum fe_status *status)
 	{
 		u8 matype;
 		u8 isi_read;
-		int rolloff;
 		fe_stid135_read_hw_matype(state, &matype, &isi_read);
 		if ( !!((matype &0x3) == 0x3) != !!((state->signal_info.matype &0x3) == 0x3)) {
 			state->signal_info.low_roll_off_detected = true;
@@ -1225,14 +1219,14 @@ static int stid135_tune_(struct dvb_frontend* fe, bool re_tune,
 {
 	struct stv *state = fe->demodulator_priv;
 	int r;
+	dprintk("demod=%d re_tune=%d\n", state->nr, re_tune);
 	if (re_tune) {
-		dprintk("setting state->signal_info.has_llr = true");
 		state->signal_info.out_of_llr = false;
 		r = stid135_set_parameters(fe);
 		if (r) {
 			state->signal_info.has_error = true;
 			if(state->signal_info.out_of_llr) {
-				dprintk("setting FE_OUT_OF_RESOURCES\n");
+				dprintk("demod=%d setting FE_OUT_OF_RESOURCES\n", state->nr);
 			}
 			*status = state->signal_info.out_of_llr ? FE_OUT_OF_RESOURCES : FE_TIMEDOUT;
 			return r;
@@ -1256,8 +1250,9 @@ static int stid135_tune_(struct dvb_frontend* fe, bool re_tune,
 	r = stid135_read_status_(fe, status);
 	if(re_tune)
 		dprintk("LOCK TIME %lldms locked=%d\n", ktime_to_ns(state->signal_info.lock_time)/1000000, state->signal_info.has_lock);
-	vprintk("[%d] setting timedout=%d\n", state->nr+1, !state->signal_info.has_viterbi);
-	state->signal_info.has_timedout = !state->signal_info.has_timing_lock;
+		dprintk("demod=%d LOCK TIME %lldms locked=%d\n", state->nr,
+						ktime_to_ns(state->signal_info.lock_time)/1000000, state->signal_info.has_lock);
+	vprintk("[%d] setting timedout=%d\n", state->nr+1, !state->signal_info.has_lock);
 	if(state->signal_info.has_timedout) {
 		*status |= FE_TIMEDOUT;
 		*status &= ~FE_HAS_LOCK;
@@ -1306,7 +1301,7 @@ static int stid135_set_voltage(struct dvb_frontend* fe, enum fe_sec_voltage volt
 	struct stv *state = fe->demodulator_priv;
 	dprintk("demod=%d rf=%d mode=%d voltage=%d", state->nr, state->rf_in,  state->base->mode, voltage);
 	//dump_stack();
-	if (state->base->mode == 0)
+	if (state->base->mode == 0) //legacy: 1 band per input @todo: fix this
 	{
 		if (voltage == SEC_VOLTAGE_18)
 			state->rf_in |= 2;
@@ -1427,6 +1422,8 @@ static int stid135_send_burst(struct dvb_frontend* fe, enum fe_sec_mini_cmd burs
 	return err != FE_LLA_NO_ERROR ? -1 : 0;
 }
 
+/*Called when the only user which has opened the frontend in read-write mode
+	exits*/
 static int stid135_sleep(struct dvb_frontend* fe)
 {
 	struct stv *state = fe->demodulator_priv;
@@ -1444,7 +1441,7 @@ static int stid135_sleep(struct dvb_frontend* fe)
 	if(state->base->tuner_use_count[state->rf_in] > 0)
 		state->base->tuner_use_count[state->rf_in]--;
 	if(state->base->tuner_use_count[state->rf_in]==0) {
-		state->tuner_active = false;
+		state->rf_in_selected = false;
 		dprintk("Calling TunerStandby 0\n");
 		err = fe_stid135_set_22khz_cont(&state->base->ip, state->rf_in + 1, false);
 		if(state->base->set_voltage) {
@@ -1619,15 +1616,6 @@ static int stid135_get_spectrum_scan_sweep(struct dvb_frontend* fe,
 					start_frequency, end_frequency,
 					ss->spectrum_len, resolution, bandwidth/1000,
 					pParams->master_clock);
-#if 0
-	error |= (error1=FE_STiD135_GetLoFreqHz(pParams, &lo_frequency));
-	if(error1) {
-		dprintk("Failed: err=%d\n", error1);
-		goto __onerror;
-	}
-	lo_frequency *=  1000000; //now in Hz
-#endif
-
 
 	//warm start
 	error |= (error1=ChipSetOneRegister(pParams->handle_demod,
@@ -1785,10 +1773,10 @@ static int stid135_spectrum_start(struct dvb_frontend* fe,
 
 	base_lock(state);
 	if(p->rf_in < 0 || !p->rf_in_valid)  {
-		p->rf_in = state->tuner_active ? state->rf_in : state->fe.ops.info.default_rf_input;
+		p->rf_in = state->rf_in_selected ? state->rf_in : state->fe.ops.info.default_rf_input;
 		p->rf_in_valid = true;
 		dprintk("Set rf_in to %d; tuner_active=%d  state->rf_in=%d default_rf_in=%d\n",
-						p->rf_in, state->tuner_active, state->rf_in, state->fe.ops.info.default_rf_input);
+						p->rf_in, state->rf_in_selected, state->rf_in, state->fe.ops.info.default_rf_input);
 	}
 #if 0
 	dprintk("Setting rf_in: %d\n", state->rf_in);
@@ -2012,22 +2000,6 @@ static int stid135_constellation_start_(struct dvb_frontend* fe, struct dtv_fe_c
 	return 0;
 }
 
-#if 0
-int stid135_constellation_start(struct dvb_frontend* fe,
-																			 struct dtv_fe_constellation* user,
-																			 unsigned int *delay, enum fe_status *status)
-{
-	int ret;
-	struct stv* state = fe->demodulator_priv;
-	stid135_stop_task(fe);
-	base_lock(state);
-	ret = stid135_constellation_start_(fe, user);
-	*status =  FE_HAS_SIGNAL|FE_HAS_CARRIER|FE_HAS_VITERBI|FE_HAS_SYNC|FE_HAS_LOCK;
-	base_unlock(state);
-	return 0;
-}
-#endif
-
 static int stid135_constellation_get(struct dvb_frontend* fe, struct dtv_fe_constellation* user)
 {
 	struct stv *state = fe->demodulator_priv;
@@ -2126,8 +2098,9 @@ struct dvb_frontend* stid135_attach(struct i2c_adapter *i2c,
 	int i;
 	struct stv *state;
 	struct stv_base *base=NULL;
-		extern struct stv_base *proc_base;
+	extern struct stv_base *proc_base;
 	state = kzalloc(sizeof(struct stv), GFP_KERNEL);
+
 	if (!state)
 		return NULL;
 

@@ -341,7 +341,7 @@ struct stv {
 	struct dvb_frontend  fe;
 	int                  nr;     //DT: number of demod device 0-7 (st internal api uses nr+1)
 	int                  rf_in;  //DT  tuner number (0-3, corresponding to a physical input connector)
-	bool                 tuner_active;  //true of tuner defined by rf_in is actually connected and active
+	bool                 rf_in_selected;  //true if tuner was reserved for rf_input; tuner not necessarily owned
 	//unsigned long        tune_time;
 	struct fe_sat_signal_info signal_info;
 	ktime_t tune_time;
