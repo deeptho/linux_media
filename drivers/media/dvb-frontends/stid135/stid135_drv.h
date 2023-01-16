@@ -408,7 +408,11 @@ void state_sleep_(struct stv* state, int timems, const char* func, int line);
 	state_sleep_(state, time, __func__, __LINE__)
 
 
-extern void print_signal_info(const char* prefix, struct fe_sat_signal_info* i);
+extern void print_signal_info_(struct stv* state, const char* func, int line);
+
+#define print_signal_info(state) \
+	print_signal_info_(state,  __func__, __LINE__)
+
 
 
 extern u32 C8CODEW_TOP_CTRL[1];

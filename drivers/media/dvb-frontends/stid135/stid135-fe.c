@@ -111,11 +111,15 @@ enum fe_rolloff dvb_rolloff(struct stv*state) {
 	return ROLLOFF_AUTO;
 }
 
-void print_signal_info(const char* prefix, struct fe_sat_signal_info* i)
+void print_signal_info_(struct stv* state, const char* func, int line)
 {
 	#if 1
-	vprintk("LOCK %s: fec=%d dmd=%d signal=%d carr=%d vit=%d sync=%d timedout=%d lock=%d\n",
-				 prefix,
+	struct fe_sat_signal_info* i= &state->signal_info;
+	printk(KERN_DEBUG
+				 pr_fmt("%s:%d "
+								"demod=%d: fec=%d dmd=%d signal=%d carr=%d vit=%d sync=%d timedout=%d lock=%d\n"),
+				 func, line,
+				 state->nr,
 				 i->fec_locked,
 				 i->demod_locked,
 				 i->has_signal,

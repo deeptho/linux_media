@@ -1779,6 +1779,14 @@ fe_lla_error_t fe_stid135_get_lock_status(struct stv* state, bool*carrier_lock, 
 		}
 		if(!state->signal_info.has_sync)
 			vprintk("[%d] DVBS2 NO SYNC: %d %d %d\n", state->nr+1,  fld_value[0] , fld_value[1] , fld_value[2]);
+		if(state->signal_info.has_lock && !(
+																				 state->signal_info.has_carrier &&
+																				 state->signal_info.has_viterbi &&
+																				 state->signal_info.has_sync)) {
+			dprintk("demod=%d QQQQQ error=%d\n", state->nr, error);
+			print_signal_info(state);
+		}
+		//dprintk("demod=%d setting has_lock=%d error=%d\n", state->nr, fld_value[0], error);
 		break;
 
 	case FE_SAT_DVBS_FOUND:
@@ -1825,6 +1833,13 @@ fe_lla_error_t fe_stid135_get_lock_status(struct stv* state, bool*carrier_lock, 
 			*has_sync  = fld_value[0] & fld_value[1] & fld_value[2];
 			if(!state->signal_info.has_sync)
 				dprintk("NO SYNC: %d %d\n",  fld_value[0] , fld_value[1]);
+		}
+		if(state->signal_info.has_lock && !(
+																				 state->signal_info.has_carrier &&
+																				 state->signal_info.has_viterbi &&
+																				 state->signal_info.has_sync)) {
+			dprintk("demod=%d QQQQQ1 error=%d\n", state->nr, error);
+			print_signal_info(state);
 		}
 		break;
 	}
@@ -2495,6 +2510,7 @@ static fe_lla_error_t FE_STiD135_GetDemodLock (struct stv* state, u32 TimeOutUNU
 		/* We have to wait for demod locked before reading ANNEXEM field (cut 1 only) */
 		error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS6_SIGNAL_ANNEXEM(state->nr+1), &fld_value);
 		dprintk("[%d] LOCK_DEFINITIF achieved timout=%d/%d fld_value=%d\n", state->nr+1, run_time, timeout, fld_value);
+		print_signal_info(state);
 		/* Dummy write to reset slicemin (if DVBS1 test followed by DVBS2 test) */
 		error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_SLICEMIN_DEMODFLT_SLICEMIN(state->nr+1), 0);
 		error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_SLICEMAX_DEMODFLT_SLICEMAX(state->nr+1), 0);
