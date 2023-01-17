@@ -82,8 +82,8 @@ MODULE_PARM_DESC(mis,"someone search the multi-stream signal lose packets,please
 	if(stid135_verbose) printk(KERN_DEBUG pr_fmt("%s:%d " fmt),  __func__, __LINE__, ##arg)
 
 
-static inline
-enum fe_rolloff dvb_rolloff(struct stv*state) {
+
+static inline enum fe_rolloff dvb_rolloff(struct stv*state) {
 	switch (state->signal_info.roll_off) {
 	case FE_SAT_05:
 		return ROLLOFF_5;
@@ -110,6 +110,135 @@ enum fe_rolloff dvb_rolloff(struct stv*state) {
 	}
 	return ROLLOFF_AUTO;
 }
+
+static inline enum fe_modulation dvb_modulation(struct stv*state) {
+	switch (state->signal_info.modulation) {
+	case FE_SAT_MOD_8PSK:
+		return PSK_8;
+		break;
+	case FE_SAT_MOD_16APSK:
+		return APSK_16;
+		break;
+	case FE_SAT_MOD_32APSK:
+		return APSK_32;
+		break;
+	case FE_SAT_MOD_64APSK:
+		return APSK_64;
+		break;
+	case FE_SAT_MOD_128APSK:
+		return APSK_128;
+		break;
+	case FE_SAT_MOD_256APSK:
+		return APSK_256;
+		break;
+	case FE_SAT_MOD_1024APSK:
+		return APSK_1024;
+		break;
+	case FE_SAT_MOD_8PSK_L:
+		return APSK_8L;
+		break;
+	case FE_SAT_MOD_16APSK_L:
+		return APSK_16L;
+		break;
+	case FE_SAT_MOD_32APSK_L:
+		return APSK_32L;
+		break;
+	case FE_SAT_MOD_64APSK_L:
+		return APSK_64L;
+		break;
+	case FE_SAT_MOD_256APSK_L:
+		return APSK_256L;
+		break;
+	case FE_SAT_MOD_QPSK:
+	default:
+		return QPSK;
+	}
+}
+
+
+
+static inline enum fe_delivery_system dvb_fec(struct stv* state, enum fe_delivery_system delsys) {
+	if (delsys == SYS_DVBS2) {
+		static enum fe_code_rate modcod2fec[0x82] = {
+			FEC_NONE, FEC_1_4, FEC_1_3, FEC_2_5,
+			FEC_1_2, FEC_3_5, FEC_2_3, FEC_3_4,
+			FEC_4_5, FEC_5_6, FEC_8_9, FEC_9_10,
+			FEC_3_5, FEC_2_3, FEC_3_4, FEC_5_6,
+			FEC_8_9, FEC_9_10, FEC_2_3, FEC_3_4,
+			FEC_4_5, FEC_5_6, FEC_8_9, FEC_9_10,
+			FEC_3_4, FEC_4_5, FEC_5_6, FEC_8_9,
+			FEC_9_10, FEC_NONE, FEC_NONE, FEC_NONE,
+			FEC_1_2, FEC_2_3, FEC_3_4, FEC_5_6,
+			FEC_6_7, FEC_7_8,   FEC_NONE, FEC_NONE,
+			FEC_NONE, FEC_NONE, FEC_NONE, FEC_NONE,
+			FEC_NONE, FEC_NONE, FEC_NONE, FEC_NONE,
+			FEC_NONE, FEC_NONE, FEC_NONE, FEC_NONE,
+			FEC_NONE, FEC_NONE, FEC_NONE, FEC_NONE,
+			FEC_NONE, FEC_NONE, FEC_NONE, FEC_NONE,
+			FEC_NONE, FEC_NONE, FEC_NONE, FEC_NONE,
+			FEC_NONE, FEC_NONE, FEC_13_45, FEC_9_20,
+			FEC_11_20, FEC_5_9, FEC_26_45, FEC_23_36,
+			FEC_25_36, FEC_13_18, FEC_1_2, FEC_8_15,
+			FEC_5_9, FEC_26_45, FEC_3_5, FEC_3_5,
+			FEC_28_45, FEC_23_36, FEC_2_3, FEC_25_36,
+			FEC_13_18, FEC_7_9, FEC_77_90, FEC_2_3,
+			FEC_NONE, FEC_32_45, FEC_11_15, FEC_7_9,
+			FEC_32_45, FEC_11_15, FEC_NONE, FEC_7_9,
+			FEC_NONE, FEC_4_5, FEC_NONE, FEC_5_6,
+			FEC_3_4, FEC_7_9, FEC_29_45, FEC_2_3,
+			FEC_31_45, FEC_32_45, FEC_11_15, FEC_3_4,
+			FEC_11_45, FEC_4_15, FEC_14_45, FEC_7_15,
+			FEC_8_15, FEC_32_45, FEC_7_15, FEC_8_15,
+			FEC_26_45, FEC_32_45, FEC_7_15, FEC_8_15,
+			FEC_26_45, FEC_3_5, FEC_32_45, FEC_2_3,
+			FEC_32_45, FEC_NONE, FEC_NONE, FEC_NONE,
+			FEC_NONE, FEC_NONE
+		};
+
+		if (state->signal_info.modcode < sizeof(modcod2fec)) {
+			return modcod2fec[state->signal_info.modcode];
+		} else
+			return FEC_AUTO;
+	} else {
+		switch (state->signal_info.puncture_rate) {
+		case FE_SAT_PR_1_2:
+			return  FEC_1_2;
+			break;
+		case FE_SAT_PR_2_3:
+			return  FEC_2_3;
+			break;
+		case FE_SAT_PR_3_4:
+			return  FEC_3_4;
+			break;
+		case FE_SAT_PR_5_6:
+			return  FEC_5_6;
+			break;
+		case FE_SAT_PR_6_7:
+			return  FEC_6_7;
+			break;
+		case FE_SAT_PR_7_8:
+			return  FEC_7_8;
+			break;
+		default:
+			return  FEC_NONE;
+		}
+	}
+}
+
+static inline enum fe_delivery_system dvb_standard(struct stv* state) {
+	switch (state->signal_info.standard) {
+	case FE_SAT_DSS_STANDARD:
+		return SYS_DSS;
+		break;
+	case FE_SAT_DVBS2_STANDARD:
+		return SYS_DVBS2;
+		break;
+	case FE_SAT_DVBS1_STANDARD:
+	default:
+		return SYS_DVBS;
+	}
+}
+
 
 void print_signal_info_(struct stv* state, const char* func, int line)
 {
@@ -885,153 +1014,16 @@ static int stid135_get_frontend(struct dvb_frontend* fe, struct dtv_frontend_pro
 		p->frequency = state->signal_info.frequency;
 		p->symbol_rate = state->signal_info.symbol_rate;
 	}
-
-	switch (state->signal_info.standard) {
-	case FE_SAT_DSS_STANDARD:
-		p->delivery_system = SYS_DSS;
-		break;
-	case FE_SAT_DVBS2_STANDARD:
-		p->delivery_system = SYS_DVBS2;
-		break;
-	case FE_SAT_DVBS1_STANDARD:
-	default:
-		p->delivery_system = SYS_DVBS;
-	}
-
-	switch (state->signal_info.modulation) {
-	case FE_SAT_MOD_8PSK:
-		p->modulation = PSK_8;
-		break;
-	case FE_SAT_MOD_16APSK:
-		p->modulation = APSK_16;
-		break;
-	case FE_SAT_MOD_32APSK:
-		p->modulation = APSK_32;
-		break;
-	case FE_SAT_MOD_64APSK:
-		p->modulation = APSK_64;
-		break;
-	case FE_SAT_MOD_128APSK:
-		p->modulation = APSK_128;
-		break;
-	case FE_SAT_MOD_256APSK:
-		p->modulation = APSK_256;
-		break;
-	case FE_SAT_MOD_1024APSK:
-		p->modulation = APSK_1024;
-		break;
-	case FE_SAT_MOD_8PSK_L:
-		p->modulation = APSK_8L;
-		break;
-	case FE_SAT_MOD_16APSK_L:
-		p->modulation = APSK_16L;
-		break;
-	case FE_SAT_MOD_32APSK_L:
-		p->modulation = APSK_32L;
-		break;
-	case FE_SAT_MOD_64APSK_L:
-		p->modulation = APSK_64L;
-		break;
-	case FE_SAT_MOD_256APSK_L:
-		p->modulation = APSK_256L;
-		break;
-	case FE_SAT_MOD_QPSK:
-	default:
-		p->modulation = QPSK;
-	}
-
-	switch (state->signal_info.roll_off) {
-		case FE_SAT_05:
-		p->rolloff = ROLLOFF_5;
-		break;
-		case FE_SAT_10:
-		p->rolloff = ROLLOFF_10;
-		break;
-		case FE_SAT_15:
-		p->rolloff = ROLLOFF_15;
-		break;
-		case FE_SAT_20:
-		p->rolloff = ROLLOFF_20;
-		break;
-		case FE_SAT_25:
-		p->rolloff = ROLLOFF_25;
-		break;
-		case FE_SAT_35:
-		p->rolloff = ROLLOFF_35;
-		break;
-		default:
-		p->rolloff = ROLLOFF_AUTO;
-	}
+	p->delivery_system = dvb_standard(state);
+	p->modulation = dvb_modulation(state);
+	p->rolloff = dvb_rolloff(state);
 
 	p->inversion = state->signal_info.spectrum == FE_SAT_IQ_SWAPPED ? INVERSION_ON : INVERSION_OFF;
 	p->modcode = state->signal_info.modcode;
-	if (p->delivery_system == SYS_DVBS2) {
-		static enum fe_code_rate modcod2fec[0x82] = {
-			FEC_NONE, FEC_1_4, FEC_1_3, FEC_2_5,
-			FEC_1_2, FEC_3_5, FEC_2_3, FEC_3_4,
-			FEC_4_5, FEC_5_6, FEC_8_9, FEC_9_10,
-			FEC_3_5, FEC_2_3, FEC_3_4, FEC_5_6,
-			FEC_8_9, FEC_9_10, FEC_2_3, FEC_3_4,
-			FEC_4_5, FEC_5_6, FEC_8_9, FEC_9_10,
-			FEC_3_4, FEC_4_5, FEC_5_6, FEC_8_9,
-			FEC_9_10, FEC_NONE, FEC_NONE, FEC_NONE,
-			FEC_1_2, FEC_2_3, FEC_3_4, FEC_5_6,
-			FEC_6_7, FEC_7_8,   FEC_NONE, FEC_NONE,
-			FEC_NONE, FEC_NONE, FEC_NONE, FEC_NONE,
-			FEC_NONE, FEC_NONE, FEC_NONE, FEC_NONE,
-			FEC_NONE, FEC_NONE, FEC_NONE, FEC_NONE,
-			FEC_NONE, FEC_NONE, FEC_NONE, FEC_NONE,
-			FEC_NONE, FEC_NONE, FEC_NONE, FEC_NONE,
-			FEC_NONE, FEC_NONE, FEC_NONE, FEC_NONE,
-			FEC_NONE, FEC_NONE, FEC_13_45, FEC_9_20,
-			FEC_11_20, FEC_5_9, FEC_26_45, FEC_23_36,
-			FEC_25_36, FEC_13_18, FEC_1_2, FEC_8_15,
-			FEC_5_9, FEC_26_45, FEC_3_5, FEC_3_5,
-			FEC_28_45, FEC_23_36, FEC_2_3, FEC_25_36,
-			FEC_13_18, FEC_7_9, FEC_77_90, FEC_2_3,
-			FEC_NONE, FEC_32_45, FEC_11_15, FEC_7_9,
-			FEC_32_45, FEC_11_15, FEC_NONE, FEC_7_9,
-			FEC_NONE, FEC_4_5, FEC_NONE, FEC_5_6,
-			FEC_3_4, FEC_7_9, FEC_29_45, FEC_2_3,
-			FEC_31_45, FEC_32_45, FEC_11_15, FEC_3_4,
-			FEC_11_45, FEC_4_15, FEC_14_45, FEC_7_15,
-			FEC_8_15, FEC_32_45, FEC_7_15, FEC_8_15,
-			FEC_26_45, FEC_32_45, FEC_7_15, FEC_8_15,
-			FEC_26_45, FEC_3_5, FEC_32_45, FEC_2_3,
-			FEC_32_45, FEC_NONE, FEC_NONE, FEC_NONE,
-			FEC_NONE, FEC_NONE
-		};
 
-		if (state->signal_info.modcode < sizeof(modcod2fec)) {
-			p->fec_inner = modcod2fec[state->signal_info.modcode];
-		} else
-			p->fec_inner = FEC_AUTO;
-		p->pilot = state->signal_info.pilots == FE_SAT_PILOTS_ON ? PILOT_ON : PILOT_OFF;
-	}
-	else {
-		switch (state->signal_info.puncture_rate) {
-		case FE_SAT_PR_1_2:
-			p->fec_inner = FEC_1_2;
-			break;
-		case FE_SAT_PR_2_3:
-			p->fec_inner = FEC_2_3;
-			break;
-		case FE_SAT_PR_3_4:
-			p->fec_inner = FEC_3_4;
-			break;
-		case FE_SAT_PR_5_6:
-			p->fec_inner = FEC_5_6;
-			break;
-		case FE_SAT_PR_6_7:
-			p->fec_inner = FEC_6_7;
-			break;
-		case FE_SAT_PR_7_8:
-			p->fec_inner = FEC_7_8;
-			break;
-		default:
-			p->fec_inner = FEC_NONE;
-		}
-	}
+	p->pilot = state->signal_info.pilots == FE_SAT_PILOTS_ON ? PILOT_ON : PILOT_OFF;
+	p->fec_inner = dvb_fec(state, p->delivery_system);
+
 	p->stream_id = ((state->mis_mode ? (state->signal_info.isi &0xff) :0xff) |
 									(state->signal_info.pls_mode << 26) |
 									((state->signal_info.pls_code &0x3FFFF)<<8)
@@ -1159,6 +1151,7 @@ static int stid135_read_status_(struct dvb_frontend* fe, enum fe_status *status)
 	memcpy(p->isi_bitset, state->signal_info.isi_list.isi_bitset, sizeof(p->isi_bitset));
 	memcpy(p->matypes, state->signal_info.isi_list.matypes, sizeof(p->matypes));
 	p->num_matypes = state->signal_info.isi_list.num_matypes;
+	vprintk("p->num_matypes=%d %d\n", p->num_matypes, state->signal_info.isi_list.num_matypes);
 
 	{
 		u8 matype;
@@ -1170,7 +1163,6 @@ static int stid135_read_status_(struct dvb_frontend* fe, enum fe_status *status)
 
 		if(!((matype &0x3) == 0x3))
 			state->signal_info.matype = matype;
-
 		switch(state->signal_info.matype) {
 		case 0:
 			state->signal_info.roll_off = state->signal_info.low_roll_off_detected ? FE_SAT_15: FE_SAT_35;
@@ -1186,11 +1178,34 @@ static int stid135_read_status_(struct dvb_frontend* fe, enum fe_status *status)
 			break;
 		}
 	}
-	p->rolloff = dvb_rolloff(state);
+
 	p->matype_val = state->signal_info.matype;
 	p->matype_valid = true;
 
-	vprintk("p->num_matypes=%d %d\n", p->num_matypes, state->signal_info.isi_list.num_matypes);
+	p->frequency = state->signal_info.frequency;
+	p->symbol_rate = state->signal_info.symbol_rate;
+
+
+	p->delivery_system = dvb_standard(state);
+	p->modulation = dvb_modulation(state);
+	p->rolloff = dvb_rolloff(state);
+
+	p->inversion = state->signal_info.spectrum == FE_SAT_IQ_SWAPPED ? INVERSION_ON : INVERSION_OFF;
+	p->modcode = state->signal_info.modcode;
+
+	p->pilot = state->signal_info.pilots == FE_SAT_PILOTS_ON ? PILOT_ON : PILOT_OFF;
+	p->fec_inner = dvb_fec(state, p->delivery_system);
+
+	p->stream_id = ((state->mis_mode ? (state->signal_info.isi &0xff) :0xff) |
+									(state->signal_info.pls_mode << 26) |
+									((state->signal_info.pls_code &0x3FFFF)<<8)
+									);
+	vprintk("read stream_id mis=%d pls_mode=0x%x pls_code=0x%x stream_id=0%x",
+					state->mis_mode,
+					state->signal_info.pls_mode, state->signal_info.pls_code, p->stream_id);
+
+	vprintk("READ stream_id=0x%x isi=0x%x\n",p->stream_id, state->signal_info.isi);
+
 	//for the tbs6912 ts setting
 	if((state->base->set_TSparam)&&(state->newTP)) {
 		speed = state->base->set_TSparam(state->base->i2c,state->nr/2,4,0);
