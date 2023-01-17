@@ -1271,7 +1271,7 @@ static int stid135_tune_(struct dvb_frontend* fe, bool re_tune,
 			 and CNR, BER
 		*/
 		memset(&state->signal_info.isi_list, 0, sizeof(state->signal_info.isi_list));
-		fe_stid135_get_signal_info(state,  &state->signal_info, 0);
+		fe_stid135_get_signal_info(state);
 	}
 	/*
 		get lock status
@@ -2067,7 +2067,7 @@ static int stid135_scan_sat(struct dvb_frontend* fe, bool init,
 			state->base->ip.handle_demod->Error = FE_LLA_NO_ERROR;
 
 			base_lock(state);
-			fe_stid135_get_signal_info(state,  &state->signal_info, 0);
+			fe_stid135_get_signal_info(state);
 			base_unlock(state);
 
 			memcpy(p->isi_bitset, state->signal_info.isi_list.isi_bitset, sizeof(p->isi_bitset));

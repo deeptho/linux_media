@@ -539,9 +539,7 @@ fe_lla_error_t fe_stid135_get_signal_quality(struct stv* state,
 					struct fe_sat_signal_info *pInfo,
 					int mc_auto);
 
-fe_lla_error_t fe_stid135_get_signal_info(struct stv* state,
-																					struct fe_sat_signal_info *pInfo,
-	u32 satellite_scan);
+fe_lla_error_t fe_stid135_get_signal_info(struct stv* state);
 
 fe_lla_error_t FE_STiD135_Term(struct fe_stid135_internal_param* pParams);
 

@@ -2552,6 +2552,7 @@ static fe_lla_error_t FE_STiD135_GetDemodLock (struct stv* state, u32 TimeOutUNU
 		}
 	} else {
 		dprintk("demod=%d: timedout %d/%d\n", state->nr, run_time, timeout);
+		print_signal_info(state);
 		state->signal_info.lock_time =ktime_sub(ktime_get_coarse(), state->tune_time);
 	}
 	*Lock_p = state->signal_info.has_lock;
@@ -3787,13 +3788,13 @@ fe_lla_error_t fe_stid135_get_signal_quality(struct stv* state,
 --PARAMS IN	::	Handle -> Front End Handle
 			Demod -> Current demod 1 .. 8
 			satellite_scan -> scan or acquisition context
---PARAMS OUT	::	pInfo -> Informations (BER,C/N,power ...)
+--PARAMS OUT	::	state->signal_info -> Informations (BER,C/N,power ...)
 --RETURN	::	Error (if any)
 --***************************************************/
-fe_lla_error_t fe_stid135_get_signal_info(struct stv* state,
-					struct fe_sat_signal_info *pInfo,
-					u32 satellite_scan)
+fe_lla_error_t fe_stid135_get_signal_info(struct stv* state)
 {
+	struct fe_sat_signal_info *pInfo = & state->signal_info;
+	u32 satellite_scan =0;
 	enum fe_stid135_demod Demod = state->nr+1;
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	struct fe_stid135_internal_param *pParams;
@@ -3878,18 +3879,13 @@ fe_lla_error_t fe_stid135_get_signal_info(struct stv* state,
 			error |= ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_TMGOBS_ROLLOFF_STATUS(Demod), &(fld_value[0]));
 			pInfo->roll_off = (enum fe_sat_rolloff)(fld_value[0]);
 
-			if (satellite_scan == FALSE) {
-				error |= FE_STiD135_GetBer(state, &(pInfo->ber));
-				error |= FE_STiD135_GetRFLevel(state, &pch_rf, &pband_rf);
-				pInfo->power = pch_rf;
-				pInfo->powerdBmx10 = pch_rf * 10;
-				pInfo->band_power = pband_rf;
-				error |= FE_STiD135_CarrierGetQuality(state->base->ip.handle_demod, Demod, &(pInfo->C_N), &(pInfo->standard));
-			} else { /* no BER, Power and CNR measurement during scan */
-				pInfo->ber = 0;
-				pInfo->power = 0;
-				pInfo->C_N = 100;
-			}
+
+			error |= FE_STiD135_GetBer(state, &(pInfo->ber));
+			error |= FE_STiD135_GetRFLevel(state, &pch_rf, &pband_rf);
+			pInfo->power = pch_rf;
+			pInfo->powerdBmx10 = pch_rf * 10;
+			pInfo->band_power = pband_rf;
+			error |= FE_STiD135_CarrierGetQuality(state->base->ip.handle_demod, Demod, &(pInfo->C_N), &(pInfo->standard));
 
 			if(pInfo->standard == FE_SAT_DVBS2_STANDARD) {
 				error |= ChipGetField(state->base->ip.handle_demod,FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS6_SPECINV_DEMOD(Demod), &(fld_value[0]));
@@ -4706,7 +4702,7 @@ static fe_lla_error_t FE_STiD135_StartSearch(struct stv* state)
 		vprintk("demod=%d: XXX set to 0x0\n", state->nr);
 		/*Trigger an acquisition (start the search)*/
 		error |= (error1=ChipSetOneRegister(state->base->ip.handle_demod,
-																				(u16)REG_RC8CODEW_DVBSX_DEMOD_DMDISTATE(Demod), 0x0)); //WAS 0x1
+																				(u16)REG_RC8CODEW_DVBSX_DEMOD_DMDISTATE(Demod), 0x1)); //WAS 0x1
 		if(error1)
 			dprintk("demod=%d: error=%d\n", state->nr, error1);
 		/*
@@ -4967,8 +4963,9 @@ static  fe_lla_error_t FE_STiD135_GetSignalParams(
 		else if (state->signal_info.modcode == FE_SATX_1024APSK)
 			state->signal_info.modulation = FE_SAT_MOD_1024APSK;
 
-		else
+		else {
 			state->signal_info.modulation = FE_SAT_MOD_UNKNOWN;
+		}
 
 	break;
 
