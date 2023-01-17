@@ -1383,6 +1383,9 @@ static int stid135_set_voltage(struct dvb_frontend* fe, enum fe_sec_voltage volt
 		stid135_select_rf_in_(state, state->rf_in);
 		state->base->set_voltage(state->base->i2c, voltage, state->rf_in);
 		base_unlock(state);
+		dprintk("demod=%d: set_voltage done: rf_in=%d; use_count=%d\n", state->nr, state->rf_in,
+						state->base->tuner_use_count[state->rf_in]);
+
 	}
 	return 0;
 }
@@ -1489,6 +1492,8 @@ static int stid135_send_master_cmd(struct dvb_frontend* fe,
 		err |= fe_stid135_diseqc_init(&state->base->ip, state->rf_in + 1, FE_SAT_DISEQC_2_3_PWM);
 		err |= fe_stid135_diseqc_send(state, state->rf_in + 1, cmd->msg, cmd->msg_len);
 		base_unlock(state);
+		dprintk("demod=%d: diseqc sent: rf_in=%d; use_count=%d\n", state->nr, state->rf_in,
+						state->base->tuner_use_count[state->rf_in]);
 
 		if (err != FE_LLA_NO_ERROR)
 			dev_err(&state->base->i2c->dev, "%s: fe_stid135_diseqc_send error %d !\n", __func__, err);

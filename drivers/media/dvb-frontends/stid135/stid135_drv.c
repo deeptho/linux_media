@@ -6049,7 +6049,7 @@ TUNER_Error_t FE_STiD135_TunerInit(struct fe_stid135_internal_param *pParams)
 fe_lla_error_t fe_stid135_tuner_enable(STCHIP_Info_t* tuner_handle, FE_OXFORD_TunerPath_t tuner_nb)
 {
 	STCHIP_Error_t error = CHIPERR_NO_ERROR;
-	dprintk("tuner=%d\n", tuner_nb);
+	dprintk("rf_in=%d\n", tuner_nb-1);
 	switch(tuner_nb) {
 		case AFE_TUNER1:
 			error |= Oxford_EnableLO(tuner_handle, AFE_TUNER1);
@@ -6269,7 +6269,7 @@ fe_lla_error_t fe_stid135_diseqc_init(struct fe_stid135_internal_param* pParams,
 
 	if (pParams->handle_demod->Error)
 		return FE_LLA_I2C_ERROR;
-	dprintk("tuner=%d mode=%d\n", tuner_nb, diseqc_mode);
+	dprintk("rf_in=%d mode=%d\n", tuner_nb-1, diseqc_mode);
 	error |= Oxford_Disec_Lnb_FskStartup(pParams->handle_demod);
 	switch(diseqc_mode) {
 	case FE_SAT_22KHZ_Continues:
