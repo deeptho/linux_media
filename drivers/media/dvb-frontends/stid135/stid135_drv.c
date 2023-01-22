@@ -5722,6 +5722,12 @@ fe_lla_error_t fe_stid135_manage_matype_info(struct stv* state)
 																pParams->ts_nosync ? 1 : 0);
 #endif
 				/* Unforce HEM mode */
+				error |= (error1=ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL2_FORCE_CONTINUOUS(Demod), 0));
+				if(error1)
+					dprintk("demod=%d: error=%d\n", state->nr, error1);
+				error |= (error1=ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL2_FRAME_MODE(Demod), 0));
+				if(error1)
+					dprintk("demod=%d: error=%d\n", state->nr, error1);
 				error |= (error1=ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL0_HEMMODE_SELECT(Demod), 0));
 				if(error1)
 					dprintk("demod=%d: error=%d\n", state->nr, error1);
