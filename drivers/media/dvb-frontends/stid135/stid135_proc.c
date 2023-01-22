@@ -55,7 +55,7 @@ struct stv_base *proc_base;
 
 static int open_stid135(struct inode *inode, struct file *filp)
 {
-    dprintk("open\n");
+	//dprintk("open\n");
 		//pr_info("virt_to_phys = 0x%llx\n", (unsigned long long)virt_to_phys((void *)info));
     filp->private_data = (char*) hChipHandle_stid135;
     return 0;
@@ -63,7 +63,7 @@ static int open_stid135(struct inode *inode, struct file *filp)
 
 static int open_soc(struct inode *inode, struct file *filp)
 {
-    pr_info("open\n");
+	//pr_info("open\n");
 		//pr_info("virt_to_phys = 0x%llx\n", (unsigned long long)virt_to_phys((void *)info));
     filp->private_data = (char*) hChipHandle_soc;
     return 0;
@@ -71,7 +71,7 @@ static int open_soc(struct inode *inode, struct file *filp)
 
 static int open_vglna(struct inode *inode, struct file *filp)
 {
-    pr_info("open\n");
+	//pr_info("open\n");
 		//pr_info("virt_to_phys = 0x%llx\n", (unsigned long long)virt_to_phys((void *)info));
     filp->private_data = (char*) hChipHandle_vglna;
     return 0;
@@ -205,5 +205,6 @@ void chip_close_proc(const char*name)
 {
 	char filename[256];
 	sprintf(filename, "hchip_%s",name);
-	 remove_proc_entry(filename, NULL);
+	dprintk("called: filename=$s\n", filename);
+	remove_proc_entry(filename, NULL);
 }
