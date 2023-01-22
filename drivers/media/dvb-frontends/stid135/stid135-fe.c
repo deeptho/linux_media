@@ -1282,10 +1282,8 @@ static int stid135_tune_(struct dvb_frontend* fe, bool re_tune,
 		get rf level, CNR, BER
 	 */
 	r = stid135_read_status_(fe, status);
-	if(re_tune)
-		dprintk("LOCK TIME %lldms locked=%d\n", ktime_to_ns(state->signal_info.lock_time)/1000000, state->signal_info.has_lock);
-		dprintk("demod=%d LOCK TIME %lldms locked=%d\n", state->nr,
-						ktime_to_ns(state->signal_info.lock_time)/1000000, state->signal_info.has_lock);
+	dprintk("demod=%d LOCK TIME %lldms locked=%d\n", state->nr,
+					ktime_to_ns(state->signal_info.lock_time)/1000000, state->signal_info.has_lock);
 	vprintk("[%d] setting timedout=%d\n", state->nr+1, !state->signal_info.has_lock);
 	if(state->signal_info.has_timedout) {
 		*status |= FE_TIMEDOUT;

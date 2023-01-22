@@ -1174,12 +1174,11 @@ fe_lla_error_t fe_stid135_set_carrier_frequency_init(struct stv* state, s32 freq
 	reg_low = reg_low / (((s32)pParams->master_clock / 1000) * 3);
 	reg_low = reg_low * (1 << 11);
 #if 1
-	vprintk("demod=%d: Initial Freq: blind=%d next=%d freq=%d up=%d low=%d range=%d\n",
+	vprintk("demod=%d: Initial Freq: blind=%d freq=%dMhz/%dMhz up=%d:0x%x low=%d:0x%x range=%d\n",
 					state->nr,
-				 state->demod_search_algo==FE_SAT_BLIND_SEARCH,
-				 state->demod_search_algo==FE_SAT_NEXT,
-				 state->tuner_frequency,
-				 freq_up, freq_low, (s32)(state->demod_search_range_hz / 2));
+					state->demod_search_algo==FE_SAT_BLIND_SEARCH,
+					frequency_hz/1000000,state->tuner_frequency/1000000,
+					freq_up, reg_up, freq_low, reg_low, (s32)(state->demod_search_range_hz / 2));
 #endif
 
 	if(state->demod_search_algo == FE_SAT_NEXT) {
@@ -1236,9 +1235,9 @@ fe_lla_error_t fe_stid135_set_carrier_frequency_init(struct stv* state, s32 freq
 		error |= (error1=ChipSetFieldImage(hChip, FLD_FC8CODEW_DVBSX_DEMOD_CFRLOW0_CFR_LOW(state->nr+1),
 																			 LSB(reg_low)));
 		if(error1)
-			dprintk("QQQ CFRLOW0_CFR_LOW failed\n");
+			dprintk("error=%d\n", error1);
 
-							error |= (error1=ChipSetRegisters(hChip, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRLOW2(state->nr+1),3));
+		error |= (error1=ChipSetRegisters(hChip, (u16)REG_RC8CODEW_DVBSX_DEMOD_CFRLOW2(state->nr+1),3));
 		if(error1)
 			dprintk("error=%d\n", error1);
 	}
@@ -2337,7 +2336,7 @@ fe_lla_error_t FE_STiD135_GetStandard(STCHIP_Info_t* hChip,
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	fe_lla_error_t error1 = FE_LLA_NO_ERROR;
 	u32 stateField, dssdvbField;
-	s32 state, fld_value = 0;
+	s32 state, fld_value = 0, reg_value=0;
 	u8 i;
 
 	/* state machine search status field */
@@ -3794,7 +3793,6 @@ fe_lla_error_t fe_stid135_get_signal_quality(struct stv* state,
 fe_lla_error_t fe_stid135_get_signal_info(struct stv* state)
 {
 	struct fe_sat_signal_info *pInfo = & state->signal_info;
-	u32 satellite_scan =0;
 	enum fe_stid135_demod Demod = state->nr+1;
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	struct fe_stid135_internal_param *pParams;
