@@ -115,6 +115,7 @@ enum fe_sat_search_algo {
 };
 
 enum fe_sat_modulation {
+   	FE_SAT_MOD_DUMMY_PLF,
 		FE_SAT_MOD_QPSK,
 		FE_SAT_MOD_8PSK,
 		FE_SAT_MOD_16APSK,

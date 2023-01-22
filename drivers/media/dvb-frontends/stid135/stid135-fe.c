@@ -149,6 +149,8 @@ static inline enum fe_modulation dvb_modulation(struct stv*state) {
 	case FE_SAT_MOD_256APSK_L:
 		return APSK_256L;
 		break;
+	case FE_SAT_MOD_DUMMY_PLF:
+		return DUMMY_PLF;
 	case FE_SAT_MOD_QPSK:
 	default:
 		return QPSK;
@@ -197,8 +199,10 @@ static inline enum fe_delivery_system dvb_fec(struct stv* state, enum fe_deliver
 
 		if (state->signal_info.modcode < sizeof(modcod2fec)) {
 			return modcod2fec[state->signal_info.modcode];
-		} else
+		} else {
 			return FEC_AUTO;
+			dprintk("Unknown modcode=%d\n", state->signal_info.modcode);
+		}
 	} else {
 		switch (state->signal_info.puncture_rate) {
 		case FE_SAT_PR_1_2:

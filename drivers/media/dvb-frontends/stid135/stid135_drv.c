@@ -3890,8 +3890,10 @@ fe_lla_error_t fe_stid135_get_signal_info(struct stv* state)
 			if(pInfo->standard == FE_SAT_DVBS2_STANDARD) {
 				error |= ChipGetField(state->base->ip.handle_demod,FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS6_SPECINV_DEMOD(Demod), &(fld_value[0]));
 				pInfo->spectrum = (enum fe_sat_iq_inversion)(fld_value[0]);
-
-				if (((pInfo->modcode >= FE_SAT_QPSK_14) && (pInfo->modcode <= FE_SAT_QPSK_910))
+				if(pInfo->modcode == FE_SAT_DUMMY_PLF) {
+					pInfo->modulation = FE_SAT_MOD_DUMMY_PLF;
+					dprintk("state->signal_info.modulation=%d\n", pInfo->modulation);
+				} else if (((pInfo->modcode >= FE_SAT_QPSK_14) && (pInfo->modcode <= FE_SAT_QPSK_910))
 					|| ((pInfo->modcode >= FE_SAT_DVBS1_QPSK_12) && (pInfo->modcode <= FE_SAT_DVBS1_QPSK_78))
 					|| ((pInfo->modcode >= FE_SATX_QPSK_13_45) && (pInfo->modcode <= FE_SATX_QPSK_11_20))
 					|| ((pInfo->modcode >= FE_SATX_QPSK_11_45) && (pInfo->modcode <= FE_SATX_QPSK_32_45)))
@@ -3900,8 +3902,9 @@ fe_lla_error_t fe_stid135_get_signal_info(struct stv* state)
 				else if (((pInfo->modcode >= FE_SAT_8PSK_35) && (pInfo->modcode <= FE_SAT_8PSK_910))
 					|| ((pInfo->modcode >= FE_SATX_8PSK_23_36) && (pInfo->modcode <= FE_SATX_8PSK_13_18))
 					|| ((pInfo->modcode >= FE_SATX_8PSK_7_15) && (pInfo->modcode <= FE_SATX_8PSK_32_45))
-					|| (pInfo->modcode == FE_SATX_8PSK))
+								 || (pInfo->modcode == FE_SATX_8PSK)) {
 					pInfo->modulation=FE_SAT_MOD_8PSK;
+				}
 
 				else if (((pInfo->modcode >= FE_SAT_16APSK_23) && (pInfo->modcode <= FE_SAT_16APSK_910))
 					|| ((pInfo->modcode >= FE_SATX_16APSK_26_45) && (pInfo->modcode <= FE_SATX_16APSK_23_36))
@@ -4902,8 +4905,10 @@ static  fe_lla_error_t FE_STiD135_GetSignalParams(
 		error |= ChipGetField(
 		state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS6_SPECINV_DEMOD(Demod), &fld_value);
 		state->signal_info.spectrum = (enum fe_sat_iq_inversion)fld_value;
-
-		if (((state->signal_info.modcode >= FE_SAT_QPSK_14) && (state->signal_info.modcode <= FE_SAT_QPSK_910))
+		if(state->signal_info.modcode == FE_SAT_DUMMY_PLF) {
+			state->signal_info.modulation = FE_SAT_MOD_DUMMY_PLF;
+			dprintk("state->signal_info.modulation=%d\n", state->signal_info.modulation);
+		} else if (((state->signal_info.modcode >= FE_SAT_QPSK_14) && (state->signal_info.modcode <= FE_SAT_QPSK_910))
 			|| ((state->signal_info.modcode >= FE_SAT_DVBS1_QPSK_12) && (state->signal_info.modcode <= FE_SAT_DVBS1_QPSK_78))
 			|| ((state->signal_info.modcode >= FE_SATX_QPSK_13_45) && (state->signal_info.modcode <= FE_SATX_QPSK_11_20))
 			|| ((state->signal_info.modcode >= FE_SATX_QPSK_11_45) && (state->signal_info.modcode <= FE_SATX_QPSK_32_45)))
@@ -9258,7 +9263,7 @@ fe_lla_error_t get_soc_block_freq(struct fe_stid135_internal_param *pParams, u8 
 --PARAMS IN	::	pParams -> Pointer to fe_stid135_internal_param structure
 			demod -> Current demod 1..8
 -PARAMS OUT	::	modcode -> MODCOD
-			frame -> frame length
+			frame -> frame length : 1 = short frame, 0 long frame
 			pilots -> pilot presence
 --RETURN	::	error (if any)
 --***************************************************/
@@ -9271,12 +9276,16 @@ static fe_lla_error_t fe_stid135_get_mode_code(struct stv* state,
 	u32 mcode = 0;
 	s32 dmdmodcode = 0;
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
-
+	fe_lla_error_t error1 = FE_LLA_NO_ERROR;
 	if(state->base->ip.handle_demod == NULL)
 		error |= FE_LLA_INVALID_HANDLE;
 	else {
-		error |= ChipGetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DMDMODCOD(demod), &mcode);
-
+		error |= (error1=
+							ChipGetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DMDMODCOD(demod),
+																 &mcode));
+		if(error1) {
+			dprintk("error=%d\n", error1);
+		}
 		if(state->signal_info.standard == FE_SAT_DVBS2_STANDARD) {
 
 			if(((mcode >> 7) & 0x01) == 1) {
