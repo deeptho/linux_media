@@ -344,9 +344,16 @@ static int stid135_select_rf_in_(struct stv* state, int rf_in)
 		//change in rf_in
 		BUG_ON(state->base->tuner_use_count[state->rf_in] < 0 || state->base->tuner_use_count[state->rf_in] > 4 );
 		BUG_ON(state->base->tuner_use_count[rf_in] < 0 || state->base->tuner_use_count[rf_in] > 3 );
-		state->base->tuner_use_count[state->rf_in]--;
-		state->rf_in = -1;
-		state->rf_in_selected = false;
+
+		state->base->tuner_use_count[state->rf_in]--; //decrease use count for old tuner
+
+		if(state->base->tuner_owner[state->rf_in] == state->nr) {
+			state->base->tuner_owner[state->rf_in] = -1; //release ownership of old tuner if we had it
+			dprintk("demod=%d: released tuner ownership of rf_in=%d; use_count=%d\n", state->nr, state->rf_in,
+							state->base->tuner_use_count[state->rf_in]);
+		}
+
+		//if no demod uses the old tuner anymore, put it to sleep
 		if(state->base->tuner_use_count[state->rf_in] == 0) {
 			dprintk("demod=%d: Calling TunerStandby 0 state->base=%p\n", state->nr, state->base);
 			err = fe_stid135_set_22khz_cont(&state->base->ip, state->rf_in + 1, false);
@@ -1309,26 +1316,47 @@ static int stid135_set_voltage(struct dvb_frontend* fe, enum fe_sec_voltage volt
 			state->rf_in &= ~2;
 		return 0;
 	}
+
+	if(state->rf_in <0) {
+		dprintk("rf_in not set yet\n");
+		return -EPERM;
+	}
+
 	/*
-		when two adapters use the same tuner and one of them exists, dvb_frontend_thread calls
-		set set_voltage(..., SEC_VOLTAGE_OFF) which will turn off the tuner.
-
-		We might also want to prevent other voltage and tone changes, because they will surely disrupt
-		some of the adapters, but we also might want to tolerate that when the user wants to send some
-		diseqc commands to move a dish, while accepting temporary disruptions on other tuners.
-		The current compromise is to disallow all voltage changes.
-
-		The rest is up to user space.
+		when multiple adapters use the same tuner, only one can chnage voltage, send tones, diseqc etc
+		This is the tuner_owner. tuner_owner=-1 means no owner.
+		We ignore any request to change voltage unless tuner_owner== state->nr or
 	 */
-	if(state->base->tuner_use_count[state->rf_in] >1 ) {
-		dprintk("demod=%d rf_in=%d calling state->base->set_voltage i2c=%p DISALLOW voltage=%d\n",
-						state->nr, state->rf_in,
-						state->base->i2c, voltage);
-	} else  if (state->base->set_voltage) {//official driver does not use mutex
+	if(state->base->tuner_owner[state->rf_in] == -1) {
+		//take ownership
+		state->base->tuner_owner[state->rf_in] = state->nr;
+		dprintk("demod=%d: took tuner ownership of rf_in=%d; use_count=%d\n", state->nr, state->rf_in,
+						state->base->tuner_use_count[state->rf_in]);
+	}
+
+
+	if(state->base->tuner_owner[state->rf_in] != state->nr) {
+		dprintk("demod=%d rf_in=%d DISALLOW voltage=%d tuner_use_count=%d owner=%d\n",
+						state->nr, state->rf_in, voltage,
+						state->base->tuner_use_count[state->rf_in],
+						state->base->tuner_owner[state->rf_in]);
+		return -EPERM;
+	}
+	if(state->base->tuner_use_count[state->rf_in] > 1 && voltage == SEC_VOLTAGE_OFF) {
+		dprintk("demod=%d rf_in=%d IGNORE voltage=OFF tuner_use_count=%d owner=%d\n",
+						state->nr, state->rf_in, voltage,
+						state->base->tuner_use_count[state->rf_in],
+						state->base->tuner_owner[state->rf_in]);
+		return 0;
+	}
+
+	if (state->base->set_voltage) {//official driver does not use mutex
 		base_lock(state); //DeepThought: this performs multiple i2c calls and needs to be protected
-		dprintk("demod=%d rf_in=%d calling state->base->set_voltage i2c=%p voltage=%d\n",
+		dprintk("demod=%d rf_in=%d calling state->base->set_voltage i2c=%p voltage=%d tune_use_count=%d owner=%d\n",
 						state->nr, state->rf_in,
-						state->base->i2c, voltage);
+						state->base->i2c, voltage,
+						state->base->tuner_use_count[state->rf_in],
+						state->base->tuner_owner[state->rf_in]);
 		stid135_select_rf_in_(state, state->rf_in);
 		state->base->set_voltage(state->base->i2c, voltage, state->rf_in);
 		base_unlock(state);
@@ -1351,19 +1379,44 @@ static int stid135_set_tone(struct dvb_frontend* fe, enum fe_sec_tone_mode tone)
 		return 0;
 	}
 
-	base_lock(state);
-	err |= stid135_select_rf_in_(state, state->rf_in);
-	err = fe_stid135_set_22khz_cont(&state->base->ip, state->rf_in + 1, tone == SEC_TONE_ON);
-	base_unlock(state);
+	if(state->rf_in <0) {
+		dprintk("dmod=d%d: rf_in not set yet\n", state->nr);
+		return -EPERM;
+	}
 
-	dprintk("demod=%d DISEQC[%d] tone=%d error=%d err=%d abort=%d", state->nr, state->rf_in+1,  tone, err,
-					state->base->ip.handle_demod->Error,
-					state->base->ip.handle_demod->Abort);
+	/*
+		when multiple adapters use the same tuner, only one can chnage voltage, send tones, diseqc etc
+		This is the tuner_owner. tuner_owner=-1 means no owner.
+		We ignore any request to change voltage unless tuner_owner== state->nr or
+	 */
+	if(state->base->tuner_owner[state->rf_in] == -1) {
+		//take ownership
+		state->base->tuner_owner[state->rf_in] = state->nr;
+		dprintk("demod=%d: took tuner ownership of rf_in=%d; use_count=%d\n", state->nr, state->rf_in,
+						state->base->tuner_use_count[state->rf_in]);
+	}
 
-	if (err != FE_LLA_NO_ERROR)
-		dev_err(&state->base->i2c->dev, "%s: fe_stid135_set_22khz_cont error %d !\n", __func__, err);
+	if(state->base->tuner_owner[state->rf_in] != state->nr ) {
+		dprintk("demod=%d rf_in=%d DISALLOW tone=%d tuner_use_count=%d owner=%d\n",
+						state->nr, state->rf_in, tone,
+						state->base->tuner_use_count[state->rf_in],
+						state->base->tuner_owner[state->rf_in]);
+		return -EPERM;
+	} else {
+		base_lock(state);
+		err |= stid135_select_rf_in_(state, state->rf_in);
+		err = fe_stid135_set_22khz_cont(&state->base->ip, state->rf_in + 1, tone == SEC_TONE_ON);
+		base_unlock(state);
 
-	return err != FE_LLA_NO_ERROR ? -1 : 0;
+		dprintk("demod=%d DISEQC[%d] tone=%d error=%d err=%d abort=%d", state->nr, state->rf_in+1,  tone, err,
+						state->base->ip.handle_demod->Error,
+						state->base->ip.handle_demod->Abort);
+
+		if (err != FE_LLA_NO_ERROR)
+			dev_err(&state->base->i2c->dev, "%s: fe_stid135_set_22khz_cont error %d !\n", __func__, err);
+
+		return err != FE_LLA_NO_ERROR ? -1 : 0;
+	}
 }
 
 static int stid135_send_master_cmd(struct dvb_frontend* fe,
@@ -1377,16 +1430,48 @@ static int stid135_send_master_cmd(struct dvb_frontend* fe,
 		return 0;
 #endif
 	dprintk("diseqc rf_in=%d\n", state->rf_in);
-	base_lock(state);
-	err |= stid135_select_rf_in_(state, state->rf_in);
-	err |= fe_stid135_diseqc_init(&state->base->ip, state->rf_in + 1, FE_SAT_DISEQC_2_3_PWM);
-	err |= fe_stid135_diseqc_send(state, state->rf_in + 1, cmd->msg, cmd->msg_len);
-	base_unlock(state);
 
-	if (err != FE_LLA_NO_ERROR)
-		dev_err(&state->base->i2c->dev, "%s: fe_stid135_diseqc_send error %d !\n", __func__, err);
+	if(state->rf_in <0) {
+		dprintk("rf_in not set yet\n");
+		return -EPERM;
+	}
 
-	return err != FE_LLA_NO_ERROR ? -1 : 0;
+
+	/*
+		when multiple adapters use the same tuner, only one can chnage voltage, send tones, diseqc etc
+		This is the tuner_owner. tuner_owner=-1 means no owner.
+		We ignore any request to change voltage unless tuner_owner== state->nr or
+	 */
+	if(state->base->tuner_owner[state->rf_in] == -1) {
+		//take ownership
+		state->base->tuner_owner[state->rf_in] = state->nr;
+		dprintk("demod=%d: took tuner ownership of rf_in=%d; use_count=%d\n", state->nr, state->rf_in,
+						state->base->tuner_use_count[state->rf_in]);
+	}
+
+	/*
+		when two adapters use the same tuner, we ignore any request to change tone
+		as long as multiple frontends use the same tuner
+	 */
+
+	if(state->base->tuner_owner[state->rf_in] != state->nr ) {
+		dprintk("demod=%d rf_in=%d DISALLOW diseqc tuner_use_count=%d owner=%d\n",
+						state->nr, state->rf_in,
+						state->base->tuner_use_count[state->rf_in],
+						state->base->tuner_owner[state->rf_in]);
+		return -EPERM;
+	} else {
+		base_lock(state);
+		err |= stid135_select_rf_in_(state, state->rf_in);
+		err |= fe_stid135_diseqc_init(&state->base->ip, state->rf_in + 1, FE_SAT_DISEQC_2_3_PWM);
+		err |= fe_stid135_diseqc_send(state, state->rf_in + 1, cmd->msg, cmd->msg_len);
+		base_unlock(state);
+
+		if (err != FE_LLA_NO_ERROR)
+			dev_err(&state->base->i2c->dev, "%s: fe_stid135_diseqc_send error %d !\n", __func__, err);
+
+		return err != FE_LLA_NO_ERROR ? -1 : 0;
+	}
 }
 
 static int stid135_recv_slave_reply(struct dvb_frontend* fe,
@@ -1438,19 +1523,30 @@ static int stid135_sleep(struct dvb_frontend* fe)
 	base_lock(state);
 	BUG_ON((state->rf_in<0 || state->rf_in >= 4));
 	BUG_ON(state->base->tuner_use_count[state->rf_in] < 0);
-	if(state->base->tuner_use_count[state->rf_in] > 0)
-		state->base->tuner_use_count[state->rf_in]--;
-	if(state->base->tuner_use_count[state->rf_in]==0) {
-		state->rf_in_selected = false;
-		dprintk("Calling TunerStandby 0\n");
-		err = fe_stid135_set_22khz_cont(&state->base->ip, state->rf_in + 1, false);
-		if(state->base->set_voltage) {
-			state->base->set_voltage(state->base->i2c, SEC_VOLTAGE_OFF, state->rf_in);
-		}
-		err |= FE_STiD135_TunerStandby(p_params->handle_demod, state->rf_in + 1, 0);
-	}
-	base_unlock(state);
 
+	if(state->rf_in >= 0 && state->rf_in_selected) {
+		if(state->base->tuner_owner[state->rf_in] == state->nr) {
+			state->base->tuner_owner[state->rf_in] = -1; //release ownership
+			dprintk("demod=%d: released tuner ownership of rf_in=%d; use_count=%d\n", state->nr, state->rf_in,
+							state->base->tuner_use_count[state->rf_in]);
+		} else {
+			dprintk("demod=%d: decreased tuner use_count of rf_in=%d; use_count=%d\n", state->nr, state->rf_in,
+							state->base->tuner_use_count[state->rf_in]);
+		}
+
+		if(state->base->tuner_use_count[state->rf_in] > 0)
+			state->base->tuner_use_count[state->rf_in]--;
+		if(state->base->tuner_use_count[state->rf_in]==0) {
+			dprintk("Calling TunerStandby 0\n");
+			err = fe_stid135_set_22khz_cont(&state->base->ip, state->rf_in + 1, false);
+			if(state->base->set_voltage) {
+				state->base->set_voltage(state->base->i2c, SEC_VOLTAGE_OFF, state->rf_in);
+			}
+			err |= FE_STiD135_TunerStandby(p_params->handle_demod, state->rf_in + 1, 0);
+		}
+	}
+	state->rf_in_selected = false;
+	base_unlock(state);
 	if (err != FE_LLA_NO_ERROR)
 		dev_warn(&state->base->i2c->dev, "%s: STiD135 standby tuner %d failed!\n", __func__, state->rf_in);
 
@@ -1576,8 +1672,6 @@ static int stid135_get_spectrum_scan_fft(struct dvb_frontend* fe, unsigned int *
 	}
 
 }
-
-
 
 
 static int stid135_get_spectrum_scan_sweep(struct dvb_frontend* fe,
@@ -1732,17 +1826,7 @@ static int stid135_stop_task(struct dvb_frontend* fe)
 	struct stv *state = fe->demodulator_priv;
 	struct spectrum_scan_state* ss = &state->spectrum_scan_state;
 	struct constellation_scan_state* cs = &state->constellation_scan_state;
-#if 0
-	/*this code should only been called when frontend task is not running
-		locking is then not needed and can be quite slow if many frontends
-		are in use on same card
-	*/
-	base_lock(state);
-#endif
-#if 0
-	if(state)
-		release_llr(state);
-#endif
+
 	if(ss->freq)
 		kfree(ss->freq);
 	if(ss->candidates)
@@ -1753,9 +1837,15 @@ static int stid135_stop_task(struct dvb_frontend* fe)
 		kfree(cs->samples);
 	memset(ss, 0, sizeof(*ss));
 	memset(cs, 0, sizeof(*cs));
-#if 0
-	base_unlock(state);
-#endif
+
+	if(state && state->rf_in >=0 && state->rf_in_selected) {
+		if(state->base->tuner_owner[state->rf_in] == state->nr) {
+			state->base->tuner_owner[state->rf_in] = -1; //release ownership
+			dprintk("demod=%d: released tuner ownership of rf_in=%d; use_count=%d\n", state->nr, state->rf_in,
+							state->base->tuner_use_count[state->rf_in]);
+		}
+	}
+
 	//dprintk("Freed memory\n");
 	return 0;
 }
@@ -1771,19 +1861,14 @@ static int stid135_spectrum_start(struct dvb_frontend* fe,
 	fe_lla_error_t err = FE_LLA_NO_ERROR;
 	stid135_stop_task(fe);
 
-	base_lock(state);
+
 	if(p->rf_in < 0 || !p->rf_in_valid)  {
 		p->rf_in = state->rf_in_selected ? state->rf_in : state->fe.ops.info.default_rf_input;
 		p->rf_in_valid = true;
-		dprintk("Set rf_in to %d; tuner_active=%d  state->rf_in=%d default_rf_in=%d\n",
+		dprintk("Set rf_in to %d; rf_in_selected=%d  state->rf_in=%d default_rf_in=%d\n",
 						p->rf_in, state->rf_in_selected, state->rf_in, state->fe.ops.info.default_rf_input);
 	}
-#if 0
-	dprintk("Setting rf_in: %d\n", state->rf_in);
-	err |= stid135_select_rf_in_(state, state->rf_in);
-	p->rf_in = state->rf_in;
-#endif
-	base_unlock(state);
+
 	if(err) {
 		dprintk("Could not set rfpath error=%d\n", err);
 	}
@@ -1858,6 +1943,14 @@ static int stid135_scan_sat(struct dvb_frontend* fe, bool init,
 		if(state->spectrum_scan_state.scan_in_progress) {
 			stid135_stop_task(fe); //cleanup older scan
 		}
+
+		if(p->rf_in < 0 || !p->rf_in_valid)  {
+			p->rf_in = state->rf_in_selected ? state->rf_in : state->fe.ops.info.default_rf_input;
+			p->rf_in_valid = true;
+			dprintk("Set rf_in to %d; rf_in_selected=%d  state->rf_in=%d default_rf_in=%d\n",
+							p->rf_in, state->rf_in_selected, state->rf_in, state->fe.ops.info.default_rf_input);
+		}
+
 		base_lock(state);
 		ret = stid135_spectral_scan_start(fe);
 		if(ret<0) {
@@ -1868,8 +1961,10 @@ static int stid135_scan_sat(struct dvb_frontend* fe, bool init,
 	} else {
 		if(!state->spectrum_scan_state.scan_in_progress) {
 			dprintk("Error: Called with init==false, but scan was  not yet started\n");
+
 			base_lock(state);
 			ret = stid135_spectral_scan_start(fe);
+
 			if(ret<0) {
 				dprintk("Could not start spectral scan\n");
 				return -1; //
@@ -1884,6 +1979,7 @@ static int stid135_scan_sat(struct dvb_frontend* fe, bool init,
 			dprintk("exiting on should stop\n");
 			break;
 		}
+
 		*status = 0;
 		ret=stid135_spectral_scan_next(fe,  &p->frequency, &p->symbol_rate);
 		if(ret<0) {
@@ -1892,6 +1988,8 @@ static int stid135_scan_sat(struct dvb_frontend* fe, bool init,
 			base_unlock(state);
 			return error;
 		}
+
+
 		if (p->frequency < p->scan_start_frequency) {
 			dprintk("implementation error: %d < %d\n",p->frequency, p->scan_start_frequency);
 		}
@@ -1924,10 +2022,12 @@ static int stid135_scan_sat(struct dvb_frontend* fe, bool init,
 		dprintk("FREQ=%d search_range=%dkHz fft=%d res=%dkHz srate=%dkS/s\n",
 						p->frequency, p->search_range/1000,
 						p->scan_fft_size, p->scan_resolution, p->symbol_rate/1000);
+
 		ret = stid135_tune_(fe, retune, mode_flags, delay, status);
 		old = *status;
 		{
 			state->base->ip.handle_demod->Error = FE_LLA_NO_ERROR;
+
 			fe_stid135_get_signal_info(state,  &state->signal_info, 0);
 			memcpy(p->isi_bitset, state->signal_info.isi_list.isi_bitset, sizeof(p->isi_bitset));
 			memcpy(p->matypes, state->signal_info.isi_list.matypes, sizeof(p->matypes));
@@ -2113,6 +2213,9 @@ struct dvb_frontend* stid135_attach(struct i2c_adapter *i2c,
 		base = kzalloc(sizeof(struct stv_base), GFP_KERNEL);
 		if (!base)
 			goto fail;
+
+		for(i=0; i < sizeof(base->tuner_owner)/sizeof(base->tuner_owner[0]); ++i)
+			base->tuner_owner[i] = -1;
 		base->i2c = i2c;
 		base->adr = cfg->adr;
 		base->count = 1;
