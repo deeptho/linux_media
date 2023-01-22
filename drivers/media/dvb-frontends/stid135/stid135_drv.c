@@ -2720,39 +2720,6 @@ static fe_lla_error_t fe_stid135_set_reg_init_values(struct stv* state)
 	return error;
 }
 
-void tstxxx(struct stv* state)
-{
-	fe_lla_error_t error;
-	fe_lla_error_t error1;
-	u32 reg1,reg2,reg3;
-	int Demod = state->nr+1;
-	error = ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CARCFG(Demod), 0xc6);
-	return;
-	if(state->nr !=0)
-		return;
-	//fe_stid135_set_reg_init_values(state);
-	//ChipGetField(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CORRELCFG(state->nr+1), &reg1);
-	error |= (error1=ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CORRELCFG(state->nr+1), 0x83));
-	error |= ChipGetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_CARCFG(state->nr+1), &reg3);
-
-	ChipGetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG2_DEMODFLT_XXXMODE(state->nr+1), &reg2);//0x14
-	error |= (error1=ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG2_DEMODFLT_XXXMODE(state->nr+1), 0x15));
-	error |= (error1=ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL1_ALGOSWRST(Demod), 0));
-	error |= (error1=ChipSetOneRegister(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DMDISTATE(Demod), 0x5C));
-	error |= (error1=fe_stid135_set_symbol_rate(state, 27500000));
-	printk("DEMOD_CARCFG was 0x%x\n", reg3);
-	tst1(state, 27500000);
-	return;
-	error |= (error1=fe_stid135_set_carrier_frequency_init(state,1916200));
-	error |= (error1=ChipSetFieldImage(state->base->ip.handle_demod,
-																		 FLD_FC8CODEW_DVBSX_DEMOD_DEMOD_SPECINV_CONTROL(Demod),
-																		 FE_SAT_IQ_AUTO));   /* Set IQ inversion always in auto */
-
-	error |= (error1=ChipSetRegisters(state->base->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DEMOD(Demod), 1));
-
-	printk("DEMOD_CORRELCFG was 0x%x\n", reg1);
-	printk("DEMODFLT_XXXMODE was 0x%x\n", reg2);
-}
 
 /*****************************************************
 --FUNCTION	::	fe_stid135_set_reg_values_wb
