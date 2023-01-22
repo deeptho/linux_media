@@ -1,5 +1,5 @@
 /*
- * (c) deeptho@gmail.com 2019-2022
+ * (c) deeptho@gmail.com 2019-2023
  *
  * Copyright notice:
  *
@@ -20,155 +20,174 @@
  */
 #include <linux/sort.h>
 #include <media/dvb_frontend.h>
-#include "neumo-scan.h"
-
-static int verbose=false;
-#define dprintk(fmt, arg...)																					\
-	printk(KERN_DEBUG pr_fmt("%s:%d " fmt),  __func__, __LINE__, ##arg)
-
-#define vprintk(fmt, arg...)																					\
-	if(verbose) printk(KERN_DEBUG pr_fmt("%s:%d " fmt),  __func__, __LINE__, ##arg)
+#include "./neumo-scan-private.h"
 
 
-
-
-struct spectrum_peak_internal_t {
-	s32 idx; //index at which we last found a peak
-	s32 freq; //frequency of current peak
-	s32 bw; //bandwidth of current peak
-	s32 rise_idx; //location of last processed rising peak
-	s32 fall_idx; //location of last processed falling peak
-	s32 snr;
-	s32 level;
-};
-
-
-struct scan_internal_t {
-	s32* rs; //running sum
-	s32 start_idx ;//analysis starts at spectrum[start_idx]
-	s32 end_idx ;//analysis end at spectrum[end_idx]-1
-	s32 current_idx; //position at which we last stopped processing
-	s32 window_idx ; //index of current window size
-	s32 next_frequency; // If we found a transponder last time, this is the frequency just above the transponder bandwidth
-
-	struct spectrum_peak_internal_t last_peak;
-
-	s32 last_rise_idx; //location of last processed rising peak
-	s32 last_fall_idx; //location of last processed falling peak
-	s32 last_peak_snr; //snr of last detected candidate
-
-	u8* peak_marks;
-	struct spectrum_peak_internal_t* peaks;
-	int num_peaks;
-	int max_num_peaks;
-	int w; //window_size to look for peaks
-};
-
-enum slope_t {
-	NONE = 0,
-	FALLING=1,
-	RISING=2
-};
-
-#if 0
-static s32 max_(s32*a, int n)
-{
+static void running_sum(s32* pout, s32* psig, int n) {
 	int i;
-	s32 ret=a[0];
-	for(i=0; i<n;++i)
-		if(a[i]> ret)
-			ret=a[i];
-	return ret;
-}
-#endif
-
-
-#if 0
-static void clean_(s32*psig, s32*pres, int n)
-{
-	int i;
-	s32 mean;
-	s32 last = psig[0];
-	int j;
-	for (i=0; i< n; ++i) {
-		if(pres[i] == pres[last]) {
-			mean += psig[i];
-		} else {
-
-			if(i>last)
-				mean/= (i-last);
-			for(j=last; j<i;++j)
-				psig[i] = mean;
-			mean =psig[i];
-			last=i;
-		}
-	}
-}
-#endif
-
-static void running_sum(s32* pout, s32* psig, int n)
-{
-	int i;
-	int accu=psig[0];
-	for(i=0;i<n;++i) {
+	int accu = psig[0];
+	for (i = 0; i < n; ++i) {
 		accu += psig[i];
-		pout[i]=accu;
+		pout[i] = accu;
 	}
 }
 
+static void noise_est(s32* pout, s32* psig, int n) {
+	int i;
+	int accu = dtabs(2*psig[0] - psig[1]);
+	for (i = 1; i < n-1; ++i) {
+		s32 temp = dtabs(psig[i]*2 - (psig[i-1] +psig[i+1]));
+		accu += temp;
+		pout[i] = accu;
+	}
+	accu += dtabs(2*psig[i] - psig[i-1]);
+	pout[i] = accu;
+}
 
-static s32 windows[] = {2,	 4,		6,
-	8,	10,	 12,	14,
-	16,	18, 20,	 22, 24, 26, 28, 30,
-	32,	36, 40,	 44, 48,	52, 56, 60,
-	64, 72,	 80,	88,	 96,	104, 112, 120,
-	128, 144, 160, 176, 192, 208, 224, 240,
-	256,	 288, 320, 352, 384, 416, 448, 480,
-	512,  576, 640, 704, 768, 832, 896, 960,
-	1024, 1152, 1280, 1408, 1536, 1664, 1792, 1920,
-	2048};
+static s32 windows[] = {
+	2,    4,    6,    8,   10,   12,   14,   16,   18,   20,   22,
+	24,   26,   28,   30,   32,   34,   36,   38,   40,   42,   44,
+	46,   48,   50,   52,   54,   56,   58,   60,   62,   64,   66,
+	68,   72,   74,   76,   80,   82,   86,   88,   92,   94,   98,
+	102,  106,  108,  112,  116,  120,  126,  130,  134,  140,  144,
+	150,  154,  160,  166,  172,  178,  184,  190,  198,  204,  212,
+	220,  228,  236,  244,  252,  262,  270,  280,  290,  300,  312,
+	322,  334,  346,  358,  370,  384,  398,  412,  426,  442,  456,
+	474,  490,  508,  526,  544,  564,  584,  604,  626,  648,  670,
+	694,  720,  744,  772,  798,  826,  856,  886,  918,  950,  984,
+	1020, 1056, 1094, 1132, 1172, 1214, 1256, 1302, 1348, 1396, 1444,
+	1496, 1548, 1604, 1660, 1720, 1780, 1844, 1910, 1976, 2048,
+};
 
-static int check_candidate_tp(struct spectrum_scan_state* ss,
-															struct scan_internal_t* si)
+
+static bool is_part_of(struct spectrum_peak_internal_t* a, struct spectrum_peak_internal_t* b) {
+	bool a_rise_in_b = (a->rise_idx >= b->rise_idx && a->rise_idx <= b->fall_idx);
+	bool a_fall_in_b =	(a->fall_idx >= b->rise_idx && a->fall_idx <= b->fall_idx);
+	bool a_in_b = a_rise_in_b && a_fall_in_b;
+	return a_in_b;
+	if (a_in_b && //an older peak is contained in the candidate
+			b->dip_snr >= a->mean_snr) //and cand has a dip due to it
+		return false;
+};
+
+	/*returns 1 if a is better than a and should be kept,
+		return -1 if b is better than a and should be kept
+		returns 0 if both do not conflict
+	*/
+static int is_better_than(struct spectrum_peak_internal_t* a, struct spectrum_peak_internal_t* b) {
+		//implicit preference for a, which has (often) lower bandwidth
+		int a_in_b_count = 0;
+		int b_in_a_count = 0;
+		if(a->lowest_left_idx > b->rise_idx && a->lowest_left_idx < b->fall_idx ) {
+			a_in_b_count++;
+			if(b->mean_level - a->lowest_left_level >= b->fluctuation*8/* &&b_w>=512*/)
+				return 1;
+		}
+
+		if(a->lowest_right_idx > b->rise_idx && a->lowest_right_idx < b->fall_idx) {
+			a_in_b_count++;
+			if(b->mean_level - a->lowest_right_level >= b->fluctuation*8 /*&& b_w>=512*/)
+				return 1;
+		}
+
+		if(is_part_of(a,b))
+			return -1;
+
+		if(b->lowest_left_idx > a->rise_idx && b->lowest_left_idx < a->fall_idx) {
+			b_in_a_count++;
+			if(a->mean_level - b->lowest_left_level >= a->fluctuation*8  /*&& a_w>=512*/)
+				return -1;
+		}
+
+		if(b->lowest_right_idx > a->rise_idx && b->lowest_right_idx < a->fall_idx) {
+			b_in_a_count++;
+			if(a->mean_level - b->lowest_right_level >= a->fluctuation*8 /*&& a_w>=512*/)
+				return -1;
+		}
+
+		if(is_part_of(b,a))
+			return 1;
+
+		if(a_in_b_count == 0 && b_in_a_count ==0)
+			return 0; // no overlap
+
+		return (a->mean_snr >= b->mean_snr ) ? 1 : -1; //prefer the peak with the lowest dip
+
+};
+
+
+static int check_candidate_tp(spectrum_scan_state_t* ss, struct scan_internal_t* si)
 {
 	int i;
-	struct spectrum_peak_internal_t *cand = &si->last_peak;
-	if(cand->snr < ss->threshold2) {
-		vprintk("Rejecting too weak candidate\n");
+	struct spectrum_peak_internal_t* cand = &si->last_peak;
+#ifdef DEBUGXXX
+	auto match = [&](auto*cand) {
+		return (cand->freq/1000 >=11175) && (cand->freq/1000 <= 11180);
+	};
+#endif
+	if (cand->mean_snr < ss->threshold2) {
+#ifdef DEBUGXXX
+		if(match(cand))
+			dprintk("Rejecting too weak candidate: %dkHz BW=%dkHz snr=%ddB/%ddB level=%ddB\n", cand->freq, cand->bw,
+							cand->mean_snr, cand->dip_snr, cand->dip_level);
+#endif
 		return -1;
 	}
-	for(i=0; i< si->num_peaks; ++i) {
-		struct spectrum_peak_internal_t *old = &si->peaks[i];
-		//older contained/overlapping transponder with smaller bandwidth
-		if(cand->bw >= old->bw &&
-			 (
-				(old->rise_idx >= cand->rise_idx &&  old->rise_idx <= cand->fall_idx) ||
-				(old->fall_idx >= cand->rise_idx &&  old->fall_idx <= cand->fall_idx)
-				 )) {
-			if( old->level - cand->level >= ss->threshold2) {
-				//vprintk("Rejecting peak because it contains other peaks\n");
-				return -1;
-			} else {
-				memmove(&si->peaks[i] , &si->peaks[i+1], sizeof(si->peaks[0]) * (si->num_peaks-i-1));
-				--i;
-				si->num_peaks--;
-				continue;
-			}
-		}
+	if(cand->dip_snr <= ss->threshold) {
+#ifdef DEBUGXXX
+		if(match(cand))
+			dprintk("Rejecting too weak candidate: %dkHz BW=%dkHz snr=%ddB/%ddB level=%ddB\n", cand->freq, cand->bw,
+							cand->mean_snr, cand->dip_snr, cand->dip_level);
+#endif
+		return -1;
+	}
 
-		//older contained/overlapping transponder with larger bandwidth
-		if((cand->bw < old->bw && cand->rise_idx >= old->rise_idx &&  cand->rise_idx <= old->fall_idx) ||
-			 (cand->fall_idx >= old->rise_idx &&  cand->fall_idx <= old->fall_idx)
-			) {
-			if( cand->level - old->level >= ss->threshold2) {
-				memmove(&si->peaks[i] , &si->peaks[i+1], sizeof(si->peaks[0]) * (si->num_peaks-i-1));
-				si->num_peaks--;
-				--i;
-				continue;
-			} else {
-				//vprintk("Overwriting peak because it contains other peaks\n");
-				return -1;
+
+	for (i = 0; i < si->num_peaks; ++i) {
+		struct spectrum_peak_internal_t* old = &si->peaks[i];
+#ifdef DEBUGXXX
+		bool print =  match(old) | match(cand);
+#endif
+		int old_is_better = is_better_than(old, cand);
+		if(old_is_better == 0)
+			continue; //no overlap
+		if(old_is_better > 0) { //old is better
+#ifdef DEBUGXXX
+			if(print) {
+				dprintk("Rejecting peak: new: %dkHz BW=%d.%03dMHz "
+								"lvl=%d snr=%d fluct=%d dip =%d"
+								" old: %dkHz BW=%d.%03dMHz lvl=%d snr=%d fluct=%d dip=%d w=%d\n",
+								cand->freq, cand->bw/1000, cand->bw%1000, cand->mean_level,
+								cand->mean_snr, cand->fluctuation, cand->dip_snr,
+								old->freq, old->bw/1000, old->bw%1000, old->mean_level,
+								old->mean_snr, old->fluctuation, old->dip_snr,
+								si->w);
+				is_better_than(old, cand);
 			}
+#endif
+				return -1;
+		} else if(old_is_better<0) { // cand is better
+#ifdef DEBUGXXX
+			if(print) {
+				dprintk("Overwriting peak: new: %dkHz BW=%d.%03dMHz "
+								"lvl=%d snr=%d fluct=%d dip =%d"
+								" old: %dkHz BW=%d.%03dMHz lvl=%d snr=%d fluct=%d dip=%d w=%d\n",
+								cand->freq, cand->bw/1000, cand->bw%1000, cand->mean_level,
+								cand->mean_snr, cand->fluctuation, cand->dip_snr,
+								old->freq, old->bw/1000, old->bw%1000, old->mean_level,
+								old->mean_snr, old->fluctuation, old->dip_snr,
+								si->w);
+				is_better_than(old, cand);
+			}
+#endif //TODO: handle equal tps
+
+			memmove(&si->peaks[i], &si->peaks[i + 1], sizeof(si->peaks[0]) * (si->num_peaks - i - 1));
+			--i;
+			si->num_peaks--;
+#ifdef DEBUGXXX
+			si->check();
+#endif
+			continue;
 		}
 	}
 	return 0;
@@ -182,36 +201,53 @@ static int check_candidate_tp(struct spectrum_scan_state* ss,
   --------------\
                  \
                   --
+
+
 */
-static void falling_kernel(struct spectrum_scan_state* ss,
-													 struct scan_internal_t* si)
-{
-	int count=0;
-	bool peak_found=false;
-	s32 delta = (si->w*16)/200;
-	s32 w2= si->w/2;
+
+static void falling_kernel(spectrum_scan_state_t* ss, struct scan_internal_t* si,
+													 s32* response_ret) {
+	s32 delta = (si->w * 16) / 200;
+	s32 w = si->w;
 	int n = ss->spectrum_len;
 	int i;
-	if(delta==0)
-		delta=1;
-	for(i=w2; i < n-delta; ++i) {
-		s32 power = (si->rs[i]-si->rs[i -w2])/w2; //average strength
+	int besti = -1;
+	s32 best = 0;
+	if(delta <= 2 || 2*delta >= si->w)
+		delta = 1;
+	if (delta == 0)
+		delta = 1;
+	for (i = n - delta -1; i >= w; --i) {
+		s32 power = (si->rs[i] - si->rs[i - w]) / w;
 		s32 right = ss->spectrum[i + delta];
-		if (power - right > ss->threshold)
-			count++;
-		else
-			count =0;
-		if(count >= ss->mincount) {
-			//mark complete peak if not already on a peak
-			if(!peak_found) {
-				si->peak_marks[i] |=FALLING;
+		s32 response = power - right;
+		if (response > ss->threshold) {
+			// mark complete peak if not already on a peak
+			if(besti >=0 && besti - i >= si->w/4)
+				besti = -1;
+			if(besti >=0 && best <= response /* && response > 2 * ss->threshold*/) {
+				si->peak_marks[besti] &= ~FALLING;
+				if (response_ret)
+					response_ret[besti] = 0;
+				besti = -1;
 			}
-			peak_found = true;
-		} else {
-			peak_found =false;
+
+			if(besti >= 0 && best  > response)
+				continue; //current peak is weak and overlaps with previous one
+
+			si->peak_marks[i] |= FALLING;
+			if (response_ret)
+				response_ret[i] = response;
+			if(response > best || besti<0) {
+				besti = i;
+				best = response;
+			}
 		}
 	}
 }
+
+
+
 
 /*
 	candidate left edges of transponder
@@ -222,323 +258,358 @@ static void falling_kernel(struct spectrum_scan_state* ss,
 -----/  |
 
 */
-static void rising_kernel(struct spectrum_scan_state* ss,
-													struct scan_internal_t* si)
-{
-
-	int count=0;
-	bool peak_found=false;
-	s32 delta = (si->w*16)/200; //rise interval
-	s32 w2= si->w/2; //plateau interval
+static void rising_kernel(spectrum_scan_state_t* ss, struct scan_internal_t* si,
+													s32* response_ret) {
+	s32 delta = (si->w * 16) / 200; // rise interval
+	s32 w = si->w;							// plateau interval
 	int n = ss->spectrum_len;
 	int i;
-	if(delta==0)
-		delta =1;
-	for(i = n - w2 - 1; i >=delta; --i) {
-		s32 power = (si->rs[i + w2]- si->rs[i])/w2;
+	int besti = -1;
+	s32 best = 0;
+	int count = 0;
+	if(delta <= 2 || 2*delta >= si->w)
+		delta = 1;
+	if (delta == 0)
+		delta = 1;
+	for (i = delta; i <= n - w -1; ++i) {
+		s32 power = (si->rs[i + w] - si->rs[i]) / w;
 		s32 left = ss->spectrum[i - delta];
-		if (power - left > ss->threshold)
-			count++;
-		else
-			count =0;
-		if(count >= ss->mincount) {
-			//mark complete peak if not already on a peak
-			if(!peak_found) {
-					si->peak_marks[i] |= RISING;
+		s32 response = power - left;
+		if (response > ss->threshold) {
+			// erase small overlapping peaks
+			if(besti >=0 && i - besti >= si->w/4)
+				besti = -1;
+			if(besti >=0 && best <= response /* && response > 2 * ss->threshold*/) {
+				count -= 	!!(si->peak_marks[besti] & ~RISING);
+				si->peak_marks[besti] &= ~RISING;
+				if (response_ret)
+					response_ret[besti] = 0;
+				besti = -1;
 			}
-			peak_found = true;
-		} else {
-			peak_found =false;
+
+			if(besti >= 0 && best  > response)
+				continue; //current peak is weak and overlaps with previous one
+
+			si->peak_marks[i] |= RISING;
+			count++;
+			if (response_ret)
+				response_ret[i] = response;
+			if(response > best || besti<0) {
+				besti = i;
+				best = response;
+			}
 		}
 	}
 }
 
 
-static void spectral_init_level(struct spectrum_scan_state* ss,
-																				struct scan_internal_t* si)
-{
-	si->start_idx =  (si->w*16)/200;
-	if (si->start_idx==0)
+void spectral_init_level(spectrum_scan_state_t* ss,
+																 struct scan_internal_t* si,
+																 s32* falling_response_ret,
+																 s32* rising_response_ret) {
+	si->start_idx = (si->w * 16) / 200;
+	if (si->start_idx == 0)
 		si->start_idx++;
-	si->end_idx = ss->spectrum_len - (si->w * 16)/200;
-	if (si->end_idx== ss->spectrum_len)
+	si->end_idx = ss->spectrum_len - (si->w * 16) / 200;
+	if (si->end_idx == ss->spectrum_len)
 		si->end_idx--;
-	si->current_idx = si->start_idx;
 	si->last_peak.idx = -1;
-	si->last_rise_idx = -1;
-	si->last_fall_idx = -1;
 	memset(si->peak_marks, 0, sizeof(si->peak_marks[0]) * ss->spectrum_len);
-	running_sum(si->rs, ss->spectrum, ss->spectrum_len);
-	falling_kernel(ss, si);
-	rising_kernel(ss, si);
-	//fix_kernel(si->peak_marks, ss->spectrum, ss->spectrum_len, ss->w, ss->threshold, ss->mincount);
+	falling_kernel(ss, si, falling_response_ret);
+	rising_kernel(ss, si, rising_response_ret);
+}
+
+static inline int find_falling(struct scan_internal_t* si, int start, int end) {
+	int i;
+	for(i = start; i < end; ++i) {
+		if (si->peak_marks[i] & FALLING) {
+			return i;
+		}
+	}
+	return -1;
+}
+
+static inline int find_rising(struct scan_internal_t* si, int start, int end) {
+	int i;
+	for(i = end; i > start; --i) {
+		if (si->peak_marks[i] & RISING) {
+			return i;
+		}
+	}
+	return -1;
+}
+
+
+static int process_candidate(spectrum_scan_state_t* ss, struct scan_internal_t* si,
+														 int rise_idx, int fall_idx) {
+	s32 delta, left, right, lowest_left, lowest_right;
+	int i, lowest_left_i, lowest_right_i, left_3db_i, right_3db_i;
+	s32 thresh;
+	int count;
+	int left_top_i, right_top_i;
+	delta = (si->w * 16) / 100; //15% one sided extension
+	if(delta <= 2 || 2*delta >= si->w)
+		delta = 1;
+	if (delta == 0)
+		delta = 1;
+	//compute average height of peak
+	si->last_peak.mean_level =
+		(si->rs[fall_idx] - si->rs[rise_idx]) / (fall_idx - rise_idx);
+	//the factor 25/102 approximates 1/sqrt(6)
+	si->last_peak.fluctuation = (25*(si->noise[fall_idx] - si->noise[rise_idx])) /(102*(fall_idx - rise_idx));
+	//compute threshold for bandwidth computation
+	thresh = si->last_peak.mean_level -3000;
+
+	//comute the deepest values near the peak
+	left = rise_idx - delta;
+	if(left < 0)
+		left = 0;
+	right = fall_idx + delta;
+	if(right > ss->spectrum_len)
+		right = ss->spectrum_len;
+
+	lowest_left = ss->spectrum[left];
+	lowest_left_i = left;
+	lowest_right = ss->spectrum[right-1];
+	lowest_right_i = right - 1;
+
+	for(i=left ; i < rise_idx ; ++i) {
+		if(lowest_left > ss->spectrum[i]) {
+			lowest_left = ss->spectrum[i];
+			lowest_left_i = i;
+		}
+	}
+	for(i=fall_idx+1; i < right ; ++i) {
+		if(lowest_right > ss->spectrum[i]) {
+			lowest_right = ss->spectrum[i];
+			lowest_right_i = i;
+		}
 	}
 
-static int spectral_scan_start(struct spectrum_scan_state* ss,
-																			 struct scan_internal_t* si)
-{
-	dprintk("Starting spectrum scan\n");
-	si->max_num_peaks = 1024;
-	ss->scan_in_progress =true;
-
-	si->window_idx = 0;
-	si->w = windows[si->window_idx];
-
-	//ss->w =17;
-	ss->snr_w = 35; ////percentage
-	//ss->threshold = 2000;
-	//ss->mincount = 3;
-	si->peak_marks = (u8*)kzalloc(ss->spectrum_len * sizeof(si->peak_marks[0]),
-																GFP_KERNEL);
-	si->peaks =(struct spectrum_peak_internal_t*)
-		kzalloc(si->max_num_peaks * sizeof(si->peaks[0]),
-																GFP_KERNEL);
-#if 0
-	ss->freq = (s32*)kzalloc(ss->spectrum_len * sizeof(ss->freq[0]),
-													 GFP_KERNEL);
-#endif
-	si->rs = (s32*)kzalloc(ss->spectrum_len * sizeof(si->rs[0]),
-												 GFP_KERNEL);
-	si->num_peaks = 0;
-#if 0
-	for(i=0; i <ss->spectrum_len; ++i)
-		ss->freq[i]=i*ss->frequency_step;
-#endif
-	if (!ss->spectrum) {
-		BUG_ON(!ss->spectrum);
-		dprintk("error - no spectrum in input\n");
-		return -ENOMEM;
+	//compute the 3dB limits of the peak
+	for(i=lowest_left_i, count=0; i < lowest_right_i; ++i) {
+		if(ss->spectrum[i] >= thresh) {
+			if(count==0)
+				left_3db_i = i;
+			if(++count >= si->w/8) //require at least si->w //8 values above threshold
+				break;
+		} else
+			count=0;
 	}
-	BUG_ON(ss->candidates); //this will be allocated later
-	spectral_init_level(ss, si);
+	if(count==0)
+		left_3db_i = lowest_left_i;
+
+	for(i=lowest_right_i, count=0; i >= lowest_left_i; --i) {
+		if(ss->spectrum[i] >= thresh) {
+			if(count==0)
+				right_3db_i = i;
+			if(++count >= si->w/8) //require at least si->w //8 values above threshold
+				break;
+		} else
+			count = 0;
+	}
+	if(count==0)
+		right_3db_i = lowest_right_i;
+
+#if 1
+	//compute bounds of top plateau
+	for(i=left_3db_i; i <= right_3db_i; ++i) {
+		if(ss->spectrum[i] >= si->last_peak.mean_level)
+			break;
+	}
+
+	left_top_i = i;
+	for(i=right_3db_i; i >= left_top_i; --i) {
+		if(ss->spectrum[i] >= si->last_peak.mean_level)
+			break;
+	}
+	right_top_i = i;
+#endif
+	if(right_top_i > left_top_i) {
+		//recompute average height of peak
+		si->last_peak.mean_level =
+			(si->rs[right_top_i] - si->rs[left_top_i]) / (right_top_i - left_top_i);
+	}
+
+
+	//recompute the 3dB limits of the peak
+	thresh = si->last_peak.mean_level -3000;
+	for(i=lowest_left_i, count=0; i < lowest_right_i; ++i) {
+		if(ss->spectrum[i] >= thresh) {
+			if(count==0)
+				left_3db_i = i;
+			if(++count >= si->w/8) //require at least si->w //8 values above threshold
+				break;
+		} else
+			count=0;
+	}
+	if(count==0)
+		left_3db_i = lowest_left_i;
+
+	for(i=lowest_right_i, count=0; i >= lowest_left_i; --i) {
+		if(ss->spectrum[i] >= thresh) {
+			if(count==0)
+				right_3db_i = i;
+			if(++count >= si->w/8) //require at least si->w //8 values above threshold
+				break;
+		} else
+			count = 0;
+	}
+	if(count==0)
+		right_3db_i = lowest_right_i;
+
+#if 0
+	//compute the lowest dip level in central peak
+	si->last_peak.dip_level = ss->spectrum[left_3db_i];
+	for(i=left_3db_i; i <= right_3db_i; ++i) {
+		if(si->last_peak.dip_level > ss->spectrum[i])
+			si->last_peak.dip_level = ss->spectrum[i];
+	}
+#else
+	//compute the lowest dip level in central peak
+	si->last_peak.dip_level = ss->spectrum[left_top_i];
+	for(i=left_top_i; i <= right_top_i; ++i) {
+		if(si->last_peak.dip_level > ss->spectrum[i])
+			si->last_peak.dip_level = ss->spectrum[i];
+	}
+#endif
+	si->last_peak.idx = (right_3db_i + left_3db_i) / 2;
+	si->last_peak.dip_snr = si->last_peak.dip_level -  dtmin(lowest_right, lowest_left);
+	si->last_peak.freq = ss->freq[si->last_peak.idx]; // in kHz
+	si->last_peak.bw = ss->freq[right_3db_i] - ss->freq[left_3db_i]; // in kHz
+	si->last_peak.fall_idx = right_3db_i;
+	si->last_peak.rise_idx = left_3db_i;
+	si->last_peak.lowest_left_idx = lowest_left_i;
+	si->last_peak.lowest_right_idx = lowest_right_i;
+	si->last_peak.lowest_left_level = lowest_left;
+	si->last_peak.lowest_right_level = lowest_right;
+	si->last_peak.mean_snr = si->last_peak.mean_level - dtmin(lowest_right, lowest_left);
+#ifdef DEBUGXXX
+	dprintk("CANDIDATE1: %d %dkHz [%d - %d] "
+					"BW=%dkHz snr=%dmdB "
+					"level=[%d %d %d]mdB w=%d\n",
+					si->last_peak.idx, si->last_peak.freq, ss->freq[lowest_left_i], ss->freq[lowest_right_i],
+					si->last_peak.bw, si->last_peak.mean_snr,
+					ss->spectrum[lowest_left_i], si->last_peak.mean_level, ss->spectrum[lowest_right_i],
+					si->w);
+#endif
+
 	return 0;
 }
 
-static int spectral_scan_end(struct spectrum_scan_state* ss,
-																			 struct scan_internal_t* si)
-{
-	int i;
+static int spectral_scan_init(spectrum_scan_state_t* ss, struct scan_internal_t* si) {
+	si->max_num_peaks = 1024*4;
+
+	ss->scan_in_progress = true;
+
+	// ss->w =17;
+	ss->snr_w = 35; //percentage
+	// ss->threshold = 2000;
+	// ss->mincount = 3;
+	dprintk("ALLOCATING: spectrum_len=%d max_num_peaks=%d\n", ss->spectrum_len, si->max_num_peaks);
+	if (!ss->spectrum || ss->spectrum_len ==0) {
+		return -ENOMEM;
+	}
+	si->rs = kzalloc(ss->spectrum_len * (sizeof(si->rs[0])), GFP_KERNEL);
+	si->noise = kzalloc(ss->spectrum_len * (sizeof(si->noise[0])), GFP_KERNEL);
+	si->peak_marks = kzalloc(ss->spectrum_len * (sizeof(si->peak_marks[0])), GFP_KERNEL);
+	si->peaks = (struct spectrum_peak_internal_t*) kzalloc(si->max_num_peaks * (sizeof(si->peaks[0])), GFP_KERNEL);
+
+	running_sum(si->rs, ss->spectrum, ss->spectrum_len);
+	noise_est(si->noise, ss->spectrum, ss->spectrum_len);
+	si->num_peaks = 0;
+	return 0;
+}
+
+static void spectral_scan_end(struct scan_internal_t* si) {
 	if(si->peak_marks)
 		kfree(si->peak_marks);
 	si->peak_marks = NULL;
-	if(si->rs)
-		kfree(si->rs);
-	si->rs = NULL;
-#if 0
-	for(i=0; i <ss->spectrum_len; ++i)
-		ss->freq[i]=i*ss->frequency_step;
-#endif
-	dprintk("num_peaks=%d\n", si->num_peaks);
-	BUG_ON(ss->candidates != NULL);
-	ss->candidates =
-		(struct spectral_peak_t*)
-		kzalloc(si->num_peaks * sizeof(struct spectral_peak_t), GFP_KERNEL);
-	if(!ss->candidates)
-		return -ENOMEM;
-	ss->num_candidates = si->num_peaks;
-	for(i=0; i < si->num_peaks; ++i) {
-		struct spectrum_peak_internal_t* pi = &si->peaks[i];
-		struct spectral_peak_t* p = &ss->candidates[i];
-		p->freq = pi->freq;
-		p->symbol_rate = pi->bw*1250;
-		p->snr = pi->snr;
-		p->level = pi->level;
-	}
 	if(si->peaks)
 		kfree(si->peaks);
 	si->peaks = NULL;
-	si->num_peaks = 0;
+	if(si->rs)
+		kfree(si->rs);
+	si->rs = NULL;
+	if(si->noise)
+		kfree(si->noise);
+	si->noise =NULL;
+}
+
+static int scan_level(spectrum_scan_state_t *ss, struct scan_internal_t *si,
+											s32* spectrum, u32* freq, int spectrum_len, int w) {
+	int fall_idx;
+	int rise_idx;
+	si->w = w;
+	spectral_init_level(ss, si, NULL, NULL);
+	fall_idx = find_falling(si, si->start_idx, si->end_idx);
+	for(; fall_idx < si->end_idx && fall_idx >=0;
+			fall_idx = find_falling(si, fall_idx+1, si->end_idx)) {
+		//find  a pair of rising and falling peaks, separated by 1 to 1.5 times si.w
+		int ll = fall_idx - (si->w * 150)/100;
+		if (ll < si->start_idx)
+			ll  = si->start_idx;
+		rise_idx = find_rising(si, ll, fall_idx - si->w);
+		for(; rise_idx >= ll && rise_idx>=0; rise_idx = find_rising(si, ll, rise_idx-1)) {
+			//compute parameters of the candidate peak
+			process_candidate(ss, si, rise_idx, fall_idx);
+			if (check_candidate_tp(ss, si) >= 0) {
+				si->peaks[si->num_peaks++] = si->last_peak;
+				if (si->num_peaks >= si->max_num_peaks)
+					return -1;
+			}
+		}
+	}
 	return 0;
 }
 
-
-#if 0
-static s32 peak_snr(struct spectrum_scan_state* ss,
-										struct scan_internal_t* si)
-{
-	s32 mean=0;
-	s32 min1=0;
-	s32 min2=0;
-	int i;
-	s32 w = (ss->snr_w * (si->last_fall_idx - si->last_rise_idx))/100;
-	if( si->last_fall_idx<=  si->last_rise_idx)
-		return -99000;
-	for(i=si->last_rise_idx; i< si->last_fall_idx; ++i)
-		mean += ss->spectrum[i];
-	mean /=(si->last_fall_idx - si->last_rise_idx);
-
-	i= si->last_rise_idx - w;
-	if(i<0)
-		i=0;
-	min1 = ss->spectrum[si->last_rise_idx];
-	for(; i < si->last_rise_idx; ++i)
-		if (ss->spectrum[i] < min1)
-			min1 = ss->spectrum[i];
-
-	i= si->last_fall_idx + w;
-	if(i> ss->spectrum_len)
-		i = ss->spectrum_len;
-	min2 = ss->spectrum[si->last_fall_idx];
-	for(; i > si->last_fall_idx; --i)
-		if (ss->spectrum[i] < min2)
-			min2 = ss->spectrum[i];
-
-	if (min2<min1)
-		min1= min2;
-	return mean - min1;
-}
-#endif
-
-//returns index of a peak in the spectrum
-static int next_candidate_this_level(struct spectrum_scan_state* ss,
-																		 struct scan_internal_t* si)
-{
-	s32 snr;
-	for(; si->current_idx < si->end_idx; ++si->current_idx) {
-		if(si->peak_marks[si->current_idx] & FALLING) {
-			if(si->last_rise_idx > si->last_fall_idx && si->last_rise_idx>=0 &&
-				 si->current_idx - si->last_rise_idx <= si->w && //maximum windows size
-				 si->current_idx - si->last_rise_idx >= (si->w*2)/3 //minimum windows size
-				) {
-
-				//candidate found; peak is between last_rise and current idx
-				si->last_peak.idx = (si->last_rise_idx + si->current_idx)/2;
-				si->last_peak.freq =
-					ss->freq[si->last_peak.idx]; //in kHz
-				BUG_ON(si->current_idx-si->last_rise_idx > si->w);
-				si->last_peak.bw = ss->freq[si->current_idx] - ss->freq[si->last_rise_idx]; //in kHz
-				dprintk("CANDIDATE: %d %dkHz BW=%dkHz snr=%ddB\n", si->last_peak.idx, si->last_peak.freq,
-								si->last_peak.bw, snr);
-				si->last_fall_idx = si->current_idx;
-#if 0
-				si->last_peak_snr = peak_snr(ss);
-#else
-				BUG_ON(si->last_fall_idx != si->current_idx);
-				si->last_peak.level = (si->rs[si->last_fall_idx] - si->rs[si->last_rise_idx]) /
-					(si->last_fall_idx-si->last_rise_idx);
-				{
-					s32 delta = (si->w*16)/200;
-					s32 left =  si->last_rise_idx - delta;
-					s32 right =  si->last_fall_idx + delta;
-					BUG_ON(left<0);
-					BUG_ON(right >= ss->spectrum_len);
-					left = ss->spectrum[left];
-					right = ss->spectrum[right];
-					if(left < right)
-						right = left;
-					si->last_peak_snr = si->last_peak.level - right;
-					si->last_peak.snr = 	si->last_peak_snr;
-				}
-#endif
-				si->last_peak.rise_idx = si->last_rise_idx;
-				si->last_peak.fall_idx = si->current_idx;
-
-				//assert(	ss->freq[si->last_peak.fall_idx] - ss->freq[si->last_peak.rise_idx] == ss->bw);
-
-
-				if(si->peak_marks[si->current_idx]& RISING)
-					si->last_rise_idx = si->current_idx;
-				si->current_idx++;
-
-				return si->last_peak.idx;
-			}
-
-			si->last_fall_idx = si->current_idx;
-		}
-
-		if(si->peak_marks[si->current_idx]& RISING)
-			si->last_rise_idx = si->current_idx;
+static int scan_all(spectrum_scan_state_t *ss, struct scan_internal_t *si,
+										 s32* spectrum, u32* freq, int spectrum_len) {
+	int window_idx=0;
+	spectral_scan_init(ss, si);
+	for(window_idx=0; window_idx < (int)(sizeof(windows) / sizeof(windows[0])); ++window_idx) {
+		int w = windows[window_idx];
+		scan_level(ss, si, spectrum, freq, spectrum_len, w);
 	}
-	return -1;
+	return 0;
 }
 
-
-static int next_candidate_tp(struct spectrum_scan_state* ss,
-														 struct scan_internal_t* si)
-{
-	int ret;
-	while(si->window_idx <  sizeof(windows)/sizeof(windows[0])) {
-		if (si->current_idx >= si->end_idx) { //we reached end of a window
-			if(++si->window_idx >=  sizeof(windows)/sizeof(windows[0]))
-				return -1; //all windows done
-			si->w = windows[si->window_idx]; //switch to next window size
-			spectral_init_level(ss, si);
-		}
-		ret= next_candidate_this_level(ss, si);
-		if(ret<0)
-			continue;
-#if 1
-		dprintk("CANDIDATE: %d %dkHz BW=%dkHz snr=%ddB\n", si->last_peak.idx, si->last_peak.freq,
-						si->last_peak.bw, si->last_peak_snr);
-#endif
-		return ret;
-	}
-	return -1;
-}
-
-
-
-
-static int spectral_scan_next(struct spectrum_scan_state* ss,
-																			struct scan_internal_t* si,
-																			s32 *frequency_ret, s32* snr_ret)
-{
-	int ret=0;
-	while(ret>=0) {
-		ret = next_candidate_tp(ss, si);
-		if(ret>=0) {
-			if(check_candidate_tp(ss, si)>=0) {
-				dprintk("Next frequency to scan: [%d] %dkHz SNR=%d BW=%d\n", ret, si->last_peak.freq,
-								si->last_peak_snr, si->last_peak.bw);
-				*frequency_ret =  si->last_peak.freq;
-				*snr_ret =  si->last_peak_snr;
-				return  si->last_peak.idx;
-			}
-		} else {
-			dprintk("Current subband fully scanned: current_idx=%d end_idx=%d\n", si->current_idx, si->end_idx);
-		}
-	}
-	return -1;
-}
-
-
-static int cmp_fn(const void *pa, const void *pb) {
-	struct spectrum_peak_internal_t* a = (struct spectrum_peak_internal_t*)pa;
-	struct spectrum_peak_internal_t* b = (struct spectrum_peak_internal_t*)pb;
+static int cmp_fn(const void* pa, const void* pb) {
+	struct spectrum_peak_t* a = (struct spectrum_peak_t*)pa;
+	struct spectrum_peak_t* b = (struct spectrum_peak_t*)pb;
 	return a->freq - b->freq;
 }
-
-
 
 /*
 	spectrum is stored in ss on input
  */
-int neumo_scan_spectrum(struct spectrum_scan_state* ss)
+int neumo_scan_spectrum(spectrum_scan_state_t* ss)
 {
-	int ret= 0;
-	s32 frequency;
-	s32 snr;
 	struct scan_internal_t si;
-	dprintk("Starting scan on spectrum %p with length %d\n", ss->spectrum, ss->spectrum_len);
-	if (!ss->spectrum || ss->spectrum_len<=0) {
-		return -ENOMEM;
-	}
-	ss->mincount = 1;
+	int j = 0;
 	ss->threshold = 3000;
 	ss->threshold2 = 3000;
-	ret = spectral_scan_start(ss, &si);
-	if(ret<0) {
-		dprintk("Error starting spectrum scan\n");
-		return ret;
+	ss->mincount = 1;
+	memset(&si, 0, sizeof(si));
+	scan_all(ss, &si, ss->spectrum, ss->freq, ss->spectrum_len);
+	dprintk("scan_all done\n");
+
+	if(ss->candidates)
+		kfree(ss->candidates);
+	ss->num_candidates = si.num_peaks;
+	ss->candidates = kzalloc(ss->num_candidates * (sizeof(ss->candidates[0])), GFP_KERNEL);
+	dprintk("allocation done num_candidates=%d\n", ss->num_candidates);
+	for (j = 0; j < si.num_peaks; ++j) {
+		struct spectral_peak_t* p = & ss->candidates[j];
+		p->freq= si.peaks[j].freq;
+		p->symbol_rate = si.peaks[j].bw*1000; //top plateau approx SR. 10% underestimation
+		p->snr = si.peaks[j].mean_snr;
+		p->level = si.peaks[j].mean_level;
 	}
-	while(ret>=0) {
-		ret = spectral_scan_next (ss, &si, &frequency, &snr);
-		dprintk("FREQ=%d BW=%d SNR=%ddB\n", frequency, si.last_peak.bw, snr);
-		if(ret>=0) {
-			si.peaks[si.num_peaks++] = si.last_peak;
-			vprintk("NP=%d\n", si.num_peaks);
-		}
-	}
-	sort(&si.peaks[0], si.num_peaks, sizeof(si.peaks[0]), cmp_fn, NULL);
-	return spectral_scan_end(ss, &si);
+	dprintk("starting to sort\n");
+	sort(&ss->candidates[0], ss->num_candidates, sizeof(ss->candidates[0]), cmp_fn, NULL);
+	dprintk("sort done\n");
+	spectral_scan_end(&si);
+	dprintk("returning\n");
+	return 0;
 }

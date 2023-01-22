@@ -73,6 +73,8 @@ struct spectrum_scan_state {
 
 };
 
+typedef struct spectrum_scan_state spectrum_scan_state_t;
+
 int neumo_scan_spectrum(struct spectrum_scan_state* ss);
 
 #endif  /* ifndef NEUMODVB_SCAN_H */
