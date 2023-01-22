@@ -218,12 +218,6 @@ static int mxl603_set_params(struct dvb_frontend *fe)
 	u32 freq = 0;
 	u8 tmp;
 
-	pr_info("delivery_system=%d frequency=%d\n",
-			c->delivery_system, c->frequency);
-	if (!dev->active) {
-		ret = -EAGAIN;
-		goto err;
-	}
 	MXL603_REG_CTRL_INFO_T MxL603_DigitalDvbc[] =
 	{
 	  {0x0C, 0xFF, 0x00},
@@ -282,6 +276,13 @@ static int mxl603_set_params(struct dvb_frontend *fe)
 	  {0xD9, 0xFF, 0x04},
 	  {0,	 0,    0}
 	};
+
+	 pr_info("delivery_system=%d frequency=%d\n",
+					 c->delivery_system, c->frequency);
+	if (!dev->active) {
+		ret = -EAGAIN;
+		goto err;
+	}
 
 	switch (c->delivery_system) {
 	case SYS_ATSC:
