@@ -31,6 +31,8 @@ struct stid135_cfg {
 	u8  adr;
 	u32 clk;
 	u8  ts_mode;
+	u8 num_rf_inputs;
+	s8 rf_inputs[16];
 #define TS_2PAR 0
 #define TS_8SER 1
 #define TS_STFE 2

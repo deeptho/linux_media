@@ -187,7 +187,7 @@ struct dvb_frontend_extended_info {
 	s64      card_mac_address;      //unique identifier for card
 	s64      adapter_mac_address;   //unique identifier for adapter
 	char     unused[64 - 24 - 16];
-	s8       rf_inputs[16];  /*rf inputs to which thios tuner can connect If num_rf_inputs==0,
+	s8       rf_inputs[16];  /*rf inputs to which this tuner can connect. If num_rf_inputs==0,
 													then the adapter can connect to a single rf_input, which equals
 													adapter_no*/
 	u32      frequency_min;

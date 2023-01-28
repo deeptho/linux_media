@@ -2186,8 +2186,8 @@ static struct dvb_frontend_ops stid135_ops = {
 		FE_CAN_IQ | FE_CAN_BLINDSEARCH,
 		.supports_neumo = true,
 		.default_rf_input = -1, //means: use adapter_no
-		.num_rf_inputs = 4,
-		.rf_inputs = { 0, 1 , 2 , 3}
+		.num_rf_inputs = 0,
+		.rf_inputs = { 0}
 	},
 	.init				= stid135_init,
 	.sleep				= stid135_sleep,
@@ -2227,7 +2227,6 @@ static struct dvb_frontend_ops stid135_ops = {
 static struct stv_base *match_base(struct i2c_adapter  *i2c, u8 adr)
 {
 	struct stv_base *p;
-
 	list_for_each_entry(p, &stvlist, stvlist)
 		if (p->i2c == i2c && p->adr == adr)
 			return p;
@@ -2239,8 +2238,8 @@ static struct stv_base *match_base(struct i2c_adapter  *i2c, u8 adr)
 	between the 8 demods; provides access to the i2c hardware and such
 */
 struct dvb_frontend* stid135_attach(struct i2c_adapter *i2c,
-						struct stid135_cfg *cfg,
-						int nr, int rf_in)
+																		struct stid135_cfg *cfg,
+																		int nr, int rf_in)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	int i;
@@ -2256,7 +2255,8 @@ struct dvb_frontend* stid135_attach(struct i2c_adapter *i2c,
 	if (base) {
 		base->count++;
 		state->base = base;
-		dprintk("ATTACH DUP nr=%d rf_in=%d base=%p count=%d\n", nr, rf_in, base, base->count);
+		dprintk("ATTACH DUP nr=%d rf_in=%d base=%p count=%d i2c_addr=0x%x i2c=%s\n", nr, rf_in, base, base->count,
+						cfg->adr,  dev_name(&i2c->dev));
 	} else {
 		base = kzalloc(sizeof(struct stv_base), GFP_KERNEL);
 		if (!base)
@@ -2267,7 +2267,7 @@ struct dvb_frontend* stid135_attach(struct i2c_adapter *i2c,
 		base->i2c = i2c;
 		base->adr = cfg->adr;
 		base->count = 1;
-		dprintk("ATTACH NEW nr=%d rf_in=%d base=%p count=%d\n", nr, rf_in, base, base->count);
+		dprintk("ATTACH NEW nr=%d rf_in=%d base=%p count=%d i2c_addr=0x%x i2c=%s\n", nr, rf_in, base, base->count, cfg->adr,  dev_name(&i2c->dev));
 		base->extclk = cfg->clk;
 		base->ts_mode = cfg->ts_mode;
 		base->set_voltage = cfg->set_voltage;
@@ -2316,6 +2316,8 @@ struct dvb_frontend* stid135_attach(struct i2c_adapter *i2c,
 		dprintk("fe_stid135_apply_custom_qef_for_modcod_filter error=%d\n", error);
 #endif
 	state->fe.ops               = stid135_ops;
+	state->fe.ops.info.num_rf_inputs = cfg->num_rf_inputs;
+	memcpy(&state->fe.ops.info.rf_inputs[0], &cfg->rf_inputs[0], state->fe.ops.info.num_rf_inputs);
 	if (nr >=4)
 		state->fe.ops.info.extended_caps &= ~FE_CAN_SPECTRUM_FFT;
 	state->fe.demodulator_priv  = state;
