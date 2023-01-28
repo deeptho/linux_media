@@ -1399,7 +1399,7 @@ static int stid135_set_voltage(struct dvb_frontend* fe, enum fe_sec_voltage volt
 	}
 	if(state->base->tuner_use_count[state->rf_in] > 1 && voltage == SEC_VOLTAGE_OFF) {
 		dprintk("demod=%d rf_in=%d IGNORE voltage=OFF tuner_use_count=%d owner=%d\n",
-						state->nr, state->rf_in, voltage,
+						state->nr, state->rf_in,
 						state->base->tuner_use_count[state->rf_in],
 						state->base->tuner_owner[state->rf_in]);
 		return 0;
