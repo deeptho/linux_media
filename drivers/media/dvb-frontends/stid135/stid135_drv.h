@@ -305,7 +305,7 @@ struct lock_t {
 
 struct stv_base {
 	struct list_head     stvlist;
-
+	u8 card_no;
 	u8                   adr;
 	struct i2c_adapter  *i2c;
 	struct lock_t         lock;
@@ -752,5 +752,7 @@ void print_spectrum_scan_state_(struct spectrum_scan_state*ss,
 #define print_spectrum_scan_state(ss)		\
 	print_spectrum_scan_state_(ss, __func__, __LINE__)
 
+extern void chip_init_proc(struct stv* state, STCHIP_Info_t* hChipHandle_, const char*name);
+void chip_close_proc(struct stv* state, const char* name);
 
 #endif  /* ndef STID135_DRV_H */

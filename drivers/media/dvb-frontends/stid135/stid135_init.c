@@ -41,9 +41,6 @@
 #include "stid135_addr_map.h"
 #include "stid135_initLLA_cut2.h"
 #include "stid135_init.h"
-extern void chip_init_proc(STCHIP_Info_t* hChipHandle_, const char*name);
-void chip_close_proc(const char* name);
-
 
 u32 C8CODEW_TOP_CTRL[1] = { C8CODEW_TOP_CTRL_ADDR(unit) };
 u32 DVBSX_AGCRF[4] = { A1_DVBSX_AGCRF_ADDR(unit), A2_DVBSX_AGCRF_ADDR(unit), A3_DVBSX_AGCRF_ADDR(unit), A4_DVBSX_AGCRF_ADDR(unit) };
@@ -8924,9 +8921,6 @@ STCHIP_Error_t STiD135_Init(Demod_InitParams_t *InitParams,
 	ChipSetHierarchyMap (TRUE);
 
 	(*hChipHandle) = ChipOpen(InitParams->Chip);
-#ifdef DONT_ALLOW_MULTIPLE_CARDS
-	chip_init_proc(*hChipHandle, "stid135");
-#endif
 	ChipSetHierarchyMap (FALSE);
 
 	hChip=(*hChipHandle);
@@ -9000,9 +8994,6 @@ STCHIP_Error_t STiD135_SOC_Init(Demod_InitParams_t *InitParams, STCHIP_Info_t** 
 	InitParams->Chip->pData    = NULL;
 
 	(*hChipHandle) = ChipOpen(InitParams->Chip);
-#ifdef DONT_ALLOW_MULTIPLE_CARDS
-	chip_init_proc(*hChipHandle, "soc");
-#endif
 	hChip=(*hChipHandle);
 
 	if(hChip != NULL) {

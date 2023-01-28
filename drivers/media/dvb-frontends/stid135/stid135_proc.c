@@ -185,10 +185,13 @@ static const struct proc_ops fops_vglna = {
 
 
 
-void chip_init_proc(STCHIP_Info_t* hChipHandle_, const char* name)
+void chip_init_proc(struct stv* state, STCHIP_Info_t* hChipHandle_, const char* name)
 {
 	char filename[256];
-	sprintf(filename, "hchip_%s",name);
+	if(state->base->card_no>0)
+		sprintf(filename, "hchip_%s_%d",name, state->base->card_no);
+	else
+		sprintf(filename, "hchip_%s",name);
 	if(strcmp(name, "stid135")==0) {
 		proc_create(filename, 0777, NULL, &fops_stid135);
 		hChipHandle_stid135 = hChipHandle_;
@@ -201,10 +204,13 @@ void chip_init_proc(STCHIP_Info_t* hChipHandle_, const char* name)
 	}
 }
 
-void chip_close_proc(const char*name)
+void chip_close_proc(struct stv* state, const char*name)
 {
 	char filename[256];
-	sprintf(filename, "hchip_%s",name);
-	dprintk("called: filename=$s\n", filename);
+	if(state->base->card_no>0)
+		sprintf(filename, "hchip_%s_%d",name, state->base->card_no);
+	else
+		sprintf(filename, "hchip_%s",name);
+	dprintk("called: filename=%s\n", filename);
 	remove_proc_entry(filename, NULL);
 }

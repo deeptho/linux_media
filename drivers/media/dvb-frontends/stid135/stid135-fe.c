@@ -319,6 +319,11 @@ static int stid135_probe(struct stv *state)
 	init_params.roll_off		=  	FE_SAT_35; // NYQUIST Filter value (used for DVBS1/DSS, DVBS2 is automatic)
 	init_params.tuner_iq_inversion	=	FE_SAT_IQ_NORMAL;
 	err = fe_stid135_init(&init_params, &state->base->ip);
+#ifdef PROC_REGISTERS
+	chip_init_proc(state, state->base->ip.handle_demod, "stid135");
+	chip_init_proc(state, state->base->ip.handle_soc, "soc");
+#endif
+
 	init_params.ts_nosync		=	ts_nosync;
 	init_params.mis_fix		= mis;
 
@@ -417,6 +422,10 @@ static int stid135_probe(struct stv *state)
 	pVGLNAInit.NbDefVal = STVVGLNA_NBREGS;
 	strcpy((char *)pVGLNAInit.Chip->Name, VglnaIdString);
 	stvvglna_init(&pVGLNAInit, &vglna_handle);
+#ifdef PROC_REGISTERS
+	chip_init_proc(state, vglna_handle, "vglna0");
+#endif
+
 	stvvglna_set_standby(vglna_handle, vglna_mode);
 	dev_warn(&state->base->i2c->dev, "Initialized STVVGLNA 0 device\n");
 
@@ -430,6 +439,9 @@ static int stid135_probe(struct stv *state)
 	pVGLNAInit1.NbDefVal = STVVGLNA_NBREGS;
 	strcpy((char *)pVGLNAInit1.Chip->Name, VglnaIdString);
 	stvvglna_init(&pVGLNAInit1, &vglna_handle1);
+#ifdef PROC_REGISTERS
+	chip_init_proc(state, vglna_handle, "vglna1");
+#endif
 	stvvglna_set_standby(vglna_handle1, vglna_mode);
 	dev_warn(&state->base->i2c->dev, "Initialized STVVGLNA 1 device\n");
 
@@ -442,6 +454,10 @@ static int stid135_probe(struct stv *state)
 	pVGLNAInit2.NbDefVal = STVVGLNA_NBREGS;
 	strcpy((char *)pVGLNAInit2.Chip->Name, VglnaIdString);
 	stvvglna_init(&pVGLNAInit2, &vglna_handle2);
+#ifdef PROC_REGISTERS
+	chip_init_proc(state, vglna_handle, "vglna2");
+#endif
+
 	stvvglna_set_standby(vglna_handle2, vglna_mode);
 	dev_warn(&state->base->i2c->dev, "Initialized STVVGLNA 2 device\n");
 
@@ -454,6 +470,10 @@ static int stid135_probe(struct stv *state)
 	pVGLNAInit3.NbDefVal = STVVGLNA_NBREGS;
 	strcpy((char *)pVGLNAInit3.Chip->Name, VglnaIdString);
 	stvvglna_init(&pVGLNAInit3, &vglna_handle3);
+#ifdef PROC_REGISTERS
+	chip_init_proc(state, vglna_handle, "vglna3");
+#endif
+
 	stvvglna_set_standby(vglna_handle3, vglna_mode);
 	dev_warn(&state->base->i2c->dev, "Initialized STVVGLNA 3 device\n");
 	}
@@ -546,6 +566,16 @@ static void stid135_release(struct dvb_frontend* fe)
 	state->base->count--;
 	if (state->base->count == 0) {
 		base_lock(state);
+#ifdef PROC_REGISTERS //todo: rewrite this code
+		chip_close_proc(state, "stid135");
+		chip_close_proc(state, "soc");
+		if(state->base->vglna) { //for 6909x v2 version
+			chip_close_proc(state, "vglna0");
+			chip_close_proc(state, "vglna1");
+			chip_close_proc(state, "vglna2");
+			chip_close_proc(state, "vglna3");
+		}
+#endif
 		FE_STiD135_Term (&state->base->ip);
 		base_unlock(state);
 		list_del(&state->base->stvlist);
@@ -2233,6 +2263,15 @@ static struct stv_base *match_base(struct i2c_adapter  *i2c, u8 adr)
 	return NULL;
 }
 
+static inline int num_cards(void)
+{
+	struct stv_base *p;
+	int ret=0;
+	list_for_each_entry(p, &stvlist, stvlist)
+		ret++;
+	return ret;
+}
+
 /*DT: called with  nr=adapter=0...7 and rf_in = nr/2=0...3
 	state->base is created exactly once and is shared
 	between the 8 demods; provides access to the i2c hardware and such
@@ -2264,6 +2303,7 @@ struct dvb_frontend* stid135_attach(struct i2c_adapter *i2c,
 
 		for(i=0; i < sizeof(base->tuner_owner)/sizeof(base->tuner_owner[0]); ++i)
 			base->tuner_owner[i] = -1;
+		base->card_no = num_cards();
 		base->i2c = i2c;
 		base->adr = cfg->adr;
 		base->count = 1;

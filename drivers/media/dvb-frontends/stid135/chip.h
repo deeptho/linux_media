@@ -289,6 +289,7 @@ typedef enum
 	{
 		STCHIP_Info_t	*Chip;     	/* pointer to parameters to pass to the CHIP API */
 		u32		NbDefVal; 	    /* number of default values (must match number of STC registers) */
+		int card_no;
 	}
 	Demod_InitParams_t;
 

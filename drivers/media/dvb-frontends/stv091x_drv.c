@@ -4,7 +4,7 @@
  * Copyright (C) 2014-2015 Ralph Metzler <rjkm@metzlerbros.de>
  * Marcus Metzler <mocm@metzlerbros.de>
  * developed for Digital Devices GmbH
- * Copyright (C) 2020 Deep Thought <deeptho@gmail.com>: blindscan, spectrum, constellation code
+ * Copyright (C) 2020-2023 Deep Thought <deeptho@gmail.com>: blindscan, spectrum, constellation code
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * version 2 only, as published by the Free Software Foundation.
@@ -2614,7 +2614,7 @@ static int set_tone(struct dvb_frontend *fe, enum fe_sec_tone_mode tone)
 	switch (tone) {
 	case SEC_TONE_ON:
 		write_reg(state, RSTV0910_P1_DISTXCFG + offs, 0x00);
-		write_reg(state, RSTV0910_P1_DISTXCFG + offs, 0x80);
+		write_reg(state, RSTV0910_P1_DISTXCFG + offs, 0x80); //reset
 		ret = write_reg(state, RSTV0910_P1_DISTXCFG + offs, 0x00);
 		break;
 	case SEC_TONE_OFF:
