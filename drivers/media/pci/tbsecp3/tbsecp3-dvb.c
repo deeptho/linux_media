@@ -1135,19 +1135,6 @@ static struct stid135_cfg tbs6909x_V2_stid135_cfg = {
 	.rf_inputs ={0,1,2,3}
 };
 
-static struct stid135_cfg tbs6916_stid135_cfg = {
-	.adr		= 0x68,
-	.clk		= 27,
-	.ts_mode	= TS_STFE,
-	.set_voltage	= Virtual_set_voltage,
-	.write_properties = ecp3_spi_write,
-	.read_properties = ecp3_spi_read,
-	.write_eeprom = ecp3_eeprom_write,
-	.read_eeprom = ecp3_eeprom_read,
-	.set_TSsampling = NULL,
-	.set_TSparam = NULL,
-	.vglna = 0,
-};
 
 static struct stid135_cfg tbs6912_stid135_cfg = {
 	.adr		= 0x68,
