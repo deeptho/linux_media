@@ -2616,8 +2616,10 @@ static int set_tone(struct dvb_frontend *fe, enum fe_sec_tone_mode tone)
 		write_reg(state, RSTV0910_P1_DISTXCFG + offs, 0x00);
 		write_reg(state, RSTV0910_P1_DISTXCFG + offs, 0x80);
 		ret = write_reg(state, RSTV0910_P1_DISTXCFG + offs, 0x00);
+		break;
 	case SEC_TONE_OFF:
 		ret = write_reg(state, RSTV0910_P1_DISTXCFG + offs, 0x80);
+		break;
 	default:
 		break;
 	}
