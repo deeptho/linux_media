@@ -179,9 +179,6 @@ static void dvb_frontend_put(struct dvb_frontend *fe)
 	 */
 	if (fe->frontend_priv) {
 		dprintk("refcount %p=%d fe=%p\n", &fe->refcount, fe->refcount, fe);
-#if 0
-		release_dtv_fe_spectrum_scan(fe);
-#endif
 		kref_put(&fe->refcount, dvb_frontend_free);
 	}
 	else {
@@ -852,7 +849,7 @@ restart:
 				}
 				if ((status != fepriv->status && !(fepriv->tune_mode_flags & FE_TUNE_MODE_ONESHOT))
 						|| (fepriv->heartbeat_interval>0)) {
-					//dprintk("Adding event val=0x%x\n", s);
+					dprintk("Adapter=%d Adding event val=0x%x old=0x%x\n", fe->dvb->num, status, fepriv->status);
 					dev_dbg(fe->dvb->device, "%s: state changed, adding current state\n", __func__);
 					dvb_frontend_add_event(fe, status);
 					fepriv->status = status;

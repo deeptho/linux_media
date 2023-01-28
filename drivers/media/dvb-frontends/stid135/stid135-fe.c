@@ -2336,14 +2336,14 @@ struct dvb_frontend* stid135_attach(struct i2c_adapter *i2c,
 	if (base->mode == 2)
 		state->rf_in = 3;
 	state->fe.ops.info.default_rf_input = rf_in;
-
+#if 0
 	if(cfg->ts_mode == TS_2PAR) {
 		//hack to detect tbs6303x
 		state->fe.ops.info.rf_inputs[0] = 0;
 		state->fe.ops.info.rf_inputs[1] = 3;
 		state->fe.ops.info.num_rf_inputs = 2;
 	}
-
+#endif
 	dev_info(&i2c->dev, "%s demod found at adr %02X on %s\n",
 					 state->fe.ops.info.name, cfg->adr, dev_name(&i2c->dev));
 
