@@ -306,8 +306,6 @@ static int tbs5927_frontend_attach(struct dvb_usb_adapter *d)
 							sizeof(d->fe_adap->fe->ops.info.name));
 			snprintf(d->fe_adap->fe->ops.info.card_address, "usb%s",
 							 sizeof(d->fe_adap->fe->ops.info.card_address), dev_name(&d->dev->udev->dev));
-			snprintf(d->fe_adap->fe->ops.info.adapter_address, sizeof(d->fe_adap->fe->ops.info.adapter_address),
-							 "%s:%d", d->fe_adap->fe->ops.info.card_address, 0/*d->fe_adap->nr*/);
 #if 0
 			snprintf(d->fe_adap->fe->ops.info.adapter_name, sizeof(d->fe_adap->fe->ops.info.adapter_name),
 							 "%s #%d", d->fe_adap->fe->ops.info.card_short_name, 0/*d->fe_adap->nr*/);

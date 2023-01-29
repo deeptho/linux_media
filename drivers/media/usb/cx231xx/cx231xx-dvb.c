@@ -1461,14 +1461,8 @@ static int dvb_init(struct cx231xx *dev)
 		dprintk("setting mac=0x%llx\n", card_mac_address);
 		dvb->frontend[0]->ops.info.card_mac_address = card_mac_address; //Select mac of first adapter as card mac_address
 	}
-
-	strlcpy(dvb->frontend[0]->ops.info.card_address, dev_name(&dev->udev->dev),
-					sizeof(dvb->frontend[0]->ops.info.card_address));
 	snprintf(dvb->frontend[0]->ops.info.card_address, sizeof(dvb->frontend[0]->ops.info.card_address),
 					 "usb%s", dev_name(&dev->udev->dev));
-	snprintf(dvb->frontend[0]->ops.info.adapter_address, sizeof(dvb->frontend[0]->ops.info.adapter_address),
-					 "%s:%d", dvb->frontend[0]->ops.info.card_address, 0/*d->fe_adap->nr*/);
-
 
 	/* register everything */
 	result = register_dvb(dvb, THIS_MODULE, dev, dev->dev);

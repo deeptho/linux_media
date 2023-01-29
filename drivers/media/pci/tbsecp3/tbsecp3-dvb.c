@@ -2417,8 +2417,6 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 	adapter->fe->ops.info.card_mac_address = dev->card_mac_address;
 	dprintk("dev->pci_dev=%p dev->pci_dev->dev=%p\n", dev->pci_dev, dev->pci_dev ? &dev->pci_dev->dev : NULL);
 	strlcpy(adapter->fe->ops.info.card_address, dev_name(&dev->pci_dev->dev), sizeof(adapter->fe->ops.info.card_address));
-	snprintf(adapter->fe->ops.info.adapter_address, sizeof(adapter->fe->ops.info.adapter_address),
-					 "%s:%d", adapter->fe->ops.info.card_address, adapter->nr);
 	if (adapter->fe->ops.info.card_short_name[0] == 0) {
 		dprintk("copying adapter->fe->ops.info.adapter_name");
 		snprintf(adapter->fe->ops.info.adapter_name, sizeof(adapter->fe->ops.info.adapter_name),
@@ -2449,8 +2447,6 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 		dprintk("dev->pci_dev=%p dev->pci_dev->dev=%p\n", dev->pci_dev, dev->pci_dev ? &dev->pci_dev->dev : NULL);
 		strlcpy(adapter->fe2->ops.info.card_address, dev_name(&dev->pci_dev->dev), sizeof(adapter->fe2->ops.info.card_address));
 		strlcpy(adapter->fe2->ops.info.name, dev->info->name, sizeof(adapter->fe2->ops.info.name));
-		snprintf(adapter->fe2->ops.info.adapter_address, sizeof(adapter->fe2->ops.info.adapter_address),
-						 "%s:%d", adapter->fe->ops.info.card_address, adapter->nr);
 		if (adapter->fe2->ops.info.card_short_name[0] == 0) {
 			dprintk("copying adapter->fe2->ops.info.adapter_name");
 			snprintf(adapter->fe2->ops.info.adapter_name, sizeof(adapter->fe2->ops.info.adapter_name),
