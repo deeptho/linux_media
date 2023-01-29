@@ -290,6 +290,8 @@ static int tbs5927_frontend_attach(struct dvb_usb_adapter *d)
 
 			memcpy(&d->fe_adap->fe->ops.info.card_mac_address, mac, sizeof(mac));
 			strlcpy(d->fe_adap->fe->ops.info.card_short_name, "TBS 5927", 16);
+			snprintf(d->fe_adap->fe->ops.info.card_address, sizeof(d->fe_adap->fe->ops.info.card_address),
+							 "usb%s", dev_name(&d->dev->udev->dev));
 
 			buf[0] = 1; /* LNB power disable */
 			buf[1] = 0;
