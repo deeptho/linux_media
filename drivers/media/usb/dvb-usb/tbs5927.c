@@ -289,7 +289,7 @@ static int tbs5927_frontend_attach(struct dvb_usb_adapter *d)
 			d->fe_adap->fe->ops.set_voltage = tbs5927_set_voltage;
 
 			memcpy(&d->fe_adap->fe->ops.info.card_mac_address, mac, sizeof(mac));
-			strlcpy(d->fe_adap->fe->ops.info.card_short_name, "TBS 5927", 16);
+			strlcpy(d->fe_adap->fe->ops.info.card_short_name, "TBS 5927", sizeof(d->fe_adap->fe->ops.info.card_short_name));
 			snprintf(d->fe_adap->fe->ops.info.card_address, sizeof(d->fe_adap->fe->ops.info.card_address),
 							 "usb%s", dev_name(&d->dev->udev->dev));
 

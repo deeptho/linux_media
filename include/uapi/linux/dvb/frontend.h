@@ -171,7 +171,7 @@ struct dvb_frontend_extended_info {
 	char     card_name[64]; //human readable name of tuner card
 	char     adapter_name[64]; //human readable name of adapter
 	char     card_address[64]; //name of the linux bus to which the device is attached (e.g. pci-express slot)
-	char     card_short_name[64]; //unique name of adapter depending on pci-express address and physical input
+	char     card_short_name[64]; //short human readable name of tuner card
 	u8       supports_neumo; /*historically we relied on FE_CAN... to indicate supported features,
 														 but in future we will rely on data returned by FE_GET_EXTENDED_INFO
 														 Note that FE_GET_EXTENDED_INFO works on all drivers, even non neumo ones:
