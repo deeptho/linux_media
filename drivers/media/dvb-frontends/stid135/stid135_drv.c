@@ -4038,6 +4038,7 @@ fe_lla_error_t fe_stid135_init(struct fe_sat_init_params *pInit,
 			pInit->demod_name);
 		demod_init_error = STiD135_Init(&DemodInitParams,
 					&(pParams->handle_demod));
+
 		/* Frequency clock XTAL */
 		pParams->quartz = pInit->demod_ref_clk;
 		/* Board depending datas */
@@ -6293,7 +6294,7 @@ fe_lla_error_t fe_stid135_diseqc_init(struct fe_stid135_internal_param* pParams,
 		return FE_LLA_BAD_PARAMETER;
 		break;
 	}
-	dprintk("DISEQC[%d] error=%d mode=%d mode_fld=%d envelope_fld=%d", tuner_nb, error, diseqc_mode,
+	dprintk("DISEQC rf_in=%d error=%d mode=%d mode_fld=%d envelope_fld=%d", tuner_nb-1, error, diseqc_mode,
 					mode_fld, envelop_fld);
 	/* Set alternate function #1 */
 	//p. 650 SYS_N_CONFIG1000 Alternative function output control for PIO0; only applies to tuners 2,3, 4
@@ -6301,9 +6302,9 @@ fe_lla_error_t fe_stid135_diseqc_init(struct fe_stid135_internal_param* pParams,
 	case AFE_TUNER2:
 		error |= ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1000, &reg_value);
 		tst(pParams, reg_value, __func__, __LINE__);
-		vprintk("DISEQC[%d] reg_value=0x%x error=%d", tuner_nb, reg_value, error);
+		vprintk("DISEQC rf_in=%d reg_value=0x%x error=%d", tuner_nb -1, reg_value, error);
 		if(error) {
-			dprintk("DISEQC[%d] ERROR reg_value=0x%x error=%d", tuner_nb, reg_value, error);
+			dprintk("DISEQC rf_in=%d ERROR reg_value=0x%x error=%d", tuner_nb -1, reg_value, error);
 		} else {
 			reg_value |= 0x00000001;
 			error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1000, reg_value);
@@ -6312,9 +6313,9 @@ fe_lla_error_t fe_stid135_diseqc_init(struct fe_stid135_internal_param* pParams,
 	case AFE_TUNER3:
 		error |= ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1000, &reg_value);
 		tst(pParams, reg_value, __func__, __LINE__);
-		vprintk("DISEQC[%d] reg_value=%d error=%d", tuner_nb, reg_value, error);
+		vprintk("DISEQC rf_in=%d reg_value=%d error=%d", tuner_nb-1, reg_value, error);
 		if(error) {
-			dprintk("DISEQC[%d] ERROR reg_value=0x%x error=%d", tuner_nb, reg_value, error);
+			dprintk("DISEQC rf_in=%d ERROR reg_value=0x%x error=%d", tuner_nb-1, reg_value, error);
 		} else {
 			reg_value |= 0x00000010;
 			error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1000, reg_value);
@@ -6323,9 +6324,9 @@ fe_lla_error_t fe_stid135_diseqc_init(struct fe_stid135_internal_param* pParams,
 	case AFE_TUNER4:
 		error |= ChipGetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1000, &reg_value);
 		tst(pParams, reg_value, __func__, __LINE__);
-		vprintk("DISEQC[%d] reg_value=%d error=%d", tuner_nb, reg_value, error);
+		vprintk("DISEQC rf_in=%d reg_value=%d error=%d", tuner_nb-1, reg_value, error);
 		if(error) {
-			dprintk("DISEQC[%d] ERROR reg_value=0x%x error=%d", tuner_nb, reg_value, error);
+			dprintk("DISEQC rf_in=%d ERROR reg_value=0x%x error=%d", tuner_nb-1, reg_value, error);
 		} else {
 			reg_value |= 0x00000100;
 			error |= ChipSetOneRegister(pParams->handle_soc, (u16)REG_RSTID135_SYSCFG_NORTH_SYSTEM_CONFIG1000, reg_value);
@@ -8266,7 +8267,9 @@ fe_lla_error_t fe_stid135_set_ts_parallel_serial(struct fe_stid135_internal_para
 				case FE_TS_PARALLEL_PUNCT_CLOCK:
 					error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG2_TSFIFO_SERIAL(demod), 0); /* Parallel mode */
 					//error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG2_TSFIFO_DVBCI(demod), 0);  /* punctured clock */
-					error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG2_TSFIFO_DVBCI(demod), 1);  /* contiunous clock */
+					error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG2_TSFIFO_DVBCI(demod), 1);  /* continuous clock */
+
+					//reset stream merger hardware
 					error |= ChipSetRegisters(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_HWARE_TSCFG2(demod), 1);
 					/* Only demod#1 and demod#3 are able to output on SOC PIOs
 					It is a FPGA choice/limitation
