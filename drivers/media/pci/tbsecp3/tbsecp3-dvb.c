@@ -486,6 +486,47 @@ static int tbsecp3_set_voltage(struct dvb_frontend* fe,
 		return 0;
 }
 
+
+static int tbs6903x_set_voltage(struct i2c_adapter *i2c, enum fe_sec_voltage voltage, u8 rf_in)
+{
+	struct tbsecp3_i2c *i2c_adap = i2c_get_adapdata(i2c);
+	struct tbsecp3_dev *dev = i2c_adap->dev;
+
+	struct tbsecp3_gpio_pin power_pin;
+	struct tbsecp3_gpio_pin voltage_pin;
+	if (rf_in ==0) {
+		power_pin.lvl = TBSECP3_GPIODEF_LOW;
+		power_pin.nr = TBSECP3_GPIO_PIN(0, 2);
+		voltage_pin.lvl = TBSECP3_GPIODEF_HIGH;
+		voltage_pin.nr = TBSECP3_GPIO_PIN(0, 1);
+	} else {
+		power_pin.lvl = TBSECP3_GPIODEF_LOW;
+		power_pin.nr = TBSECP3_GPIO_PIN(1, 2);
+		voltage_pin.lvl = TBSECP3_GPIODEF_HIGH;
+		voltage_pin.nr = TBSECP3_GPIO_PIN(1, 1);
+	}
+	dev_dbg(&dev->pci_dev->dev, "%s() %s\n", __func__,
+		voltage == SEC_VOLTAGE_13 ? "SEC_VOLTAGE_13" :
+		voltage == SEC_VOLTAGE_18 ? "SEC_VOLTAGE_18" :
+		"SEC_VOLTAGE_OFF");
+	dprintk("Set voltage rf_in=%d\n", voltage, rf_in);
+	switch (voltage) {
+		case SEC_VOLTAGE_13:
+			tbsecp3_gpio_set_pin(dev, &power_pin, 1);
+			tbsecp3_gpio_set_pin(dev, &voltage_pin, 0);
+			break;
+		case SEC_VOLTAGE_18:
+			tbsecp3_gpio_set_pin(dev, &power_pin, 1);
+			tbsecp3_gpio_set_pin(dev, &voltage_pin, 1);
+			break;
+		default: /* OFF */
+			tbsecp3_gpio_set_pin(dev, &power_pin, 0);
+			break;
+	}
+		return 0;
+}
+
+
 static void tbsecp3_release_sec(struct dvb_frontend* fe)
 {
 	struct sec_priv *priv;
@@ -1075,7 +1116,7 @@ static struct stid135_cfg tbs6903x_stid135_cfg = {
 	.adr		= 0x68,
 	.clk		= 27,
 	.ts_mode	= TS_2PAR,
-	.set_voltage	= NULL,
+	.set_voltage	= tbs6903x_set_voltage,
 	.write_properties = ecp3_spi_write,
 	.read_properties = ecp3_spi_read,
 	.write_eeprom = ecp3_eeprom_write,
@@ -1107,7 +1148,7 @@ static struct stid135_cfg tbs6903x_V2_stid135_cfg = {
 	.adr		= 0x68,
 	.clk		= 27,
 	.ts_mode	= TS_2PAR,
-	.set_voltage	= NULL,
+	.set_voltage	= tbs6903x_set_voltage,
 	.write_properties = ecp3_spi_write,
 	.read_properties = ecp3_spi_read,
 	.write_eeprom = ecp3_eeprom_write,
@@ -2374,15 +2415,15 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 				&tbs6903x_stid135_cfg, adapter->nr ? 2 : 0, adapter->nr ? 3 : 0);
 		if (adapter->fe == NULL)
 			goto frontend_atach_fail;
-
-		if (tbsecp3_attach_sec(adapter, adapter->fe) == NULL) {
-			dev_warn(&dev->pci_dev->dev,
-				"error attaching lnb control on adapter %d\n",
-				adapter->nr);
+		if(pci->subsystem_vendor==0x6912) {
+			if (tbsecp3_attach_sec(adapter, adapter->fe) == NULL) {
+				dev_warn(&dev->pci_dev->dev,
+								 "error attaching lnb control on adapter %d\n",
+								 adapter->nr);
+			}
+			if(pci->subsystem_vendor==0x6912)
+				tbsecp3_ca_init(adapter, adapter->nr);
 		}
-		if(pci->subsystem_vendor==0x6912)
-			tbsecp3_ca_init(adapter, adapter->nr);
-
 		break;
 
 	default:
