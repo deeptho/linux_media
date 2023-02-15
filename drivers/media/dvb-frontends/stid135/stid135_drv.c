@@ -4358,6 +4358,19 @@ fe_lla_error_t FE_STiD135_Algo(struct stv* state, BOOL satellite_scan, enum fe_s
 			if(error1)
 				dprintk("demod=%d: ERROR=%d\n", state->nr, error1);
 			vprintk("demod=%d: here standard=%d\n", state->nr, state->signal_info.standard);
+
+			//unforce any non-frame mode
+				error |= (error1=ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL2_FORCE_CONTINUOUS(Demod), 0));
+				if(error1)
+					dprintk("demod=%d: error=%d\n", state->nr, error1);
+				error |= (error1=ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL2_FRAME_MODE(Demod), 0));
+				if(error1)
+					dprintk("demod=%d: error=%d\n", state->nr, error1);
+				error |= (error1=ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL0_HEMMODE_SELECT(Demod), 0));
+				if(error1)
+					dprintk("demod=%d: error=%d\n", state->nr, error1);
+
+
 			/* Manage Matype Information if DVBS2 signal */
 			if (state->signal_info.standard == FE_SAT_DVBS2_STANDARD) {
 				/* Before reading MATYPE value, we need to wait for packet delin locked */
@@ -5699,9 +5712,9 @@ fe_lla_error_t fe_stid135_manage_matype_info(struct stv* state)
 						dprintk("demod=%d: error=%d\n", state->nr, error1);
 				}
 			}
-				error |= (error1=ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_TPKTDELIN_TESTBUS_SELECT(Demod), 0));
-				if(error1)
-					dprintk("demod=%d: error=%d\n", state->nr, error1);
+			error |= (error1=ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_TPKTDELIN_TESTBUS_SELECT(Demod), 0));
+			if(error1)
+				dprintk("demod=%d: error=%d\n", state->nr, error1);
 
 			/* If TS/GS = 11 (MPEG TS), reset matype force bit and do NOT load frames in MPEG packets */
 				if(((genuine_matype>>6) & 0x3) == 0x3) {
