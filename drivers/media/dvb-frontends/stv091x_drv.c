@@ -2455,7 +2455,7 @@ static int stv091x_tune(struct dvb_frontend *fe, bool re_tune,
 		dprintk("tune called with freq=%d srate=%d => %d re_tune=%d\n", p->frequency, p->symbol_rate,
 						state->symbol_rate, re_tune);
 		//stv091x_stop_task(fe);
-		vprintk("[%d] RETUNE: GET SIGNAL\n");
+		vprintk("RETUNE: GET SIGNAL\n");
 		/*
 			 retrieve information about modulation, frequency, symbol_rate
 			 and CNR, BER
