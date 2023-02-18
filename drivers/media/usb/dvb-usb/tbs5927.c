@@ -287,6 +287,8 @@ static int tbs5927_frontend_attach(struct dvb_usb_adapter *d)
 					    &tbs5927_stv0910_cfg, 1 );
 		if (d->fe_adap->fe != NULL) {
 			d->fe_adap->fe->ops.set_voltage = tbs5927_set_voltage;
+			d->fe_adap->fe->ops.tuner_ops.info.frequency_min_hz = 250 * MHz;
+			d->fe_adap->fe->ops.tuner_ops.info.frequency_max_hz = 2150 * MHz;
 
 			memcpy(&d->fe_adap->fe->ops.info.card_mac_address, mac, sizeof(mac));
 			strlcpy(d->fe_adap->fe->ops.info.card_short_name, "TBS 5927", sizeof(d->fe_adap->fe->ops.info.card_short_name));
