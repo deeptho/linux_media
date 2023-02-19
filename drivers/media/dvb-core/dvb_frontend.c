@@ -1187,7 +1187,7 @@ static int dvb_frontend_clear_cache(struct dvb_frontend *fe)
 	c->code_rate_LP = FEC_AUTO;
 	c->fec_inner = FEC_AUTO;
 	c->rolloff = ROLLOFF_AUTO;
-#if 0 //preserve the following, as they are not only set by DTV_TONE and DTV_VOLTAGE
+#if 1 //preserve the following, as they are not only set by DTV_TONE and DTV_VOLTAGE
 	c->voltage = SEC_VOLTAGE_OFF;
 	c->sectone = SEC_TONE_OFF;
 #endif
