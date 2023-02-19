@@ -1168,6 +1168,7 @@ static int dvb_frontend_check_parameters(struct dvb_frontend *fe)
 static int dvb_frontend_clear_cache(struct dvb_frontend *fe)
 {
 	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
+	struct dvb_frontend_private *fepriv = fe->frontend_priv;
 	int i;
 	u32 delsys;
 
@@ -1188,8 +1189,8 @@ static int dvb_frontend_clear_cache(struct dvb_frontend *fe)
 	c->fec_inner = FEC_AUTO;
 	c->rolloff = ROLLOFF_AUTO;
 #if 1 //preserve the following, as they are not only set by DTV_TONE and DTV_VOLTAGE
-	c->voltage = SEC_VOLTAGE_OFF;
-	c->sectone = SEC_TONE_OFF;
+	c->voltage = fepriv->voltage;
+	c->sectone = fepriv->tone;
 #endif
 	c->pilot = PILOT_AUTO;
 
