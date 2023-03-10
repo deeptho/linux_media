@@ -509,7 +509,7 @@ static int tbs6903x_set_voltage(struct i2c_adapter *i2c, enum fe_sec_voltage vol
 		voltage == SEC_VOLTAGE_13 ? "SEC_VOLTAGE_13" :
 		voltage == SEC_VOLTAGE_18 ? "SEC_VOLTAGE_18" :
 		"SEC_VOLTAGE_OFF");
-	dprintk("Set voltage rf_in=%d\n", voltage, rf_in);
+	dprintk("Set voltage voltage=%d rf_in=%d\n", voltage, rf_in);
 	switch (voltage) {
 		case SEC_VOLTAGE_13:
 			tbsecp3_gpio_set_pin(dev, &power_pin, 1);
@@ -2454,7 +2454,8 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 	dprintk("adapter->fe=%p dev=%p\n", adapter->fe, dev);
 	strlcpy(adapter->fe->ops.info.name, dev->info->name, sizeof(adapter->fe->ops.info.name));
 	dprintk("dev=%p dev->info=%p\n", dev, dev ? dev->info : NULL);
-	strlcpy(adapter->fe->ops.info.card_short_name, dev->info->short_name, sizeof(adapter->fe->ops.info.card_short_name));
+	if(dev->info->short_name)
+		strlcpy(adapter->fe->ops.info.card_short_name, dev->info->short_name, sizeof(adapter->fe->ops.info.card_short_name));
 	adapter->fe->ops.info.card_mac_address = dev->card_mac_address;
 	dprintk("dev->pci_dev=%p dev->pci_dev->dev=%p\n", dev->pci_dev, dev->pci_dev ? &dev->pci_dev->dev : NULL);
 	strlcpy(adapter->fe->ops.info.card_address, dev_name(&dev->pci_dev->dev), sizeof(adapter->fe->ops.info.card_address));
