@@ -1,11 +1,12 @@
 # What is this?
 This repository is a clone of tbs/linux_media.
 It contains patches for the following drivers
-* stid135: ts6909x and tbs6903x cards
-* stv091x: tbs5927
+
+* stid135: ts6909x and tbs6903x cards (v1 and v2)
+* stv091x: tbs5927 tbs6908 tbs6903
 * tas2101: tbs5990, tbs6904
 * si2183 based cards: tbs6504
-* m88rs6060 based cards: tbs6902SE and tbs2904SE. On these cards there is not IQ-scan (constellation display)
+* m88rs6060 based cards: tbs6902SE and tbs904SE. On these cards there is not IQ-scan (constellation display)
 to support blindscan, to fix bugs and to make improvements.
 
 # Changes in release-0.9.0
@@ -37,23 +38,61 @@ https://github.com/deeptho/blindscan
 
 First install the required compilers, git ...
 You may also need libproc-processtable-perl (e.g., on ubuntu)
+
 ```
 mkdir ~/blindscan_kernel
 cd  ~/blindscan_kernel
+```
 
-#check out the actual drivers. This uses the default branch which is called deepthought
+Check out the actual drivers. This uses the default branch which is called deepthought
+
+```
 git clone --depth=1  https://github.com/deeptho/linux_media.git ./media
+```
 
-#checkout a copy of media_build. Standard media_build should work as well
-git clone https://github.com/tbsdtv/media_build.git
+Then  check out a copy of DeepThought's media_build (try tbs media_build if it does not work)
+
+```
+git clone https://github.com/deeptho/media_build
+```
+
+Make sure software for kernel compilation is installed.
+For instance on fedora, with MYKERNEL the exact kernel version you are running:
+
+```
+sudo dnf install -y patchutils
+sudo dnf install -y ccache
+sudo dnf install -y kernel-devel-MYKERNEL
+sudo dnf install -y perl-File-Copy #not needed?
+sudo dnf install -y perl
+sudo dnf install -y perl-Proc-ProcessTable
 
 cd media_build
-
-#it is important to use a media_build version compatible with media
-#The following version works on 14.5.2022
 git checkout master
-
 make dir DIR=../media
 make distclean
 ./install.sh
 ```
+
+Last but not least, install rsyslog so that kernel debug messages are stored in the file system
+in /var/log/debug:
+
+```
+sudo dnf install -y rsyslog
+sudo vi /etc/rsyslog.conf # add "kern.debug /var/log/debug" line
+sudo systemctl enable rsyslog
+sudo systemctl start rsyslog #to have log messages in /var/log/debug
+```
+
+Now load the drivers: either reboot, or try loading the proper module for your card, e.g., tbsecp3
+for many cards:
+
+```
+sudo modprobe tbsecp3
+```
+
+Check /var/log/debug for messages. If there are i2c_xfer error messages, try editing
+the file tbsecp3-cards.c. In that file lcate the entry for your card and change i2c_speed
+to 9.
+
+If you have this problem then report it. Also report if the solution works,
