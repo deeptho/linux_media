@@ -1156,8 +1156,8 @@ static struct stid135_cfg tbs6903x_V2_stid135_cfg = {
 	.set_TSsampling = NULL,
 	.set_TSparam = NULL,
 	.vglna = 1,
-	.num_rf_inputs = 4,
-	.rf_inputs ={0,1,2,3}
+	.num_rf_inputs = 2,
+	.rf_inputs ={0,3}
 };
 
 static struct stid135_cfg tbs6909x_V2_stid135_cfg = {
