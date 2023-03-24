@@ -541,21 +541,8 @@ static int stid135_select_rf_in_(struct stv* state, int rf_in)
 static int stid135_init(struct dvb_frontend* fe)
 {
 	struct stv *state = fe->demodulator_priv;
-	fe_lla_error_t err = FE_LLA_NO_ERROR;
-
-	if (state->base->mode == 0)
-		return 0;
-
-	dev_dbg(&state->base->i2c->dev, "%s: demod %d + tuner %d\n", __func__, state->nr, state->rf_in);
-	if(state->base->mode == 0) {
-		base_lock(state);
-		err |= stid135_select_rf_in_(state, state->rf_in);
-		base_unlock(state);
-	} else {
-
-		dprintk("state->rf_in_selected=%d adapter=%d state->rf_in=%d\n", state->rf_in_selected, state->nr, state->rf_in);
-	}
-	return err != FE_LLA_NO_ERROR ? -1 : 0;
+	dprintk("state->rf_in_selected=%d adapter=%d state->rf_in=%d\n", state->rf_in_selected, state->nr, state->rf_in);
+	return 0;
 }
 
 static void stid135_release(struct dvb_frontend* fe)
@@ -1483,7 +1470,7 @@ static int stid135_send_master_cmd(struct dvb_frontend* fe,
 	struct stv *state = fe->demodulator_priv;
 	fe_lla_error_t err = FE_LLA_NO_ERROR;
 
-#if 0
+#if 1
 	if (state->base->mode == 0)
 		return 0;
 #endif
@@ -1540,7 +1527,7 @@ static int stid135_recv_slave_reply(struct dvb_frontend* fe,
 	struct stv *state = fe->demodulator_priv;
 	fe_lla_error_t err = FE_LLA_NO_ERROR;
 
-#if 0
+#if 1
 	if (state->base->mode == 0)
 		return 0;
 #endif
@@ -2376,14 +2363,6 @@ struct dvb_frontend* stid135_attach(struct i2c_adapter *i2c,
 	if (base->mode == 2)
 		state->rf_in = 3;
 	state->fe.ops.info.default_rf_input = rf_in;
-#if 0
-	if(cfg->ts_mode == TS_2PAR) {
-		//hack to detect tbs6303x
-		state->fe.ops.info.rf_inputs[0] = 0;
-		state->fe.ops.info.rf_inputs[1] = 3;
-		state->fe.ops.info.num_rf_inputs = 2;
-	}
-#endif
 	dev_info(&i2c->dev, "%s demod found at adr %02X on %s\n",
 					 state->fe.ops.info.name, cfg->adr, dev_name(&i2c->dev));
 
