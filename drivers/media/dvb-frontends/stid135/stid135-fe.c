@@ -39,10 +39,10 @@
 #define MAX_FFT_SIZE 8192
 LIST_HEAD(stvlist);
 
-static int mode;
+static int mode = 1;
 module_param(mode, int, 0444);
 MODULE_PARM_DESC(mode,
-		"Multi-switch mode: 0=quattro/quad 1=normal direct connection");
+		"Multi-switch mode: 0=quattro/quad 1=normal direct connection; 2=unicable/jess");
 
 static int vglna_mode=0;
 module_param(vglna_mode, int, 0444);
