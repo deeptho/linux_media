@@ -328,7 +328,7 @@ static int stid135_probe(struct stv *state)
 	init_params.mis_fix		= mis;
 
 	if (err != FE_LLA_NO_ERROR) {
-		dev_err(&state->base->i2c->dev, "%s: fe_stid135_init error %d !\n", __func__, err);
+		dprintk("fe_stid135_init error %d !\n", err);
 		return -EINVAL;
 	}
 
@@ -1350,8 +1350,7 @@ static int stid135_set_voltage(struct dvb_frontend* fe, enum fe_sec_voltage volt
 	struct stv *state = fe->demodulator_priv;
 	dprintk("demod=%d rf=%d mode=%d voltage=%d", state->nr, state->rf_in,  state->base->mode, voltage);
 	//dump_stack();
-	if (state->base->mode == 0) //legacy: 1 band per input @todo: fix this
-	{
+	if (state->base->mode == 0) { //legacy: 1 band per input @todo: fix this
 		if (voltage == SEC_VOLTAGE_18)
 			state->rf_in |= 2;
 		else
@@ -1414,13 +1413,11 @@ static int stid135_set_tone(struct dvb_frontend* fe, enum fe_sec_tone_mode tone)
 	struct stv *state = fe->demodulator_priv;
 	fe_lla_error_t err = FE_LLA_NO_ERROR;
 	dprintk("demod=%d rf=%d mode=%d tone=%d", state->nr, state->rf_in,  state->base->mode, tone);
-	if(state->base->mode == 0) //mode always 1
-	{
+	if(state->base->mode == 0) {
 		if (tone == SEC_TONE_ON)
 			state->rf_in |= 1;
 		else
 			state->rf_in &= ~1;
-
 		return 0;
 	}
 
@@ -2298,7 +2295,10 @@ struct dvb_frontend* stid135_attach(struct i2c_adapter *i2c,
 		base->extclk = cfg->clk;
 		base->ts_mode = cfg->ts_mode;
 		base->set_voltage = cfg->set_voltage;
-		base->mode = cfg->set_voltage ? mode : 1;
+		if(mode==1 && !cfg->set_voltage)
+			base->mode = 0;
+		else
+			base->mode = mode;
 		base->write_properties = cfg->write_properties;
 		base->read_properties = cfg->read_properties;
 		base->write_eeprom = cfg->write_eeprom;
@@ -2311,8 +2311,7 @@ struct dvb_frontend* stid135_attach(struct i2c_adapter *i2c,
 		proc_base = base;
 		state->base = base;
 		if (stid135_probe(state) < 0) {
-			dev_warn(&i2c->dev, "No demod found at adr %02X on %s\n",
-				 cfg->adr, dev_name(&i2c->dev));
+			dprintk("No demod found at adr %02X on %s\n", cfg->adr, dev_name(&i2c->dev));
 			kfree(base);
 			goto fail;
 		}
