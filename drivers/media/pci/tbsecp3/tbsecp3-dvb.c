@@ -2483,8 +2483,9 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 		dprintk("adapter->fe2=%p dev=%p\n", adapter->fe2, dev);
 		strlcpy(adapter->fe2->ops.info.name, dev->info->name, sizeof(adapter->fe2->ops.info.name));
 		dprintk("dev=%p dev->info=%p\n", dev, dev ? dev->info : NULL);
-		strlcpy(adapter->fe2->ops.info.card_short_name, dev->info->short_name,
-						sizeof(adapter->fe2->ops.info.card_short_name));
+		if(dev->info->short_name)
+			strlcpy(adapter->fe2->ops.info.card_short_name, dev->info->short_name,
+							sizeof(adapter->fe2->ops.info.card_short_name));
 		adapter->fe2->ops.info.card_mac_address = dev->card_mac_address;
 		dprintk("dev->pci_dev=%p dev->pci_dev->dev=%p\n", dev->pci_dev, dev->pci_dev ? &dev->pci_dev->dev : NULL);
 		strlcpy(adapter->fe2->ops.info.card_address, dev_name(&dev->pci_dev->dev), sizeof(adapter->fe2->ops.info.card_address));
