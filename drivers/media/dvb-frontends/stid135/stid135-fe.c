@@ -1049,9 +1049,9 @@ static int stid135_get_frontend(struct dvb_frontend* fe, struct dtv_frontend_pro
 									(state->signal_info.pls_mode << 26) |
 									((state->signal_info.pls_code &0x3FFFF)<<8)
 									);
-	vprintk("read stream_id mis=%d pls_mode=0x%x pls_code=0x%x stream_id=0%x",
+	vprintk("read stream_id mis=%d pls_mode=0x%x pls_code=0x%x stream_id=0%x fec=%d",
 					state->mis_mode,
-					state->signal_info.pls_mode, state->signal_info.pls_code, p->stream_id);
+					state->signal_info.pls_mode, state->signal_info.pls_code, p->stream_id, p->fec_inner);
 
 	vprintk("READ stream_id=0x%x isi=0x%x\n",p->stream_id, state->signal_info.isi);
 	return 0;
@@ -1221,9 +1221,9 @@ static int stid135_read_status_(struct dvb_frontend* fe, enum fe_status *status)
 									(state->signal_info.pls_mode << 26) |
 									((state->signal_info.pls_code &0x3FFFF)<<8)
 									);
-	vprintk("read stream_id mis=%d pls_mode=0x%x pls_code=0x%x stream_id=0%x",
+	vprintk("read stream_id mis=%d pls_mode=0x%x pls_code=0x%x stream_id=0%x fec=%d",
 					state->mis_mode,
-					state->signal_info.pls_mode, state->signal_info.pls_code, p->stream_id);
+					state->signal_info.pls_mode, state->signal_info.pls_code, p->stream_id, p->fec_inner);
 
 	vprintk("READ stream_id=0x%x isi=0x%x\n",p->stream_id, state->signal_info.isi);
 
