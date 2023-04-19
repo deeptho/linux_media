@@ -499,8 +499,8 @@ static int stid135_select_rf_in_(struct stv* state, int rf_in)
 
 	if(rf_in != state->rf_in && state->rf_in_selected) {
 		//change in rf_in
-		BUG_ON(state->base->tuner_use_count[state->rf_in] < 0 || state->base->tuner_use_count[state->rf_in] > 4 );
-		BUG_ON(state->base->tuner_use_count[rf_in] < 0 || state->base->tuner_use_count[rf_in] > 3 );
+		BUG_ON(state->base->tuner_use_count[state->rf_in] < 0 || state->base->tuner_use_count[state->rf_in] > 8 );
+		BUG_ON(state->base->tuner_use_count[rf_in] < 0 || state->base->tuner_use_count[rf_in] > 7 );
 
 		state->base->tuner_use_count[state->rf_in]--; //decrease use count for old tuner
 
