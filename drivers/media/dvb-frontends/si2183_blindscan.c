@@ -191,7 +191,7 @@ static int si2183_get_iq_sample_unlocked(struct dvb_frontend* fe, s16* ival, s16
       break;
     }
     default : {
-			dprintk("unknown standard");
+			dprintk("unknown standard: delsys=%d\n", p->delivery_system);
       ret = -1;
       break;
 		}

@@ -408,9 +408,11 @@ int si2183_read_status(struct dvb_frontend *fe, enum fe_status *status)
 		case SYS_DVBS2: {
 			// rolloff
 			bool npd = 0; //null packet deletion?
-			bool issyi = 0; //input stream syncrhoniser present?
+			bool issyi = 0; //input stream synchroniser present?
 			u8 stream_type = ((cmd.args[10]>>5)&0x7);
+			u8 stream_type_override =3;
 			bool is_mis = !((cmd.args[10]>>4) & 0x1);
+			u8 rolloff = cmd.args[10] & 0x03;
 			si2183_misc_data(client, &issyi, &npd);
 			c->rolloff = si2183_rolloff(cmd.args[10] & 0x07);
 			c->vcm =  ((cmd.args[10]>>3) & 0x1);
@@ -421,15 +423,16 @@ int si2183_read_status(struct dvb_frontend *fe, enum fe_status *status)
 				bit 5,6,7: stream_type
 				Following value is compatible with stid135; //need some extension later
 			*/
-			c->matype_val = (c->rolloff &0x3) | //msb not used
-				(npd &0x1)<<2 |
+			c->matype_val = rolloff | //OK
+				((!npd) &0x1)<<2 | //OK
 				(issyi &0x1)<<3 |
 				(c->vcm &0x1)<<4 |
-				(is_mis &0x1)<<5 |
-				(stream_type&0x3) <<6l //msb not used
+				((!is_mis) &0x1)<<5 |
+				(stream_type_override&0x3) <<6 //msb not used
 				;
 			c->matype_valid = true;
-			vprintk("num_is =%d is_mis=%d matype=%d", cmd.args[11], is_mis, c->matype_val);
+			dprintk("num_is =%d is_mis=%d stream_type=0x%x matype=0x%x [10]=0x%x", cmd.args[11], is_mis, stream_type,
+							c->matype_val, cmd.args[10]);
 			if(is_mis) {
 				int pls_mode = (c->stream_id >> 26) & 3;
 				int pls_code = (c->stream_id >> 8) & 0x3FFFF;
