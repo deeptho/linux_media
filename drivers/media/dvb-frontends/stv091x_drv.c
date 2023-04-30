@@ -895,7 +895,7 @@ static int Stop(struct stv *state)
 							state->tscfgh | 0x01); //reset hardware merger
 		write_reg(state, RSTV0910_P2_TSCFGH , state->tscfgh); // restore it to its normal state (see: probe)
 #endif
-		write_reg_field(state, FSTV0910_P2_ALGOSWRST,0); /*release reset DVBS2 packet delin*/
+		write_reg_field(state, FSTV0910_P2_ALGOSWRST + state->regoff,0); /*release reset DVBS2 packet delin*/
 
 
 #if 1 //the following not done in stv091x_Algo
@@ -1153,8 +1153,8 @@ static void stv091x_set_viterbi(struct stv* state, struct dtv_frontend_propertie
 
 	s32 fecmReg,
 		prvitReg;
-	fecmReg=RSTV0910_P2_FECM;
-	prvitReg=RSTV0910_P2_PRVIT;
+	fecmReg = RSTV0910_P2_FECM + state->regoff;
+	prvitReg = RSTV0910_P2_PRVIT + state->regoff;
 	dprintk("system=%d\n", p->delivery_system);
 
 	switch(p->delivery_system) {
@@ -1494,8 +1494,8 @@ static int stv091x_isi_scan(struct dvb_frontend *fe)
 	for (i=0; i < 40; i++) {
 		uint32_t mask;
 		int j;
-		regs[0] = read_reg(state, RSTV0910_P2_MATSTR1);
-		regs[1] = read_reg(state, RSTV0910_P2_MATSTR0);
+		regs[0] = read_reg(state, RSTV0910_P2_MATSTR1 + state->regoff);
+		regs[1] = read_reg(state, RSTV0910_P2_MATSTR0 + state->regoff);
 		matype = regs[0];
 		CurrentISI = regs[1];
 
@@ -1559,7 +1559,7 @@ static bool stv091x_get_signal_info(struct dvb_frontend *fe)
 	s32 carrier_frequency_offset;
 	u8 rolloff_status, rolloff;
 
-	read_regs(state, RSTV0910_P2_CFR2, regs, 2);
+	read_regs(state, RSTV0910_P2_CFR2 + state->regoff, regs, 2);
 	carrier_frequency_offset = (s16)((regs[0]<<8) | regs[1]);
 	carrier_frequency_offset *= ((state->base->mclk>>16) / 1000);
 	state->signal_info.frequency = state->tuner_frequency + carrier_frequency_offset;
@@ -1577,7 +1577,7 @@ static bool stv091x_get_signal_info(struct dvb_frontend *fe)
 
 	p->delivery_system = state->signal_info.standard;
 
-	regs[0] = read_reg(state, RSTV0910_P2_TMGOBS);
+	regs[0] = read_reg(state, RSTV0910_P2_TMGOBS  + state->regoff);
 	rolloff_status = (regs[0]>>6);
 	switch(rolloff_status) {
 		case 0x03:
@@ -1643,8 +1643,8 @@ static int pls_search_list(struct dvb_frontend *fe)
 				u8 stream_id;
 				write_reg(state, RSTV0910_P2_PDELCTRL0 + state->regoff, 0);
 				msleep(40);
-				stream_id = read_reg(state, RSTV0910_P2_MATSTR1); //dummy read. Apparantly needed!
-				stream_id = read_reg(state, RSTV0910_P2_MATSTR0);
+				stream_id = read_reg(state, RSTV0910_P2_MATSTR1  + state->regoff); //dummy read. Apparantly needed!
+				stream_id = read_reg(state, RSTV0910_P2_MATSTR0  + state->regoff);
 				dprintk("selecting stream_id=%d\n", stream_id);
 				p->stream_id = 	(stream_id&0xff) | (pls_code & ~0xff);
 				break;
@@ -1690,8 +1690,8 @@ static int pls_search_range(struct dvb_frontend *fe)
 				u8 stream_id;
 				write_reg(state, RSTV0910_P2_PDELCTRL0 + state->regoff, 0);
 				msleep(40);
-				stream_id = read_reg(state, RSTV0910_P2_MATSTR1); //dummy read. Apparantly needed!
-				stream_id = read_reg(state, RSTV0910_P2_MATSTR0);
+				stream_id = read_reg(state, RSTV0910_P2_MATSTR1 + state->regoff); //dummy read. Apparantly needed!
+				stream_id = read_reg(state, RSTV0910_P2_MATSTR0 + state->regoff);
 				dprintk("selecting stream_id=%d\n", stream_id);
 				p->stream_id = 	(stream_id&0xff) | (pls_code & ~0xff);
 				break;
@@ -1837,9 +1837,9 @@ static s32 stv091x_narrow_band_signal_power_dbm(struct dvb_frontend *fe)
 {
 	struct stv *state = fe->demodulator_priv;
 	//todo: take into account agc2
-	s32 agc2level = (read_reg_field(state, FSTV0910_P2_AGC2_INTEGRATOR1) <<8) |
-		read_reg_field(state, FSTV0910_P2_AGC2_INTEGRATOR0);
-	s32	agc2ref = read_reg(state, RSTV0910_P2_AGC2REF);
+	s32 agc2level = (read_reg_field(state, FSTV0910_P2_AGC2_INTEGRATOR1 + state->regoff) <<8) |
+		read_reg_field(state, FSTV0910_P2_AGC2_INTEGRATOR0 + state->regoff);
+	s32	agc2ref = read_reg(state, RSTV0910_P2_AGC2REF + state->regoff);
 	s32 x =  20*(s32)STLog10((u32)(agc2ref)); //unit is 0.001dB
 	s32 y =  20*(s32)STLog10(agc2level); //unit is 0.001dB
 	return (x-y) + (-520 - stv091x_agc1_power_gain_dbm(state)) +7991; //unit is 0.001dB
@@ -2072,19 +2072,19 @@ static int stv091x_carrier_check(struct stv* state, s32 *FinalFreq, s32* frequen
 	s32 i,j,k,l,nbSteps;
 
 
-	write_reg(state, RSTV0910_P2_DMDISTATE,0x1C);
-	tmp2= read_reg(state, RSTV0910_P2_CARCFG);
-	write_reg(state, RSTV0910_P2_CARCFG,0x06);
+	write_reg(state, RSTV0910_P2_DMDISTATE + state->regoff,0x1C);
+	tmp2= read_reg(state, RSTV0910_P2_CARCFG + state->regoff);
+	write_reg(state, RSTV0910_P2_CARCFG + state->regoff, 0x06);
 
-	tmp3= read_reg(state, RSTV0910_P2_BCLC);
-	write_reg(state, RSTV0910_P2_BCLC,0x00);
-	tmp4= read_reg(state, RSTV0910_P2_CARFREQ);
-	write_reg(state, RSTV0910_P2_CARFREQ,0x00); //stop coarse carrrier corr
+	tmp3= read_reg(state, RSTV0910_P2_BCLC + state->regoff);
+	write_reg(state, RSTV0910_P2_BCLC + state->regoff, 0x00);
+	tmp4= read_reg(state, RSTV0910_P2_CARFREQ + state->regoff);
+	write_reg(state, RSTV0910_P2_CARFREQ + state->regoff, 0x00); //stop coarse carrrier corr
 
-	write_reg(state, RSTV0910_P2_AGC2REF,0x38);
+	write_reg(state, RSTV0910_P2_AGC2REF + state->regoff, 0x38);
 
-	tmp1= read_reg(state, RSTV0910_P2_DMDCFGMD);
-	write_reg_fields(state, RSTV0910_P2_DMDCFGMD,
+	tmp1= read_reg(state, RSTV0910_P2_DMDCFGMD + state->regoff);
+	write_reg_fields(state, RSTV0910_P2_DMDCFGMD  + state->regoff,
 									 {FSTV0910_P2_DVBS1_ENABLE, 1},
 									 {FSTV0910_P2_DVBS2_ENABLE, 1},
 									 {FSTV0910_P2_SCAN_ENABLE, 0}, 		/*Enable the SR SCAN*/
@@ -2105,15 +2105,15 @@ static int stv091x_carrier_check(struct stv* state, s32 *FinalFreq, s32* frequen
 	{
 		/* Scan on the positive part of the tuner Bw */
 		//dprintk("freq=%d\n", init_freq);
-		write_reg(state, RSTV0910_P2_DMDISTATE, 0x1C);
-		write_reg(state, RSTV0910_P2_CFRINIT1, (init_freq >>8) & 0xff);
-		write_reg(state, RSTV0910_P2_CFRINIT0, init_freq & 0xff);
-		write_reg(state, RSTV0910_P2_DMDISTATE, 0x18); //zero offset start
+		write_reg(state, RSTV0910_P2_DMDISTATE  + state->regoff, 0x1C);
+		write_reg(state, RSTV0910_P2_CFRINIT1 + state->regoff, (init_freq >>8) & 0xff);
+		write_reg(state, RSTV0910_P2_CFRINIT0 + state->regoff, init_freq & 0xff);
+		write_reg(state, RSTV0910_P2_DMDISTATE + state->regoff, 0x18); //zero offset start
 		msleep(5);
 
 		agc2level=0;
-		agc2level = (read_reg_field(state, FSTV0910_P2_AGC2_INTEGRATOR1) <<8) |
-			read_reg_field(state, FSTV0910_P2_AGC2_INTEGRATOR0);
+		agc2level = (read_reg_field(state, FSTV0910_P2_AGC2_INTEGRATOR1  + state->regoff) <<8) |
+			read_reg_field(state, FSTV0910_P2_AGC2_INTEGRATOR0  + state->regoff);
 
 		if (i == 0) {
 			minagc2level= agc2level;
@@ -2196,13 +2196,13 @@ static int stv091x_carrier_check(struct stv* state, s32 *FinalFreq, s32* frequen
 	} /* End of for (i=0;i<nbSteps) */
 
 	//restore registers
-	write_reg(state, RSTV0910_P2_DMDCFGMD,tmp1);
-	write_reg(state, RSTV0910_P2_CARCFG,tmp2);
-	write_reg(state, RSTV0910_P2_BCLC,tmp3);
-	write_reg(state, RSTV0910_P2_CARFREQ,tmp4);
-	write_reg(state, RSTV0910_P2_DMDISTATE,0x1C);
-	write_reg(state, RSTV0910_P2_CFRINIT1,0);
-	write_reg(state, RSTV0910_P2_CFRINIT0,0);
+	write_reg(state, RSTV0910_P2_DMDCFGMD + state->regoff, tmp1);
+	write_reg(state, RSTV0910_P2_CARCFG + state->regoff, tmp2);
+	write_reg(state, RSTV0910_P2_BCLC + state->regoff, tmp3);
+	write_reg(state, RSTV0910_P2_CARFREQ + state->regoff, tmp4);
+	write_reg(state, RSTV0910_P2_DMDISTATE + state->regoff, 0x1C);
+	write_reg(state, RSTV0910_P2_CFRINIT1 + state->regoff, 0);
+	write_reg(state, RSTV0910_P2_CFRINIT0 + state->regoff, 0);
 
 	if (asperity ==1) { /* rising edge followed by a constant level or a falling edge */
 		*frequency_jump = (1000/div)*(i-(j+2)/2);
@@ -2261,7 +2261,7 @@ static int stv091x_carrier_search(struct stv *state,  s32* frequency_jump)
 	if (state->search_range_hz >40000000)
 		state->search_range_hz = 40000000;
 
-	write_reg(state, RSTV0910_P2_DMDISTATE,0x5C); /* Demod Stop*/
+	write_reg(state, RSTV0910_P2_DMDISTATE + state->regoff, 0x5C); /* Demod Stop*/
 
 	return asperity;
 }
@@ -2802,16 +2802,16 @@ static int stv091x_spectrum_start(struct dvb_frontend *fe,
 	write_reg(state, RSTV0910_P2_CFRUP0 + state->regoff, 0);
 	/*CFR Low Setting*/
 
-	write_reg(state, RSTV0910_P2_DMDISTATE, 0x18); //warm start
+	write_reg(state, RSTV0910_P2_DMDISTATE + state->regoff, 0x18); //warm start
 
 	//write_reg(state, RSTV0910_P2_AGC2O + state->regoff, 0x5B); //reset
 #if 0
 	reg = read_reg(state, RSTV0910_P2_AGC1CN + state->regoff);
 	reg = (reg & ~0x7) | 1; //slows decrease of agciq_beta
-	write_reg(state, RSTV0910_P2_AGC1CN, reg);
+	write_reg(state, RSTV0910_P2_AGC1CN +state->regoff, reg);
 #endif
 
-	write_reg(state, RSTV0910_P2_DMDISTATE, 0x5C); /* Demod Stop */
+	write_reg(state, RSTV0910_P2_DMDISTATE + state->regoff, 0x5C); /* Demod Stop */
 
 #if 0
 	reg = read_reg(state, RSTV0910_P2_DMDCFGMD + state->regoff);
@@ -2827,11 +2827,11 @@ static int stv091x_spectrum_start(struct dvb_frontend *fe,
 
 	stv091x_set_symbol_rate(state, resolution*1000);
 
-	write_reg(state, RSTV0910_P2_DMDISTATE, 0x5C); //stop demod
+	write_reg(state, RSTV0910_P2_DMDISTATE + state->regoff, 0x5C); //stop demod
 #ifdef TEST
 #else
-		write_reg(state, RSTV0910_P2_DMDISTATE, 0x1C); //stop demod
-		write_reg(state, RSTV0910_P2_DMDISTATE, 0x18); //warm
+		write_reg(state, RSTV0910_P2_DMDISTATE + state->regoff, 0x1C); //stop demod
+		write_reg(state, RSTV0910_P2_DMDISTATE + state->regoff, 0x18); //warm
 #endif
 
 	for (i = 0; i < num_freq; i++) {
@@ -2840,8 +2840,8 @@ static int stv091x_spectrum_start(struct dvb_frontend *fe,
 			break;
 		}
 #ifdef TEST
-		write_reg(state, RSTV0910_P2_DMDISTATE, 0x1C); //stop demod
-		write_reg(state, RSTV0910_P2_DMDISTATE, 0x18); //warm
+		write_reg(state, RSTV0910_P2_DMDISTATE + state->regoff, 0x1C); //stop demod
+		write_reg(state, RSTV0910_P2_DMDISTATE + state->regoff, 0x18); //warm
 #endif
 
 		ss->freq[i]= start_frequency + i*resolution;
@@ -2903,7 +2903,7 @@ static int stv091x_constellation_start_(struct dvb_frontend *fe,
 	cs->num_samples = 0;
 	cs->constel_select =  user->constel_select;
 
-	write_reg_fields(state, RSTV0910_P2_IQCONST,
+	write_reg_fields(state, RSTV0910_P2_IQCONST  + state->regoff,
 									 {FSTV0910_P2_CONSTEL_SELECT, 0}, //inverse mode
 									 {FSTV0910_P2_IQSYMB_SEL, cs->constel_select}
 									 );
@@ -2914,7 +2914,7 @@ static int stv091x_constellation_start_(struct dvb_frontend *fe,
 			break;
 		}
 
-		read_regs(state, RSTV0910_P2_ISYMB, buff, 2);
+		read_regs(state, RSTV0910_P2_ISYMB +state->regoff, buff, 2);
 		cs->samples[cs->num_samples].imag = buff[0];
 		cs->samples[cs->num_samples].real = buff[1];
 	}
