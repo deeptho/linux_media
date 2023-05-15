@@ -19,6 +19,7 @@
 #include <linux/etherdevice.h>
 #include <linux/ip.h>
 #include <linux/in.h>
+#include <linux/inet.h>
 #include <linux/ipv6.h>
 #include <linux/inetdevice.h>
 #include <linux/igmp.h>
@@ -46,9 +47,9 @@ int qeth_l3_ipaddr_to_string(enum qeth_prot_versions proto, const u8 *addr,
 			     char *buf)
 {
 	if (proto == QETH_PROT_IPV4)
-		return sprintf(buf, "%pI4", addr);
+		return scnprintf(buf, INET_ADDRSTRLEN, "%pI4", addr);
 	else
-		return sprintf(buf, "%pI6", addr);
+		return scnprintf(buf, INET6_ADDRSTRLEN, "%pI6", addr);
 }
 
 static struct qeth_ipaddr *qeth_l3_find_addr_by_ip(struct qeth_card *card,
@@ -158,7 +159,7 @@ static int qeth_l3_add_ip(struct qeth_card *card, struct qeth_ipaddr *tmp_addr)
 {
 	int rc = 0;
 	struct qeth_ipaddr *addr;
-	char buf[40];
+	char buf[INET6_ADDRSTRLEN];
 
 	if (tmp_addr->type == QETH_IP_TYPE_RXIP)
 		QETH_CARD_TEXT(card, 2, "addrxip");
@@ -1907,10 +1908,10 @@ static int qeth_l3_setup_netdev(struct qeth_card *card)
 
 	netif_keep_dst(card->dev);
 	if (card->dev->hw_features & (NETIF_F_TSO | NETIF_F_TSO6))
-		netif_set_gso_max_size(card->dev,
+		netif_set_tso_max_size(card->dev,
 				       PAGE_SIZE * (QETH_MAX_BUFFER_ELEMENTS(card) - 1));
 
-	netif_napi_add(card->dev, &card->napi, qeth_poll, QETH_NAPI_WEIGHT);
+	netif_napi_add(card->dev, &card->napi, qeth_poll);
 	return register_netdev(card->dev);
 }
 

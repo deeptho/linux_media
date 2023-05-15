@@ -236,8 +236,7 @@ static int tegra20_spdif_probe(struct snd_soc_dai *dai)
 {
 	struct tegra20_spdif *spdif = dev_get_drvdata(dai->dev);
 
-	dai->capture_dma_data = NULL;
-	dai->playback_dma_data = &spdif->playback_dma_data;
+	snd_soc_dai_init_dma_data(dai, &spdif->playback_dma_data, NULL);
 
 	return 0;
 }
@@ -264,6 +263,7 @@ static struct snd_soc_dai_driver tegra20_spdif_dai = {
 
 static const struct snd_soc_component_driver tegra20_spdif_component = {
 	.name = "tegra20-spdif",
+	.legacy_dai_naming = 1,
 };
 
 static bool tegra20_spdif_wr_rd_reg(struct device *dev, unsigned int reg)

@@ -926,6 +926,9 @@ static int tc_setup_taprio(struct stmmac_priv *priv,
 	int i, ret = 0;
 	u64 ctr;
 
+	if (qopt->base_time < 0)
+		return -ERANGE;
+
 	if (!priv->dma_cap.estsel)
 		return -EOPNOTSUPP;
 
@@ -1091,17 +1094,36 @@ static int tc_setup_etf(struct stmmac_priv *priv,
 		return -EOPNOTSUPP;
 	if (qopt->queue >= priv->plat->tx_queues_to_use)
 		return -EINVAL;
-	if (!(priv->tx_queue[qopt->queue].tbs & STMMAC_TBS_AVAIL))
+	if (!(priv->dma_conf.tx_queue[qopt->queue].tbs & STMMAC_TBS_AVAIL))
 		return -EINVAL;
 
 	if (qopt->enable)
-		priv->tx_queue[qopt->queue].tbs |= STMMAC_TBS_EN;
+		priv->dma_conf.tx_queue[qopt->queue].tbs |= STMMAC_TBS_EN;
 	else
-		priv->tx_queue[qopt->queue].tbs &= ~STMMAC_TBS_EN;
+		priv->dma_conf.tx_queue[qopt->queue].tbs &= ~STMMAC_TBS_EN;
 
 	netdev_info(priv->dev, "%s ETF for Queue %d\n",
 		    qopt->enable ? "enabled" : "disabled", qopt->queue);
 	return 0;
+}
+
+static int tc_query_caps(struct stmmac_priv *priv,
+			 struct tc_query_caps_base *base)
+{
+	switch (base->type) {
+	case TC_SETUP_QDISC_TAPRIO: {
+		struct tc_taprio_caps *caps = base->caps;
+
+		if (!priv->dma_cap.estsel)
+			return -EOPNOTSUPP;
+
+		caps->gate_mask_per_txq = true;
+
+		return 0;
+	}
+	default:
+		return -EOPNOTSUPP;
+	}
 }
 
 const struct stmmac_tc_ops dwmac510_tc_ops = {
@@ -1111,4 +1133,5 @@ const struct stmmac_tc_ops dwmac510_tc_ops = {
 	.setup_cls = tc_setup_cls,
 	.setup_taprio = tc_setup_taprio,
 	.setup_etf = tc_setup_etf,
+	.query_caps = tc_query_caps,
 };

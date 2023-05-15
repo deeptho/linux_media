@@ -52,9 +52,12 @@ struct i915_page_sizes {
  * @mr: The memory region of the object pointed to by the vma.
  * @ops: Pointer to the backend i915_vma_ops.
  * @private: Bind backend private info.
- * @start: Offset into the address space of bind range start.
- * @node_size: Size of the allocated range manager node.
+ * @start: Offset into the address space of bind range start. Note that
+ * this is after any padding that might have been allocated.
+ * @node_size: Size of the allocated range manager node with padding
+ * subtracted.
  * @vma_size: Bind size.
+ * @guard: The size of guard area preceding and trailing the bind.
  * @page_sizes_gtt: Resulting page sizes from the bind operation.
  * @bound_flags: Flags indicating binding status.
  * @allocated: Backend private data. TODO: Should move into @private.
@@ -62,6 +65,12 @@ struct i915_page_sizes {
  * deferred to a work item awaiting unsignaled fences. This is a hack.
  * (dma_fence_work uses a fence flag for this, but this seems slightly
  * cleaner).
+ * @needs_wakeref: Whether a wakeref is needed during unbind. Since we can't
+ * take a wakeref in the dma-fence signalling critical path, it needs to be
+ * taken when the unbind is scheduled.
+ * @skip_pte_rewrite: During ggtt suspend and vm takedown pte rewriting
+ * needs to be skipped for unbind.
+ * @tlb: pointer for obj->mm.tlb, if async unbind. Otherwise, NULL
  *
  * The lifetime of a struct i915_vma_resource is from a binding request to
  * the actual possible asynchronous unbind has completed.
@@ -107,12 +116,16 @@ struct i915_vma_resource {
 	u64 start;
 	u64 node_size;
 	u64 vma_size;
+	u32 guard;
 	u32 page_sizes_gtt;
 
 	u32 bound_flags;
 	bool allocated:1;
 	bool immediate_unbind:1;
 	bool needs_wakeref:1;
+	bool skip_pte_rewrite:1;
+
+	u32 *tlb;
 };
 
 bool i915_vma_resource_hold(struct i915_vma_resource *vma_res,
@@ -125,7 +138,8 @@ struct i915_vma_resource *i915_vma_resource_alloc(void);
 
 void i915_vma_resource_free(struct i915_vma_resource *vma_res);
 
-struct dma_fence *i915_vma_resource_unbind(struct i915_vma_resource *vma_res);
+struct dma_fence *i915_vma_resource_unbind(struct i915_vma_resource *vma_res,
+					   u32 *tlb);
 
 void __i915_vma_resource_init(struct i915_vma_resource *vma_res);
 
@@ -164,9 +178,10 @@ static inline void i915_vma_resource_put(struct i915_vma_resource *vma_res)
  * @mr: The memory region of the object the vma points to.
  * @ops: The backend ops.
  * @private: Bind backend private info.
- * @start: Offset into the address space of bind range start.
- * @node_size: Size of the allocated range manager node.
+ * @start: Offset into the address space of bind range start after padding.
+ * @node_size: Size of the allocated range manager node minus padding.
  * @size: Bind size.
+ * @guard: The size of the guard area preceding and trailing the bind.
  *
  * Initializes a vma resource allocated using i915_vma_resource_alloc().
  * The reason for having separate allocate and initialize function is that
@@ -185,7 +200,8 @@ static inline void i915_vma_resource_init(struct i915_vma_resource *vma_res,
 					  void *private,
 					  u64 start,
 					  u64 node_size,
-					  u64 size)
+					  u64 size,
+					  u32 guard)
 {
 	__i915_vma_resource_init(vma_res);
 	vma_res->vm = vm;
@@ -203,6 +219,7 @@ static inline void i915_vma_resource_init(struct i915_vma_resource *vma_res,
 	vma_res->start = start;
 	vma_res->node_size = node_size;
 	vma_res->vma_size = size;
+	vma_res->guard = guard;
 }
 
 static inline void i915_vma_resource_fini(struct i915_vma_resource *vma_res)

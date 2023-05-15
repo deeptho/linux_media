@@ -18,14 +18,14 @@
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_gpio_led>;
 
-		green {
+		led-green {
 			label = "som:green";
 			gpios = <&gpio3 4 GPIO_ACTIVE_HIGH>;
 			default-state = "on";
 			linux,default-trigger = "heartbeat";
 		};
 
-		red {
+		led-red {
 			label = "som:red";
 			gpios = <&gpio5 10 GPIO_ACTIVE_HIGH>;
 			default-state = "off";
@@ -98,7 +98,7 @@
 	pinctrl-1 = <&pinctrl_flexspi1>;
 	status = "okay";
 
-	flash0: spi-flash@0 {
+	flash0: flash@0 {
 		reg = <0>;
 		#address-cells = <1>;
 		#size-cells = <1>;

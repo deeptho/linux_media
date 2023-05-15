@@ -8,9 +8,6 @@
  *
  *  proc net directory handling functions
  */
-
-#include <linux/uaccess.h>
-
 #include <linux/errno.h>
 #include <linux/time.h>
 #include <linux/proc_fs.h>
@@ -302,7 +299,7 @@ static struct dentry *proc_tgid_net_lookup(struct inode *dir,
 	return de;
 }
 
-static int proc_tgid_net_getattr(struct user_namespace *mnt_userns,
+static int proc_tgid_net_getattr(struct mnt_idmap *idmap,
 				 const struct path *path, struct kstat *stat,
 				 u32 request_mask, unsigned int query_flags)
 {
@@ -311,7 +308,7 @@ static int proc_tgid_net_getattr(struct user_namespace *mnt_userns,
 
 	net = get_proc_task_net(inode);
 
-	generic_fillattr(&init_user_ns, inode, stat);
+	generic_fillattr(&nop_mnt_idmap, inode, stat);
 
 	if (net != NULL) {
 		stat->nlink = net->proc_net->nlink;
@@ -353,6 +350,12 @@ static __net_init int proc_net_ns_init(struct net *net)
 	kgid_t gid;
 	int err;
 
+	/*
+	 * This PDE acts only as an anchor for /proc/${pid}/net hierarchy.
+	 * Corresponding inode (PDE(inode) == net->proc_net) is never
+	 * instantiated therefore blanket zeroing is fine.
+	 * net->proc_net_stat inode is instantiated normally.
+	 */
 	err = -ENOMEM;
 	netd = kmem_cache_zalloc(proc_dir_entry_cache, GFP_KERNEL);
 	if (!netd)
@@ -375,6 +378,9 @@ static __net_init int proc_net_ns_init(struct net *net)
 		gid = netd->gid;
 
 	proc_set_user(netd, uid, gid);
+
+	/* Seed dentry revalidation for /proc/${pid}/net */
+	pde_force_lookup(netd);
 
 	err = -EEXIST;
 	net_statd = proc_net_mkdir(net, "stat", netd);

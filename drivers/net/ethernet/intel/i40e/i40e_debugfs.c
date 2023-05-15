@@ -309,10 +309,11 @@ static void i40e_dbg_dump_vsi_seid(struct i40e_pf *pf, int seid)
 			 tx_ring->stats.bytes,
 			 tx_ring->tx_stats.restart_queue);
 		dev_info(&pf->pdev->dev,
-			 "    tx_rings[%i]: tx_stats: tx_busy = %lld, tx_done_old = %lld\n",
+			 "    tx_rings[%i]: tx_stats: tx_busy = %lld, tx_done_old = %lld, tx_stopped = %lld\n",
 			 i,
 			 tx_ring->tx_stats.tx_busy,
-			 tx_ring->tx_stats.tx_done_old);
+			 tx_ring->tx_stats.tx_done_old,
+			 tx_ring->tx_stats.tx_stopped);
 		dev_info(&pf->pdev->dev,
 			 "    tx_rings[%i]: size = %i\n",
 			 i, tx_ring->size);
@@ -917,9 +918,9 @@ static ssize_t i40e_dbg_command_write(struct file *filp,
 		dev_info(&pf->pdev->dev, "deleting relay %d\n", veb_seid);
 		i40e_veb_release(pf->veb[i]);
 	} else if (strncmp(cmd_buf, "add pvid", 8) == 0) {
-		i40e_status ret;
-		u16 vid;
 		unsigned int v;
+		int ret;
+		u16 vid;
 
 		cnt = sscanf(&cmd_buf[8], "%i %u", &vsi_seid, &v);
 		if (cnt != 2) {
@@ -1283,7 +1284,7 @@ static ssize_t i40e_dbg_command_write(struct file *filp,
 		}
 	} else if (strncmp(cmd_buf, "send aq_cmd", 11) == 0) {
 		struct i40e_aq_desc *desc;
-		i40e_status ret;
+		int ret;
 
 		desc = kzalloc(sizeof(struct i40e_aq_desc), GFP_KERNEL);
 		if (!desc)
@@ -1329,9 +1330,9 @@ static ssize_t i40e_dbg_command_write(struct file *filp,
 		desc = NULL;
 	} else if (strncmp(cmd_buf, "send indirect aq_cmd", 20) == 0) {
 		struct i40e_aq_desc *desc;
-		i40e_status ret;
 		u16 buffer_len;
 		u8 *buff;
+		int ret;
 
 		desc = kzalloc(sizeof(struct i40e_aq_desc), GFP_KERNEL);
 		if (!desc)

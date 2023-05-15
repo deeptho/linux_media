@@ -752,7 +752,7 @@ static int alx_alloc_napis(struct alx_priv *alx)
 			goto err_out;
 
 		np->alx = alx;
-		netif_napi_add(alx->dev, &np->napi, alx_poll, 64);
+		netif_napi_add(alx->dev, &np->napi, alx_poll);
 		alx->qnapi[i] = np;
 	}
 
@@ -1905,18 +1905,20 @@ static void alx_remove(struct pci_dev *pdev)
 	free_netdev(alx->dev);
 }
 
-#ifdef CONFIG_PM_SLEEP
 static int alx_suspend(struct device *dev)
 {
 	struct alx_priv *alx = dev_get_drvdata(dev);
 
 	if (!netif_running(alx->dev))
 		return 0;
+
+	rtnl_lock();
 	netif_device_detach(alx->dev);
 
 	mutex_lock(&alx->mtx);
 	__alx_stop(alx);
 	mutex_unlock(&alx->mtx);
+	rtnl_unlock();
 
 	return 0;
 }
@@ -1927,6 +1929,7 @@ static int alx_resume(struct device *dev)
 	struct alx_hw *hw = &alx->hw;
 	int err;
 
+	rtnl_lock();
 	mutex_lock(&alx->mtx);
 	alx_reset_phy(hw);
 
@@ -1943,15 +1946,11 @@ static int alx_resume(struct device *dev)
 
 unlock:
 	mutex_unlock(&alx->mtx);
+	rtnl_unlock();
 	return err;
 }
 
-static SIMPLE_DEV_PM_OPS(alx_pm_ops, alx_suspend, alx_resume);
-#define ALX_PM_OPS      (&alx_pm_ops)
-#else
-#define ALX_PM_OPS      NULL
-#endif
-
+static DEFINE_SIMPLE_DEV_PM_OPS(alx_pm_ops, alx_suspend, alx_resume);
 
 static pci_ers_result_t alx_pci_error_detected(struct pci_dev *pdev,
 					       pci_channel_state_t state)
@@ -2050,7 +2049,7 @@ static struct pci_driver alx_driver = {
 	.probe       = alx_probe,
 	.remove      = alx_remove,
 	.err_handler = &alx_err_handlers,
-	.driver.pm   = ALX_PM_OPS,
+	.driver.pm   = pm_sleep_ptr(&alx_pm_ops),
 };
 
 module_pci_driver(alx_driver);

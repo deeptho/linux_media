@@ -23,6 +23,7 @@
 #include <linux/dma-map-ops.h>
 #include <linux/kobject.h>
 #include <linux/kexec.h>
+#include <linux/of_irq.h>
 
 #include <asm/iommu.h>
 #include <asm/dma.h>
@@ -1608,10 +1609,10 @@ static int vio_bus_match(struct device *dev, struct device_driver *drv)
 	return (ids != NULL) && (vio_match_device(ids, vio_dev) != NULL);
 }
 
-static int vio_hotplug(struct device *dev, struct kobj_uevent_env *env)
+static int vio_hotplug(const struct device *dev, struct kobj_uevent_env *env)
 {
 	const struct vio_dev *vio_dev = to_vio_dev(dev);
-	struct device_node *dn;
+	const struct device_node *dn;
 	const char *cp;
 
 	dn = dev->of_node;

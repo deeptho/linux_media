@@ -23,16 +23,12 @@
  *
  */
 
-#include <linux/delay.h>
-#include <linux/slab.h>
-
 #include "reg_helper.h"
 
 #include "core_types.h"
 #include "link_encoder.h"
 #include "dce_link_encoder.h"
 #include "stream_encoder.h"
-#include "i2caux_interface.h"
 #include "dc_bios_types.h"
 
 #include "gpio_service_interface.h"

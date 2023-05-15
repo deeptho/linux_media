@@ -45,8 +45,7 @@
 #include "link_hwss.h"
 #include "dpcd_defs.h"
 #include "dce/dmub_outbox.h"
-#include "dc_link_dp.h"
-#include "inc/link_dpcd.h"
+#include "link.h"
 #include "dcn10/dcn10_hw_sequencer.h"
 #include "inc/link_enc_cfg.h"
 #include "dcn30/dcn30_vpg.h"
@@ -89,7 +88,8 @@ static void enable_memory_low_power(struct dc *dc)
 		REG_UPDATE(MMHUBBUB_MEM_PWR_CNTL, VGA_MEM_PWR_FORCE, 1);
 	}
 
-	if (dc->debug.enable_mem_low_power.bits.mpc)
+	if (dc->debug.enable_mem_low_power.bits.mpc &&
+		dc->res_pool->mpc->funcs->set_mpc_mem_lp_mode)
 		dc->res_pool->mpc->funcs->set_mpc_mem_lp_mode(dc->res_pool->mpc);
 
 
@@ -141,7 +141,8 @@ void dcn31_init_hw(struct dc *dc)
 
 	if (!dcb->funcs->is_accelerated_mode(dcb)) {
 		hws->funcs.bios_golden_init(dc);
-		hws->funcs.disable_vga(dc->hwseq);
+		if (hws->funcs.disable_vga)
+			hws->funcs.disable_vga(dc->hwseq);
 	}
 	// Initialize the dccg
 	if (res_pool->dccg->funcs->dccg_init)
@@ -188,8 +189,12 @@ void dcn31_init_hw(struct dc *dc)
 
 		/* Check for enabled DIG to identify enabled display */
 		if (link->link_enc->funcs->is_dig_enabled &&
-			link->link_enc->funcs->is_dig_enabled(link->link_enc))
+			link->link_enc->funcs->is_dig_enabled(link->link_enc)) {
 			link->link_status.link_active = true;
+			if (link->link_enc->funcs->fec_is_active &&
+					link->link_enc->funcs->fec_is_active(link->link_enc))
+				link->fec_state = dc_link_fec_enabled;
+		}
 	}
 
 	/* Enables outbox notifications for usb4 dpia */
@@ -197,7 +202,7 @@ void dcn31_init_hw(struct dc *dc)
 		dmub_enable_outbox_notification(dc->ctx->dmub_srv);
 
 	/* we want to turn off all dp displays before doing detection */
-	dc_link_blank_all_dp_displays(dc);
+	link_blank_all_dp_displays(dc);
 
 	if (hws->funcs.enable_power_gating_plane)
 		hws->funcs.enable_power_gating_plane(dc->hwseq, true);
@@ -209,6 +214,28 @@ void dcn31_init_hw(struct dc *dc)
 	 * everything down.
 	 */
 	if (dcb->funcs->is_accelerated_mode(dcb) || !dc->config.seamless_boot_edp_requested) {
+
+		// we want to turn off edp displays if odm is enabled and no seamless boot
+		if (!dc->caps.seamless_odm) {
+			for (i = 0; i < dc->res_pool->timing_generator_count; i++) {
+				struct timing_generator *tg = dc->res_pool->timing_generators[i];
+				uint32_t num_opps, opp_id_src0, opp_id_src1;
+
+				num_opps = 1;
+				if (tg) {
+					if (tg->funcs->is_tg_enabled(tg) && tg->funcs->get_optc_source) {
+						tg->funcs->get_optc_source(tg, &num_opps,
+								&opp_id_src0, &opp_id_src1);
+					}
+				}
+
+				if (num_opps > 1) {
+					link_blank_all_edp_displays(dc);
+					break;
+				}
+			}
+		}
+
 		hws->funcs.init_pipes(dc, dc->current_state);
 		if (dc->res_pool->hubbub->funcs->allow_self_refresh_control)
 			dc->res_pool->hubbub->funcs->allow_self_refresh_control(dc->res_pool->hubbub,
@@ -387,7 +414,17 @@ void dcn31_update_info_frame(struct pipe_ctx *pipe_ctx)
 		pipe_ctx->stream_res.stream_enc->funcs->update_hdmi_info_packets(
 			pipe_ctx->stream_res.stream_enc,
 			&pipe_ctx->stream_res.encoder_info_frame);
-	else {
+	else if (link_is_dp_128b_132b_signal(pipe_ctx)) {
+		pipe_ctx->stream_res.hpo_dp_stream_enc->funcs->update_dp_info_packets(
+				pipe_ctx->stream_res.hpo_dp_stream_enc,
+				&pipe_ctx->stream_res.encoder_info_frame);
+		return;
+	} else {
+		if (pipe_ctx->stream_res.stream_enc->funcs->update_dp_info_packets_sdp_line_num)
+			pipe_ctx->stream_res.stream_enc->funcs->update_dp_info_packets_sdp_line_num(
+				pipe_ctx->stream_res.stream_enc,
+				&pipe_ctx->stream_res.encoder_info_frame);
+
 		pipe_ctx->stream_res.stream_enc->funcs->update_dp_info_packets(
 			pipe_ctx->stream_res.stream_enc,
 			&pipe_ctx->stream_res.encoder_info_frame);
@@ -509,11 +546,11 @@ static void dcn31_reset_back_end_for_pipe(
 			pipe_ctx->stream_res.tg,
 			OPTC_DSC_DISABLED, 0, 0);
 	pipe_ctx->stream_res.tg->funcs->disable_crtc(pipe_ctx->stream_res.tg);
-
 	pipe_ctx->stream_res.tg->funcs->enable_optc_clock(pipe_ctx->stream_res.tg, false);
 	if (pipe_ctx->stream_res.tg->funcs->set_odm_bypass)
 		pipe_ctx->stream_res.tg->funcs->set_odm_bypass(
 				pipe_ctx->stream_res.tg, &pipe_ctx->stream->timing);
+	pipe_ctx->stream->link->phy_state.symclk_ref_cnts.otg = 0;
 
 	if (pipe_ctx->stream_res.tg->funcs->set_drr)
 		pipe_ctx->stream_res.tg->funcs->set_drr(
@@ -528,7 +565,7 @@ static void dcn31_reset_back_end_for_pipe(
 		 * VBIOS lit up eDP, so check link status too.
 		 */
 		if (!pipe_ctx->stream->dpms_off || link->link_status.link_active)
-			core_link_disable_stream(pipe_ctx);
+			link_set_dpms_off(pipe_ctx);
 		else if (pipe_ctx->stream_res.audio)
 			dc->hwss.disable_audio_stream(pipe_ctx);
 
@@ -547,7 +584,7 @@ static void dcn31_reset_back_end_for_pipe(
 			}
 		}
 	} else if (pipe_ctx->stream_res.dsc) {
-			dp_set_dsc_enable(pipe_ctx, false);
+			link_set_dsc_enable(pipe_ctx, false);
 	}
 
 	pipe_ctx->stream = NULL;
@@ -587,7 +624,7 @@ void dcn31_reset_hw_ctx_wrap(
 	}
 
 	/* New dc_state in the process of being applied to hardware. */
-	dc->current_state->res_ctx.link_enc_cfg_ctx.mode = LINK_ENC_CFG_TRANSIENT;
+	link_enc_cfg_set_transient_mode(dc, dc->current_state, context);
 }
 
 void dcn31_setup_hpo_hw_control(const struct dce_hwseq *hws, bool enable)

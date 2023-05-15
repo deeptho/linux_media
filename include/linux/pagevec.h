@@ -26,25 +26,6 @@ struct pagevec {
 };
 
 void __pagevec_release(struct pagevec *pvec);
-void __pagevec_lru_add(struct pagevec *pvec);
-unsigned pagevec_lookup_range(struct pagevec *pvec,
-			      struct address_space *mapping,
-			      pgoff_t *start, pgoff_t end);
-static inline unsigned pagevec_lookup(struct pagevec *pvec,
-				      struct address_space *mapping,
-				      pgoff_t *start)
-{
-	return pagevec_lookup_range(pvec, mapping, start, (pgoff_t)-1);
-}
-
-unsigned pagevec_lookup_range_tag(struct pagevec *pvec,
-		struct address_space *mapping, pgoff_t *index, pgoff_t end,
-		xa_mark_t tag);
-static inline unsigned pagevec_lookup_tag(struct pagevec *pvec,
-		struct address_space *mapping, pgoff_t *index, xa_mark_t tag)
-{
-	return pagevec_lookup_range_tag(pvec, mapping, index, (pgoff_t)-1, tag);
-}
 
 static inline void pagevec_init(struct pagevec *pvec)
 {
@@ -112,6 +93,11 @@ static inline void folio_batch_init(struct folio_batch *fbatch)
 {
 	fbatch->nr = 0;
 	fbatch->percpu_pvec_drained = false;
+}
+
+static inline void folio_batch_reinit(struct folio_batch *fbatch)
+{
+	fbatch->nr = 0;
 }
 
 static inline unsigned int folio_batch_count(struct folio_batch *fbatch)

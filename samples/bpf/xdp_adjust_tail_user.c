@@ -14,7 +14,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <net/if.h>
-#include <sys/resource.h>
 #include <arpa/inet.h>
 #include <netinet/ether.h>
 #include <unistd.h>
@@ -185,7 +184,7 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
-	err = bpf_obj_get_info_by_fd(prog_fd, &info, &info_len);
+	err = bpf_prog_get_info_by_fd(prog_fd, &info, &info_len);
 	if (err) {
 		printf("can't get prog info - %s\n", strerror(errno));
 		return 1;

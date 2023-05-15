@@ -909,6 +909,19 @@
 				#gpio-cells = <2>;
 			};
 
+			pinmux {
+				compatible = "ti,tps65913-pinctrl";
+				pinctrl-names = "default";
+				pinctrl-0 = <&palmas_default>;
+
+				palmas_default: pinmux {
+					pin_gpio6 {
+						pins = "gpio6";
+						function = "gpio";
+					};
+				};
+			};
+
 			pmic {
 				compatible = "ti,tps65913-pmic", "ti,palmas-pmic";
 				smps1-in-supply = <&tps65090_dcdc3_reg>;
@@ -1065,19 +1078,6 @@
 				interrupt-parent = <&palmas>;
 				interrupts = <8 0>;
 			};
-
-			pinmux {
-				compatible = "ti,tps65913-pinctrl";
-				pinctrl-names = "default";
-				pinctrl-0 = <&palmas_default>;
-
-				palmas_default: pinmux {
-					pin_gpio6 {
-						pins = "gpio6";
-						function = "gpio";
-					};
-				};
-			};
 		};
 	};
 
@@ -1161,26 +1161,26 @@
 	gpio-keys {
 		compatible = "gpio-keys";
 
-		home {
+		key-home {
 			label = "Home";
 			gpios = <&gpio TEGRA_GPIO(I, 5) GPIO_ACTIVE_LOW>;
 			linux,code = <KEY_HOME>;
 		};
 
-		power {
+		key-power {
 			label = "Power";
 			gpios = <&gpio TEGRA_GPIO(Q, 0) GPIO_ACTIVE_LOW>;
 			linux,code = <KEY_POWER>;
 			wakeup-source;
 		};
 
-		volume_down {
+		key-volume-down {
 			label = "Volume Down";
 			gpios = <&gpio TEGRA_GPIO(R, 1) GPIO_ACTIVE_LOW>;
 			linux,code = <KEY_VOLUMEDOWN>;
 		};
 
-		volume_up {
+		key-volume-up {
 			label = "Volume Up";
 			gpios = <&gpio TEGRA_GPIO(R, 2) GPIO_ACTIVE_LOW>;
 			linux,code = <KEY_VOLUMEUP>;

@@ -20,6 +20,11 @@
 	model = "WinLink E850-96 board";
 	compatible = "winlink,e850-96", "samsung,exynos850";
 
+	aliases {
+		mmc0 = &mmc_0;
+		serial0 = &serial_0;
+	};
+
 	chosen {
 		stdout-path = &serial_0;
 	};
@@ -101,7 +106,7 @@
 			gpios = <&gpg2 7 GPIO_ACTIVE_HIGH>;
 			color = <LED_COLOR_ID_BLUE>;
 			function = LED_FUNCTION_BLUETOOTH;
-			linux,default-trigger = "hci0rx";
+			linux,default-trigger = "hci0-power";
 			default-state = "off";
 		};
 	};

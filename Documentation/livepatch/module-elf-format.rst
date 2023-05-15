@@ -210,11 +210,11 @@ module->symtab.
 =====================================
 Normally, a stripped down copy of a module's symbol table (containing only
 "core" symbols) is made available through module->symtab (See layout_symtab()
-in kernel/module.c). For livepatch modules, the symbol table copied into memory
-on module load must be exactly the same as the symbol table produced when the
-patch module was compiled. This is because the relocations in each livepatch
-relocation section refer to their respective symbols with their symbol indices,
-and the original symbol indices (and thus the symtab ordering) must be
+in kernel/module/kallsyms.c). For livepatch modules, the symbol table copied
+into memory on module load must be exactly the same as the symbol table produced
+when the patch module was compiled. This is because the relocations in each
+livepatch relocation section refer to their respective symbols with their symbol
+indices, and the original symbol indices (and thus the symtab ordering) must be
 preserved in order for apply_relocate_add() to find the right symbol.
 
 For example, take this particular rela from a livepatch module:::
@@ -298,12 +298,5 @@ A livepatch module's symbol table is accessible through module->symtab.
 Since apply_relocate_add() requires access to a module's section headers,
 symbol table, and relocation section indices, Elf information is preserved for
 livepatch modules and is made accessible by the module loader through
-module->klp_info, which is a klp_modinfo struct. When a livepatch module loads,
-this struct is filled in by the module loader. Its fields are documented below::
-
-	struct klp_modinfo {
-		Elf_Ehdr hdr; /* Elf header */
-		Elf_Shdr *sechdrs; /* Section header table */
-		char *secstrings; /* String table for the section headers */
-		unsigned int symndx; /* The symbol table section index */
-	};
+module->klp_info, which is a :c:type:`klp_modinfo` struct. When a livepatch module
+loads, this struct is filled in by the module loader.

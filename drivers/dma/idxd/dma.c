@@ -63,12 +63,6 @@ static void op_flag_setup(unsigned long flags, u32 *desc_flags)
 		*desc_flags |= IDXD_OP_FLAG_RCI;
 }
 
-static inline void set_completion_address(struct idxd_desc *desc,
-					  u64 *compl_addr)
-{
-		*compl_addr = desc->compl_dma;
-}
-
 static inline void idxd_prep_desc_common(struct idxd_wq *wq,
 					 struct dsa_hw_desc *hw, char opcode,
 					 u64 addr_f1, u64 addr_f2, u64 len,
@@ -85,6 +79,27 @@ static inline void idxd_prep_desc_common(struct idxd_wq *wq,
 	 */
 	hw->priv = 1;
 	hw->completion_addr = compl;
+}
+
+static struct dma_async_tx_descriptor *
+idxd_dma_prep_interrupt(struct dma_chan *c, unsigned long flags)
+{
+	struct idxd_wq *wq = to_idxd_wq(c);
+	u32 desc_flags;
+	struct idxd_desc *desc;
+
+	if (wq->state != IDXD_WQ_ENABLED)
+		return NULL;
+
+	op_flag_setup(flags, &desc_flags);
+	desc = idxd_alloc_desc(wq, IDXD_OP_BLOCK);
+	if (IS_ERR(desc))
+		return NULL;
+
+	idxd_prep_desc_common(wq, desc->hw, DSA_OPCODE_NOOP,
+			      0, 0, 0, desc->compl_dma, desc_flags);
+	desc->txd.flags = flags;
+	return &desc->txd;
 }
 
 static struct dma_async_tx_descriptor *
@@ -193,10 +208,12 @@ int idxd_register_dma_device(struct idxd_device *idxd)
 	INIT_LIST_HEAD(&dma->channels);
 	dma->dev = dev;
 
+	dma_cap_set(DMA_INTERRUPT, dma->cap_mask);
 	dma_cap_set(DMA_PRIVATE, dma->cap_mask);
 	dma_cap_set(DMA_COMPLETION_NO_ORDER, dma->cap_mask);
 	dma->device_release = idxd_dma_release;
 
+	dma->device_prep_dma_interrupt = idxd_dma_prep_interrupt;
 	if (idxd->hw.opcap.bits[0] & IDXD_OPCAP_MEMMOVE) {
 		dma_cap_set(DMA_MEMCPY, dma->cap_mask);
 		dma->device_prep_dma_memcpy = idxd_dma_submit_memcpy;
@@ -227,7 +244,7 @@ void idxd_unregister_dma_device(struct idxd_device *idxd)
 	dma_async_device_unregister(&idxd->idxd_dma->dma);
 }
 
-int idxd_register_dma_channel(struct idxd_wq *wq)
+static int idxd_register_dma_channel(struct idxd_wq *wq)
 {
 	struct idxd_device *idxd = wq->idxd;
 	struct dma_device *dma = &idxd->idxd_dma->dma;
@@ -264,7 +281,7 @@ int idxd_register_dma_channel(struct idxd_wq *wq)
 	return 0;
 }
 
-void idxd_unregister_dma_channel(struct idxd_wq *wq)
+static void idxd_unregister_dma_channel(struct idxd_wq *wq)
 {
 	struct idxd_dma_chan *idxd_chan = wq->idxd_chan;
 	struct dma_chan *chan = &idxd_chan->chan;
@@ -290,32 +307,11 @@ static int idxd_dmaengine_drv_probe(struct idxd_dev *idxd_dev)
 	mutex_lock(&wq->wq_lock);
 	wq->type = IDXD_WQT_KERNEL;
 
-	rc = idxd_wq_request_irq(wq);
-	if (rc < 0) {
-		idxd->cmd_status = IDXD_SCMD_WQ_IRQ_ERR;
-		dev_dbg(dev, "WQ %d irq setup failed: %d\n", wq->id, rc);
-		goto err_irq;
-	}
-
-	rc = __drv_enable_wq(wq);
+	rc = drv_enable_wq(wq);
 	if (rc < 0) {
 		dev_dbg(dev, "Enable wq %d failed: %d\n", wq->id, rc);
 		rc = -ENXIO;
 		goto err;
-	}
-
-	rc = idxd_wq_alloc_resources(wq);
-	if (rc < 0) {
-		idxd->cmd_status = IDXD_SCMD_WQ_RES_ALLOC_ERR;
-		dev_dbg(dev, "WQ resource alloc failed\n");
-		goto err_res_alloc;
-	}
-
-	rc = idxd_wq_init_percpu_ref(wq);
-	if (rc < 0) {
-		idxd->cmd_status = IDXD_SCMD_PERCPU_ERR;
-		dev_dbg(dev, "percpu_ref setup failed\n");
-		goto err_ref;
 	}
 
 	rc = idxd_register_dma_channel(wq);
@@ -330,15 +326,8 @@ static int idxd_dmaengine_drv_probe(struct idxd_dev *idxd_dev)
 	return 0;
 
 err_dma:
-	__idxd_wq_quiesce(wq);
-	percpu_ref_exit(&wq->wq_active);
-err_ref:
-	idxd_wq_free_resources(wq);
-err_res_alloc:
-	__drv_disable_wq(wq);
+	drv_disable_wq(wq);
 err:
-	idxd_wq_free_irq(wq);
-err_irq:
 	wq->type = IDXD_WQT_NONE;
 	mutex_unlock(&wq->wq_lock);
 	return rc;
@@ -351,11 +340,7 @@ static void idxd_dmaengine_drv_remove(struct idxd_dev *idxd_dev)
 	mutex_lock(&wq->wq_lock);
 	__idxd_wq_quiesce(wq);
 	idxd_unregister_dma_channel(wq);
-	idxd_wq_free_resources(wq);
-	__drv_disable_wq(wq);
-	percpu_ref_exit(&wq->wq_active);
-	idxd_wq_free_irq(wq);
-	wq->type = IDXD_WQT_NONE;
+	drv_disable_wq(wq);
 	mutex_unlock(&wq->wq_lock);
 }
 

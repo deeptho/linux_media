@@ -9,7 +9,9 @@
 #include <linux/sched.h>
 #include <linux/slab.h>
 #include <linux/tee_drv.h>
+#include <linux/uaccess.h>
 #include <linux/uio.h>
+#include <linux/highmem.h>
 #include "tee_private.h"
 
 static void shm_put_kernel_pages(struct page **pages, size_t page_count)
@@ -23,23 +25,20 @@ static void shm_put_kernel_pages(struct page **pages, size_t page_count)
 static int shm_get_kernel_pages(unsigned long start, size_t page_count,
 				struct page **pages)
 {
-	struct kvec *kiov;
+	struct page *page;
 	size_t n;
-	int rc;
 
-	kiov = kcalloc(page_count, sizeof(*kiov), GFP_KERNEL);
-	if (!kiov)
-		return -ENOMEM;
+	if (WARN_ON_ONCE(is_vmalloc_addr((void *)start) ||
+			 is_kmap_addr((void *)start)))
+		return -EINVAL;
 
+	page = virt_to_page(start);
 	for (n = 0; n < page_count; n++) {
-		kiov[n].iov_base = (void *)(start + n * PAGE_SIZE);
-		kiov[n].iov_len = PAGE_SIZE;
+		pages[n] = page + n;
+		get_page(pages[n]);
 	}
 
-	rc = get_kernel_pages(kiov, page_count, 0, pages);
-	kfree(kiov);
-
-	return rc;
+	return page_count;
 }
 
 static void release_registered_pages(struct tee_shm *shm)
@@ -311,6 +310,9 @@ struct tee_shm *tee_shm_register_user_buf(struct tee_context *ctx,
 	void *ret;
 	int id;
 
+	if (!access_ok((void __user *)addr, length))
+		return ERR_PTR(-EFAULT);
+
 	mutex_lock(&teedev->mutex);
 	id = idr_alloc(&teedev->idr, NULL, 1, 0, GFP_KERNEL);
 	mutex_unlock(&teedev->mutex);
@@ -413,56 +415,6 @@ void tee_shm_free(struct tee_shm *shm)
 	tee_shm_put(shm);
 }
 EXPORT_SYMBOL_GPL(tee_shm_free);
-
-/**
- * tee_shm_va2pa() - Get physical address of a virtual address
- * @shm:	Shared memory handle
- * @va:		Virtual address to tranlsate
- * @pa:		Returned physical address
- * @returns 0 on success and < 0 on failure
- */
-int tee_shm_va2pa(struct tee_shm *shm, void *va, phys_addr_t *pa)
-{
-	if (!shm->kaddr)
-		return -EINVAL;
-	/* Check that we're in the range of the shm */
-	if ((char *)va < (char *)shm->kaddr)
-		return -EINVAL;
-	if ((char *)va >= ((char *)shm->kaddr + shm->size))
-		return -EINVAL;
-
-	return tee_shm_get_pa(
-			shm, (unsigned long)va - (unsigned long)shm->kaddr, pa);
-}
-EXPORT_SYMBOL_GPL(tee_shm_va2pa);
-
-/**
- * tee_shm_pa2va() - Get virtual address of a physical address
- * @shm:	Shared memory handle
- * @pa:		Physical address to tranlsate
- * @va:		Returned virtual address
- * @returns 0 on success and < 0 on failure
- */
-int tee_shm_pa2va(struct tee_shm *shm, phys_addr_t pa, void **va)
-{
-	if (!shm->kaddr)
-		return -EINVAL;
-	/* Check that we're in the range of the shm */
-	if (pa < shm->paddr)
-		return -EINVAL;
-	if (pa >= (shm->paddr + shm->size))
-		return -EINVAL;
-
-	if (va) {
-		void *v = tee_shm_get_va(shm, pa - shm->paddr);
-
-		if (IS_ERR(v))
-			return PTR_ERR(v);
-		*va = v;
-	}
-	return 0;
-}
-EXPORT_SYMBOL_GPL(tee_shm_pa2va);
 
 /**
  * tee_shm_get_va() - Get virtual address of a shared memory plus an offset

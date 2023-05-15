@@ -550,15 +550,12 @@ static struct irq_chip msc313_gpio_irqchip = {
  * so we need to provide the fwspec. Essentially gpiochip_populate_parent_fwspec_twocell
  * that puts GIC_SPI into the first cell.
  */
-static void *msc313_gpio_populate_parent_fwspec(struct gpio_chip *gc,
-					     unsigned int parent_hwirq,
-					     unsigned int parent_type)
+static int msc313_gpio_populate_parent_fwspec(struct gpio_chip *gc,
+					      union gpio_irq_fwspec *gfwspec,
+					      unsigned int parent_hwirq,
+					      unsigned int parent_type)
 {
-	struct irq_fwspec *fwspec;
-
-	fwspec = kmalloc(sizeof(*fwspec), GFP_KERNEL);
-	if (!fwspec)
-		return NULL;
+	struct irq_fwspec *fwspec = &gfwspec->fwspec;
 
 	fwspec->fwnode = gc->irq.parent_domain->fwnode;
 	fwspec->param_count = 3;
@@ -566,7 +563,7 @@ static void *msc313_gpio_populate_parent_fwspec(struct gpio_chip *gc,
 	fwspec->param[1] = parent_hwirq;
 	fwspec->param[2] = parent_type;
 
-	return fwspec;
+	return 0;
 }
 
 static int msc313e_gpio_child_to_parent_hwirq(struct gpio_chip *chip,
@@ -658,11 +655,6 @@ static int msc313_gpio_probe(struct platform_device *pdev)
 	return devm_gpiochip_add_data(dev, gpiochip, gpio);
 }
 
-static int msc313_gpio_remove(struct platform_device *pdev)
-{
-	return 0;
-}
-
 static const struct of_device_id msc313_gpio_of_match[] = {
 #ifdef CONFIG_MACH_INFINITY
 	{
@@ -713,6 +705,5 @@ static struct platform_driver msc313_gpio_driver = {
 		.pm = &msc313_gpio_ops,
 	},
 	.probe = msc313_gpio_probe,
-	.remove = msc313_gpio_remove,
 };
 builtin_platform_driver(msc313_gpio_driver);

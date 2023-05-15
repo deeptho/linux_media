@@ -302,6 +302,31 @@ pte_t ptep_xchg_direct(struct mm_struct *mm, unsigned long addr,
 }
 EXPORT_SYMBOL(ptep_xchg_direct);
 
+/*
+ * Caller must check that new PTE only differs in _PAGE_PROTECT HW bit, so that
+ * RDP can be used instead of IPTE. See also comments at pte_allow_rdp().
+ */
+void ptep_reset_dat_prot(struct mm_struct *mm, unsigned long addr, pte_t *ptep,
+			 pte_t new)
+{
+	preempt_disable();
+	atomic_inc(&mm->context.flush_count);
+	if (cpumask_equal(mm_cpumask(mm), cpumask_of(smp_processor_id())))
+		__ptep_rdp(addr, ptep, 0, 0, 1);
+	else
+		__ptep_rdp(addr, ptep, 0, 0, 0);
+	/*
+	 * PTE is not invalidated by RDP, only _PAGE_PROTECT is cleared. That
+	 * means it is still valid and active, and must not be changed according
+	 * to the architecture. But writing a new value that only differs in SW
+	 * bits is allowed.
+	 */
+	set_pte(ptep, new);
+	atomic_dec(&mm->context.flush_count);
+	preempt_enable();
+}
+EXPORT_SYMBOL(ptep_reset_dat_prot);
+
 pte_t ptep_xchg_lazy(struct mm_struct *mm, unsigned long addr,
 		     pte_t *ptep, pte_t new)
 {
@@ -748,7 +773,7 @@ void ptep_zap_key(struct mm_struct *mm, unsigned long addr, pte_t *ptep)
 	pgste_val(pgste) |= PGSTE_GR_BIT | PGSTE_GC_BIT;
 	ptev = pte_val(*ptep);
 	if (!(ptev & _PAGE_INVALID) && (ptev & _PAGE_WRITE))
-		page_set_storage_key(ptev & PAGE_MASK, PAGE_DEFAULT_KEY, 1);
+		page_set_storage_key(ptev & PAGE_MASK, PAGE_DEFAULT_KEY, 0);
 	pgste_set_unlock(ptep, pgste);
 	preempt_enable();
 }

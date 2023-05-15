@@ -5,6 +5,7 @@
 
 #include <dt-bindings/interrupt-controller/irq.h>
 #include <dt-bindings/interrupt-controller/arm-gic.h>
+#include <dt-bindings/clock/ste-db8500-clkout.h>
 #include <dt-bindings/reset/stericsson,db8500-prcc-reset.h>
 #include <dt-bindings/mfd/dbx500-prcmu.h>
 #include <dt-bindings/arm/ux500_pm_domains.h>
@@ -311,6 +312,11 @@
 
 			smp_twd_clk: smp-twd-clock {
 				#clock-cells = <0>;
+			};
+
+			clkout_clk: clkout-clock {
+				/* Cell 1 id, cell 2 source, cell 3 div */
+				#clock-cells = <3>;
 			};
 		};
 
@@ -661,7 +667,6 @@
 
 			#address-cells = <1>;
 			#size-cells = <0>;
-			v-i2c-supply = <&db8500_vape_reg>;
 
 			clock-frequency = <400000>;
 			clocks = <&prcc_kclk 3 3>, <&prcc_pclk 3 3>;
@@ -679,7 +684,6 @@
 
 			#address-cells = <1>;
 			#size-cells = <0>;
-			v-i2c-supply = <&db8500_vape_reg>;
 
 			clock-frequency = <400000>;
 
@@ -698,7 +702,6 @@
 
 			#address-cells = <1>;
 			#size-cells = <0>;
-			v-i2c-supply = <&db8500_vape_reg>;
 
 			clock-frequency = <400000>;
 
@@ -717,7 +720,6 @@
 
 			#address-cells = <1>;
 			#size-cells = <0>;
-			v-i2c-supply = <&db8500_vape_reg>;
 
 			clock-frequency = <400000>;
 
@@ -736,7 +738,6 @@
 
 			#address-cells = <1>;
 			#size-cells = <0>;
-			v-i2c-supply = <&db8500_vape_reg>;
 
 			clock-frequency = <400000>;
 
@@ -755,7 +756,7 @@
 			#address-cells = <1>;
 			#size-cells = <0>;
 			clocks = <&prcc_kclk 3 1>, <&prcc_pclk 3 1>;
-			clock-names = "SSPCLK", "apb_pclk";
+			clock-names = "sspclk", "apb_pclk";
 			dmas = <&dma 8 0 0x2>, /* Logical - DevToMem */
 			       <&dma 8 0 0x0>; /* Logical - MemToDev */
 			dma-names = "rx", "tx";
@@ -772,7 +773,7 @@
 			#address-cells = <1>;
 			#size-cells = <0>;
 			clocks = <&prcc_kclk 3 2>, <&prcc_pclk 3 2>;
-			clock-names = "SSPCLK", "apb_pclk";
+			clock-names = "sspclk", "apb_pclk";
 			dmas = <&dma 9 0 0x2>, /* Logical - DevToMem */
 			       <&dma 9 0 0x0>; /* Logical - MemToDev */
 			dma-names = "rx", "tx";
@@ -790,7 +791,7 @@
 			#size-cells = <0>;
 			/* Same clock wired to kernel and pclk */
 			clocks = <&prcc_pclk 2 8>, <&prcc_pclk 2 8>;
-			clock-names = "SSPCLK", "apb_pclk";
+			clock-names = "sspclk", "apb_pclk";
 			dmas = <&dma 0 0 0x2>, /* Logical - DevToMem */
 			       <&dma 0 0 0x0>; /* Logical - MemToDev */
 			dma-names = "rx", "tx";
@@ -807,7 +808,7 @@
 			#size-cells = <0>;
 			/* Same clock wired to kernel and pclk */
 			clocks = <&prcc_pclk 2 2>, <&prcc_pclk 2 2>;
-			clock-names = "SSPCLK", "apb_pclk";
+			clock-names = "sspclk", "apb_pclk";
 			dmas = <&dma 35 0 0x2>, /* Logical - DevToMem */
 			       <&dma 35 0 0x0>; /* Logical - MemToDev */
 			dma-names = "rx", "tx";
@@ -824,7 +825,7 @@
 			#size-cells = <0>;
 			/* Same clock wired to kernel and pclk */
 			clocks = <&prcc_pclk 2 1>, <&prcc_pclk 2 1>;
-			clock-names = "SSPCLK", "apb_pclk";
+			clock-names = "sspclk", "apb_pclk";
 			dmas = <&dma 33 0 0x2>, /* Logical - DevToMem */
 			       <&dma 33 0 0x0>; /* Logical - MemToDev */
 			dma-names = "rx", "tx";
@@ -841,7 +842,7 @@
 			#size-cells = <0>;
 			/* Same clock wired to kernel and pclk */
 			clocks = <&prcc_pclk 1 7>, <&prcc_pclk 1 7>;
-			clock-names = "SSPCLK", "apb_pclk";
+			clock-names = "sspclk", "apb_pclk";
 			dmas = <&dma 40 0 0x2>, /* Logical - DevToMem */
 			       <&dma 40 0 0x0>; /* Logical - MemToDev */
 			dma-names = "rx", "tx";
@@ -1154,17 +1155,15 @@
 			compatible = "stericsson,ux500-cryp";
 			reg = <0xa03cb000 0x1000>;
 			interrupts = <GIC_SPI 15 IRQ_TYPE_LEVEL_HIGH>;
-
-			v-ape-supply = <&db8500_vape_reg>;
 			clocks = <&prcc_pclk 6 1>;
+			power-domains = <&pm_domains DOMAIN_VAPE>;
 		};
 
 		hash@a03c2000 {
 			compatible = "stericsson,ux500-hash";
 			reg = <0xa03c2000 0x1000>;
-
-			v-ape-supply = <&db8500_vape_reg>;
 			clocks = <&prcc_pclk 6 2>;
+			power-domains = <&pm_domains DOMAIN_VAPE>;
 		};
 	};
 };

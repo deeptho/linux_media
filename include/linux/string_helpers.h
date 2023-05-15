@@ -11,6 +11,11 @@ struct device;
 struct file;
 struct task_struct;
 
+static inline bool string_is_terminated(const char *s, int len)
+{
+	return memchr(s, '\0', len) ? true : false;
+}
+
 /* Descriptions of the types of units to
  * print in */
 enum string_size_units {
@@ -20,6 +25,8 @@ enum string_size_units {
 
 void string_get_size(u64 size, u64 blk_size, enum string_size_units units,
 		     char *buf, int len);
+
+int parse_int_array_user(const char __user *from, size_t count, int **array);
 
 #define UNESCAPE_SPACE		BIT(0)
 #define UNESCAPE_OCTAL		BIT(1)
@@ -124,6 +131,11 @@ static inline const char *str_enable_disable(bool v)
 static inline const char *str_enabled_disabled(bool v)
 {
 	return v ? "enabled" : "disabled";
+}
+
+static inline const char *str_read_write(bool v)
+{
+	return v ? "read" : "write";
 }
 
 #endif

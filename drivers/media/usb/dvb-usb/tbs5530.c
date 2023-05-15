@@ -63,8 +63,8 @@ static int tbs5530_i2c_transfer(struct i2c_adapter *adap,
 {
 	struct dvb_usb_device *d = i2c_get_adapdata(adap);
 	int i = 0;
-	u8 buf6[20];
-	u8 inbuf[20];
+	u8 buf6[50];
+	u8 inbuf[50];
 
 	if (!d)
 		return -ENODEV;
@@ -237,7 +237,7 @@ static int tbs5930_frontend_m88rs6060_attach(struct dvb_usb_adapter *adap)
 	info.platform_data = &m88rs6060_config;
 	request_module(info.type);
 	client = i2c_new_client_device(&d->i2c_adap,&info);
-	if(client ==NULL || client->dev.driver == NULL)
+	if(!i2c_client_has_driver(client))
 				return -ENODEV;
 	if (!try_module_get(client->dev.driver->owner)) {
 			i2c_unregister_device(client);

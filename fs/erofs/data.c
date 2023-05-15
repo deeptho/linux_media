@@ -6,15 +6,14 @@
  */
 #include "internal.h"
 #include <linux/prefetch.h>
+#include <linux/sched/mm.h>
 #include <linux/dax.h>
 #include <trace/events/erofs.h>
 
 void erofs_unmap_metabuf(struct erofs_buf *buf)
 {
 	if (buf->kmap_type == EROFS_KMAP)
-		kunmap(buf->page);
-	else if (buf->kmap_type == EROFS_KMAP_ATOMIC)
-		kunmap_atomic(buf->base);
+		kunmap_local(buf->base);
 	buf->base = NULL;
 	buf->kmap_type = EROFS_NO_KMAP;
 }
@@ -35,21 +34,25 @@ void *erofs_bread(struct erofs_buf *buf, struct inode *inode,
 	erofs_off_t offset = blknr_to_addr(blkaddr);
 	pgoff_t index = offset >> PAGE_SHIFT;
 	struct page *page = buf->page;
+	struct folio *folio;
+	unsigned int nofs_flag;
 
 	if (!page || page->index != index) {
 		erofs_put_metabuf(buf);
-		page = read_cache_page_gfp(mapping, index,
-				mapping_gfp_constraint(mapping, ~__GFP_FS));
-		if (IS_ERR(page))
-			return page;
+
+		nofs_flag = memalloc_nofs_save();
+		folio = read_cache_folio(mapping, index, NULL, NULL);
+		memalloc_nofs_restore(nofs_flag);
+		if (IS_ERR(folio))
+			return folio;
+
 		/* should already be PageUptodate, no need to lock page */
+		page = folio_file_page(folio, index);
 		buf->page = page;
 	}
 	if (buf->kmap_type == EROFS_NO_KMAP) {
 		if (type == EROFS_KMAP)
-			buf->base = kmap(page);
-		else if (type == EROFS_KMAP_ATOMIC)
-			buf->base = kmap_atomic(page);
+			buf->base = kmap_local_page(page);
 		buf->kmap_type = type;
 	} else if (buf->kmap_type != type) {
 		DBG_BUGON(1);
@@ -63,12 +66,15 @@ void *erofs_bread(struct erofs_buf *buf, struct inode *inode,
 void *erofs_read_metabuf(struct erofs_buf *buf, struct super_block *sb,
 			 erofs_blk_t blkaddr, enum erofs_kmap_type type)
 {
+	if (erofs_is_fscache_mode(sb))
+		return erofs_bread(buf, EROFS_SB(sb)->s_fscache->inode,
+				   blkaddr, type);
+
 	return erofs_bread(buf, sb->s_bdev->bd_inode, blkaddr, type);
 }
 
 static int erofs_map_blocks_flatmode(struct inode *inode,
-				     struct erofs_map_blocks *map,
-				     int flags)
+				     struct erofs_map_blocks *map)
 {
 	erofs_blk_t nblocks, lastblk;
 	u64 offset = map->m_la;
@@ -84,11 +90,8 @@ static int erofs_map_blocks_flatmode(struct inode *inode,
 		map->m_pa = blknr_to_addr(vi->raw_blkaddr) + map->m_la;
 		map->m_plen = blknr_to_addr(lastblk) - offset;
 	} else if (tailendpacking) {
-		/* 2 - inode inline B: inode, [xattrs], inline last blk... */
-		struct erofs_sb_info *sbi = EROFS_SB(inode->i_sb);
-
-		map->m_pa = iloc(sbi, vi->nid) + vi->inode_isize +
-			vi->xattr_isize + erofs_blkoff(map->m_la);
+		map->m_pa = erofs_iloc(inode) + vi->inode_isize +
+			vi->xattr_isize + erofs_blkoff(offset);
 		map->m_plen = inode->i_size - offset;
 
 		/* inline data should be located in the same meta block */
@@ -110,8 +113,7 @@ static int erofs_map_blocks_flatmode(struct inode *inode,
 	return 0;
 }
 
-static int erofs_map_blocks(struct inode *inode,
-			    struct erofs_map_blocks *map, int flags)
+int erofs_map_blocks(struct inode *inode, struct erofs_map_blocks *map)
 {
 	struct super_block *sb = inode->i_sb;
 	struct erofs_inode *vi = EROFS_I(inode);
@@ -123,7 +125,7 @@ static int erofs_map_blocks(struct inode *inode,
 	void *kaddr;
 	int err = 0;
 
-	trace_erofs_map_blocks_enter(inode, map, flags);
+	trace_erofs_map_blocks_enter(inode, map, 0);
 	map->m_deviceid = 0;
 	if (map->m_la >= inode->i_size) {
 		/* leave out-of-bound access unmapped */
@@ -133,7 +135,7 @@ static int erofs_map_blocks(struct inode *inode,
 	}
 
 	if (vi->datalayout != EROFS_INODE_CHUNK_BASED) {
-		err = erofs_map_blocks_flatmode(inode, map, flags);
+		err = erofs_map_blocks_flatmode(inode, map);
 		goto out;
 	}
 
@@ -143,7 +145,7 @@ static int erofs_map_blocks(struct inode *inode,
 		unit = EROFS_BLOCK_MAP_ENTRY_SIZE;	/* block map */
 
 	chunknr = map->m_la >> vi->chunkbits;
-	pos = ALIGN(iloc(EROFS_SB(sb), vi->nid) + vi->inode_isize +
+	pos = ALIGN(erofs_iloc(inode) + vi->inode_isize +
 		    vi->xattr_isize, unit) + unit * chunknr;
 
 	kaddr = erofs_read_metabuf(&buf, sb, erofs_blknr(pos), EROFS_KMAP);
@@ -185,7 +187,7 @@ out_unlock:
 out:
 	if (!err)
 		map->m_llen = map->m_plen;
-	trace_erofs_map_blocks_exit(inode, map, flags, 0);
+	trace_erofs_map_blocks_exit(inode, map, 0, err);
 	return err;
 }
 
@@ -199,6 +201,7 @@ int erofs_map_dev(struct super_block *sb, struct erofs_map_dev *map)
 	map->m_bdev = sb->s_bdev;
 	map->m_daxdev = EROFS_SB(sb)->dax_dev;
 	map->m_dax_part_off = EROFS_SB(sb)->dax_part_off;
+	map->m_fscache = EROFS_SB(sb)->s_fscache;
 
 	if (map->m_deviceid) {
 		down_read(&devs->rwsem);
@@ -210,6 +213,7 @@ int erofs_map_dev(struct super_block *sb, struct erofs_map_dev *map)
 		map->m_bdev = dif->bdev;
 		map->m_daxdev = dif->dax_dev;
 		map->m_dax_part_off = dif->dax_part_off;
+		map->m_fscache = dif->fscache;
 		up_read(&devs->rwsem);
 	} else if (devs->extra_devices) {
 		down_read(&devs->rwsem);
@@ -227,6 +231,7 @@ int erofs_map_dev(struct super_block *sb, struct erofs_map_dev *map)
 				map->m_bdev = dif->bdev;
 				map->m_daxdev = dif->dax_dev;
 				map->m_dax_part_off = dif->dax_part_off;
+				map->m_fscache = dif->fscache;
 				break;
 			}
 		}
@@ -245,7 +250,7 @@ static int erofs_iomap_begin(struct inode *inode, loff_t offset, loff_t length,
 	map.m_la = offset;
 	map.m_llen = length;
 
-	ret = erofs_map_blocks(inode, &map, EROFS_GET_BLOCKS_RAW);
+	ret = erofs_map_blocks(inode, &map);
 	if (ret < 0)
 		return ret;
 
@@ -337,9 +342,9 @@ int erofs_fiemap(struct inode *inode, struct fiemap_extent_info *fieinfo,
  * since we dont have write or truncate flows, so no inode
  * locking needs to be held at the moment.
  */
-static int erofs_readpage(struct file *file, struct page *page)
+static int erofs_read_folio(struct file *file, struct folio *folio)
 {
-	return iomap_readpage(page, &erofs_iomap_ops);
+	return iomap_read_folio(folio, &erofs_iomap_ops);
 }
 
 static void erofs_readahead(struct readahead_control *rac)
@@ -352,52 +357,45 @@ static sector_t erofs_bmap(struct address_space *mapping, sector_t block)
 	return iomap_bmap(mapping, block, &erofs_iomap_ops);
 }
 
-static int erofs_prepare_dio(struct kiocb *iocb, struct iov_iter *to)
-{
-	struct inode *inode = file_inode(iocb->ki_filp);
-	loff_t align = iocb->ki_pos | iov_iter_count(to) |
-		iov_iter_alignment(to);
-	struct block_device *bdev = inode->i_sb->s_bdev;
-	unsigned int blksize_mask;
-
-	if (bdev)
-		blksize_mask = (1 << ilog2(bdev_logical_block_size(bdev))) - 1;
-	else
-		blksize_mask = (1 << inode->i_blkbits) - 1;
-
-	if (align & blksize_mask)
-		return -EINVAL;
-	return 0;
-}
-
 static ssize_t erofs_file_read_iter(struct kiocb *iocb, struct iov_iter *to)
 {
+	struct inode *inode = file_inode(iocb->ki_filp);
+
 	/* no need taking (shared) inode lock since it's a ro filesystem */
 	if (!iov_iter_count(to))
 		return 0;
 
 #ifdef CONFIG_FS_DAX
-	if (IS_DAX(iocb->ki_filp->f_mapping->host))
+	if (IS_DAX(inode))
 		return dax_iomap_rw(iocb, to, &erofs_iomap_ops);
 #endif
 	if (iocb->ki_flags & IOCB_DIRECT) {
-		int err = erofs_prepare_dio(iocb, to);
+		struct block_device *bdev = inode->i_sb->s_bdev;
+		unsigned int blksize_mask;
 
-		if (!err)
-			return iomap_dio_rw(iocb, to, &erofs_iomap_ops,
-					    NULL, 0, 0);
-		if (err < 0)
-			return err;
+		if (bdev)
+			blksize_mask = bdev_logical_block_size(bdev) - 1;
+		else
+			blksize_mask = i_blocksize(inode) - 1;
+
+		if ((iocb->ki_pos | iov_iter_count(to) |
+		     iov_iter_alignment(to)) & blksize_mask)
+			return -EINVAL;
+
+		return iomap_dio_rw(iocb, to, &erofs_iomap_ops,
+				    NULL, 0, NULL, 0);
 	}
 	return filemap_read(iocb, to, 0);
 }
 
 /* for uncompressed (aligned) files and raw access for other files */
 const struct address_space_operations erofs_raw_access_aops = {
-	.readpage = erofs_readpage,
+	.read_folio = erofs_read_folio,
 	.readahead = erofs_readahead,
 	.bmap = erofs_bmap,
 	.direct_IO = noop_direct_IO,
+	.release_folio = iomap_release_folio,
+	.invalidate_folio = iomap_invalidate_folio,
 };
 
 #ifdef CONFIG_FS_DAX
@@ -426,7 +424,7 @@ static int erofs_file_mmap(struct file *file, struct vm_area_struct *vma)
 		return -EINVAL;
 
 	vma->vm_ops = &erofs_dax_vm_ops;
-	vma->vm_flags |= VM_HUGEPAGE;
+	vm_flags_set(vma, VM_HUGEPAGE);
 	return 0;
 }
 #else

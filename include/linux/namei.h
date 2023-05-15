@@ -68,16 +68,22 @@ extern struct dentry *try_lookup_one_len(const char *, struct dentry *, int);
 extern struct dentry *lookup_one_len(const char *, struct dentry *, int);
 extern struct dentry *lookup_one_len_unlocked(const char *, struct dentry *, int);
 extern struct dentry *lookup_positive_unlocked(const char *, struct dentry *, int);
-struct dentry *lookup_one(struct user_namespace *, const char *, struct dentry *, int);
+struct dentry *lookup_one(struct mnt_idmap *, const char *, struct dentry *, int);
+struct dentry *lookup_one_unlocked(struct mnt_idmap *idmap,
+				   const char *name, struct dentry *base,
+				   int len);
+struct dentry *lookup_one_positive_unlocked(struct mnt_idmap *idmap,
+					    const char *name,
+					    struct dentry *base, int len);
 
 extern int follow_down_one(struct path *);
-extern int follow_down(struct path *);
+extern int follow_down(struct path *path, unsigned int flags);
 extern int follow_up(struct path *);
 
 extern struct dentry *lock_rename(struct dentry *, struct dentry *);
 extern void unlock_rename(struct dentry *, struct dentry *);
 
-extern int __must_check nd_jump_link(struct path *path);
+extern int __must_check nd_jump_link(const struct path *path);
 
 static inline void nd_terminate_link(void *name, size_t len, size_t maxlen)
 {

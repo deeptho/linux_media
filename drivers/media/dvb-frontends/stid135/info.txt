@@ -1,0 +1,50 @@
+lo_frequency = 1.5e9 #1.5GHz
+
+	state->tuner_frequency = (s32)(
+		pSearch->frequency - pSearch->lo_frequency);
+ mclk_mhz = 130
+frequency_mhz = 11307
+tuner_frequency_mhz =  (frequency_mhz -9750) -lo_frequency_mhz
+
+= 403
+
+ckadc_mhz = 12* mclk_mhz = 1560
+
+tuner_frequency_mhz = ckadc * cfr_init / 2^24
+=> cfr_init = (tuner_frequency_mhz * 2**24)/ ckadc
+
+cfr_low in MHz = ckadc * cfr_low / 2^24
+
+11307H
+27500000
+fe_stid135_set_carrier_frequency_init:1178 demod=4: Initial Freq: blind=1
+freq=4651000 up=6651000:0x11800 low=2651000:0x7000 range=2000000
+
+
+
+11344.5H
+-3446kHz
+
+10714H -2740        // 839  => but is 10714.250
+
+10773.25H  = -2953  //642
+
+10802.750 = -2952  // 655
+
+10891.250H = -2938 // 664
+
+10964.25H = -2948 // 646
+
+11023.250H = -2964 // 646
+
+11265.000H =-2942 // 639
+
+11307.000H = -4942 // -1342
+
+11344.500H =  -3453
+
+11386.500 = -2928
+
+11426.500 = -2937
+
+11464.250 = -2943

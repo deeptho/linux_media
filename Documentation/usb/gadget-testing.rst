@@ -333,6 +333,12 @@ In each lun directory there are the following attribute files:
 			being a CD-ROM.
 	nofua		Flag specifying that FUA flag
 			in SCSI WRITE(10,12)
+	forced_eject	This write-only file is useful only when
+			the function is active. It causes the backing
+			file to be forcibly detached from the LUN,
+			regardless of whether the host has allowed it.
+			Any non-zero number of bytes written will
+			result in ejection.
 	=============== ==============================================
 
 Testing the MASS STORAGE function
@@ -787,6 +793,7 @@ The uvc function provides these attributes in its function directory:
 	streaming_maxpacket maximum packet size this endpoint is capable of
 			    sending or receiving when this configuration is
 			    selected
+	function_name       name of the interface
 	=================== ================================================
 
 There are also "control" and "streaming" subdirectories, each of which contain
@@ -806,7 +813,7 @@ the user must provide the following:
 	================== ====================================================
 
 Each frame description contains frame interval specification, and each
-such specification consists of a number of lines with an inverval value
+such specification consists of a number of lines with an interval value
 in each line. The rules stated above are best illustrated with an example::
 
   # mkdir functions/uvc.usb0/control/header/h

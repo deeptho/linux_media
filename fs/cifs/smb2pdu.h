@@ -56,6 +56,9 @@ struct smb2_rdma_crypto_transform {
 
 #define COMPOUND_FID 0xFFFFFFFFFFFFFFFFULL
 
+#define SMB2_SYMLINK_STRUCT_SIZE \
+	(sizeof(struct smb2_err_rsp) + sizeof(struct smb2_symlink_err_rsp))
+
 #define SYMLINK_ERROR_TAG 0x4c4d5953
 
 struct smb2_symlink_err_rsp {
@@ -260,28 +263,6 @@ struct get_retrieval_pointers_refcount_rsp {
 	struct smb3_extents extents[];
 } __packed;
 
-struct fsctl_set_integrity_information_req {
-	__le16	ChecksumAlgorithm;
-	__le16	Reserved;
-	__le32	Flags;
-} __packed;
-
-struct fsctl_get_integrity_information_rsp {
-	__le16	ChecksumAlgorithm;
-	__le16	Reserved;
-	__le32	Flags;
-	__le32	ChecksumChunkSizeInBytes;
-	__le32	ClusterSizeInBytes;
-} __packed;
-
-/* Integrity ChecksumAlgorithm choices for above */
-#define	CHECKSUM_TYPE_NONE	0x0000
-#define	CHECKSUM_TYPE_CRC64	0x0002
-#define CHECKSUM_TYPE_UNCHANGED	0xFFFF	/* set only */
-
-/* Integrity flags for above */
-#define FSCTL_INTEGRITY_FLAG_CHECKSUM_ENFORCEMENT_OFF	0x00000001
-
 /* See MS-DFSC 2.2.2 */
 struct fsctl_get_dfs_referral_req {
 	__le16 MaxReferralLevel;
@@ -390,7 +371,7 @@ struct smb2_file_id_extd_directory_info {
 	__le32 EaSize; /* EA size */
 	__le32 ReparsePointTag; /* valid if FILE_ATTR_REPARSE_POINT set in FileAttributes */
 	__le64 UniqueId; /* inode num - le since Samba puts ino in low 32 bit */
-	char FileName[1];
+	char FileName[];
 } __packed; /* level 60 */
 
 extern char smb2_padding[7];

@@ -154,10 +154,10 @@ static void console_callback(struct work_struct *ignored);
 static void con_driver_unregister_callback(struct work_struct *ignored);
 static void blank_screen_t(struct timer_list *unused);
 static void set_palette(struct vc_data *vc);
+static void unblank_screen(void);
 
 #define vt_get_kmsg_redirect() vt_kmsg_redirect(-1)
 
-static int printable;		/* Is console ready for printing? */
 int default_utf8 = true;
 module_param(default_utf8, int, S_IRUGO | S_IWUSR);
 int global_cursor_default = -1;
@@ -316,73 +316,55 @@ void schedule_console_callback(void)
  * Code to manage unicode-based screen buffers
  */
 
-#ifdef NO_VC_UNI_SCREEN
-/* this disables and optimizes related code away at compile time */
-#define get_vc_uniscr(vc) NULL
-#else
-#define get_vc_uniscr(vc) vc->vc_uni_screen
-#endif
-
-#define VC_UNI_SCREEN_DEBUG 0
-
-typedef uint32_t char32_t;
-
 /*
  * Our screen buffer is preceded by an array of line pointers so that
  * scrolling only implies some pointer shuffling.
  */
-struct uni_screen {
-	char32_t *lines[0];
-};
 
-static struct uni_screen *vc_uniscr_alloc(unsigned int cols, unsigned int rows)
+static u32 **vc_uniscr_alloc(unsigned int cols, unsigned int rows)
 {
-	struct uni_screen *uniscr;
+	u32 **uni_lines;
 	void *p;
-	unsigned int memsize, i;
+	unsigned int memsize, i, col_size = cols * sizeof(**uni_lines);
 
 	/* allocate everything in one go */
-	memsize = cols * rows * sizeof(char32_t);
-	memsize += rows * sizeof(char32_t *);
-	p = vmalloc(memsize);
-	if (!p)
+	memsize = col_size * rows;
+	memsize += rows * sizeof(*uni_lines);
+	uni_lines = vzalloc(memsize);
+	if (!uni_lines)
 		return NULL;
 
 	/* initial line pointers */
-	uniscr = p;
-	p = uniscr->lines + rows;
+	p = uni_lines + rows;
 	for (i = 0; i < rows; i++) {
-		uniscr->lines[i] = p;
-		p += cols * sizeof(char32_t);
+		uni_lines[i] = p;
+		p += col_size;
 	}
-	return uniscr;
+
+	return uni_lines;
 }
 
-static void vc_uniscr_free(struct uni_screen *uniscr)
+static void vc_uniscr_free(u32 **uni_lines)
 {
-	vfree(uniscr);
+	vfree(uni_lines);
 }
 
-static void vc_uniscr_set(struct vc_data *vc, struct uni_screen *new_uniscr)
+static void vc_uniscr_set(struct vc_data *vc, u32 **new_uni_lines)
 {
-	vc_uniscr_free(vc->vc_uni_screen);
-	vc->vc_uni_screen = new_uniscr;
+	vc_uniscr_free(vc->vc_uni_lines);
+	vc->vc_uni_lines = new_uni_lines;
 }
 
-static void vc_uniscr_putc(struct vc_data *vc, char32_t uc)
+static void vc_uniscr_putc(struct vc_data *vc, u32 uc)
 {
-	struct uni_screen *uniscr = get_vc_uniscr(vc);
-
-	if (uniscr)
-		uniscr->lines[vc->state.y][vc->state.x] = uc;
+	if (vc->vc_uni_lines)
+		vc->vc_uni_lines[vc->state.y][vc->state.x] = uc;
 }
 
 static void vc_uniscr_insert(struct vc_data *vc, unsigned int nr)
 {
-	struct uni_screen *uniscr = get_vc_uniscr(vc);
-
-	if (uniscr) {
-		char32_t *ln = uniscr->lines[vc->state.y];
+	if (vc->vc_uni_lines) {
+		u32 *ln = vc->vc_uni_lines[vc->state.y];
 		unsigned int x = vc->state.x, cols = vc->vc_cols;
 
 		memmove(&ln[x + nr], &ln[x], (cols - x - nr) * sizeof(*ln));
@@ -392,10 +374,8 @@ static void vc_uniscr_insert(struct vc_data *vc, unsigned int nr)
 
 static void vc_uniscr_delete(struct vc_data *vc, unsigned int nr)
 {
-	struct uni_screen *uniscr = get_vc_uniscr(vc);
-
-	if (uniscr) {
-		char32_t *ln = uniscr->lines[vc->state.y];
+	if (vc->vc_uni_lines) {
+		u32 *ln = vc->vc_uni_lines[vc->state.y];
 		unsigned int x = vc->state.x, cols = vc->vc_cols;
 
 		memcpy(&ln[x], &ln[x + nr], (cols - x - nr) * sizeof(*ln));
@@ -406,86 +386,84 @@ static void vc_uniscr_delete(struct vc_data *vc, unsigned int nr)
 static void vc_uniscr_clear_line(struct vc_data *vc, unsigned int x,
 				 unsigned int nr)
 {
-	struct uni_screen *uniscr = get_vc_uniscr(vc);
-
-	if (uniscr) {
-		char32_t *ln = uniscr->lines[vc->state.y];
-
-		memset32(&ln[x], ' ', nr);
-	}
+	if (vc->vc_uni_lines)
+		memset32(&vc->vc_uni_lines[vc->state.y][x], ' ', nr);
 }
 
 static void vc_uniscr_clear_lines(struct vc_data *vc, unsigned int y,
 				  unsigned int nr)
 {
-	struct uni_screen *uniscr = get_vc_uniscr(vc);
-
-	if (uniscr) {
-		unsigned int cols = vc->vc_cols;
-
+	if (vc->vc_uni_lines)
 		while (nr--)
-			memset32(uniscr->lines[y++], ' ', cols);
-	}
+			memset32(vc->vc_uni_lines[y++], ' ', vc->vc_cols);
 }
 
-static void vc_uniscr_scroll(struct vc_data *vc, unsigned int t, unsigned int b,
-			     enum con_scroll dir, unsigned int nr)
+/* juggling array rotation algorithm (complexity O(N), size complexity O(1)) */
+static void juggle_array(u32 **array, unsigned int size, unsigned int nr)
 {
-	struct uni_screen *uniscr = get_vc_uniscr(vc);
+	unsigned int gcd_idx;
 
-	if (uniscr) {
-		unsigned int i, j, k, sz, d, clear;
+	for (gcd_idx = 0; gcd_idx < gcd(nr, size); gcd_idx++) {
+		u32 *gcd_idx_val = array[gcd_idx];
+		unsigned int dst_idx = gcd_idx;
 
-		sz = b - t;
-		clear = b - nr;
-		d = nr;
-		if (dir == SM_DOWN) {
-			clear = t;
-			d = sz - nr;
+		while (1) {
+			unsigned int src_idx = (dst_idx + nr) % size;
+			if (src_idx == gcd_idx)
+				break;
+
+			array[dst_idx] = array[src_idx];
+			dst_idx = src_idx;
 		}
-		for (i = 0; i < gcd(d, sz); i++) {
-			char32_t *tmp = uniscr->lines[t + i];
-			j = i;
-			while (1) {
-				k = j + d;
-				if (k >= sz)
-					k -= sz;
-				if (k == i)
-					break;
-				uniscr->lines[t + j] = uniscr->lines[t + k];
-				j = k;
-			}
-			uniscr->lines[t + j] = tmp;
-		}
-		vc_uniscr_clear_lines(vc, clear, nr);
+
+		array[dst_idx] = gcd_idx_val;
 	}
 }
 
-static void vc_uniscr_copy_area(struct uni_screen *dst,
+static void vc_uniscr_scroll(struct vc_data *vc, unsigned int top,
+			     unsigned int bottom, enum con_scroll dir,
+			     unsigned int nr)
+{
+	u32 **uni_lines = vc->vc_uni_lines;
+	unsigned int size = bottom - top;
+
+	if (!uni_lines)
+		return;
+
+	if (dir == SM_DOWN) {
+		juggle_array(&uni_lines[top], size, size - nr);
+		vc_uniscr_clear_lines(vc, top, nr);
+	} else {
+		juggle_array(&uni_lines[top], size, nr);
+		vc_uniscr_clear_lines(vc, bottom - nr, nr);
+	}
+}
+
+static void vc_uniscr_copy_area(u32 **dst_lines,
 				unsigned int dst_cols,
 				unsigned int dst_rows,
-				struct uni_screen *src,
+				u32 **src_lines,
 				unsigned int src_cols,
 				unsigned int src_top_row,
 				unsigned int src_bot_row)
 {
 	unsigned int dst_row = 0;
 
-	if (!dst)
+	if (!dst_lines)
 		return;
 
 	while (src_top_row < src_bot_row) {
-		char32_t *src_line = src->lines[src_top_row];
-		char32_t *dst_line = dst->lines[dst_row];
+		u32 *src_line = src_lines[src_top_row];
+		u32 *dst_line = dst_lines[dst_row];
 
-		memcpy(dst_line, src_line, src_cols * sizeof(char32_t));
+		memcpy(dst_line, src_line, src_cols * sizeof(*src_line));
 		if (dst_cols - src_cols)
 			memset32(dst_line + src_cols, ' ', dst_cols - src_cols);
 		src_top_row++;
 		dst_row++;
 	}
 	while (dst_row < dst_rows) {
-		char32_t *dst_line = dst->lines[dst_row];
+		u32 *dst_line = dst_lines[dst_row];
 
 		memset32(dst_line, ' ', dst_cols);
 		dst_row++;
@@ -500,23 +478,20 @@ static void vc_uniscr_copy_area(struct uni_screen *dst,
  */
 int vc_uniscr_check(struct vc_data *vc)
 {
-	struct uni_screen *uniscr;
+	u32 **uni_lines;
 	unsigned short *p;
 	int x, y, mask;
-
-	if (__is_defined(NO_VC_UNI_SCREEN))
-		return -EOPNOTSUPP;
 
 	WARN_CONSOLE_UNLOCKED();
 
 	if (!vc->vc_utf)
 		return -ENODATA;
 
-	if (vc->vc_uni_screen)
+	if (vc->vc_uni_lines)
 		return 0;
 
-	uniscr = vc_uniscr_alloc(vc->vc_cols, vc->vc_rows);
-	if (!uniscr)
+	uni_lines = vc_uniscr_alloc(vc->vc_cols, vc->vc_rows);
+	if (!uni_lines)
 		return -ENOMEM;
 
 	/*
@@ -528,14 +503,15 @@ int vc_uniscr_check(struct vc_data *vc)
 	p = (unsigned short *)vc->vc_origin;
 	mask = vc->vc_hi_font_mask | 0xff;
 	for (y = 0; y < vc->vc_rows; y++) {
-		char32_t *line = uniscr->lines[y];
+		u32 *line = uni_lines[y];
 		for (x = 0; x < vc->vc_cols; x++) {
 			u16 glyph = scr_readw(p++) & mask;
 			line[x] = inverse_translate(vc, glyph, true);
 		}
 	}
 
-	vc->vc_uni_screen = uniscr;
+	vc->vc_uni_lines = uni_lines;
+
 	return 0;
 }
 
@@ -547,11 +523,12 @@ int vc_uniscr_check(struct vc_data *vc)
 void vc_uniscr_copy_line(const struct vc_data *vc, void *dest, bool viewed,
 			 unsigned int row, unsigned int col, unsigned int nr)
 {
-	struct uni_screen *uniscr = get_vc_uniscr(vc);
+	u32 **uni_lines = vc->vc_uni_lines;
 	int offset = row * vc->vc_size_row + col * 2;
 	unsigned long pos;
 
-	BUG_ON(!uniscr);
+	if (WARN_ON_ONCE(!uni_lines))
+		return;
 
 	pos = (unsigned long)screenpos(vc, offset, viewed);
 	if (pos >= vc->vc_origin && pos < vc->vc_scr_end) {
@@ -562,7 +539,7 @@ void vc_uniscr_copy_line(const struct vc_data *vc, void *dest, bool viewed,
 		 */
 		row = (pos - vc->vc_origin) / vc->vc_size_row;
 		col = ((pos - vc->vc_origin) % vc->vc_size_row) / 2;
-		memcpy(dest, &uniscr->lines[row][col], nr * sizeof(char32_t));
+		memcpy(dest, &uni_lines[row][col], nr * sizeof(u32));
 	} else {
 		/*
 		 * Scrollback is active. For now let's simply backtranslate
@@ -572,7 +549,7 @@ void vc_uniscr_copy_line(const struct vc_data *vc, void *dest, bool viewed,
 		 */
 		u16 *p = (u16 *)pos;
 		int mask = vc->vc_hi_font_mask | 0xff;
-		char32_t *uni_buf = dest;
+		u32 *uni_buf = dest;
 		while (nr--) {
 			u16 glyph = scr_readw(p++) & mask;
 			*uni_buf++ = inverse_translate(vc, glyph, true);
@@ -580,64 +557,31 @@ void vc_uniscr_copy_line(const struct vc_data *vc, void *dest, bool viewed,
 	}
 }
 
-/* this is for validation and debugging only */
-static void vc_uniscr_debug_check(struct vc_data *vc)
+static void con_scroll(struct vc_data *vc, unsigned int top,
+		       unsigned int bottom, enum con_scroll dir,
+		       unsigned int nr)
 {
-	struct uni_screen *uniscr = get_vc_uniscr(vc);
-	unsigned short *p;
-	int x, y, mask;
+	unsigned int rows = bottom - top;
+	u16 *clear, *dst, *src;
 
-	if (!VC_UNI_SCREEN_DEBUG || !uniscr)
+	if (top + nr >= bottom)
+		nr = rows - 1;
+	if (bottom > vc->vc_rows || top >= bottom || nr < 1)
 		return;
 
-	WARN_CONSOLE_UNLOCKED();
-
-	/*
-	 * Make sure our unicode screen translates into the same glyphs
-	 * as the actual screen. This is brutal indeed.
-	 */
-	p = (unsigned short *)vc->vc_origin;
-	mask = vc->vc_hi_font_mask | 0xff;
-	for (y = 0; y < vc->vc_rows; y++) {
-		char32_t *line = uniscr->lines[y];
-		for (x = 0; x < vc->vc_cols; x++) {
-			u16 glyph = scr_readw(p++) & mask;
-			char32_t uc = line[x];
-			int tc = conv_uni_to_pc(vc, uc);
-			if (tc == -4)
-				tc = conv_uni_to_pc(vc, 0xfffd);
-			if (tc == -4)
-				tc = conv_uni_to_pc(vc, '?');
-			if (tc != glyph)
-				pr_err_ratelimited(
-					"%s: mismatch at %d,%d: glyph=%#x tc=%#x\n",
-					__func__, x, y, glyph, tc);
-		}
-	}
-}
-
-
-static void con_scroll(struct vc_data *vc, unsigned int t, unsigned int b,
-		enum con_scroll dir, unsigned int nr)
-{
-	u16 *clear, *d, *s;
-
-	if (t + nr >= b)
-		nr = b - t - 1;
-	if (b > vc->vc_rows || t >= b || nr < 1)
-		return;
-	vc_uniscr_scroll(vc, t, b, dir, nr);
-	if (con_is_visible(vc) && vc->vc_sw->con_scroll(vc, t, b, dir, nr))
+	vc_uniscr_scroll(vc, top, bottom, dir, nr);
+	if (con_is_visible(vc) &&
+			vc->vc_sw->con_scroll(vc, top, bottom, dir, nr))
 		return;
 
-	s = clear = (u16 *)(vc->vc_origin + vc->vc_size_row * t);
-	d = (u16 *)(vc->vc_origin + vc->vc_size_row * (t + nr));
+	src = clear = (u16 *)(vc->vc_origin + vc->vc_size_row * top);
+	dst = (u16 *)(vc->vc_origin + vc->vc_size_row * (top + nr));
 
 	if (dir == SM_UP) {
-		clear = s + (b - t - nr) * vc->vc_cols;
-		swap(s, d);
+		clear = src + (rows - nr) * vc->vc_cols;
+		swap(src, dst);
 	}
-	scr_memmovew(d, s, (b - t - nr) * vc->vc_size_row);
+	scr_memmovew(dst, src, (rows - nr) * vc->vc_size_row);
 	scr_memsetw(clear, vc->vc_video_erase_char, vc->vc_size_row * nr);
 }
 
@@ -855,7 +799,7 @@ static void delete_char(struct vc_data *vc, unsigned int nr)
 	unsigned short *p = (unsigned short *) vc->vc_pos;
 
 	vc_uniscr_delete(vc, nr);
-	scr_memcpyw(p, p + nr, (vc->vc_cols - vc->state.x - nr) * 2);
+	scr_memmovew(p, p + nr, (vc->vc_cols - vc->state.x - nr) * 2);
 	scr_memsetw(p + vc->vc_cols - vc->state.x - nr, vc->vc_video_erase_char,
 			nr * 2);
 	vc->vc_need_wrap = 0;
@@ -1063,10 +1007,10 @@ static void visual_init(struct vc_data *vc, int num, int init)
 	__module_get(vc->vc_sw->owner);
 	vc->vc_num = num;
 	vc->vc_display_fg = &master_display_fg;
-	if (vc->vc_uni_pagedir_loc)
+	if (vc->uni_pagedict_loc)
 		con_free_unimap(vc);
-	vc->vc_uni_pagedir_loc = &vc->vc_uni_pagedir;
-	vc->vc_uni_pagedir = NULL;
+	vc->uni_pagedict_loc = &vc->uni_pagedict;
+	vc->uni_pagedict = NULL;
 	vc->vc_hi_font_mask = 0;
 	vc->vc_complement_mask = 0;
 	vc->vc_can_do_color = 0;
@@ -1136,7 +1080,7 @@ int vc_allocate(unsigned int currcons)	/* return 0 on success */
 
 	visual_init(vc, currcons, 1);
 
-	if (!*vc->vc_uni_pagedir_loc)
+	if (!*vc->uni_pagedict_loc)
 		con_set_default_unimap(vc);
 
 	err = -EINVAL;
@@ -1201,7 +1145,7 @@ static int vc_do_resize(struct tty_struct *tty, struct vc_data *vc,
 	unsigned int new_cols, new_rows, new_row_size, new_screen_size;
 	unsigned int user;
 	unsigned short *oldscreen, *newscreen;
-	struct uni_screen *new_uniscr = NULL;
+	u32 **new_uniscr = NULL;
 
 	WARN_CONSOLE_UNLOCKED();
 
@@ -1245,7 +1189,7 @@ static int vc_do_resize(struct tty_struct *tty, struct vc_data *vc,
 	if (!newscreen)
 		return -ENOMEM;
 
-	if (get_vc_uniscr(vc)) {
+	if (vc->vc_uni_lines) {
 		new_uniscr = vc_uniscr_alloc(new_cols, new_rows);
 		if (!new_uniscr) {
 			kfree(newscreen);
@@ -1297,7 +1241,7 @@ static int vc_do_resize(struct tty_struct *tty, struct vc_data *vc,
 	end = old_origin + old_row_size * min(old_rows, new_rows);
 
 	vc_uniscr_copy_area(new_uniscr, new_cols, new_rows,
-			    get_vc_uniscr(vc), rlth/2, first_copied_row,
+			    vc->vc_uni_lines, rlth/2, first_copied_row,
 			    min(old_rows, new_rows));
 	vc_uniscr_set(vc, new_uniscr);
 
@@ -2959,7 +2903,6 @@ rescan_last_byte:
 			goto rescan_last_byte;
 	}
 	con_flush(vc, &draw);
-	vc_uniscr_debug_check(vc);
 	console_conditional_schedule();
 	notify_update(vc);
 	console_unlock();
@@ -3084,9 +3027,9 @@ static void vt_console_print(struct console *co, const char *b, unsigned count)
 	ushort start_x, cnt;
 	int kmsg_console;
 
-	/* console busy or not yet initialized */
-	if (!printable)
-		return;
+	WARN_CONSOLE_UNLOCKED();
+
+	/* this protects against concurrent oops only */
 	if (!spin_trylock(&printing_lock))
 		return;
 
@@ -3156,8 +3099,14 @@ static struct tty_driver *vt_console_device(struct console *c, int *index)
 	return console_driver;
 }
 
+static int vt_console_setup(struct console *co, char *options)
+{
+	return co->index >= MAX_NR_CONSOLES ? -EINVAL : 0;
+}
+
 static struct console vt_console_driver = {
 	.name		= "tty",
+	.setup		= vt_console_setup,
 	.write		= vt_console_print,
 	.device		= vt_console_device,
 	.unblank	= unblank_screen,
@@ -3537,7 +3486,6 @@ static int __init con_init(void)
 	pr_info("Console: %s %s %dx%d\n",
 		vc->vc_can_do_color ? "colour" : "mono",
 		display_desc, vc->vc_cols, vc->vc_rows);
-	printable = 1;
 
 	console_unlock();
 
@@ -3939,7 +3887,7 @@ static ssize_t show_bind(struct device *dev, struct device_attribute *attr,
 	bind = con_is_bound(con->con);
 	console_unlock();
 
-	return snprintf(buf, PAGE_SIZE, "%i\n", bind);
+	return sysfs_emit(buf, "%i\n", bind);
 }
 
 static ssize_t show_name(struct device *dev, struct device_attribute *attr,
@@ -3947,7 +3895,7 @@ static ssize_t show_name(struct device *dev, struct device_attribute *attr,
 {
 	struct con_driver *con = dev_get_drvdata(dev);
 
-	return snprintf(buf, PAGE_SIZE, "%s %s\n",
+	return sysfs_emit(buf, "%s %s\n",
 			(con->flag & CON_DRIVER_FLAG_MODULE) ? "(M)" : "(S)",
 			 con->desc);
 
@@ -4452,7 +4400,7 @@ EXPORT_SYMBOL(do_unblank_screen);
  * call it with 1 as an argument and so force a mode restore... that may kill
  * X or at least garbage the screen but would also make the Oops visible...
  */
-void unblank_screen(void)
+static void unblank_screen(void)
 {
 	do_unblank_screen(0);
 }
@@ -4575,26 +4523,30 @@ void reset_palette(struct vc_data *vc)
 /*
  *  Font switching
  *
- *  Currently we only support fonts up to 32 pixels wide, at a maximum height
- *  of 32 pixels. Userspace fontdata is stored with 32 bytes (shorts/ints, 
- *  depending on width) reserved for each character which is kinda wasty, but 
- *  this is done in order to maintain compatibility with the EGA/VGA fonts. It 
- *  is up to the actual low-level console-driver convert data into its favorite
- *  format (maybe we should add a `fontoffset' field to the `display'
- *  structure so we won't have to convert the fontdata all the time.
+ *  Currently we only support fonts up to 128 pixels wide, at a maximum height
+ *  of 128 pixels. Userspace fontdata may have to be stored with 32 bytes
+ *  (shorts/ints, depending on width) reserved for each character which is
+ *  kinda wasty, but this is done in order to maintain compatibility with the
+ *  EGA/VGA fonts. It is up to the actual low-level console-driver convert data
+ *  into its favorite format (maybe we should add a `fontoffset' field to the
+ *  `display' structure so we won't have to convert the fontdata all the time.
  *  /Jes
  */
 
-#define max_font_size 65536
+#define max_font_width	64
+#define max_font_height	128
+#define max_font_glyphs	512
+#define max_font_size	(max_font_glyphs*max_font_width*max_font_height)
 
 static int con_font_get(struct vc_data *vc, struct console_font_op *op)
 {
 	struct console_font font;
 	int rc = -EINVAL;
 	int c;
+	unsigned int vpitch = op->op == KD_FONT_OP_GET_TALL ? op->height : 32;
 
 	if (op->data) {
-		font.data = kmalloc(max_font_size, GFP_KERNEL);
+		font.data = kvmalloc(max_font_size, GFP_KERNEL);
 		if (!font.data)
 			return -ENOMEM;
 	} else
@@ -4604,7 +4556,7 @@ static int con_font_get(struct vc_data *vc, struct console_font_op *op)
 	if (vc->vc_mode != KD_TEXT)
 		rc = -EINVAL;
 	else if (vc->vc_sw->con_font_get)
-		rc = vc->vc_sw->con_font_get(vc, &font);
+		rc = vc->vc_sw->con_font_get(vc, &font, vpitch);
 	else
 		rc = -ENOSYS;
 	console_unlock();
@@ -4612,7 +4564,7 @@ static int con_font_get(struct vc_data *vc, struct console_font_op *op)
 	if (rc)
 		goto out;
 
-	c = (font.width+7)/8 * 32 * font.charcount;
+	c = (font.width+7)/8 * vpitch * font.charcount;
 
 	if (op->data && font.charcount > op->charcount)
 		rc = -ENOSPC;
@@ -4629,7 +4581,7 @@ static int con_font_get(struct vc_data *vc, struct console_font_op *op)
 		rc = -EFAULT;
 
 out:
-	kfree(font.data);
+	kvfree(font.data);
 	return rc;
 }
 
@@ -4638,16 +4590,20 @@ static int con_font_set(struct vc_data *vc, struct console_font_op *op)
 	struct console_font font;
 	int rc = -EINVAL;
 	int size;
+	unsigned int vpitch = op->op == KD_FONT_OP_SET_TALL ? op->height : 32;
 
 	if (vc->vc_mode != KD_TEXT)
 		return -EINVAL;
 	if (!op->data)
 		return -EINVAL;
-	if (op->charcount > 512)
+	if (op->charcount > max_font_glyphs)
 		return -EINVAL;
-	if (op->width <= 0 || op->width > 32 || !op->height || op->height > 32)
+	if (op->width <= 0 || op->width > max_font_width || !op->height ||
+	    op->height > max_font_height)
 		return -EINVAL;
-	size = (op->width+7)/8 * 32 * op->charcount;
+	if (vpitch < op->height)
+		return -EINVAL;
+	size = (op->width+7)/8 * vpitch * op->charcount;
 	if (size > max_font_size)
 		return -ENOSPC;
 
@@ -4662,9 +4618,11 @@ static int con_font_set(struct vc_data *vc, struct console_font_op *op)
 	console_lock();
 	if (vc->vc_mode != KD_TEXT)
 		rc = -EINVAL;
-	else if (vc->vc_sw->con_font_set)
-		rc = vc->vc_sw->con_font_set(vc, &font, op->flags);
-	else
+	else if (vc->vc_sw->con_font_set) {
+		if (vc_is_sel(vc))
+			clear_selection();
+		rc = vc->vc_sw->con_font_set(vc, &font, vpitch, op->flags);
+	} else
 		rc = -ENOSYS;
 	console_unlock();
 	kfree(font.data);
@@ -4691,9 +4649,11 @@ static int con_font_default(struct vc_data *vc, struct console_font_op *op)
 		console_unlock();
 		return -EINVAL;
 	}
-	if (vc->vc_sw->con_font_default)
+	if (vc->vc_sw->con_font_default) {
+		if (vc_is_sel(vc))
+			clear_selection();
 		rc = vc->vc_sw->con_font_default(vc, &font, s);
-	else
+	} else
 		rc = -ENOSYS;
 	console_unlock();
 	if (!rc) {
@@ -4707,8 +4667,10 @@ int con_font_op(struct vc_data *vc, struct console_font_op *op)
 {
 	switch (op->op) {
 	case KD_FONT_OP_SET:
+	case KD_FONT_OP_SET_TALL:
 		return con_font_set(vc, op);
 	case KD_FONT_OP_GET:
+	case KD_FONT_OP_GET_TALL:
 		return con_font_get(vc, op);
 	case KD_FONT_OP_SET_DEFAULT:
 		return con_font_default(vc, op);
@@ -4737,11 +4699,12 @@ EXPORT_SYMBOL_GPL(screen_glyph);
 
 u32 screen_glyph_unicode(const struct vc_data *vc, int n)
 {
-	struct uni_screen *uniscr = get_vc_uniscr(vc);
+	u32 **uni_lines = vc->vc_uni_lines;
 
-	if (uniscr)
-		return uniscr->lines[n / vc->vc_cols][n % vc->vc_cols];
-	return inverse_translate(vc, screen_glyph(vc, n * 2), 1);
+	if (uni_lines)
+		return uni_lines[n / vc->vc_cols][n % vc->vc_cols];
+
+	return inverse_translate(vc, screen_glyph(vc, n * 2), true);
 }
 EXPORT_SYMBOL_GPL(screen_glyph_unicode);
 

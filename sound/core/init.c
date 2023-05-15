@@ -178,10 +178,8 @@ int snd_card_new(struct device *parent, int idx, const char *xid,
 		return -ENOMEM;
 
 	err = snd_card_init(card, parent, idx, xid, module, extra_size);
-	if (err < 0) {
-		kfree(card);
-		return err;
-	}
+	if (err < 0)
+		return err; /* card is freed by error handler */
 
 	*card_ret = card;
 	return 0;
@@ -215,6 +213,8 @@ static void __snd_card_release(struct device *dev, void *data)
  * via snd_card_free() call in the error; otherwise it may lead to UAF due to
  * devres call orders.  You can use snd_card_free_on_error() helper for
  * handling it more easily.
+ *
+ * Return: zero if successful, or a negative error code
  */
 int snd_devm_card_new(struct device *parent, int idx, const char *xid,
 		      struct module *module, size_t extra_size,
@@ -231,7 +231,7 @@ int snd_devm_card_new(struct device *parent, int idx, const char *xid,
 	card->managed = true;
 	err = snd_card_init(card, parent, idx, xid, module, extra_size);
 	if (err < 0) {
-		devres_free(card);
+		devres_free(card); /* in managed mode, we need to free manually */
 		return err;
 	}
 
@@ -249,6 +249,8 @@ EXPORT_SYMBOL_GPL(snd_devm_card_new);
  * This function handles the explicit snd_card_free() call at the error from
  * the probe callback.  It's just a small helper for simplifying the error
  * handling with the managed devices.
+ *
+ * Return: zero if successful, or a negative error code
  */
 int snd_card_free_on_error(struct device *dev, int ret)
 {
@@ -293,6 +295,8 @@ static int snd_card_init(struct snd_card *card, struct device *parent,
 		mutex_unlock(&snd_card_mutex);
 		dev_err(parent, "cannot find the slot for index %d (range 0-%i), error: %d\n",
 			 idx, snd_ecards_limit - 1, err);
+		if (!card->managed)
+			kfree(card); /* manually free here, as no destructor called */
 		return err;
 	}
 	set_bit(idx, snd_cards_lock);		/* lock it */
@@ -310,6 +314,10 @@ static int snd_card_init(struct snd_card *card, struct device *parent,
 	rwlock_init(&card->ctl_files_rwlock);
 	INIT_LIST_HEAD(&card->controls);
 	INIT_LIST_HEAD(&card->ctl_files);
+#ifdef CONFIG_SND_CTL_FAST_LOOKUP
+	xa_init(&card->ctl_numids);
+	xa_init(&card->ctl_hash);
+#endif
 	spin_lock_init(&card->files_lock);
 	INIT_LIST_HEAD(&card->files_list);
 	mutex_init(&card->memory_mutex);
@@ -366,6 +374,8 @@ static int snd_card_init(struct snd_card *card, struct device *parent,
  *
  * Returns a card object corresponding to the given index or NULL if not found.
  * Release the object via snd_card_unref().
+ *
+ * Return: a card object or NULL
  */
 struct snd_card *snd_card_ref(int idx)
 {
@@ -479,17 +489,17 @@ static const struct file_operations snd_shutdown_f_ops =
  *  Note: The current implementation replaces all active file->f_op with special
  *        dummy file operations (they do nothing except release).
  */
-int snd_card_disconnect(struct snd_card *card)
+void snd_card_disconnect(struct snd_card *card)
 {
 	struct snd_monitor_file *mfile;
 
 	if (!card)
-		return -EINVAL;
+		return;
 
 	spin_lock(&card->files_lock);
 	if (card->shutdown) {
 		spin_unlock(&card->files_lock);
-		return 0;
+		return;
 	}
 	card->shutdown = 1;
 
@@ -538,7 +548,6 @@ int snd_card_disconnect(struct snd_card *card)
 	wake_up(&card->power_sleep);
 	snd_power_sync_ref(card);
 #endif
-	return 0;	
 }
 EXPORT_SYMBOL(snd_card_disconnect);
 
@@ -553,15 +562,7 @@ EXPORT_SYMBOL(snd_card_disconnect);
  */
 void snd_card_disconnect_sync(struct snd_card *card)
 {
-	int err;
-
-	err = snd_card_disconnect(card);
-	if (err < 0) {
-		dev_err(card->dev,
-			"snd_card_disconnect error (%d), skipping sync\n",
-			err);
-		return;
-	}
+	snd_card_disconnect(card);
 
 	spin_lock_irq(&card->files_lock);
 	wait_event_lock_irq(card->remove_sleep,
@@ -604,14 +605,17 @@ static int snd_card_do_free(struct snd_card *card)
  * resource immediately, but tries to disconnect at first.  When the card
  * is still in use, the function returns before freeing the resources.
  * The card resources will be freed when the refcount gets to zero.
+ *
+ * Return: zero if successful, or a negative error code
  */
-int snd_card_free_when_closed(struct snd_card *card)
+void snd_card_free_when_closed(struct snd_card *card)
 {
-	int ret = snd_card_disconnect(card);
-	if (ret)
-		return ret;
+	if (!card)
+		return;
+
+	snd_card_disconnect(card);
 	put_device(&card->card_dev);
-	return 0;
+	return;
 }
 EXPORT_SYMBOL(snd_card_free_when_closed);
 
@@ -628,10 +632,9 @@ EXPORT_SYMBOL(snd_card_free_when_closed);
  * Return: Zero. Frees all associated devices and frees the control
  * interface associated to given soundcard.
  */
-int snd_card_free(struct snd_card *card)
+void snd_card_free(struct snd_card *card)
 {
 	DECLARE_COMPLETION_ONSTACK(released);
-	int ret;
 
 	/* The call of snd_card_free() is allowed from various code paths;
 	 * a manual call from the driver and the call via devres_free, and
@@ -640,16 +643,13 @@ int snd_card_free(struct snd_card *card)
 	 * the check here at the beginning.
 	 */
 	if (card->releasing)
-		return 0;
+		return;
 
 	card->release_completion = &released;
-	ret = snd_card_free_when_closed(card);
-	if (ret)
-		return ret;
+	snd_card_free_when_closed(card);
+
 	/* wait, until all devices are ready for the free operation */
 	wait_for_completion(&released);
-
-	return 0;
 }
 EXPORT_SYMBOL(snd_card_free);
 
@@ -772,7 +772,7 @@ static ssize_t id_show(struct device *dev,
 		       struct device_attribute *attr, char *buf)
 {
 	struct snd_card *card = container_of(dev, struct snd_card, card_dev);
-	return scnprintf(buf, PAGE_SIZE, "%s\n", card->id);
+	return sysfs_emit(buf, "%s\n", card->id);
 }
 
 static ssize_t id_store(struct device *dev, struct device_attribute *attr,
@@ -810,7 +810,7 @@ static ssize_t number_show(struct device *dev,
 			   struct device_attribute *attr, char *buf)
 {
 	struct snd_card *card = container_of(dev, struct snd_card, card_dev);
-	return scnprintf(buf, PAGE_SIZE, "%i\n", card->number);
+	return sysfs_emit(buf, "%i\n", card->number);
 }
 
 static DEVICE_ATTR_RO(number);
@@ -829,6 +829,8 @@ static const struct attribute_group card_dev_attr_group = {
  * snd_card_add_dev_attr - Append a new sysfs attribute group to card
  * @card: card instance
  * @group: attribute group to append
+ *
+ * Return: zero if successful, or a negative error code
  */
 int snd_card_add_dev_attr(struct snd_card *card,
 			  const struct attribute_group *group)

@@ -767,6 +767,7 @@ static int vector_config(char *str, char **error_out)
 
 	if (parsed == NULL) {
 		*error_out = "vector_config failed to parse parameters";
+		kfree(params);
 		return -EINVAL;
 	}
 
@@ -1255,7 +1256,8 @@ static int vector_net_open(struct net_device *dev)
 			goto out_close;
 	}
 
-	netif_napi_add(vp->dev, &vp->napi, vector_poll, get_depth(vp->parsed));
+	netif_napi_add_weight(vp->dev, &vp->napi, vector_poll,
+			      get_depth(vp->parsed));
 	napi_enable(&vp->napi);
 
 	/* READ IRQ */
@@ -1371,7 +1373,7 @@ static void vector_net_poll_controller(struct net_device *dev)
 static void vector_net_get_drvinfo(struct net_device *dev,
 				struct ethtool_drvinfo *info)
 {
-	strlcpy(info->driver, DRIVER_NAME, sizeof(info->driver));
+	strscpy(info->driver, DRIVER_NAME, sizeof(info->driver));
 }
 
 static int vector_net_load_bpf_flash(struct net_device *dev,

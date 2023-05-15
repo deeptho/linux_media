@@ -6,6 +6,7 @@
 #include <linux/kernel.h>
 #include <linux/bug.h>
 #include <linux/cacheflush.h>
+#include <linux/kmsan.h>
 #include <linux/mm.h>
 #include <linux/uaccess.h>
 #include <linux/hardirq.h>
@@ -37,7 +38,7 @@ static inline void *kmap(struct page *page);
 
 /**
  * kunmap - Unmap the virtual address mapped by kmap()
- * @addr:	Virtual address to be unmapped
+ * @page:	Pointer to the page which was mapped by kmap()
  *
  * Counterpart to kmap(). A NOOP for CONFIG_HIGHMEM=n and for mappings of
  * pages in the low memory area.
@@ -60,11 +61,11 @@ static inline void kmap_flush_unused(void);
 
 /**
  * kmap_local_page - Map a page for temporary usage
- * @page:	Pointer to the page to be mapped
+ * @page: Pointer to the page to be mapped
  *
  * Returns: The virtual address of the mapping
  *
- * Can be invoked from any context.
+ * Can be invoked from any context, including interrupts.
  *
  * Requires careful handling when nesting multiple mappings because the map
  * management is stack based. The unmap has to be in the reverse order of
@@ -85,9 +86,8 @@ static inline void kmap_flush_unused(void);
  * virtual address of the direct mapping. Only real highmem pages are
  * temporarily mapped.
  *
- * While it is significantly faster than kmap() for the higmem case it
- * comes with restrictions about the pointer validity. Only use when really
- * necessary.
+ * While kmap_local_page() is significantly faster than kmap() for the highmem
+ * case it comes with restrictions about the pointer validity.
  *
  * On HIGHMEM enabled systems mapping a highmem page has the side effect of
  * disabling migration in order to keep the virtual address stable across
@@ -119,9 +119,8 @@ static inline void *kmap_local_page(struct page *page);
  * virtual address of the direct mapping. Only real highmem pages are
  * temporarily mapped.
  *
- * While it is significantly faster than kmap() for the higmem case it
- * comes with restrictions about the pointer validity. Only use when really
- * necessary.
+ * While it is significantly faster than kmap() for the highmem case it
+ * comes with restrictions about the pointer validity.
  *
  * On HIGHMEM enabled systems mapping a highmem page has the side effect of
  * disabling migration in order to keep the virtual address stable across
@@ -138,23 +137,46 @@ static inline void *kmap_local_folio(struct folio *folio, size_t offset);
  *
  * Returns: The virtual address of the mapping
  *
- * Effectively a wrapper around kmap_local_page() which disables pagefaults
- * and preemption.
+ * In fact a wrapper around kmap_local_page() which also disables pagefaults
+ * and, depending on PREEMPT_RT configuration, also CPU migration and
+ * preemption. Therefore users should not count on the latter two side effects.
+ *
+ * Mappings should always be released by kunmap_atomic().
  *
  * Do not use in new code. Use kmap_local_page() instead.
+ *
+ * It is used in atomic context when code wants to access the contents of a
+ * page that might be allocated from high memory (see __GFP_HIGHMEM), for
+ * example a page in the pagecache.  The API has two functions, and they
+ * can be used in a manner similar to the following::
+ *
+ *   // Find the page of interest.
+ *   struct page *page = find_get_page(mapping, offset);
+ *
+ *   // Gain access to the contents of that page.
+ *   void *vaddr = kmap_atomic(page);
+ *
+ *   // Do something to the contents of that page.
+ *   memset(vaddr, 0, PAGE_SIZE);
+ *
+ *   // Unmap that page.
+ *   kunmap_atomic(vaddr);
+ *
+ * Note that the kunmap_atomic() call takes the result of the kmap_atomic()
+ * call, not the argument.
+ *
+ * If you need to map two pages because you want to copy from one page to
+ * another you need to keep the kmap_atomic calls strictly nested, like:
+ *
+ * vaddr1 = kmap_atomic(page1);
+ * vaddr2 = kmap_atomic(page2);
+ *
+ * memcpy(vaddr1, vaddr2, PAGE_SIZE);
+ *
+ * kunmap_atomic(vaddr2);
+ * kunmap_atomic(vaddr1);
  */
 static inline void *kmap_atomic(struct page *page);
-
-/**
- * kunmap_atomic - Unmap the virtual address mapped by kmap_atomic()
- * @addr:	Virtual address to be unmapped
- *
- * Counterpart to kmap_atomic().
- *
- * Effectively a wrapper around kunmap_local() which additionally undoes
- * the side effects of kmap_atomic(), i.e. reenabling pagefaults and
- * preemption.
- */
 
 /* Highmem related interfaces for management code */
 static inline unsigned int nr_free_highpages(void);
@@ -185,29 +207,30 @@ static inline void clear_user_highpage(struct page *page, unsigned long vaddr)
 }
 #endif
 
-#ifndef __HAVE_ARCH_ALLOC_ZEROED_USER_HIGHPAGE_MOVABLE
+#ifndef vma_alloc_zeroed_movable_folio
 /**
- * alloc_zeroed_user_highpage_movable - Allocate a zeroed HIGHMEM page for a VMA that the caller knows can move
- * @vma: The VMA the page is to be allocated for
- * @vaddr: The virtual address the page will be inserted into
+ * vma_alloc_zeroed_movable_folio - Allocate a zeroed page for a VMA.
+ * @vma: The VMA the page is to be allocated for.
+ * @vaddr: The virtual address the page will be inserted into.
  *
- * This function will allocate a page for a VMA that the caller knows will
- * be able to migrate in the future using move_pages() or reclaimed
+ * This function will allocate a page suitable for inserting into this
+ * VMA at this virtual address.  It may be allocated from highmem or
+ * the movable zone.  An architecture may provide its own implementation.
  *
- * An architecture may override this function by defining
- * __HAVE_ARCH_ALLOC_ZEROED_USER_HIGHPAGE_MOVABLE and providing their own
- * implementation.
+ * Return: A folio containing one allocated and zeroed page or NULL if
+ * we are out of memory.
  */
-static inline struct page *
-alloc_zeroed_user_highpage_movable(struct vm_area_struct *vma,
+static inline
+struct folio *vma_alloc_zeroed_movable_folio(struct vm_area_struct *vma,
 				   unsigned long vaddr)
 {
-	struct page *page = alloc_page_vma(GFP_HIGHUSER_MOVABLE, vma, vaddr);
+	struct folio *folio;
 
-	if (page)
-		clear_user_highpage(page, vaddr);
+	folio = vma_alloc_folio(GFP_HIGHUSER_MOVABLE, 0, vma, vaddr, false);
+	if (folio)
+		clear_user_highpage(&folio->page, vaddr);
 
-	return page;
+	return folio;
 }
 #endif
 
@@ -216,6 +239,16 @@ static inline void clear_highpage(struct page *page)
 	void *kaddr = kmap_local_page(page);
 	clear_page(kaddr);
 	kunmap_local(kaddr);
+}
+
+static inline void clear_highpage_kasan_tagged(struct page *page)
+{
+	u8 tag;
+
+	tag = page_kasan_tag(page);
+	page_kasan_tag_reset(page);
+	clear_highpage(page);
+	page_kasan_tag_set(page, tag);
 }
 
 #ifndef __HAVE_ARCH_TAG_CLEAR_HIGHPAGE
@@ -277,10 +310,37 @@ static inline void copy_user_highpage(struct page *to, struct page *from,
 	vfrom = kmap_local_page(from);
 	vto = kmap_local_page(to);
 	copy_user_page(vto, vfrom, vaddr, to);
+	kmsan_unpoison_memory(page_address(to), PAGE_SIZE);
 	kunmap_local(vto);
 	kunmap_local(vfrom);
 }
 
+#endif
+
+#ifdef copy_mc_to_kernel
+static inline int copy_mc_user_highpage(struct page *to, struct page *from,
+					unsigned long vaddr, struct vm_area_struct *vma)
+{
+	unsigned long ret;
+	char *vfrom, *vto;
+
+	vfrom = kmap_local_page(from);
+	vto = kmap_local_page(to);
+	ret = copy_mc_to_kernel(vto, vfrom, PAGE_SIZE);
+	if (!ret)
+		kmsan_unpoison_memory(page_address(to), PAGE_SIZE);
+	kunmap_local(vto);
+	kunmap_local(vfrom);
+
+	return ret;
+}
+#else
+static inline int copy_mc_user_highpage(struct page *to, struct page *from,
+					unsigned long vaddr, struct vm_area_struct *vma)
+{
+	copy_user_highpage(to, from, vaddr, vma);
+	return 0;
+}
 #endif
 
 #ifndef __HAVE_ARCH_COPY_HIGHPAGE
@@ -292,6 +352,7 @@ static inline void copy_highpage(struct page *to, struct page *from)
 	vfrom = kmap_local_page(from);
 	vto = kmap_local_page(to);
 	copy_page(vto, vfrom);
+	kmsan_copy_page_meta(to, from);
 	kunmap_local(vto);
 	kunmap_local(vfrom);
 }
@@ -307,19 +368,6 @@ static inline void memcpy_page(struct page *dst_page, size_t dst_off,
 
 	VM_BUG_ON(dst_off + len > PAGE_SIZE || src_off + len > PAGE_SIZE);
 	memcpy(dst + dst_off, src + src_off, len);
-	kunmap_local(src);
-	kunmap_local(dst);
-}
-
-static inline void memmove_page(struct page *dst_page, size_t dst_off,
-			       struct page *src_page, size_t src_off,
-			       size_t len)
-{
-	char *dst = kmap_local_page(dst_page);
-	char *src = kmap_local_page(src_page);
-
-	VM_BUG_ON(dst_off + len > PAGE_SIZE || src_off + len > PAGE_SIZE);
-	memmove(dst + dst_off, src + src_off, len);
 	kunmap_local(src);
 	kunmap_local(dst);
 }
@@ -358,9 +406,41 @@ static inline void memcpy_to_page(struct page *page, size_t offset,
 static inline void memzero_page(struct page *page, size_t offset, size_t len)
 {
 	char *addr = kmap_local_page(page);
+
+	VM_BUG_ON(offset + len > PAGE_SIZE);
 	memset(addr + offset, 0, len);
 	flush_dcache_page(page);
 	kunmap_local(addr);
+}
+
+/**
+ * memcpy_from_file_folio - Copy some bytes from a file folio.
+ * @to: The destination buffer.
+ * @folio: The folio to copy from.
+ * @pos: The position in the file.
+ * @len: The maximum number of bytes to copy.
+ *
+ * Copy up to @len bytes from this folio.  This may be limited by PAGE_SIZE
+ * if the folio comes from HIGHMEM, and by the size of the folio.
+ *
+ * Return: The number of bytes copied from the folio.
+ */
+static inline size_t memcpy_from_file_folio(char *to, struct folio *folio,
+		loff_t pos, size_t len)
+{
+	size_t offset = offset_in_folio(folio, pos);
+	char *from = kmap_local_folio(folio, offset);
+
+	if (folio_test_highmem(folio)) {
+		offset = offset_in_page(offset);
+		len = min_t(size_t, len, PAGE_SIZE - offset);
+	} else
+		len = min(len, folio_size(folio) - offset);
+
+	memcpy(to, from, len);
+	kunmap_local(from);
+
+	return len;
 }
 
 /**
@@ -399,6 +479,12 @@ static inline void folio_zero_range(struct folio *folio,
 		size_t start, size_t length)
 {
 	zero_user_segments(&folio->page, start, start + length, 0, 0);
+}
+
+static inline void put_and_unmap_page(struct page *page, void *addr)
+{
+	kunmap_local(addr);
+	put_page(page);
 }
 
 #endif /* _LINUX_HIGHMEM_H */

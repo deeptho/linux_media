@@ -111,8 +111,7 @@ static int pp_sw_fini(void *handle)
 
 	hwmgr_sw_fini(hwmgr);
 
-	release_firmware(adev->pm.fw);
-	adev->pm.fw = NULL;
+	amdgpu_ucode_release(&adev->pm.fw);
 
 	return 0;
 }
@@ -671,6 +670,22 @@ static int pp_dpm_force_clock_level(void *handle,
 	return hwmgr->hwmgr_func->force_clock_level(hwmgr, type, mask);
 }
 
+static int pp_dpm_emit_clock_levels(void *handle,
+				    enum pp_clock_type type,
+				    char *buf,
+				    int *offset)
+{
+	struct pp_hwmgr *hwmgr = handle;
+
+	if (!hwmgr || !hwmgr->pm_en)
+		return -EOPNOTSUPP;
+
+	if (!hwmgr->hwmgr_func->emit_clock_levels)
+		return -ENOENT;
+
+	return hwmgr->hwmgr_func->emit_clock_levels(hwmgr, type, buf, offset);
+}
+
 static int pp_dpm_print_clock_levels(void *handle,
 		enum pp_clock_type type, char *buf)
 {
@@ -753,10 +768,16 @@ static int pp_dpm_read_sensor(void *handle, int idx,
 
 	switch (idx) {
 	case AMDGPU_PP_SENSOR_STABLE_PSTATE_SCLK:
-		*((uint32_t *)value) = hwmgr->pstate_sclk;
+		*((uint32_t *)value) = hwmgr->pstate_sclk * 100;
 		return 0;
 	case AMDGPU_PP_SENSOR_STABLE_PSTATE_MCLK:
-		*((uint32_t *)value) = hwmgr->pstate_mclk;
+		*((uint32_t *)value) = hwmgr->pstate_mclk * 100;
+		return 0;
+	case AMDGPU_PP_SENSOR_PEAK_PSTATE_SCLK:
+		*((uint32_t *)value) = hwmgr->pstate_sclk_peak * 100;
+		return 0;
+	case AMDGPU_PP_SENSOR_PEAK_PSTATE_MCLK:
+		*((uint32_t *)value) = hwmgr->pstate_mclk_peak * 100;
 		return 0;
 	case AMDGPU_PP_SENSOR_MIN_FAN_RPM:
 		*((uint32_t *)value) = hwmgr->thermal_controller.fanInfo.ulMinRPM;
@@ -822,7 +843,8 @@ static int pp_set_fine_grain_clk_vol(void *handle, uint32_t type, long *input, u
 	return hwmgr->hwmgr_func->set_fine_grain_clk_vol(hwmgr, type, input, size);
 }
 
-static int pp_odn_edit_dpm_table(void *handle, uint32_t type, long *input, uint32_t size)
+static int pp_odn_edit_dpm_table(void *handle, enum PP_OD_DPM_TABLE_COMMAND type,
+				 long *input, uint32_t size)
 {
 	struct pp_hwmgr *hwmgr = handle;
 
@@ -1469,6 +1491,7 @@ static int pp_get_prv_buffer_details(void *handle, void **addr, size_t *size)
 {
 	struct pp_hwmgr *hwmgr = handle;
 	struct amdgpu_device *adev = hwmgr->adev;
+	int err;
 
 	if (!addr || !size)
 		return -EINVAL;
@@ -1476,7 +1499,9 @@ static int pp_get_prv_buffer_details(void *handle, void **addr, size_t *size)
 	*addr = NULL;
 	*size = 0;
 	if (adev->pm.smu_prv_buffer) {
-		amdgpu_bo_kmap(adev->pm.smu_prv_buffer, addr);
+		err = amdgpu_bo_kmap(adev->pm.smu_prv_buffer, addr);
+		if (err)
+			return err;
 		*size = adev->pm.smu_prv_buffer_size;
 	}
 
@@ -1488,7 +1513,7 @@ static void pp_pm_compute_clocks(void *handle)
 	struct pp_hwmgr *hwmgr = handle;
 	struct amdgpu_device *adev = hwmgr->adev;
 
-	if (!amdgpu_device_has_dc_support(adev)) {
+	if (!adev->dc_enabled) {
 		amdgpu_dpm_get_active_displays(adev);
 		adev->pm.pm_display_cfg.num_display = adev->pm.dpm.new_active_crtc_count;
 		adev->pm.pm_display_cfg.vrefresh = amdgpu_dpm_get_vrefresh(adev);
@@ -1525,6 +1550,7 @@ static const struct amd_pm_funcs pp_dpm_funcs = {
 	.get_pp_table = pp_dpm_get_pp_table,
 	.set_pp_table = pp_dpm_set_pp_table,
 	.force_clock_level = pp_dpm_force_clock_level,
+	.emit_clock_levels = pp_dpm_emit_clock_levels,
 	.print_clock_levels = pp_dpm_print_clock_levels,
 	.get_sclk_od = pp_dpm_get_sclk_od,
 	.set_sclk_od = pp_dpm_set_sclk_od,

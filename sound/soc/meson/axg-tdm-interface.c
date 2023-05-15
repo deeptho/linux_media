@@ -37,10 +37,8 @@ int axg_tdm_set_tdm_slots(struct snd_soc_dai *dai, u32 *tx_mask,
 			  unsigned int slot_width)
 {
 	struct axg_tdm_iface *iface = snd_soc_dai_get_drvdata(dai);
-	struct axg_tdm_stream *tx = (struct axg_tdm_stream *)
-		dai->playback_dma_data;
-	struct axg_tdm_stream *rx = (struct axg_tdm_stream *)
-		dai->capture_dma_data;
+	struct axg_tdm_stream *tx = snd_soc_dai_dma_data_get_playback(dai);
+	struct axg_tdm_stream *rx = snd_soc_dai_dma_data_get_capture(dai);
 	unsigned int tx_slots, rx_slots;
 	unsigned int fmt = 0;
 
@@ -119,19 +117,19 @@ static int axg_tdm_iface_set_fmt(struct snd_soc_dai *dai, unsigned int fmt)
 {
 	struct axg_tdm_iface *iface = snd_soc_dai_get_drvdata(dai);
 
-	switch (fmt & SND_SOC_DAIFMT_MASTER_MASK) {
-	case SND_SOC_DAIFMT_CBS_CFS:
+	switch (fmt & SND_SOC_DAIFMT_CLOCK_PROVIDER_MASK) {
+	case SND_SOC_DAIFMT_BP_FP:
 		if (!iface->mclk) {
 			dev_err(dai->dev, "cpu clock master: mclk missing\n");
 			return -ENODEV;
 		}
 		break;
 
-	case SND_SOC_DAIFMT_CBM_CFM:
+	case SND_SOC_DAIFMT_BC_FC:
 		break;
 
-	case SND_SOC_DAIFMT_CBS_CFM:
-	case SND_SOC_DAIFMT_CBM_CFS:
+	case SND_SOC_DAIFMT_BP_FC:
+	case SND_SOC_DAIFMT_BC_FP:
 		dev_err(dai->dev, "only CBS_CFS and CBM_CFM are supported\n");
 		fallthrough;
 	default:
@@ -326,8 +324,8 @@ static int axg_tdm_iface_hw_params(struct snd_pcm_substream *substream,
 	if (ret)
 		return ret;
 
-	if ((iface->fmt & SND_SOC_DAIFMT_MASTER_MASK) ==
-	    SND_SOC_DAIFMT_CBS_CFS) {
+	if ((iface->fmt & SND_SOC_DAIFMT_CLOCK_PROVIDER_MASK) ==
+	    SND_SOC_DAIFMT_BP_FP) {
 		ret = axg_tdm_iface_set_sclk(dai, params);
 		if (ret)
 			return ret;
@@ -362,11 +360,14 @@ static int axg_tdm_iface_prepare(struct snd_pcm_substream *substream,
 
 static int axg_tdm_iface_remove_dai(struct snd_soc_dai *dai)
 {
-	if (dai->capture_dma_data)
-		axg_tdm_stream_free(dai->capture_dma_data);
+	int stream;
 
-	if (dai->playback_dma_data)
-		axg_tdm_stream_free(dai->playback_dma_data);
+	for_each_pcm_streams(stream) {
+		struct axg_tdm_stream *ts = snd_soc_dai_dma_data_get(dai, stream);
+
+		if (ts)
+			axg_tdm_stream_free(ts);
+	}
 
 	return 0;
 }
@@ -374,19 +375,20 @@ static int axg_tdm_iface_remove_dai(struct snd_soc_dai *dai)
 static int axg_tdm_iface_probe_dai(struct snd_soc_dai *dai)
 {
 	struct axg_tdm_iface *iface = snd_soc_dai_get_drvdata(dai);
+	int stream;
 
-	if (dai->capture_widget) {
-		dai->capture_dma_data = axg_tdm_stream_alloc(iface);
-		if (!dai->capture_dma_data)
-			return -ENOMEM;
-	}
+	for_each_pcm_streams(stream) {
+		struct axg_tdm_stream *ts;
 
-	if (dai->playback_widget) {
-		dai->playback_dma_data = axg_tdm_stream_alloc(iface);
-		if (!dai->playback_dma_data) {
+		if (!snd_soc_dai_get_widget(dai, stream))
+			continue;
+
+		ts = axg_tdm_stream_alloc(iface);
+		if (!ts) {
 			axg_tdm_iface_remove_dai(dai);
 			return -ENOMEM;
 		}
+		snd_soc_dai_dma_data_set(dai, stream, ts);
 	}
 
 	return 0;

@@ -60,9 +60,13 @@
 #define EXYNOS850_CLUSTER0_NONCPU_INT_EN	0x1244
 #define EXYNOS850_CLUSTER1_NONCPU_OUT		0x1620
 #define EXYNOS850_CLUSTER1_NONCPU_INT_EN	0x1644
+#define EXYNOSAUTOV9_CLUSTER1_NONCPU_OUT	0x1520
+#define EXYNOSAUTOV9_CLUSTER1_NONCPU_INT_EN	0x1544
 
 #define EXYNOS850_CLUSTER0_WDTRESET_BIT		24
 #define EXYNOS850_CLUSTER1_WDTRESET_BIT		23
+#define EXYNOSAUTOV9_CLUSTER0_WDTRESET_BIT	25
+#define EXYNOSAUTOV9_CLUSTER1_WDTRESET_BIT	24
 
 /**
  * DOC: Quirk flags for different Samsung watchdog IP-cores
@@ -236,6 +240,30 @@ static const struct s3c2410_wdt_variant drv_data_exynos850_cl1 = {
 		  QUIRK_HAS_PMU_RST_STAT | QUIRK_HAS_PMU_CNT_EN,
 };
 
+static const struct s3c2410_wdt_variant drv_data_exynosautov9_cl0 = {
+	.mask_reset_reg = EXYNOS850_CLUSTER0_NONCPU_INT_EN,
+	.mask_bit = 2,
+	.mask_reset_inv = true,
+	.rst_stat_reg = EXYNOS5_RST_STAT_REG_OFFSET,
+	.rst_stat_bit = EXYNOSAUTOV9_CLUSTER0_WDTRESET_BIT,
+	.cnt_en_reg = EXYNOS850_CLUSTER0_NONCPU_OUT,
+	.cnt_en_bit = 7,
+	.quirks = QUIRK_HAS_WTCLRINT_REG | QUIRK_HAS_PMU_MASK_RESET |
+		  QUIRK_HAS_PMU_RST_STAT | QUIRK_HAS_PMU_CNT_EN,
+};
+
+static const struct s3c2410_wdt_variant drv_data_exynosautov9_cl1 = {
+	.mask_reset_reg = EXYNOSAUTOV9_CLUSTER1_NONCPU_INT_EN,
+	.mask_bit = 2,
+	.mask_reset_inv = true,
+	.rst_stat_reg = EXYNOS5_RST_STAT_REG_OFFSET,
+	.rst_stat_bit = EXYNOSAUTOV9_CLUSTER1_WDTRESET_BIT,
+	.cnt_en_reg = EXYNOSAUTOV9_CLUSTER1_NONCPU_OUT,
+	.cnt_en_bit = 7,
+	.quirks = QUIRK_HAS_WTCLRINT_REG | QUIRK_HAS_PMU_MASK_RESET |
+		  QUIRK_HAS_PMU_RST_STAT | QUIRK_HAS_PMU_CNT_EN,
+};
+
 static const struct of_device_id s3c2410_wdt_match[] = {
 	{ .compatible = "samsung,s3c2410-wdt",
 	  .data = &drv_data_s3c2410 },
@@ -249,6 +277,8 @@ static const struct of_device_id s3c2410_wdt_match[] = {
 	  .data = &drv_data_exynos7 },
 	{ .compatible = "samsung,exynos850-wdt",
 	  .data = &drv_data_exynos850_cl0 },
+	{ .compatible = "samsung,exynosautov9-wdt",
+	  .data = &drv_data_exynosautov9_cl0 },
 	{},
 };
 MODULE_DEVICE_TABLE(of, s3c2410_wdt_match);
@@ -532,73 +562,6 @@ static irqreturn_t s3c2410wdt_irq(int irqno, void *param)
 	return IRQ_HANDLED;
 }
 
-#ifdef CONFIG_ARM_S3C24XX_CPUFREQ
-
-static int s3c2410wdt_cpufreq_transition(struct notifier_block *nb,
-					  unsigned long val, void *data)
-{
-	int ret;
-	struct s3c2410_wdt *wdt = freq_to_wdt(nb);
-
-	if (!s3c2410wdt_is_running(wdt))
-		goto done;
-
-	if (val == CPUFREQ_PRECHANGE) {
-		/* To ensure that over the change we don't cause the
-		 * watchdog to trigger, we perform an keep-alive if
-		 * the watchdog is running.
-		 */
-
-		s3c2410wdt_keepalive(&wdt->wdt_device);
-	} else if (val == CPUFREQ_POSTCHANGE) {
-		s3c2410wdt_stop(&wdt->wdt_device);
-
-		ret = s3c2410wdt_set_heartbeat(&wdt->wdt_device,
-						wdt->wdt_device.timeout);
-
-		if (ret >= 0)
-			s3c2410wdt_start(&wdt->wdt_device);
-		else
-			goto err;
-	}
-
-done:
-	return 0;
-
- err:
-	dev_err(wdt->dev, "cannot set new value for timeout %d\n",
-				wdt->wdt_device.timeout);
-	return ret;
-}
-
-static inline int s3c2410wdt_cpufreq_register(struct s3c2410_wdt *wdt)
-{
-	wdt->freq_transition.notifier_call = s3c2410wdt_cpufreq_transition;
-
-	return cpufreq_register_notifier(&wdt->freq_transition,
-					 CPUFREQ_TRANSITION_NOTIFIER);
-}
-
-static inline void s3c2410wdt_cpufreq_deregister(struct s3c2410_wdt *wdt)
-{
-	wdt->freq_transition.notifier_call = s3c2410wdt_cpufreq_transition;
-
-	cpufreq_unregister_notifier(&wdt->freq_transition,
-				    CPUFREQ_TRANSITION_NOTIFIER);
-}
-
-#else
-
-static inline int s3c2410wdt_cpufreq_register(struct s3c2410_wdt *wdt)
-{
-	return 0;
-}
-
-static inline void s3c2410wdt_cpufreq_deregister(struct s3c2410_wdt *wdt)
-{
-}
-#endif
-
 static inline unsigned int s3c2410wdt_get_bootstatus(struct s3c2410_wdt *wdt)
 {
 	unsigned int rst_stat;
@@ -630,8 +593,9 @@ s3c2410_get_wdt_drv_data(struct platform_device *pdev)
 	}
 
 #ifdef CONFIG_OF
-	/* Choose Exynos850 driver data w.r.t. cluster index */
-	if (variant == &drv_data_exynos850_cl0) {
+	/* Choose Exynos850/ExynosAutov9 driver data w.r.t. cluster index */
+	if (variant == &drv_data_exynos850_cl0 ||
+	    variant == &drv_data_exynosautov9_cl0) {
 		u32 index;
 		int err;
 
@@ -644,9 +608,11 @@ s3c2410_get_wdt_drv_data(struct platform_device *pdev)
 
 		switch (index) {
 		case 0:
-			return &drv_data_exynos850_cl0;
+			return variant;
 		case 1:
-			return &drv_data_exynos850_cl1;
+			return (variant == &drv_data_exynos850_cl0) ?
+				&drv_data_exynos850_cl1 :
+				&drv_data_exynosautov9_cl1;
 		default:
 			dev_err(dev, "wrong cluster index: %u\n", index);
 			return NULL;
@@ -728,12 +694,6 @@ static int s3c2410wdt_probe(struct platform_device *pdev)
 	wdt->wdt_device.min_timeout = 1;
 	wdt->wdt_device.max_timeout = s3c2410wdt_max_timeout(wdt);
 
-	ret = s3c2410wdt_cpufreq_register(wdt);
-	if (ret < 0) {
-		dev_err(dev, "failed to register cpufreq\n");
-		goto err_src_clk;
-	}
-
 	watchdog_set_drvdata(&wdt->wdt_device, wdt);
 
 	/* see if we can actually set the requested timer margin, and if
@@ -750,7 +710,7 @@ static int s3c2410wdt_probe(struct platform_device *pdev)
 				 S3C2410_WATCHDOG_DEFAULT_TIME);
 		} else {
 			dev_err(dev, "failed to use default timeout\n");
-			goto err_cpufreq;
+			goto err_src_clk;
 		}
 	}
 
@@ -758,7 +718,7 @@ static int s3c2410wdt_probe(struct platform_device *pdev)
 			       pdev->name, pdev);
 	if (ret != 0) {
 		dev_err(dev, "failed to install irq (%d)\n", ret);
-		goto err_cpufreq;
+		goto err_src_clk;
 	}
 
 	watchdog_set_nowayout(&wdt->wdt_device, nowayout);
@@ -784,7 +744,7 @@ static int s3c2410wdt_probe(struct platform_device *pdev)
 
 	ret = watchdog_register_device(&wdt->wdt_device);
 	if (ret)
-		goto err_cpufreq;
+		goto err_src_clk;
 
 	ret = s3c2410wdt_enable(wdt, true);
 	if (ret < 0)
@@ -806,9 +766,6 @@ static int s3c2410wdt_probe(struct platform_device *pdev)
  err_unregister:
 	watchdog_unregister_device(&wdt->wdt_device);
 
- err_cpufreq:
-	s3c2410wdt_cpufreq_deregister(wdt);
-
  err_src_clk:
 	clk_disable_unprepare(wdt->src_clk);
 
@@ -829,8 +786,6 @@ static int s3c2410wdt_remove(struct platform_device *dev)
 
 	watchdog_unregister_device(&wdt->wdt_device);
 
-	s3c2410wdt_cpufreq_deregister(wdt);
-
 	clk_disable_unprepare(wdt->src_clk);
 	clk_disable_unprepare(wdt->bus_clk);
 
@@ -844,8 +799,6 @@ static void s3c2410wdt_shutdown(struct platform_device *dev)
 	s3c2410wdt_enable(wdt, false);
 	s3c2410wdt_stop(&wdt->wdt_device);
 }
-
-#ifdef CONFIG_PM_SLEEP
 
 static int s3c2410wdt_suspend(struct device *dev)
 {
@@ -885,10 +838,9 @@ static int s3c2410wdt_resume(struct device *dev)
 
 	return 0;
 }
-#endif
 
-static SIMPLE_DEV_PM_OPS(s3c2410wdt_pm_ops, s3c2410wdt_suspend,
-			s3c2410wdt_resume);
+static DEFINE_SIMPLE_DEV_PM_OPS(s3c2410wdt_pm_ops,
+				s3c2410wdt_suspend, s3c2410wdt_resume);
 
 static struct platform_driver s3c2410wdt_driver = {
 	.probe		= s3c2410wdt_probe,
@@ -897,7 +849,7 @@ static struct platform_driver s3c2410wdt_driver = {
 	.id_table	= s3c2410_wdt_ids,
 	.driver		= {
 		.name	= "s3c2410-wdt",
-		.pm	= &s3c2410wdt_pm_ops,
+		.pm	= pm_sleep_ptr(&s3c2410wdt_pm_ops),
 		.of_match_table	= of_match_ptr(s3c2410_wdt_match),
 	},
 };

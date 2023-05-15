@@ -9,6 +9,7 @@
  */
 
 #include <linux/mm.h>
+#include <linux/mm_inline.h>
 #include <linux/hugetlb.h>
 #include <linux/shm.h>
 #include <linux/ksm.h>
@@ -23,6 +24,7 @@
 #include <linux/mmu_notifier.h>
 #include <linux/uaccess.h>
 #include <linux/userfaultfd_k.h>
+#include <linux/mempolicy.h>
 
 #include <asm/cacheflush.h>
 #include <asm/tlb.h>
@@ -490,13 +492,13 @@ unsigned long move_page_tables(struct vm_area_struct *vma,
 		return 0;
 
 	old_end = old_addr + len;
-	flush_cache_range(vma, old_addr, old_end);
 
 	if (is_vm_hugetlb_page(vma))
 		return move_hugetlb_page_tables(vma, new_vma, old_addr,
 						new_addr, len);
 
-	mmu_notifier_range_init(&range, MMU_NOTIFY_UNMAP, 0, vma, vma->vm_mm,
+	flush_cache_range(vma, old_addr, old_end);
+	mmu_notifier_range_init(&range, MMU_NOTIFY_UNMAP, 0, vma->vm_mm,
 				old_addr, old_end);
 	mmu_notifier_invalidate_range_start(&range);
 
@@ -578,11 +580,12 @@ static unsigned long move_vma(struct vm_area_struct *vma,
 	unsigned long vm_flags = vma->vm_flags;
 	unsigned long new_pgoff;
 	unsigned long moved_len;
-	unsigned long excess = 0;
+	unsigned long account_start = 0;
+	unsigned long account_end = 0;
 	unsigned long hiwater_vm;
-	int split = 0;
 	int err = 0;
 	bool need_rmap_locks;
+	struct vma_iterator vmi;
 
 	/*
 	 * We'd prefer to avoid failure later on in do_munmap:
@@ -659,11 +662,11 @@ static unsigned long move_vma(struct vm_area_struct *vma,
 
 	/* Conceal VM_ACCOUNT so old reservation is not undone */
 	if (vm_flags & VM_ACCOUNT && !(flags & MREMAP_DONTUNMAP)) {
-		vma->vm_flags &= ~VM_ACCOUNT;
-		excess = vma->vm_end - vma->vm_start - old_len;
-		if (old_addr > vma->vm_start &&
-		    old_addr + old_len < vma->vm_end)
-			split = 1;
+		vm_flags_clear(vma, VM_ACCOUNT);
+		if (vma->vm_start < old_addr)
+			account_start = vma->vm_start;
+		if (vma->vm_end > old_addr + old_len)
+			account_end = vma->vm_end;
 	}
 
 	/*
@@ -684,7 +687,7 @@ static unsigned long move_vma(struct vm_area_struct *vma,
 
 	if (unlikely(!err && (flags & MREMAP_DONTUNMAP))) {
 		/* We always clear VM_LOCKED[ONFAULT] on the old vma */
-		vma->vm_flags &= VM_LOCKED_CLEAR_MASK;
+		vm_flags_clear(vma, VM_LOCKED_MASK);
 
 		/*
 		 * anon_vma links of the old vma is no longer needed after its page
@@ -698,11 +701,12 @@ static unsigned long move_vma(struct vm_area_struct *vma,
 		return new_addr;
 	}
 
-	if (do_munmap(mm, old_addr, old_len, uf_unmap) < 0) {
+	vma_iter_init(&vmi, mm, old_addr);
+	if (do_vmi_munmap(&vmi, mm, old_addr, old_len, uf_unmap, false) < 0) {
 		/* OOM: unable to split vma, just get accounts right */
 		if (vm_flags & VM_ACCOUNT && !(flags & MREMAP_DONTUNMAP))
 			vm_acct_memory(old_len >> PAGE_SHIFT);
-		excess = 0;
+		account_start = account_end = 0;
 	}
 
 	if (vm_flags & VM_LOCKED) {
@@ -713,10 +717,14 @@ static unsigned long move_vma(struct vm_area_struct *vma,
 	mm->hiwater_vm = hiwater_vm;
 
 	/* Restore VM_ACCOUNT if one or two pieces of vma left */
-	if (excess) {
-		vma->vm_flags |= VM_ACCOUNT;
-		if (split)
-			vma->vm_next->vm_flags |= VM_ACCOUNT;
+	if (account_start) {
+		vma = vma_prev(&vmi);
+		vm_flags_set(vma, VM_ACCOUNT);
+	}
+
+	if (account_end) {
+		vma = vma_next(&vmi);
+		vm_flags_set(vma, VM_ACCOUNT);
 	}
 
 	return new_addr;
@@ -766,14 +774,8 @@ static struct vm_area_struct *vma_to_resize(unsigned long addr,
 	if (vma->vm_flags & (VM_DONTEXPAND | VM_PFNMAP))
 		return ERR_PTR(-EFAULT);
 
-	if (vma->vm_flags & VM_LOCKED) {
-		unsigned long locked, lock_limit;
-		locked = mm->locked_vm << PAGE_SHIFT;
-		lock_limit = rlimit(RLIMIT_MEMLOCK);
-		locked += new_len - old_len;
-		if (locked > lock_limit && !capable(CAP_IPC_LOCK))
-			return ERR_PTR(-EAGAIN);
-	}
+	if (mlock_future_check(mm, vma->vm_flags, new_len - old_len))
+		return ERR_PTR(-EAGAIN);
 
 	if (!may_expand_vm(mm, vma->vm_flags,
 				(new_len - old_len) >> PAGE_SHIFT))
@@ -826,9 +828,9 @@ static unsigned long mremap_to(unsigned long addr, unsigned long old_len,
 			goto out;
 	}
 
-	if (old_len >= new_len) {
+	if (old_len > new_len) {
 		ret = do_munmap(mm, addr+new_len, old_len - new_len, uf_unmap);
-		if (ret && old_len != new_len)
+		if (ret)
 			goto out;
 		old_len = new_len;
 	}
@@ -872,9 +874,10 @@ out:
 static int vma_expandable(struct vm_area_struct *vma, unsigned long delta)
 {
 	unsigned long end = vma->vm_end + delta;
+
 	if (end < vma->vm_end) /* overflow */
 		return 0;
-	if (vma->vm_next && vma->vm_next->vm_start < end) /* intersection */
+	if (find_vma_intersection(vma->vm_mm, vma->vm_end, end))
 		return 0;
 	if (get_unmapped_area(NULL, vma->vm_start, end - vma->vm_start,
 			      0, MAP_FIXED) & ~PAGE_MASK)
@@ -981,20 +984,23 @@ SYSCALL_DEFINE5(mremap, unsigned long, addr, unsigned long, old_len,
 	/*
 	 * Always allow a shrinking remap: that just unmaps
 	 * the unnecessary pages..
-	 * __do_munmap does all the needed commit accounting, and
+	 * do_vmi_munmap does all the needed commit accounting, and
 	 * downgrades mmap_lock to read if so directed.
 	 */
 	if (old_len >= new_len) {
 		int retval;
+		VMA_ITERATOR(vmi, mm, addr + new_len);
 
-		retval = __do_munmap(mm, addr+new_len, old_len - new_len,
-				  &uf_unmap, true);
-		if (retval < 0 && old_len != new_len) {
+		retval = do_vmi_munmap(&vmi, mm, addr + new_len,
+				       old_len - new_len, &uf_unmap, true);
+		/* Returning 1 indicates mmap_lock is downgraded to read. */
+		if (retval == 1) {
+			downgraded = true;
+		} else if (retval < 0 && old_len != new_len) {
 			ret = retval;
 			goto out;
-		/* Returning 1 indicates mmap_lock is downgraded to read. */
-		} else if (retval == 1)
-			downgraded = true;
+		}
+
 		ret = addr;
 		goto out;
 	}
@@ -1014,6 +1020,11 @@ SYSCALL_DEFINE5(mremap, unsigned long, addr, unsigned long, old_len,
 		/* can we just expand the current mapping? */
 		if (vma_expandable(vma, new_len - old_len)) {
 			long pages = (new_len - old_len) >> PAGE_SHIFT;
+			unsigned long extension_start = addr + old_len;
+			unsigned long extension_end = addr + new_len;
+			pgoff_t extension_pgoff = vma->vm_pgoff +
+				((extension_start - vma->vm_start) >> PAGE_SHIFT);
+			VMA_ITERATOR(vmi, mm, extension_start);
 
 			if (vma->vm_flags & VM_ACCOUNT) {
 				if (security_vm_enough_memory_mm(mm, pages)) {
@@ -1022,8 +1033,31 @@ SYSCALL_DEFINE5(mremap, unsigned long, addr, unsigned long, old_len,
 				}
 			}
 
-			if (vma_adjust(vma, vma->vm_start, addr + new_len,
-				       vma->vm_pgoff, NULL)) {
+			/*
+			 * Function vma_merge() is called on the extension we
+			 * are adding to the already existing vma, vma_merge()
+			 * will merge this extension with the already existing
+			 * vma (expand operation itself) and possibly also with
+			 * the next vma if it becomes adjacent to the expanded
+			 * vma and  otherwise compatible.
+			 *
+			 * However, vma_merge() can currently fail due to
+			 * is_mergeable_vma() check for vm_ops->close (see the
+			 * comment there). Yet this should not prevent vma
+			 * expanding, so perform a simple expand for such vma.
+			 * Ideally the check for close op should be only done
+			 * when a vma would be actually removed due to a merge.
+			 */
+			if (!vma->vm_ops || !vma->vm_ops->close) {
+				vma = vma_merge(&vmi, mm, vma, extension_start,
+					extension_end, vma->vm_flags, vma->anon_vma,
+					vma->vm_file, extension_pgoff, vma_policy(vma),
+					vma->vm_userfaultfd_ctx, anon_vma_name(vma));
+			} else if (vma_expand(&vmi, vma, vma->vm_start,
+					addr + new_len, vma->vm_pgoff, NULL)) {
+				vma = NULL;
+			}
+			if (!vma) {
 				vm_unacct_memory(pages);
 				ret = -ENOMEM;
 				goto out;

@@ -18,10 +18,10 @@
 #define TSNEP "tsnep"
 
 #define TSNEP_RING_SIZE 256
+#define TSNEP_RING_RX_REFILL 16
+#define TSNEP_RING_RX_REUSE (TSNEP_RING_SIZE - TSNEP_RING_SIZE / 4)
 #define TSNEP_RING_ENTRIES_PER_PAGE (PAGE_SIZE / TSNEP_DESC_SIZE)
 #define TSNEP_RING_PAGE_COUNT (TSNEP_RING_SIZE / TSNEP_RING_ENTRIES_PER_PAGE)
-
-#define TSNEP_QUEUES 1
 
 struct tsnep_gcl {
 	void __iomem *addr;
@@ -39,6 +39,24 @@ struct tsnep_gcl {
 	bool change;
 };
 
+enum tsnep_rxnfc_filter_type {
+	TSNEP_RXNFC_ETHER_TYPE,
+};
+
+struct tsnep_rxnfc_filter {
+	enum tsnep_rxnfc_filter_type type;
+	union {
+		u16 ether_type;
+	};
+};
+
+struct tsnep_rxnfc_rule {
+	struct list_head list;
+	struct tsnep_rxnfc_filter filter;
+	int queue_index;
+	int location;
+};
+
 struct tsnep_tx_entry {
 	struct tsnep_tx_desc *desc;
 	struct tsnep_tx_desc_wb *desc_wb;
@@ -47,7 +65,11 @@ struct tsnep_tx_entry {
 
 	u32 properties;
 
-	struct sk_buff *skb;
+	u32 type;
+	union {
+		struct sk_buff *skb;
+		struct xdp_frame *xdpf;
+	};
 	size_t len;
 	DEFINE_DMA_UNMAP_ADDR(dma);
 };
@@ -55,12 +77,11 @@ struct tsnep_tx_entry {
 struct tsnep_tx {
 	struct tsnep_adapter *adapter;
 	void __iomem *addr;
+	int queue_index;
 
 	void *page[TSNEP_RING_PAGE_COUNT];
 	dma_addr_t page_dma[TSNEP_RING_PAGE_COUNT];
 
-	/* TX ring lock */
-	spinlock_t lock;
 	struct tsnep_tx_entry entry[TSNEP_RING_SIZE];
 	int write;
 	int read;
@@ -79,38 +100,49 @@ struct tsnep_rx_entry {
 
 	u32 properties;
 
-	struct sk_buff *skb;
+	struct page *page;
 	size_t len;
-	DEFINE_DMA_UNMAP_ADDR(dma);
+	dma_addr_t dma;
 };
 
 struct tsnep_rx {
 	struct tsnep_adapter *adapter;
 	void __iomem *addr;
+	int queue_index;
+	int tx_queue_index;
 
 	void *page[TSNEP_RING_PAGE_COUNT];
 	dma_addr_t page_dma[TSNEP_RING_PAGE_COUNT];
 
 	struct tsnep_rx_entry entry[TSNEP_RING_SIZE];
+	int write;
 	int read;
 	u32 owner_counter;
 	int increment_owner_counter;
+	struct page_pool *page_pool;
 
 	u32 packets;
 	u32 bytes;
 	u32 dropped;
 	u32 multicast;
+	u32 alloc_failed;
+
+	struct xdp_rxq_info xdp_rxq;
 };
 
 struct tsnep_queue {
 	struct tsnep_adapter *adapter;
+	char name[IFNAMSIZ + 9];
 
 	struct tsnep_tx *tx;
 	struct tsnep_rx *rx;
 
 	struct napi_struct napi;
 
+	int irq;
 	u32 irq_mask;
+	void __iomem *irq_delay_addr;
+	u8 irq_delay;
 };
 
 struct tsnep_adapter {
@@ -125,7 +157,6 @@ struct tsnep_adapter {
 	struct platform_device *pdev;
 	struct device *dmadev;
 	void __iomem *addr;
-	int irq;
 
 	bool gate_control;
 	/* gate control lock */
@@ -139,6 +170,14 @@ struct tsnep_adapter {
 	struct ptp_clock_info ptp_clock_info;
 	/* ptp clock lock */
 	spinlock_t ptp_lock;
+
+	/* RX flow classification rules lock */
+	struct mutex rxnfc_lock;
+	struct list_head rxnfc_rules;
+	int rxnfc_count;
+	int rxnfc_max;
+
+	struct bpf_prog *xdp_prog;
 
 	int num_tx_queues;
 	struct tsnep_tx tx[TSNEP_MAX_QUEUES];
@@ -159,6 +198,21 @@ int tsnep_tc_init(struct tsnep_adapter *adapter);
 void tsnep_tc_cleanup(struct tsnep_adapter *adapter);
 int tsnep_tc_setup(struct net_device *netdev, enum tc_setup_type type,
 		   void *type_data);
+
+int tsnep_rxnfc_init(struct tsnep_adapter *adapter);
+void tsnep_rxnfc_cleanup(struct tsnep_adapter *adapter);
+int tsnep_rxnfc_get_rule(struct tsnep_adapter *adapter,
+			 struct ethtool_rxnfc *cmd);
+int tsnep_rxnfc_get_all(struct tsnep_adapter *adapter,
+			struct ethtool_rxnfc *cmd,
+			u32 *rule_locs);
+int tsnep_rxnfc_add_rule(struct tsnep_adapter *adapter,
+			 struct ethtool_rxnfc *cmd);
+int tsnep_rxnfc_del_rule(struct tsnep_adapter *adapter,
+			 struct ethtool_rxnfc *cmd);
+
+int tsnep_xdp_setup_prog(struct tsnep_adapter *adapter, struct bpf_prog *prog,
+			 struct netlink_ext_ack *extack);
 
 #if IS_ENABLED(CONFIG_TSNEP_SELFTESTS)
 int tsnep_ethtool_get_test_count(void);
@@ -185,5 +239,7 @@ static inline void tsnep_ethtool_self_test(struct net_device *dev,
 #endif /* CONFIG_TSNEP_SELFTESTS */
 
 void tsnep_get_system_time(struct tsnep_adapter *adapter, u64 *time);
+int tsnep_set_irq_coalesce(struct tsnep_queue *queue, u32 usecs);
+u32 tsnep_get_irq_coalesce(struct tsnep_queue *queue);
 
 #endif /* _TSNEP_H */

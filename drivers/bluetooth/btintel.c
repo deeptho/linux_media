@@ -9,6 +9,7 @@
 #include <linux/module.h>
 #include <linux/firmware.h>
 #include <linux/regmap.h>
+#include <linux/acpi.h>
 #include <asm/unaligned.h>
 
 #include <net/bluetooth/bluetooth.h>
@@ -24,9 +25,12 @@
 #define ECDSA_OFFSET		644
 #define ECDSA_HEADER_LEN	320
 
+#define BTINTEL_PPAG_NAME   "PPAG"
+#define BTINTEL_PPAG_PREFIX "\\_SB_.PCI0.XHCI.RHUB"
+
 #define CMD_WRITE_BOOT_PARAMS	0xfc0e
 struct cmd_write_boot_params {
-	u32 boot_addr;
+	__le32 boot_addr;
 	u8  fw_build_num;
 	u8  fw_build_ww;
 	u8  fw_build_yy;
@@ -449,6 +453,7 @@ static int btintel_version_info_tlv(struct hci_dev *hdev,
 	case 0x17:	/* TyP */
 	case 0x18:	/* Slr */
 	case 0x19:	/* Slr-F */
+	case 0x1b:      /* Mgr */
 		break;
 	default:
 		bt_dev_err(hdev, "Unsupported Intel hardware variant (0x%x)",
@@ -794,7 +799,7 @@ static void regmap_ibt_free_context(void *context)
 	kfree(context);
 }
 
-static struct regmap_bus regmap_ibt = {
+static const struct regmap_bus regmap_ibt = {
 	.read = regmap_ibt_read,
 	.write = regmap_ibt_write,
 	.gather_write = regmap_ibt_gather_write,
@@ -1275,6 +1280,63 @@ static int btintel_read_debug_features(struct hci_dev *hdev,
 	 */
 	kfree_skb(skb);
 	return 0;
+}
+
+static acpi_status btintel_ppag_callback(acpi_handle handle, u32 lvl, void *data,
+					 void **ret)
+{
+	acpi_status status;
+	size_t len;
+	struct btintel_ppag *ppag = data;
+	union acpi_object *p, *elements;
+	struct acpi_buffer string = {ACPI_ALLOCATE_BUFFER, NULL};
+	struct acpi_buffer buffer = {ACPI_ALLOCATE_BUFFER, NULL};
+	struct hci_dev *hdev = ppag->hdev;
+
+	status = acpi_get_name(handle, ACPI_FULL_PATHNAME, &string);
+	if (ACPI_FAILURE(status)) {
+		bt_dev_warn(hdev, "ACPI Failure: %s", acpi_format_exception(status));
+		return status;
+	}
+
+	if (strncmp(BTINTEL_PPAG_PREFIX, string.pointer,
+		    strlen(BTINTEL_PPAG_PREFIX))) {
+		kfree(string.pointer);
+		return AE_OK;
+	}
+
+	len = strlen(string.pointer);
+	if (strncmp((char *)string.pointer + len - 4, BTINTEL_PPAG_NAME, 4)) {
+		kfree(string.pointer);
+		return AE_OK;
+	}
+	kfree(string.pointer);
+
+	status = acpi_evaluate_object(handle, NULL, NULL, &buffer);
+	if (ACPI_FAILURE(status)) {
+		bt_dev_warn(hdev, "ACPI Failure: %s", acpi_format_exception(status));
+		return status;
+	}
+
+	p = buffer.pointer;
+	ppag = (struct btintel_ppag *)data;
+
+	if (p->type != ACPI_TYPE_PACKAGE || p->package.count != 2) {
+		kfree(buffer.pointer);
+		bt_dev_warn(hdev, "Invalid object type: %d or package count: %d",
+			    p->type, p->package.count);
+		return AE_ERROR;
+	}
+
+	elements = p->package.elements;
+
+	/* PPAG table is located at element[1] */
+	p = &elements[1];
+
+	ppag->domain = (u32)p->package.elements[0].integer.value;
+	ppag->mode = (u32)p->package.elements[1].integer.value;
+	kfree(buffer.pointer);
+	return AE_CTRL_TERMINATE;
 }
 
 static int btintel_set_debug_features(struct hci_dev *hdev,
@@ -1782,19 +1844,19 @@ static int btintel_get_fw_name(struct intel_version *ver,
 	case 0x0b:	/* SfP */
 	case 0x0c:	/* WsP */
 		snprintf(fw_name, len, "intel/ibt-%u-%u.%s",
-			le16_to_cpu(ver->hw_variant),
-			le16_to_cpu(params->dev_revid),
-			suffix);
+			 ver->hw_variant,
+			 le16_to_cpu(params->dev_revid),
+			 suffix);
 		break;
 	case 0x11:	/* JfP */
 	case 0x12:	/* ThP */
 	case 0x13:	/* HrP */
 	case 0x14:	/* CcP */
 		snprintf(fw_name, len, "intel/ibt-%u-%u-%u.%s",
-			le16_to_cpu(ver->hw_variant),
-			le16_to_cpu(ver->hw_revision),
-			le16_to_cpu(ver->fw_revision),
-			suffix);
+			 ver->hw_variant,
+			 ver->hw_revision,
+			 ver->fw_revision,
+			 suffix);
 		break;
 	default:
 		return -EINVAL;
@@ -2250,6 +2312,58 @@ error:
 	return err;
 }
 
+static void btintel_set_ppag(struct hci_dev *hdev, struct intel_version_tlv *ver)
+{
+	acpi_status status;
+	struct btintel_ppag ppag;
+	struct sk_buff *skb;
+	struct btintel_loc_aware_reg ppag_cmd;
+
+    /* PPAG is not supported if CRF is HrP2, Jfp2, JfP1 */
+	switch (ver->cnvr_top & 0xFFF) {
+	case 0x504:     /* Hrp2 */
+	case 0x202:     /* Jfp2 */
+	case 0x201:     /* Jfp1 */
+		return;
+	}
+
+	memset(&ppag, 0, sizeof(ppag));
+
+	ppag.hdev = hdev;
+	status = acpi_walk_namespace(ACPI_TYPE_ANY, ACPI_ROOT_OBJECT,
+				     ACPI_UINT32_MAX, NULL,
+				     btintel_ppag_callback, &ppag, NULL);
+
+	if (ACPI_FAILURE(status)) {
+		/* Do not log warning message if ACPI entry is not found */
+		if (status == AE_NOT_FOUND)
+			return;
+		bt_dev_warn(hdev, "PPAG: ACPI Failure: %s", acpi_format_exception(status));
+		return;
+	}
+
+	if (ppag.domain != 0x12) {
+		bt_dev_warn(hdev, "PPAG-BT Domain disabled");
+		return;
+	}
+
+	/* PPAG mode, BIT0 = 0 Disabled, BIT0 = 1 Enabled */
+	if (!(ppag.mode & BIT(0))) {
+		bt_dev_dbg(hdev, "PPAG disabled");
+		return;
+	}
+
+	ppag_cmd.mcc = cpu_to_le32(0);
+	ppag_cmd.sel = cpu_to_le32(0); /* 0 - Enable , 1 - Disable, 2 - Testing mode */
+	ppag_cmd.delta = cpu_to_le32(0);
+	skb = __hci_cmd_sync(hdev, 0xfe19, sizeof(ppag_cmd), &ppag_cmd, HCI_CMD_TIMEOUT);
+	if (IS_ERR(skb)) {
+		bt_dev_warn(hdev, "Failed to send PPAG Enable (%ld)", PTR_ERR(skb));
+		return;
+	}
+	kfree_skb(skb);
+}
+
 static int btintel_bootloader_setup_tlv(struct hci_dev *hdev,
 					struct intel_version_tlv *ver)
 {
@@ -2296,6 +2410,9 @@ static int btintel_bootloader_setup_tlv(struct hci_dev *hdev,
 
 	hci_dev_clear_flag(hdev, HCI_QUALITY_REPORT);
 
+	/* Set PPAG feature */
+	btintel_set_ppag(hdev, ver);
+
 	/* Read the Intel version information after loading the FW  */
 	err = btintel_read_version_tlv(hdev, &new_ver);
 	if (err)
@@ -2330,6 +2447,7 @@ static void btintel_set_msft_opcode(struct hci_dev *hdev, u8 hw_variant)
 	case 0x17:
 	case 0x18:
 	case 0x19:
+	case 0x1b:
 		hci_set_msft_opcode(hdev, 0xFC1E);
 		break;
 	default:
@@ -2439,26 +2557,26 @@ static int btintel_setup_combined(struct hci_dev *hdev)
 					       INTEL_ROM_LEGACY_NO_WBS_SUPPORT))
 				set_bit(HCI_QUIRK_WIDEBAND_SPEECH_SUPPORTED,
 					&hdev->quirks);
+			if (ver.hw_variant == 0x08 && ver.fw_variant == 0x22)
+				set_bit(HCI_QUIRK_VALID_LE_STATES,
+					&hdev->quirks);
 
 			err = btintel_legacy_rom_setup(hdev, &ver);
 			break;
 		case 0x0b:      /* SfP */
-		case 0x0c:      /* WsP */
 		case 0x11:      /* JfP */
 		case 0x12:      /* ThP */
 		case 0x13:      /* HrP */
 		case 0x14:      /* CcP */
+			set_bit(HCI_QUIRK_VALID_LE_STATES, &hdev->quirks);
+			fallthrough;
+		case 0x0c:	/* WsP */
 			/* Apply the device specific HCI quirks
 			 *
 			 * All Legacy bootloader devices support WBS
 			 */
 			set_bit(HCI_QUIRK_WIDEBAND_SPEECH_SUPPORTED,
 				&hdev->quirks);
-
-			/* Valid LE States quirk for JfP/ThP familiy */
-			if (ver.hw_variant == 0x11 || ver.hw_variant == 0x12)
-				set_bit(HCI_QUIRK_VALID_LE_STATES,
-					&hdev->quirks);
 
 			/* Setup MSFT Extension support */
 			btintel_set_msft_opcode(hdev, ver.hw_variant);
@@ -2522,7 +2640,7 @@ static int btintel_setup_combined(struct hci_dev *hdev)
 		 */
 		err = btintel_read_version(hdev, &ver);
 		if (err)
-			return err;
+			break;
 
 		/* Apply the device specific HCI quirks
 		 *
@@ -2530,9 +2648,8 @@ static int btintel_setup_combined(struct hci_dev *hdev)
 		 */
 		set_bit(HCI_QUIRK_WIDEBAND_SPEECH_SUPPORTED, &hdev->quirks);
 
-		/* Valid LE States quirk for JfP/ThP familiy */
-		if (ver.hw_variant == 0x11 || ver.hw_variant == 0x12)
-			set_bit(HCI_QUIRK_VALID_LE_STATES, &hdev->quirks);
+		/* Set Valid LE States quirk */
+		set_bit(HCI_QUIRK_VALID_LE_STATES, &hdev->quirks);
 
 		/* Setup MSFT Extension support */
 		btintel_set_msft_opcode(hdev, ver.hw_variant);
@@ -2542,6 +2659,7 @@ static int btintel_setup_combined(struct hci_dev *hdev)
 	case 0x17:
 	case 0x18:
 	case 0x19:
+	case 0x1b:
 		/* Display version information of TLV type */
 		btintel_version_info_tlv(hdev, &ver_tlv);
 
@@ -2564,7 +2682,8 @@ static int btintel_setup_combined(struct hci_dev *hdev)
 	default:
 		bt_dev_err(hdev, "Unsupported Intel hw variant (%u)",
 			   INTEL_HW_VARIANT(ver_tlv.cnvi_bt));
-		return -EINVAL;
+		err = -EINVAL;
+		break;
 	}
 
 exit_error:

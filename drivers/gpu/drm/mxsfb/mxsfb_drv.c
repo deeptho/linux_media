@@ -20,9 +20,9 @@
 #include <drm/drm_bridge.h>
 #include <drm/drm_connector.h>
 #include <drm/drm_drv.h>
-#include <drm/drm_fb_helper.h>
+#include <drm/drm_fbdev_generic.h>
 #include <drm/drm_fourcc.h>
-#include <drm/drm_gem_cma_helper.h>
+#include <drm/drm_gem_dma_helper.h>
 #include <drm/drm_gem_framebuffer_helper.h>
 #include <drm/drm_mode_config.h>
 #include <drm/drm_module.h>
@@ -52,6 +52,7 @@ static const struct mxsfb_devdata mxsfb_devdata[] = {
 		.hs_wdth_shift	= 24,
 		.has_overlay	= false,
 		.has_ctrl2	= false,
+		.has_crc32	= false,
 	},
 	[MXSFB_V4] = {
 		.transfer_count	= LCDC_V4_TRANSFER_COUNT,
@@ -61,6 +62,7 @@ static const struct mxsfb_devdata mxsfb_devdata[] = {
 		.hs_wdth_shift	= 18,
 		.has_overlay	= false,
 		.has_ctrl2	= true,
+		.has_crc32	= true,
 	},
 	[MXSFB_V6] = {
 		.transfer_count	= LCDC_V4_TRANSFER_COUNT,
@@ -70,19 +72,18 @@ static const struct mxsfb_devdata mxsfb_devdata[] = {
 		.hs_wdth_shift	= 18,
 		.has_overlay	= true,
 		.has_ctrl2	= true,
+		.has_crc32	= true,
 	},
 };
 
 void mxsfb_enable_axi_clk(struct mxsfb_drm_private *mxsfb)
 {
-	if (mxsfb->clk_axi)
-		clk_prepare_enable(mxsfb->clk_axi);
+	clk_prepare_enable(mxsfb->clk_axi);
 }
 
 void mxsfb_disable_axi_clk(struct mxsfb_drm_private *mxsfb)
 {
-	if (mxsfb->clk_axi)
-		clk_disable_unprepare(mxsfb->clk_axi);
+	clk_disable_unprepare(mxsfb->clk_axi);
 }
 
 static struct drm_framebuffer *
@@ -157,12 +158,19 @@ static irqreturn_t mxsfb_irq_handler(int irq, void *data)
 {
 	struct drm_device *drm = data;
 	struct mxsfb_drm_private *mxsfb = drm->dev_private;
-	u32 reg;
+	u32 reg, crc;
+	u64 vbc;
 
 	reg = readl(mxsfb->base + LCDC_CTRL1);
 
-	if (reg & CTRL1_CUR_FRAME_DONE_IRQ)
+	if (reg & CTRL1_CUR_FRAME_DONE_IRQ) {
 		drm_crtc_handle_vblank(&mxsfb->crtc);
+		if (mxsfb->crc_active) {
+			crc = readl(mxsfb->base + LCDC_V4_CRC_STAT);
+			vbc = drm_crtc_accurate_vblank_count(&mxsfb->crtc);
+			drm_crtc_add_crc_entry(&mxsfb->crtc, true, vbc, &crc);
+		}
+	}
 
 	writel(CTRL1_CUR_FRAME_DONE_IRQ, mxsfb->base + LCDC_CTRL1 + REG_CLR);
 
@@ -225,9 +233,9 @@ static int mxsfb_load(struct drm_device *drm,
 	if (IS_ERR(mxsfb->clk))
 		return PTR_ERR(mxsfb->clk);
 
-	mxsfb->clk_axi = devm_clk_get(drm->dev, "axi");
+	mxsfb->clk_axi = devm_clk_get_optional(drm->dev, "axi");
 	if (IS_ERR(mxsfb->clk_axi))
-		mxsfb->clk_axi = NULL;
+		return PTR_ERR(mxsfb->clk_axi);
 
 	mxsfb->clk_disp_axi = devm_clk_get(drm->dev, "disp_axi");
 	if (IS_ERR(mxsfb->clk_disp_axi))
@@ -314,11 +322,11 @@ static void mxsfb_unload(struct drm_device *drm)
 	pm_runtime_disable(drm->dev);
 }
 
-DEFINE_DRM_GEM_CMA_FOPS(fops);
+DEFINE_DRM_GEM_DMA_FOPS(fops);
 
 static const struct drm_driver mxsfb_driver = {
 	.driver_features	= DRIVER_GEM | DRIVER_MODESET | DRIVER_ATOMIC,
-	DRM_GEM_CMA_DRIVER_OPS,
+	DRM_GEM_DMA_DRIVER_OPS,
 	.fops	= &fops,
 	.name	= "mxsfb-drm",
 	.desc	= "MXSFB Controller DRM",

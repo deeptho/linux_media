@@ -20,6 +20,15 @@
 		};
 	};
 
+	gpio: gpio@6000d000 {
+		lan-reset-n-hog {
+			gpio-hog;
+			gpios = <TEGRA_GPIO(DD, 0) GPIO_ACTIVE_HIGH>;
+			output-high;
+			line-name = "LAN_RESET#";
+		};
+	};
+
 	pinmux@70000868 {
 		pinctrl-names = "default";
 		pinctrl-0 = <&state_default>;
@@ -239,7 +248,7 @@
 				nvidia,enable-input = <TEGRA_PIN_ENABLE>;
 			};
 			spdif-in-pk6 {
-				nvidia,pins =	"spdif_in_pk6";
+				nvidia,pins = "spdif_in_pk6";
 				nvidia,function = "hda";
 				nvidia,pull = <TEGRA_PIN_PULL_NONE>;
 				nvidia,tristate = <TEGRA_PIN_DISABLE>;
@@ -364,7 +373,7 @@
 			};
 			/* Multiplexed and therefore disabled */
 			cam-mclk-pcc0 {
-				nvidia,pins =	"cam_mclk_pcc0";
+				nvidia,pins = "cam_mclk_pcc0";
 				nvidia,function = "vi_alt3";
 				nvidia,pull = <TEGRA_PIN_PULL_DOWN>;
 				nvidia,tristate = <TEGRA_PIN_ENABLE>;
@@ -511,7 +520,7 @@
 
 			/* Colibri USBC_DET */
 			spdif-out-pk5 {
-				nvidia,pins =	"spdif_out_pk5";
+				nvidia,pins = "spdif_out_pk5";
 				nvidia,function = "rsvd2";
 				nvidia,pull = <TEGRA_PIN_PULL_NONE>;
 				nvidia,tristate = <TEGRA_PIN_DISABLE>;
@@ -849,7 +858,7 @@
 		touchscreen@41 {
 			compatible = "st,stmpe811";
 			reg = <0x41>;
-			irq-gpio = <&gpio TEGRA_GPIO(V, 0) IRQ_TYPE_LEVEL_LOW>;
+			irq-gpio = <&gpio TEGRA_GPIO(V, 0) GPIO_ACTIVE_LOW>;
 			interrupt-controller;
 			id = <0>;
 			blocks = <0x5>;
@@ -863,6 +872,11 @@
 			/* ADC converstion time: 80 clocks */
 			st,sample-time = <4>;
 			/* forbid to use ADC channels 3-0 (touch) */
+
+			stmpe_adc {
+				compatible = "st,stmpe-adc";
+				st,norequest-mask = <0x0F>;
+			};
 
 			stmpe_touchscreen {
 				compatible = "st,stmpe-ts";
@@ -879,11 +893,6 @@
 				st,settling = <3>;
 				/* 5 ms touch detect interrupt delay */
 				st,touch-det-delay = <5>;
-			};
-
-			stmpe_adc {
-				compatible = "st,stmpe-adc";
-				st,norequest-mask = <0x0F>;
 			};
 		};
 
@@ -972,7 +981,7 @@
 		vbus-supply = <&reg_lan_v_bus>;
 	};
 
-	clk32k_in: xtal1 {
+	clk32k_in: clock-xtal1 {
 		compatible = "fixed-clock";
 		#clock-cells = <0>;
 		clock-frequency = <32768>;
@@ -1051,14 +1060,5 @@
 
 		assigned-clock-parents = <&tegra_car TEGRA30_CLK_PLL_A_OUT0>,
 					 <&tegra_car TEGRA30_CLK_EXTERN1>;
-	};
-};
-
-&gpio {
-	lan-reset-n-hog {
-		gpio-hog;
-		gpios = <TEGRA_GPIO(DD, 0) GPIO_ACTIVE_HIGH>;
-		output-high;
-		line-name = "LAN_RESET#";
 	};
 };

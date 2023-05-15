@@ -10,7 +10,7 @@
 #include <linux/types.h>
 
 struct clk;
-struct clk_onecell_data;
+struct clk_hw_onecell_data;
 struct clk_ops;
 struct device;
 struct device_node;
@@ -50,16 +50,11 @@ struct mtk_gate {
 #define GATE_MTK(_id, _name, _parent, _regs, _shift, _ops)		\
 	GATE_MTK_FLAGS(_id, _name, _parent, _regs, _shift, _ops, 0)
 
-int mtk_clk_register_gates(struct device_node *node,
+int mtk_clk_register_gates(struct device *dev, struct device_node *node,
 			   const struct mtk_gate *clks, int num,
-			   struct clk_onecell_data *clk_data);
-
-int mtk_clk_register_gates_with_dev(struct device_node *node,
-				    const struct mtk_gate *clks, int num,
-				    struct clk_onecell_data *clk_data,
-				    struct device *dev);
+			   struct clk_hw_onecell_data *clk_data);
 
 void mtk_clk_unregister_gates(const struct mtk_gate *clks, int num,
-			      struct clk_onecell_data *clk_data);
+			      struct clk_hw_onecell_data *clk_data);
 
 #endif /* __DRV_CLK_GATE_H */

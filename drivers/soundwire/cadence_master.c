@@ -127,7 +127,8 @@ MODULE_PARM_DESC(cdns_mcp_int_mask, "Cadence MCP IntMask");
 
 #define CDNS_MCP_CMD_BASE			0x80
 #define CDNS_MCP_RESP_BASE			0x80
-#define CDNS_MCP_CMD_LEN			0x20
+/* FIFO can hold 8 commands */
+#define CDNS_MCP_CMD_LEN			8
 #define CDNS_MCP_CMD_WORD_LEN			0x4
 
 #define CDNS_MCP_CMD_SSP_TAG			BIT(31)
@@ -386,12 +387,11 @@ static int cdns_parity_error_injection(void *data, u64 value)
 	 * Resume Master device. If this results in a bus reset, the
 	 * Slave devices will re-attach and be re-enumerated.
 	 */
-	ret = pm_runtime_get_sync(bus->dev);
+	ret = pm_runtime_resume_and_get(bus->dev);
 	if (ret < 0 && ret != -EACCES) {
 		dev_err_ratelimited(cdns->dev,
-				    "pm_runtime_get_sync failed in %s, ret %d\n",
+				    "pm_runtime_resume_and_get failed in %s, ret %d\n",
 				    __func__, ret);
-		pm_runtime_put_noidle(bus->dev);
 		return ret;
 	}
 
@@ -545,11 +545,37 @@ cdns_fill_msg_resp(struct sdw_cdns *cdns,
 		return SDW_CMD_IGNORED;
 	}
 
-	/* fill response */
-	for (i = 0; i < count; i++)
-		msg->buf[i + offset] = FIELD_GET(CDNS_MCP_RESP_RDATA, cdns->response_buf[i]);
+	if (msg->flags == SDW_MSG_FLAG_READ) {
+		/* fill response */
+		for (i = 0; i < count; i++)
+			msg->buf[i + offset] = FIELD_GET(CDNS_MCP_RESP_RDATA,
+							 cdns->response_buf[i]);
+	}
 
 	return SDW_CMD_OK;
+}
+
+static void cdns_read_response(struct sdw_cdns *cdns)
+{
+	u32 num_resp, cmd_base;
+	int i;
+
+	/* RX_FIFO_AVAIL can be 2 entries more than the FIFO size */
+	BUILD_BUG_ON(ARRAY_SIZE(cdns->response_buf) < CDNS_MCP_CMD_LEN + 2);
+
+	num_resp = cdns_readl(cdns, CDNS_MCP_FIFOSTAT);
+	num_resp &= CDNS_MCP_RX_FIFO_AVAIL;
+	if (num_resp > ARRAY_SIZE(cdns->response_buf)) {
+		dev_warn(cdns->dev, "RX AVAIL %d too long\n", num_resp);
+		num_resp = ARRAY_SIZE(cdns->response_buf);
+	}
+
+	cmd_base = CDNS_MCP_CMD_BASE;
+
+	for (i = 0; i < num_resp; i++) {
+		cdns->response_buf[i] = cdns_readl(cdns, cmd_base);
+		cmd_base += CDNS_MCP_CMD_WORD_LEN;
+	}
 }
 
 static enum sdw_command_response
@@ -567,7 +593,7 @@ _cdns_xfer_msg(struct sdw_cdns *cdns, struct sdw_msg *msg, int cmd,
 	}
 
 	base = CDNS_MCP_CMD_BASE;
-	addr = msg->addr;
+	addr = msg->addr + offset;
 
 	for (i = 0; i < count; i++) {
 		data = FIELD_PREP(CDNS_MCP_CMD_DEV_ADDR, msg->dev_num);
@@ -593,6 +619,10 @@ _cdns_xfer_msg(struct sdw_cdns *cdns, struct sdw_msg *msg, int cmd,
 		dev_err(cdns->dev, "IO transfer timed out, cmd %d device %d addr %x len %d\n",
 			cmd, msg->dev_num, msg->addr, msg->len);
 		msg->len = 0;
+
+		/* Drain anything in the RX_FIFO */
+		cdns_read_response(cdns);
+
 		return SDW_CMD_TIMEOUT;
 	}
 
@@ -706,26 +736,24 @@ cdns_xfer_msg(struct sdw_bus *bus, struct sdw_msg *msg)
 	for (i = 0; i < msg->len / CDNS_MCP_CMD_LEN; i++) {
 		ret = _cdns_xfer_msg(cdns, msg, cmd, i * CDNS_MCP_CMD_LEN,
 				     CDNS_MCP_CMD_LEN, false);
-		if (ret < 0)
-			goto exit;
+		if (ret != SDW_CMD_OK)
+			return ret;
 	}
 
 	if (!(msg->len % CDNS_MCP_CMD_LEN))
-		goto exit;
+		return SDW_CMD_OK;
 
-	ret = _cdns_xfer_msg(cdns, msg, cmd, i * CDNS_MCP_CMD_LEN,
-			     msg->len % CDNS_MCP_CMD_LEN, false);
-
-exit:
-	return ret;
+	return _cdns_xfer_msg(cdns, msg, cmd, i * CDNS_MCP_CMD_LEN,
+			      msg->len % CDNS_MCP_CMD_LEN, false);
 }
 EXPORT_SYMBOL(cdns_xfer_msg);
 
 enum sdw_command_response
-cdns_xfer_msg_defer(struct sdw_bus *bus,
-		    struct sdw_msg *msg, struct sdw_defer *defer)
+cdns_xfer_msg_defer(struct sdw_bus *bus)
 {
 	struct sdw_cdns *cdns = bus_to_cdns(bus);
+	struct sdw_defer *defer = &bus->defer_msg;
+	struct sdw_msg *msg = defer->msg;
 	int cmd = 0, ret;
 
 	/* for defer only 1 message is supported */
@@ -736,46 +764,21 @@ cdns_xfer_msg_defer(struct sdw_bus *bus,
 	if (ret)
 		return SDW_CMD_FAIL_OTHER;
 
-	cdns->defer = defer;
-	cdns->defer->length = msg->len;
-
 	return _cdns_xfer_msg(cdns, msg, cmd, 0, msg->len, true);
 }
 EXPORT_SYMBOL(cdns_xfer_msg_defer);
 
-enum sdw_command_response
-cdns_reset_page_addr(struct sdw_bus *bus, unsigned int dev_num)
+u32 cdns_read_ping_status(struct sdw_bus *bus)
 {
 	struct sdw_cdns *cdns = bus_to_cdns(bus);
-	struct sdw_msg msg;
 
-	/* Create dummy message with valid device number */
-	memset(&msg, 0, sizeof(msg));
-	msg.dev_num = dev_num;
-
-	return cdns_program_scp_addr(cdns, &msg);
+	return cdns_readl(cdns, CDNS_MCP_SLAVE_STAT);
 }
-EXPORT_SYMBOL(cdns_reset_page_addr);
+EXPORT_SYMBOL(cdns_read_ping_status);
 
 /*
  * IRQ handling
  */
-
-static void cdns_read_response(struct sdw_cdns *cdns)
-{
-	u32 num_resp, cmd_base;
-	int i;
-
-	num_resp = cdns_readl(cdns, CDNS_MCP_FIFOSTAT);
-	num_resp &= CDNS_MCP_RX_FIFO_AVAIL;
-
-	cmd_base = CDNS_MCP_CMD_BASE;
-
-	for (i = 0; i < num_resp; i++) {
-		cdns->response_buf[i] = cdns_readl(cdns, cmd_base);
-		cmd_base += CDNS_MCP_CMD_WORD_LEN;
-	}
-}
 
 static int cdns_update_slave_status(struct sdw_cdns *cdns,
 				    u64 slave_intstat)
@@ -783,6 +786,7 @@ static int cdns_update_slave_status(struct sdw_cdns *cdns,
 	enum sdw_slave_status status[SDW_MAX_DEVICES + 1];
 	bool is_slave = false;
 	u32 mask;
+	u32 val;
 	int i, set_status;
 
 	memset(status, 0, sizeof(status));
@@ -790,41 +794,38 @@ static int cdns_update_slave_status(struct sdw_cdns *cdns,
 	for (i = 0; i <= SDW_MAX_DEVICES; i++) {
 		mask = (slave_intstat >> (i * CDNS_MCP_SLAVE_STATUS_NUM)) &
 			CDNS_MCP_SLAVE_STATUS_BITS;
-		if (!mask)
-			continue;
 
-		is_slave = true;
 		set_status = 0;
 
-		if (mask & CDNS_MCP_SLAVE_INTSTAT_RESERVED) {
-			status[i] = SDW_SLAVE_RESERVED;
-			set_status++;
+		if (mask) {
+			is_slave = true;
+
+			if (mask & CDNS_MCP_SLAVE_INTSTAT_RESERVED) {
+				status[i] = SDW_SLAVE_RESERVED;
+				set_status++;
+			}
+
+			if (mask & CDNS_MCP_SLAVE_INTSTAT_ATTACHED) {
+				status[i] = SDW_SLAVE_ATTACHED;
+				set_status++;
+			}
+
+			if (mask & CDNS_MCP_SLAVE_INTSTAT_ALERT) {
+				status[i] = SDW_SLAVE_ALERT;
+				set_status++;
+			}
+
+			if (mask & CDNS_MCP_SLAVE_INTSTAT_NPRESENT) {
+				status[i] = SDW_SLAVE_UNATTACHED;
+				set_status++;
+			}
 		}
 
-		if (mask & CDNS_MCP_SLAVE_INTSTAT_ATTACHED) {
-			status[i] = SDW_SLAVE_ATTACHED;
-			set_status++;
-		}
-
-		if (mask & CDNS_MCP_SLAVE_INTSTAT_ALERT) {
-			status[i] = SDW_SLAVE_ALERT;
-			set_status++;
-		}
-
-		if (mask & CDNS_MCP_SLAVE_INTSTAT_NPRESENT) {
-			status[i] = SDW_SLAVE_UNATTACHED;
-			set_status++;
-		}
-
-		/* first check if Slave reported multiple status */
-		if (set_status > 1) {
-			u32 val;
-
-			dev_warn_ratelimited(cdns->dev,
-					     "Slave %d reported multiple Status: %d\n",
-					     i, mask);
-
-			/* check latest status extracted from PING commands */
+		/*
+		 * check that there was a single reported Slave status and when
+		 * there is not use the latest status extracted from PING commands
+		 */
+		if (set_status != 1) {
 			val = cdns_readl(cdns, CDNS_MCP_SLAVE_STAT);
 			val >>= (i * 2);
 
@@ -843,11 +844,6 @@ static int cdns_update_slave_status(struct sdw_cdns *cdns,
 				status[i] = SDW_SLAVE_RESERVED;
 				break;
 			}
-
-			dev_warn_ratelimited(cdns->dev,
-					     "Slave %d status updated to %d\n",
-					     i, status[i]);
-
 		}
 	}
 
@@ -881,13 +877,15 @@ irqreturn_t sdw_cdns_irq(int irq, void *dev_id)
 		return IRQ_NONE;
 
 	if (int_status & CDNS_MCP_INT_RX_WL) {
+		struct sdw_bus *bus = &cdns->bus;
+		struct sdw_defer *defer = &bus->defer_msg;
+
 		cdns_read_response(cdns);
 
-		if (cdns->defer) {
-			cdns_fill_msg_resp(cdns, cdns->defer->msg,
-					   cdns->defer->length, 0);
-			complete(&cdns->defer->complete);
-			cdns->defer = NULL;
+		if (defer && defer->msg) {
+			cdns_fill_msg_resp(cdns, defer->msg,
+					   defer->length, 0);
+			complete(&defer->complete);
 		} else {
 			complete(&cdns->tx_complete);
 		}
@@ -959,21 +957,73 @@ static void cdns_update_slave_status_work(struct work_struct *work)
 		container_of(work, struct sdw_cdns, work);
 	u32 slave0, slave1;
 	u64 slave_intstat;
+	u32 device0_status;
+	int retry_count = 0;
+
+	/*
+	 * Clear main interrupt first so we don't lose any assertions
+	 * that happen during this function.
+	 */
+	cdns_writel(cdns, CDNS_MCP_INTSTAT, CDNS_MCP_INT_SLAVE_MASK);
 
 	slave0 = cdns_readl(cdns, CDNS_MCP_SLAVE_INTSTAT0);
 	slave1 = cdns_readl(cdns, CDNS_MCP_SLAVE_INTSTAT1);
+
+	/*
+	 * Clear the bits before handling so we don't lose any
+	 * bits that re-assert.
+	 */
+	cdns_writel(cdns, CDNS_MCP_SLAVE_INTSTAT0, slave0);
+	cdns_writel(cdns, CDNS_MCP_SLAVE_INTSTAT1, slave1);
 
 	/* combine the two status */
 	slave_intstat = ((u64)slave1 << 32) | slave0;
 
 	dev_dbg_ratelimited(cdns->dev, "Slave status change: 0x%llx\n", slave_intstat);
 
+update_status:
 	cdns_update_slave_status(cdns, slave_intstat);
-	cdns_writel(cdns, CDNS_MCP_SLAVE_INTSTAT0, slave0);
-	cdns_writel(cdns, CDNS_MCP_SLAVE_INTSTAT1, slave1);
 
-	/* clear and unmask Slave interrupt now */
-	cdns_writel(cdns, CDNS_MCP_INTSTAT, CDNS_MCP_INT_SLAVE_MASK);
+	/*
+	 * When there is more than one peripheral per link, it's
+	 * possible that a deviceB becomes attached after we deal with
+	 * the attachment of deviceA. Since the hardware does a
+	 * logical AND, the attachment of the second device does not
+	 * change the status seen by the driver.
+	 *
+	 * In that case, clearing the registers above would result in
+	 * the deviceB never being detected - until a change of status
+	 * is observed on the bus.
+	 *
+	 * To avoid this race condition, re-check if any device0 needs
+	 * attention with PING commands. There is no need to check for
+	 * ALERTS since they are not allowed until a non-zero
+	 * device_number is assigned.
+	 *
+	 * Do not clear the INTSTAT0/1. While looping to enumerate devices on
+	 * #0 there could be status changes on other devices - these must
+	 * be kept in the INTSTAT so they can be handled when all #0 devices
+	 * have been handled.
+	 */
+
+	device0_status = cdns_readl(cdns, CDNS_MCP_SLAVE_STAT);
+	device0_status &= 3;
+
+	if (device0_status == SDW_SLAVE_ATTACHED) {
+		if (retry_count++ < SDW_MAX_DEVICES) {
+			dev_dbg_ratelimited(cdns->dev,
+					    "Device0 detected after clearing status, iteration %d\n",
+					    retry_count);
+			slave_intstat = CDNS_MCP_SLAVE_INTSTAT_ATTACHED;
+			goto update_status;
+		} else {
+			dev_err_ratelimited(cdns->dev,
+					    "Device0 detected after %d iterations\n",
+					    retry_count);
+		}
+	}
+
+	/* unmask Slave interrupt now */
 	cdns_updatel(cdns, CDNS_MCP_INTMASK,
 		     CDNS_MCP_INT_SLAVE_MASK, CDNS_MCP_INT_SLAVE_MASK);
 
@@ -1655,47 +1705,45 @@ int cdns_set_sdw_stream(struct snd_soc_dai *dai,
 			void *stream, int direction)
 {
 	struct sdw_cdns *cdns = snd_soc_dai_get_drvdata(dai);
-	struct sdw_cdns_dma_data *dma;
+	struct sdw_cdns_dai_runtime *dai_runtime;
+
+	dai_runtime = cdns->dai_runtime_array[dai->id];
 
 	if (stream) {
 		/* first paranoia check */
-		if (direction == SNDRV_PCM_STREAM_PLAYBACK)
-			dma = dai->playback_dma_data;
-		else
-			dma = dai->capture_dma_data;
-
-		if (dma) {
+		if (dai_runtime) {
 			dev_err(dai->dev,
-				"dma_data already allocated for dai %s\n",
+				"dai_runtime already allocated for dai %s\n",
 				dai->name);
 			return -EINVAL;
 		}
 
-		/* allocate and set dma info */
-		dma = kzalloc(sizeof(*dma), GFP_KERNEL);
-		if (!dma)
+		/* allocate and set dai_runtime info */
+		dai_runtime = kzalloc(sizeof(*dai_runtime), GFP_KERNEL);
+		if (!dai_runtime)
 			return -ENOMEM;
 
-		dma->stream_type = SDW_STREAM_PCM;
+		dai_runtime->stream_type = SDW_STREAM_PCM;
 
-		dma->bus = &cdns->bus;
-		dma->link_id = cdns->instance;
+		dai_runtime->bus = &cdns->bus;
+		dai_runtime->link_id = cdns->instance;
 
-		dma->stream = stream;
+		dai_runtime->stream = stream;
+		dai_runtime->direction = direction;
 
-		if (direction == SNDRV_PCM_STREAM_PLAYBACK)
-			dai->playback_dma_data = dma;
-		else
-			dai->capture_dma_data = dma;
+		cdns->dai_runtime_array[dai->id] = dai_runtime;
 	} else {
-		/* for NULL stream we release allocated dma_data */
-		if (direction == SNDRV_PCM_STREAM_PLAYBACK) {
-			kfree(dai->playback_dma_data);
-			dai->playback_dma_data = NULL;
-		} else {
-			kfree(dai->capture_dma_data);
-			dai->capture_dma_data = NULL;
+		/* second paranoia check */
+		if (!dai_runtime) {
+			dev_err(dai->dev,
+				"dai_runtime not allocated for dai %s\n",
+				dai->name);
+			return -EINVAL;
 		}
+
+		/* for NULL stream we release allocated dai_runtime */
+		kfree(dai_runtime);
+		cdns->dai_runtime_array[dai->id] = NULL;
 	}
 	return 0;
 }

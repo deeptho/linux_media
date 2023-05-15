@@ -645,7 +645,7 @@ nouveau_gem_pushbuf_reloc_apply(struct nouveau_cli *cli,
 				struct drm_nouveau_gem_pushbuf_reloc *reloc,
 				struct drm_nouveau_gem_pushbuf_bo *bo)
 {
-	int ret = 0;
+	long ret = 0;
 	unsigned i;
 
 	for (i = 0; i < req->nr_relocs; i++) {
@@ -679,7 +679,7 @@ nouveau_gem_pushbuf_reloc_apply(struct nouveau_cli *cli,
 		}
 
 		if (!nvbo->kmap.virtual) {
-			ret = ttm_bo_kmap(&nvbo->bo, 0, nvbo->bo.resource->num_pages,
+			ret = ttm_bo_kmap(&nvbo->bo, 0, PFN_UP(nvbo->bo.base.size),
 					  &nvbo->kmap);
 			if (ret) {
 				NV_PRINTK(err, cli, "failed kmap for reloc\n");
@@ -703,9 +703,14 @@ nouveau_gem_pushbuf_reloc_apply(struct nouveau_cli *cli,
 				data |= r->vor;
 		}
 
-		ret = ttm_bo_wait(&nvbo->bo, false, false);
+		ret = dma_resv_wait_timeout(nvbo->bo.base.resv,
+					    DMA_RESV_USAGE_BOOKKEEP,
+					    false, 15 * HZ);
+		if (ret == 0)
+			ret = -EBUSY;
 		if (ret) {
-			NV_PRINTK(err, cli, "reloc wait_idle failed: %d\n", ret);
+			NV_PRINTK(err, cli, "reloc wait_idle failed: %ld\n",
+				  ret);
 			break;
 		}
 
@@ -868,8 +873,7 @@ revalidate:
 			if (unlikely(cmd != req->suffix0)) {
 				if (!nvbo->kmap.virtual) {
 					ret = ttm_bo_kmap(&nvbo->bo, 0,
-							  nvbo->bo.resource->
-							  num_pages,
+							  PFN_UP(nvbo->bo.base.size),
 							  &nvbo->kmap);
 					if (ret) {
 						WIND_RING(chan);
@@ -962,7 +966,8 @@ nouveau_gem_ioctl_cpu_prep(struct drm_device *dev, void *data,
 		return -ENOENT;
 	nvbo = nouveau_gem_object(gem);
 
-	lret = dma_resv_wait_timeout(nvbo->bo.base.resv, write, true,
+	lret = dma_resv_wait_timeout(nvbo->bo.base.resv,
+				     dma_resv_usage_rw(write), true,
 				     no_wait ? 0 : 30 * HZ);
 	if (!lret)
 		ret = -EBUSY;

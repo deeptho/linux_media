@@ -310,7 +310,11 @@ static void dpu_hw_sspp_setup_format(struct dpu_hw_pipe *ctx,
 			ctx->mdp->highest_bank_bit << 18);
 		switch (ctx->catalog->caps->ubwc_version) {
 		case DPU_HW_UBWC_VER_10:
-			/* TODO: UBWC v1 case */
+			fast_clear = fmt->alpha_enable ? BIT(31) : 0;
+			DPU_REG_WRITE(c, SSPP_UBWC_STATIC_CTRL,
+					fast_clear | (ctx->mdp->ubwc_swizzle & 0x1) |
+					BIT(8) |
+					(ctx->mdp->highest_bank_bit << 4));
 			break;
 		case DPU_HW_UBWC_VER_20:
 			fast_clear = fmt->alpha_enable ? BIT(31) : 0;
@@ -627,7 +631,7 @@ static void dpu_hw_sspp_setup_qos_ctrl(struct dpu_hw_pipe *ctx,
 }
 
 static void dpu_hw_sspp_setup_cdp(struct dpu_hw_pipe *ctx,
-		struct dpu_hw_pipe_cdp_cfg *cfg,
+		struct dpu_hw_cdp_cfg *cfg,
 		enum dpu_sspp_multirect_index index)
 {
 	u32 idx;
@@ -761,7 +765,7 @@ int _dpu_hw_sspp_init_debugfs(struct dpu_hw_pipe *hw_pipe, struct dpu_kms *kms, 
 
 static const struct dpu_sspp_cfg *_sspp_offset(enum dpu_sspp sspp,
 		void __iomem *addr,
-		struct dpu_mdss_cfg *catalog,
+		const struct dpu_mdss_cfg *catalog,
 		struct dpu_hw_blk_reg_map *b)
 {
 	int i;
@@ -769,10 +773,7 @@ static const struct dpu_sspp_cfg *_sspp_offset(enum dpu_sspp sspp,
 	if ((sspp < SSPP_MAX) && catalog && addr && b) {
 		for (i = 0; i < catalog->sspp_count; i++) {
 			if (sspp == catalog->sspp[i].id) {
-				b->base_off = addr;
-				b->blk_off = catalog->sspp[i].base;
-				b->length = catalog->sspp[i].len;
-				b->hwversion = catalog->hwversion;
+				b->blk_addr = addr + catalog->sspp[i].base;
 				b->log_mask = DPU_DBG_MASK_SSPP;
 				return &catalog->sspp[i];
 			}
@@ -783,8 +784,7 @@ static const struct dpu_sspp_cfg *_sspp_offset(enum dpu_sspp sspp,
 }
 
 struct dpu_hw_pipe *dpu_hw_sspp_init(enum dpu_sspp idx,
-		void __iomem *addr, struct dpu_mdss_cfg *catalog,
-		bool is_virtual_pipe)
+		void __iomem *addr, const struct dpu_mdss_cfg *catalog)
 {
 	struct dpu_hw_pipe *hw_pipe;
 	const struct dpu_sspp_cfg *cfg;

@@ -23,6 +23,8 @@
 
 #include "amdgpu_reset.h"
 #include "aldebaran.h"
+#include "sienna_cichlid.h"
+#include "smu_v13_0_10.h"
 
 int amdgpu_reset_add_handler(struct amdgpu_reset_control *reset_ctl,
 			     struct amdgpu_reset_handler *handler)
@@ -40,6 +42,12 @@ int amdgpu_reset_init(struct amdgpu_device *adev)
 	case IP_VERSION(13, 0, 2):
 		ret = aldebaran_reset_init(adev);
 		break;
+	case IP_VERSION(11, 0, 7):
+		ret = sienna_cichlid_reset_init(adev);
+		break;
+	case IP_VERSION(13, 0, 10):
+		ret = smu_v13_0_10_reset_init(adev);
+		break;
 	default:
 		break;
 	}
@@ -54,6 +62,12 @@ int amdgpu_reset_fini(struct amdgpu_device *adev)
 	switch (adev->ip_versions[MP1_HWIP][0]) {
 	case IP_VERSION(13, 0, 2):
 		ret = aldebaran_reset_fini(adev);
+		break;
+	case IP_VERSION(11, 0, 7):
+		ret = sienna_cichlid_reset_fini(adev);
+		break;
+	case IP_VERSION(13, 0, 10):
+		ret = smu_v13_0_10_reset_fini(adev);
 		break;
 	default:
 		break;
@@ -132,6 +146,7 @@ struct amdgpu_reset_domain *amdgpu_reset_create_reset_domain(enum amdgpu_reset_d
 	}
 
 	atomic_set(&reset_domain->in_gpu_reset, 0);
+	atomic_set(&reset_domain->reset_res, 0);
 	init_rwsem(&reset_domain->sem);
 
 	return reset_domain;

@@ -42,6 +42,8 @@
 #define ACPI_BATTERY_STATE_CHARGING	0x2
 #define ACPI_BATTERY_STATE_CRITICAL	0x4
 
+#define MAX_STRING_LENGTH	64
+
 MODULE_AUTHOR("Paul Diefenbaugh");
 MODULE_AUTHOR("Alexey Starikovskiy <astarikovskiy@suse.de>");
 MODULE_DESCRIPTION("ACPI Battery Driver");
@@ -52,7 +54,6 @@ static bool battery_driver_registered;
 static int battery_bix_broken_package;
 static int battery_notification_delay_ms;
 static int battery_ac_is_broken;
-static int battery_quirk_notcharging;
 static unsigned int cache_time = 1000;
 module_param(cache_time, uint, 0644);
 MODULE_PARM_DESC(cache_time, "cache time in milliseconds");
@@ -119,10 +120,10 @@ struct acpi_battery {
 	int capacity_granularity_1;
 	int capacity_granularity_2;
 	int alarm;
-	char model_number[32];
-	char serial_number[32];
-	char type[32];
-	char oem_info[32];
+	char model_number[MAX_STRING_LENGTH];
+	char serial_number[MAX_STRING_LENGTH];
+	char type[MAX_STRING_LENGTH];
+	char oem_info[MAX_STRING_LENGTH];
 	int state;
 	int power_unit;
 	unsigned long flags;
@@ -216,10 +217,8 @@ static int acpi_battery_get_property(struct power_supply *psy,
 			val->intval = POWER_SUPPLY_STATUS_CHARGING;
 		else if (acpi_battery_is_charged(battery))
 			val->intval = POWER_SUPPLY_STATUS_FULL;
-		else if (battery_quirk_notcharging)
-			val->intval = POWER_SUPPLY_STATUS_NOT_CHARGING;
 		else
-			val->intval = POWER_SUPPLY_STATUS_UNKNOWN;
+			val->intval = POWER_SUPPLY_STATUS_NOT_CHARGING;
 		break;
 	case POWER_SUPPLY_PROP_PRESENT:
 		val->intval = acpi_battery_present(battery);
@@ -440,16 +439,25 @@ static int extract_package(struct acpi_battery *battery,
 		element = &package->package.elements[i];
 		if (offsets[i].mode) {
 			u8 *ptr = (u8 *)battery + offsets[i].offset;
+			u32 len = MAX_STRING_LENGTH;
 
-			if (element->type == ACPI_TYPE_STRING ||
-			    element->type == ACPI_TYPE_BUFFER)
-				strncpy(ptr, element->string.pointer, 32);
-			else if (element->type == ACPI_TYPE_INTEGER) {
-				strncpy(ptr, (u8 *)&element->integer.value,
-					sizeof(u64));
-				ptr[sizeof(u64)] = 0;
-			} else
+			switch (element->type) {
+			case ACPI_TYPE_BUFFER:
+				if (len > element->buffer.length + 1)
+					len = element->buffer.length + 1;
+
+				fallthrough;
+			case ACPI_TYPE_STRING:
+				strscpy(ptr, element->string.pointer, len);
+
+				break;
+			case ACPI_TYPE_INTEGER:
+				strscpy(ptr, (u8 *)&element->integer.value, sizeof(u64) + 1);
+
+				break;
+			default:
 				*ptr = 0; /* don't have value */
+			}
 		} else {
 			int *x = (int *)((u8 *)battery + offsets[i].offset);
 			*x = (element->type == ACPI_TYPE_INTEGER) ?
@@ -699,7 +707,8 @@ static void __battery_hook_unregister(struct acpi_battery_hook *hook, int lock)
 	if (lock)
 		mutex_lock(&hook_mutex);
 	list_for_each_entry(battery, &acpi_battery_list, list) {
-		hook->remove_battery(battery->bat);
+		if (!hook->remove_battery(battery->bat, hook))
+			power_supply_changed(battery->bat);
 	}
 	list_del(&hook->list);
 	if (lock)
@@ -727,7 +736,7 @@ void battery_hook_register(struct acpi_battery_hook *hook)
 	 * its attributes.
 	 */
 	list_for_each_entry(battery, &acpi_battery_list, list) {
-		if (hook->add_battery(battery->bat)) {
+		if (hook->add_battery(battery->bat, hook)) {
 			/*
 			 * If a add-battery returns non-zero,
 			 * the registration of the extension has failed,
@@ -738,6 +747,8 @@ void battery_hook_register(struct acpi_battery_hook *hook)
 			__battery_hook_unregister(hook, 0);
 			goto end;
 		}
+
+		power_supply_changed(battery->bat);
 	}
 	pr_info("new extension: %s\n", hook->name);
 end:
@@ -765,7 +776,7 @@ static void battery_hook_add_battery(struct acpi_battery *battery)
 	 * during the battery module initialization.
 	 */
 	list_for_each_entry_safe(hook_node, tmp, &battery_hook_list, list) {
-		if (hook_node->add_battery(battery->bat)) {
+		if (hook_node->add_battery(battery->bat, hook_node)) {
 			/*
 			 * The notification of the extensions has failed, to
 			 * prevent further errors we will unload the extension.
@@ -788,7 +799,7 @@ static void battery_hook_remove_battery(struct acpi_battery *battery)
 	 * custom attributes from the battery.
 	 */
 	list_for_each_entry(hook, &battery_hook_list, list) {
-		hook->remove_battery(battery->bat);
+		hook->remove_battery(battery->bat, hook);
 	}
 	/* Then, just remove the battery from the list */
 	list_del(&battery->list);
@@ -1105,12 +1116,6 @@ battery_ac_is_broken_quirk(const struct dmi_system_id *d)
 	return 0;
 }
 
-static int __init battery_quirk_not_charging(const struct dmi_system_id *d)
-{
-	battery_quirk_notcharging = 1;
-	return 0;
-}
-
 static const struct dmi_system_id bat_dmi_table[] __initconst = {
 	{
 		/* NEC LZ750/LS */
@@ -1137,19 +1142,6 @@ static const struct dmi_system_id bat_dmi_table[] __initconst = {
 			DMI_MATCH(DMI_BIOS_VERSION, "3BAIR1013"),
 			/* Above matches are too generic, add bios-date match */
 			DMI_MATCH(DMI_BIOS_DATE, "08/22/2014"),
-		},
-	},
-	{
-		/*
-		 * On Lenovo ThinkPads the BIOS specification defines
-		 * a state when the bits for charging and discharging
-		 * are both set to 0. That state is "Not Charging".
-		 */
-		.callback = battery_quirk_not_charging,
-		.ident = "Lenovo ThinkPad",
-		.matches = {
-			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
-			DMI_MATCH(DMI_PRODUCT_VERSION, "ThinkPad"),
 		},
 	},
 	{
@@ -1230,12 +1222,12 @@ fail:
 	return result;
 }
 
-static int acpi_battery_remove(struct acpi_device *device)
+static void acpi_battery_remove(struct acpi_device *device)
 {
 	struct acpi_battery *battery = NULL;
 
 	if (!device || !acpi_driver_data(device))
-		return -EINVAL;
+		return;
 	device_init_wakeup(&device->dev, 0);
 	battery = acpi_driver_data(device);
 	unregister_pm_notifier(&battery->pm_nb);
@@ -1243,7 +1235,6 @@ static int acpi_battery_remove(struct acpi_device *device)
 	mutex_destroy(&battery->lock);
 	mutex_destroy(&battery->sysfs_lock);
 	kfree(battery);
-	return 0;
 }
 
 #ifdef CONFIG_PM_SLEEP

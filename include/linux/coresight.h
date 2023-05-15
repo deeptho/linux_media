@@ -61,6 +61,7 @@ enum coresight_dev_subtype_source {
 	CORESIGHT_DEV_SUBTYPE_SOURCE_PROC,
 	CORESIGHT_DEV_SUBTYPE_SOURCE_BUS,
 	CORESIGHT_DEV_SUBTYPE_SOURCE_SOFTWARE,
+	CORESIGHT_DEV_SUBTYPE_SOURCE_OTHERS,
 };
 
 enum coresight_dev_subtype_helper {
@@ -314,14 +315,11 @@ struct coresight_ops_link {
  * Operations available for sources.
  * @cpu_id:	returns the value of the CPU number this component
  *		is associated to.
- * @trace_id:	returns the value of the component's trace ID as known
- *		to the HW.
  * @enable:	enables tracing for a source.
  * @disable:	disables tracing for a source.
  */
 struct coresight_ops_source {
 	int (*cpu_id)(struct coresight_device *csdev);
-	int (*trace_id)(struct coresight_device *csdev);
 	int (*enable)(struct coresight_device *csdev,
 		      struct perf_event *event,  u32 mode);
 	void (*disable)(struct coresight_device *csdev,
@@ -370,6 +368,29 @@ static inline u32 csdev_access_relaxed_read32(struct csdev_access *csa,
 		return readl_relaxed(csa->base + offset);
 
 	return csa->read(offset, true, false);
+}
+
+static inline u64 csdev_access_relaxed_read_pair(struct csdev_access *csa,
+						 u32 lo_offset, u32 hi_offset)
+{
+	if (likely(csa->io_mem)) {
+		return readl_relaxed(csa->base + lo_offset) |
+			((u64)readl_relaxed(csa->base + hi_offset) << 32);
+	}
+
+	return csa->read(lo_offset, true, false) | (csa->read(hi_offset, true, false) << 32);
+}
+
+static inline void csdev_access_relaxed_write_pair(struct csdev_access *csa, u64 val,
+						   u32 lo_offset, u32 hi_offset)
+{
+	if (likely(csa->io_mem)) {
+		writel_relaxed((u32)val, csa->base + lo_offset);
+		writel_relaxed((u32)(val >> 32), csa->base + hi_offset);
+	} else {
+		csa->write((u32)val, lo_offset, true, false);
+		csa->write((u32)(val >> 32), hi_offset, true, false);
+	}
 }
 
 static inline u32 csdev_access_read32(struct csdev_access *csa, u32 offset)

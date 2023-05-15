@@ -458,7 +458,7 @@ static const struct snd_soc_component_driver atmel_classd_cpu_dai_component = {
 	.num_controls		= ARRAY_SIZE(atmel_classd_snd_controls),
 	.idle_bias_on		= 1,
 	.use_pmdown_time	= 1,
-	.endianness		= 1,
+	.legacy_dai_naming	= 1,
 };
 
 /* ASoC sound card */
@@ -616,11 +616,6 @@ unregister_codec:
 	return ret;
 }
 
-static int atmel_classd_remove(struct platform_device *pdev)
-{
-	return 0;
-}
-
 static struct platform_driver atmel_classd_driver = {
 	.driver	= {
 		.name		= "atmel-classd",
@@ -628,7 +623,6 @@ static struct platform_driver atmel_classd_driver = {
 		.pm		= &snd_soc_pm_ops,
 	},
 	.probe	= atmel_classd_probe,
-	.remove	= atmel_classd_remove,
 };
 module_platform_driver(atmel_classd_driver);
 

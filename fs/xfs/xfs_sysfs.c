@@ -69,7 +69,7 @@ static struct attribute *xfs_mp_attrs[] = {
 };
 ATTRIBUTE_GROUPS(xfs_mp);
 
-struct kobj_type xfs_mp_ktype = {
+const struct kobj_type xfs_mp_ktype = {
 	.release = xfs_sysfs_release,
 	.sysfs_ops = &xfs_sysfs_ops,
 	.default_groups = xfs_mp_groups,
@@ -228,6 +228,29 @@ pwork_threads_show(
 	return sysfs_emit(buf, "%d\n", xfs_globals.pwork_threads);
 }
 XFS_SYSFS_ATTR_RW(pwork_threads);
+
+static ssize_t
+larp_store(
+	struct kobject	*kobject,
+	const char	*buf,
+	size_t		count)
+{
+	ssize_t		ret;
+
+	ret = kstrtobool(buf, &xfs_globals.larp);
+	if (ret < 0)
+		return ret;
+	return count;
+}
+
+STATIC ssize_t
+larp_show(
+	struct kobject	*kobject,
+	char		*buf)
+{
+	return snprintf(buf, PAGE_SIZE, "%d\n", xfs_globals.larp);
+}
+XFS_SYSFS_ATTR_RW(larp);
 #endif /* DEBUG */
 
 static struct attribute *xfs_dbg_attrs[] = {
@@ -237,12 +260,13 @@ static struct attribute *xfs_dbg_attrs[] = {
 	ATTR_LIST(always_cow),
 #ifdef DEBUG
 	ATTR_LIST(pwork_threads),
+	ATTR_LIST(larp),
 #endif
 	NULL,
 };
 ATTRIBUTE_GROUPS(xfs_dbg);
 
-struct kobj_type xfs_dbg_ktype = {
+const struct kobj_type xfs_dbg_ktype = {
 	.release = xfs_sysfs_release,
 	.sysfs_ops = &xfs_sysfs_ops,
 	.default_groups = xfs_dbg_groups,
@@ -300,7 +324,7 @@ static struct attribute *xfs_stats_attrs[] = {
 };
 ATTRIBUTE_GROUPS(xfs_stats);
 
-struct kobj_type xfs_stats_ktype = {
+const struct kobj_type xfs_stats_ktype = {
 	.release = xfs_sysfs_release,
 	.sysfs_ops = &xfs_sysfs_ops,
 	.default_groups = xfs_stats_groups,
@@ -386,7 +410,7 @@ static struct attribute *xfs_log_attrs[] = {
 };
 ATTRIBUTE_GROUPS(xfs_log);
 
-struct kobj_type xfs_log_ktype = {
+const struct kobj_type xfs_log_ktype = {
 	.release = xfs_sysfs_release,
 	.sysfs_ops = &xfs_sysfs_ops,
 	.default_groups = xfs_log_groups,
@@ -540,13 +564,13 @@ static struct attribute *xfs_error_attrs[] = {
 };
 ATTRIBUTE_GROUPS(xfs_error);
 
-static struct kobj_type xfs_error_cfg_ktype = {
+static const struct kobj_type xfs_error_cfg_ktype = {
 	.release = xfs_sysfs_release,
 	.sysfs_ops = &xfs_sysfs_ops,
 	.default_groups = xfs_error_groups,
 };
 
-static struct kobj_type xfs_error_ktype = {
+static const struct kobj_type xfs_error_ktype = {
 	.release = xfs_sysfs_release,
 	.sysfs_ops = &xfs_sysfs_ops,
 };

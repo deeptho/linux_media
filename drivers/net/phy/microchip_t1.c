@@ -28,11 +28,15 @@
 
 /* Interrupt Source Register */
 #define LAN87XX_INTERRUPT_SOURCE                (0x18)
+#define LAN87XX_INTERRUPT_SOURCE_2              (0x08)
 
 /* Interrupt Mask Register */
 #define LAN87XX_INTERRUPT_MASK                  (0x19)
 #define LAN87XX_MASK_LINK_UP                    (0x0004)
 #define LAN87XX_MASK_LINK_DOWN                  (0x0002)
+
+#define LAN87XX_INTERRUPT_MASK_2                (0x09)
+#define LAN87XX_MASK_COMM_RDY			BIT(10)
 
 /* MISC Control 1 Register */
 #define LAN87XX_CTRL_1                          (0x11)
@@ -68,7 +72,12 @@
 #define T1_POST_LCK_MUFACT_CFG_REG	0x1C
 #define T1_TX_RX_FIFO_CFG_REG		0x02
 #define T1_TX_LPF_FIR_CFG_REG		0x55
+#define T1_COEF_CLK_PWR_DN_CFG		0x04
+#define T1_COEF_RW_CTL_CFG		0x0D
 #define T1_SQI_CONFIG_REG		0x2E
+#define T1_SQI_CONFIG2_REG		0x4A
+#define T1_DCQ_SQI_REG			0xC3
+#define T1_DCQ_SQI_MSK			GENMASK(3, 1)
 #define T1_MDIO_CONTROL2_REG		0x10
 #define T1_INTERRUPT_SOURCE_REG		0x18
 #define T1_INTERRUPT2_SOURCE_REG	0x08
@@ -81,6 +90,9 @@
 
 #define T1_MODE_STAT_REG		0x11
 #define T1_LINK_UP_MSK			BIT(0)
+
+/* SQI defines */
+#define LAN87XX_MAX_SQI			0x07
 
 #define DRIVER_AUTHOR	"Nisar Sayed <nisar.sayed@microchip.com>"
 #define DRIVER_DESC	"Microchip LAN87XX/LAN937x T1 PHY driver"
@@ -233,15 +245,42 @@ static int lan87xx_config_rgmii_delay(struct phy_device *phydev)
 			   PHYACC_ATTR_BANK_MISC, LAN87XX_CTRL_1, rc);
 }
 
+static int lan87xx_phy_init_cmd(struct phy_device *phydev,
+				const struct access_ereg_val *cmd_seq, int cnt)
+{
+	int ret, i;
+
+	for (i = 0; i < cnt; i++) {
+		if (cmd_seq[i].mode == PHYACC_ATTR_MODE_POLL &&
+		    cmd_seq[i].bank == PHYACC_ATTR_BANK_SMI) {
+			ret = access_smi_poll_timeout(phydev,
+						      cmd_seq[i].offset,
+						      cmd_seq[i].val,
+						      cmd_seq[i].mask);
+		} else {
+			ret = access_ereg(phydev, cmd_seq[i].mode,
+					  cmd_seq[i].bank, cmd_seq[i].offset,
+					  cmd_seq[i].val);
+		}
+		if (ret < 0)
+			return ret;
+	}
+
+	return ret;
+}
+
 static int lan87xx_phy_init(struct phy_device *phydev)
 {
-	static const struct access_ereg_val init[] = {
+	static const struct access_ereg_val hw_init[] = {
 		/* TXPD/TXAMP6 Configs */
 		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_AFE,
 		  T1_AFE_PORT_CFG1_REG,       0x002D,  0 },
 		/* HW_Init Hi and Force_ED */
 		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_SMI,
 		  T1_POWER_DOWN_CONTROL_REG,  0x0308,  0 },
+	};
+
+	static const struct access_ereg_val slave_init[] = {
 		/* Equalizer Full Duplex Freeze - T1 Slave */
 		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_DSP,
 		  T1_EQ_FD_STG1_FRZ_CFG,     0x0002,  0 },
@@ -255,6 +294,9 @@ static int lan87xx_phy_init(struct phy_device *phydev)
 		  T1_EQ_WT_FD_LCK_FRZ_CFG,    0x0002,  0 },
 		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_DSP,
 		  T1_PST_EQ_LCK_STG1_FRZ_CFG, 0x0002,  0 },
+	};
+
+	static const struct access_ereg_val phy_init[] = {
 		/* Slave Full Duplex Multi Configs */
 		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_DSP,
 		  T1_SLV_FD_MULT_CFG_REG,     0x0D53,  0 },
@@ -346,9 +388,20 @@ static int lan87xx_phy_init(struct phy_device *phydev)
 		  T1_TX_LPF_FIR_CFG_REG, 0x1011, 0 },
 		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_DSP,
 		  T1_TX_LPF_FIR_CFG_REG, 0x1000, 0 },
+		/* Setup SQI measurement */
+		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_DSP,
+		  T1_COEF_CLK_PWR_DN_CFG,	0x16d6, 0 },
 		/* SQI enable */
 		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_DSP,
 		  T1_SQI_CONFIG_REG,		0x9572, 0 },
+		/* SQI select mode 5 */
+		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_DSP,
+		  T1_SQI_CONFIG2_REG,		0x0001, 0 },
+		/* Throws the first SQI reading */
+		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_DSP,
+		  T1_COEF_RW_CTL_CFG,		0x0301,	0 },
+		{ PHYACC_ATTR_MODE_READ, PHYACC_ATTR_BANK_DSP,
+		  T1_DCQ_SQI_REG,		0,	0 },
 		/* Flag LPS and WUR as idle errors */
 		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_SMI,
 		  T1_MDIO_CONTROL2_REG,		0x0014, 0 },
@@ -374,7 +427,7 @@ static int lan87xx_phy_init(struct phy_device *phydev)
 		{ PHYACC_ATTR_MODE_WRITE, PHYACC_ATTR_BANK_SMI,
 		  T1_POWER_DOWN_CONTROL_REG,	0x0300, 0 },
 	};
-	int rc, i;
+	int rc;
 
 	/* phy Soft reset */
 	rc = genphy_soft_reset(phydev);
@@ -382,20 +435,27 @@ static int lan87xx_phy_init(struct phy_device *phydev)
 		return rc;
 
 	/* PHY Initialization */
-	for (i = 0; i < ARRAY_SIZE(init); i++) {
-		if (init[i].mode == PHYACC_ATTR_MODE_POLL &&
-		    init[i].bank == PHYACC_ATTR_BANK_SMI) {
-			rc = access_smi_poll_timeout(phydev,
-						     init[i].offset,
-						     init[i].val,
-						     init[i].mask);
-		} else {
-			rc = access_ereg(phydev, init[i].mode, init[i].bank,
-					 init[i].offset, init[i].val);
-		}
+	rc = lan87xx_phy_init_cmd(phydev, hw_init, ARRAY_SIZE(hw_init));
+	if (rc < 0)
+		return rc;
+
+	rc = genphy_read_master_slave(phydev);
+	if (rc)
+		return rc;
+
+	/* The following squence needs to run only if phydev is in
+	 * slave mode.
+	 */
+	if (phydev->master_slave_state == MASTER_SLAVE_STATE_SLAVE) {
+		rc = lan87xx_phy_init_cmd(phydev, slave_init,
+					  ARRAY_SIZE(slave_init));
 		if (rc < 0)
 			return rc;
 	}
+
+	rc = lan87xx_phy_init_cmd(phydev, phy_init, ARRAY_SIZE(phy_init));
+	if (rc < 0)
+		return rc;
 
 	return lan87xx_config_rgmii_delay(phydev);
 }
@@ -405,17 +465,55 @@ static int lan87xx_phy_config_intr(struct phy_device *phydev)
 	int rc, val = 0;
 
 	if (phydev->interrupts == PHY_INTERRUPT_ENABLED) {
-		/* unmask all source and clear them before enable */
-		rc = phy_write(phydev, LAN87XX_INTERRUPT_MASK, 0x7FFF);
-		rc = phy_read(phydev, LAN87XX_INTERRUPT_SOURCE);
-		val = LAN87XX_MASK_LINK_UP | LAN87XX_MASK_LINK_DOWN;
+		/* clear all interrupt */
 		rc = phy_write(phydev, LAN87XX_INTERRUPT_MASK, val);
-	} else {
-		rc = phy_write(phydev, LAN87XX_INTERRUPT_MASK, val);
-		if (rc)
+		if (rc < 0)
 			return rc;
 
 		rc = phy_read(phydev, LAN87XX_INTERRUPT_SOURCE);
+		if (rc < 0)
+			return rc;
+
+		rc = access_ereg(phydev, PHYACC_ATTR_MODE_WRITE,
+				 PHYACC_ATTR_BANK_MISC,
+				 LAN87XX_INTERRUPT_MASK_2, val);
+		if (rc < 0)
+			return rc;
+
+		rc = access_ereg(phydev, PHYACC_ATTR_MODE_READ,
+				 PHYACC_ATTR_BANK_MISC,
+				 LAN87XX_INTERRUPT_SOURCE_2, 0);
+		if (rc < 0)
+			return rc;
+
+		/* enable link down and comm ready interrupt */
+		val = LAN87XX_MASK_LINK_DOWN;
+		rc = phy_write(phydev, LAN87XX_INTERRUPT_MASK, val);
+		if (rc < 0)
+			return rc;
+
+		val = LAN87XX_MASK_COMM_RDY;
+		rc = access_ereg(phydev, PHYACC_ATTR_MODE_WRITE,
+				 PHYACC_ATTR_BANK_MISC,
+				 LAN87XX_INTERRUPT_MASK_2, val);
+	} else {
+		rc = phy_write(phydev, LAN87XX_INTERRUPT_MASK, val);
+		if (rc < 0)
+			return rc;
+
+		rc = phy_read(phydev, LAN87XX_INTERRUPT_SOURCE);
+		if (rc < 0)
+			return rc;
+
+		rc = access_ereg(phydev, PHYACC_ATTR_MODE_WRITE,
+				 PHYACC_ATTR_BANK_MISC,
+				 LAN87XX_INTERRUPT_MASK_2, val);
+		if (rc < 0)
+			return rc;
+
+		rc = access_ereg(phydev, PHYACC_ATTR_MODE_READ,
+				 PHYACC_ATTR_BANK_MISC,
+				 LAN87XX_INTERRUPT_SOURCE_2, 0);
 	}
 
 	return rc < 0 ? rc : 0;
@@ -424,6 +522,14 @@ static int lan87xx_phy_config_intr(struct phy_device *phydev)
 static irqreturn_t lan87xx_handle_interrupt(struct phy_device *phydev)
 {
 	int irq_status;
+
+	irq_status  = access_ereg(phydev, PHYACC_ATTR_MODE_READ,
+				  PHYACC_ATTR_BANK_MISC,
+				  LAN87XX_INTERRUPT_SOURCE_2, 0);
+	if (irq_status < 0) {
+		phy_error(phydev);
+		return IRQ_NONE;
+	}
 
 	irq_status = phy_read(phydev, LAN87XX_INTERRUPT_SOURCE);
 	if (irq_status < 0) {
@@ -706,6 +812,7 @@ static int lan87xx_read_status(struct phy_device *phydev)
 static int lan87xx_config_aneg(struct phy_device *phydev)
 {
 	u16 ctl = 0;
+	int ret;
 
 	switch (phydev->master_slave_set) {
 	case MASTER_SLAVE_CFG_MASTER_FORCE:
@@ -721,7 +828,36 @@ static int lan87xx_config_aneg(struct phy_device *phydev)
 		return -EOPNOTSUPP;
 	}
 
-	return phy_modify_changed(phydev, MII_CTRL1000, CTL1000_AS_MASTER, ctl);
+	ret = phy_modify_changed(phydev, MII_CTRL1000, CTL1000_AS_MASTER, ctl);
+	if (ret == 1)
+		return phy_init_hw(phydev);
+
+	return ret;
+}
+
+static int lan87xx_get_sqi(struct phy_device *phydev)
+{
+	u8 sqi_value = 0;
+	int rc;
+
+	rc = access_ereg(phydev, PHYACC_ATTR_MODE_WRITE,
+			 PHYACC_ATTR_BANK_DSP, T1_COEF_RW_CTL_CFG, 0x0301);
+	if (rc < 0)
+		return rc;
+
+	rc = access_ereg(phydev, PHYACC_ATTR_MODE_READ,
+			 PHYACC_ATTR_BANK_DSP, T1_DCQ_SQI_REG, 0x0);
+	if (rc < 0)
+		return rc;
+
+	sqi_value = FIELD_GET(T1_DCQ_SQI_MSK, rc);
+
+	return sqi_value;
+}
+
+static int lan87xx_get_sqi_max(struct phy_device *phydev)
+{
+	return LAN87XX_MAX_SQI;
 }
 
 static struct phy_driver microchip_t1_phy_driver[] = {
@@ -737,6 +873,8 @@ static struct phy_driver microchip_t1_phy_driver[] = {
 		.resume         = genphy_resume,
 		.config_aneg    = lan87xx_config_aneg,
 		.read_status	= lan87xx_read_status,
+		.get_sqi	= lan87xx_get_sqi,
+		.get_sqi_max	= lan87xx_get_sqi_max,
 		.cable_test_start = lan87xx_cable_test_start,
 		.cable_test_get_status = lan87xx_cable_test_get_status,
 	},
@@ -746,10 +884,14 @@ static struct phy_driver microchip_t1_phy_driver[] = {
 		.flags          = PHY_POLL_CABLE_TEST,
 		.features	= PHY_BASIC_T1_FEATURES,
 		.config_init	= lan87xx_config_init,
+		.config_intr    = lan87xx_phy_config_intr,
+		.handle_interrupt = lan87xx_handle_interrupt,
 		.suspend	= genphy_suspend,
 		.resume		= genphy_resume,
 		.config_aneg    = lan87xx_config_aneg,
 		.read_status	= lan87xx_read_status,
+		.get_sqi	= lan87xx_get_sqi,
+		.get_sqi_max	= lan87xx_get_sqi_max,
 		.cable_test_start = lan87xx_cable_test_start,
 		.cable_test_get_status = lan87xx_cable_test_get_status,
 	}

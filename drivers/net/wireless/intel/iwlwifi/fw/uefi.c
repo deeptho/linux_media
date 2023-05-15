@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
- * Copyright(c) 2021 Intel Corporation
+ * Copyright(c) 2021-2022 Intel Corporation
  */
 
 #include "iwl-drv.h"
@@ -19,20 +19,14 @@
 
 void *iwl_uefi_get_pnvm(struct iwl_trans *trans, size_t *len)
 {
-	struct efivar_entry *pnvm_efivar;
 	void *data;
 	unsigned long package_size;
-	int err;
+	efi_status_t status;
 
 	*len = 0;
 
-	pnvm_efivar = kzalloc(sizeof(*pnvm_efivar), GFP_KERNEL);
-	if (!pnvm_efivar)
-		return ERR_PTR(-ENOMEM);
-
-	memcpy(&pnvm_efivar->var.VariableName, IWL_UEFI_OEM_PNVM_NAME,
-	       sizeof(IWL_UEFI_OEM_PNVM_NAME));
-	pnvm_efivar->var.VendorGuid = IWL_EFI_VAR_GUID;
+	if (!efi_rt_services_supported(EFI_RT_SUPPORTED_GET_VARIABLE))
+		return ERR_PTR(-ENODEV);
 
 	/*
 	 * TODO: we hardcode a maximum length here, because reading
@@ -42,26 +36,21 @@ void *iwl_uefi_get_pnvm(struct iwl_trans *trans, size_t *len)
 	package_size = IWL_HARDCODED_PNVM_SIZE;
 
 	data = kmalloc(package_size, GFP_KERNEL);
-	if (!data) {
-		data = ERR_PTR(-ENOMEM);
-		goto out;
-	}
+	if (!data)
+		return ERR_PTR(-ENOMEM);
 
-	err = efivar_entry_get(pnvm_efivar, NULL, &package_size, data);
-	if (err) {
+	status = efi.get_variable(IWL_UEFI_OEM_PNVM_NAME, &IWL_EFI_VAR_GUID,
+				  NULL, &package_size, data);
+	if (status != EFI_SUCCESS) {
 		IWL_DEBUG_FW(trans,
-			     "PNVM UEFI variable not found %d (len %lu)\n",
-			     err, package_size);
+			     "PNVM UEFI variable not found 0x%lx (len %lu)\n",
+			     status, package_size);
 		kfree(data);
-		data = ERR_PTR(err);
-		goto out;
+		return ERR_PTR(-ENOENT);
 	}
 
 	IWL_DEBUG_FW(trans, "Read PNVM from UEFI with size %lu\n", package_size);
 	*len = package_size;
-
-out:
-	kfree(pnvm_efivar);
 
 	return data;
 }
@@ -211,21 +200,15 @@ static void *iwl_uefi_reduce_power_parse(struct iwl_trans *trans,
 
 void *iwl_uefi_get_reduced_power(struct iwl_trans *trans, size_t *len)
 {
-	struct efivar_entry *reduce_power_efivar;
 	struct pnvm_sku_package *package;
 	void *data = NULL;
 	unsigned long package_size;
-	int err;
+	efi_status_t status;
 
 	*len = 0;
 
-	reduce_power_efivar = kzalloc(sizeof(*reduce_power_efivar), GFP_KERNEL);
-	if (!reduce_power_efivar)
-		return ERR_PTR(-ENOMEM);
-
-	memcpy(&reduce_power_efivar->var.VariableName, IWL_UEFI_REDUCED_POWER_NAME,
-	       sizeof(IWL_UEFI_REDUCED_POWER_NAME));
-	reduce_power_efivar->var.VendorGuid = IWL_EFI_VAR_GUID;
+	if (!efi_rt_services_supported(EFI_RT_SUPPORTED_GET_VARIABLE))
+		return ERR_PTR(-ENODEV);
 
 	/*
 	 * TODO: we hardcode a maximum length here, because reading
@@ -235,19 +218,17 @@ void *iwl_uefi_get_reduced_power(struct iwl_trans *trans, size_t *len)
 	package_size = IWL_HARDCODED_REDUCE_POWER_SIZE;
 
 	package = kmalloc(package_size, GFP_KERNEL);
-	if (!package) {
-		package = ERR_PTR(-ENOMEM);
-		goto out;
-	}
+	if (!package)
+		return ERR_PTR(-ENOMEM);
 
-	err = efivar_entry_get(reduce_power_efivar, NULL, &package_size, package);
-	if (err) {
+	status = efi.get_variable(IWL_UEFI_REDUCED_POWER_NAME, &IWL_EFI_VAR_GUID,
+				  NULL, &package_size, data);
+	if (status != EFI_SUCCESS) {
 		IWL_DEBUG_FW(trans,
-			     "Reduced Power UEFI variable not found %d (len %lu)\n",
-			     err, package_size);
+			     "Reduced Power UEFI variable not found 0x%lx (len %lu)\n",
+			     status, package_size);
 		kfree(package);
-		data = ERR_PTR(err);
-		goto out;
+		return ERR_PTR(-ENOENT);
 	}
 
 	IWL_DEBUG_FW(trans, "Read reduced power from UEFI with size %lu\n",
@@ -262,11 +243,65 @@ void *iwl_uefi_get_reduced_power(struct iwl_trans *trans, size_t *len)
 
 	kfree(package);
 
-out:
-	kfree(reduce_power_efivar);
-
 	return data;
 }
+
+static int iwl_uefi_step_parse(struct uefi_cnv_common_step_data *common_step_data,
+			       struct iwl_trans *trans)
+{
+	if (common_step_data->revision != 1)
+		return -EINVAL;
+
+	trans->mbx_addr_0_step = (u32)common_step_data->revision |
+		(u32)common_step_data->cnvi_eq_channel << 8 |
+		(u32)common_step_data->cnvr_eq_channel << 16 |
+		(u32)common_step_data->radio1 << 24;
+	trans->mbx_addr_1_step = (u32)common_step_data->radio2;
+	return 0;
+}
+
+void iwl_uefi_get_step_table(struct iwl_trans *trans)
+{
+	struct uefi_cnv_common_step_data *data;
+	unsigned long package_size;
+	efi_status_t status;
+	int ret;
+
+	if (trans->trans_cfg->device_family < IWL_DEVICE_FAMILY_AX210)
+		return;
+
+	if (!efi_rt_services_supported(EFI_RT_SUPPORTED_GET_VARIABLE))
+		return;
+
+	/* TODO: we hardcode a maximum length here, because reading
+	 * from the UEFI is not working.  To implement this properly,
+	 * we have to call efivar_entry_size().
+	 */
+	package_size = IWL_HARDCODED_STEP_SIZE;
+
+	data = kmalloc(package_size, GFP_KERNEL);
+	if (!data)
+		return;
+
+	status = efi.get_variable(IWL_UEFI_STEP_NAME, &IWL_EFI_VAR_GUID,
+				  NULL, &package_size, data);
+	if (status != EFI_SUCCESS) {
+		IWL_DEBUG_FW(trans,
+			     "STEP UEFI variable not found 0x%lx\n", status);
+		goto out_free;
+	}
+
+	IWL_DEBUG_FW(trans, "Read STEP from UEFI with size %lu\n",
+		     package_size);
+
+	ret = iwl_uefi_step_parse(data, trans);
+	if (ret < 0)
+		IWL_DEBUG_FW(trans, "Cannot read STEP tables. rev is invalid\n");
+
+out_free:
+	kfree(data);
+}
+IWL_EXPORT_SYMBOL(iwl_uefi_get_step_table);
 
 #ifdef CONFIG_ACPI
 static int iwl_uefi_sgom_parse(struct uefi_cnv_wlan_sgom_data *sgom_data,
@@ -304,21 +339,14 @@ static int iwl_uefi_sgom_parse(struct uefi_cnv_wlan_sgom_data *sgom_data,
 void iwl_uefi_get_sgom_table(struct iwl_trans *trans,
 			     struct iwl_fw_runtime *fwrt)
 {
-	struct efivar_entry *sgom_efivar;
 	struct uefi_cnv_wlan_sgom_data *data;
 	unsigned long package_size;
-	int err, ret;
+	efi_status_t status;
+	int ret;
 
-	if (!fwrt->geo_enabled)
+	if (!fwrt->geo_enabled ||
+	    !efi_rt_services_supported(EFI_RT_SUPPORTED_GET_VARIABLE))
 		return;
-
-	sgom_efivar = kzalloc(sizeof(*sgom_efivar), GFP_KERNEL);
-	if (!sgom_efivar)
-		return;
-
-	memcpy(&sgom_efivar->var.VariableName, IWL_UEFI_SGOM_NAME,
-	       sizeof(IWL_UEFI_SGOM_NAME));
-	sgom_efivar->var.VendorGuid = IWL_EFI_VAR_GUID;
 
 	/* TODO: we hardcode a maximum length here, because reading
 	 * from the UEFI is not working.  To implement this properly,
@@ -327,15 +355,14 @@ void iwl_uefi_get_sgom_table(struct iwl_trans *trans,
 	package_size = IWL_HARDCODED_SGOM_SIZE;
 
 	data = kmalloc(package_size, GFP_KERNEL);
-	if (!data) {
-		data = ERR_PTR(-ENOMEM);
-		goto out;
-	}
+	if (!data)
+		return;
 
-	err = efivar_entry_get(sgom_efivar, NULL, &package_size, data);
-	if (err) {
+	status = efi.get_variable(IWL_UEFI_SGOM_NAME, &IWL_EFI_VAR_GUID,
+				  NULL, &package_size, data);
+	if (status != EFI_SUCCESS) {
 		IWL_DEBUG_FW(trans,
-			     "SGOM UEFI variable not found %d\n", err);
+			     "SGOM UEFI variable not found 0x%lx\n", status);
 		goto out_free;
 	}
 
@@ -349,8 +376,6 @@ void iwl_uefi_get_sgom_table(struct iwl_trans *trans,
 out_free:
 	kfree(data);
 
-out:
-	kfree(sgom_efivar);
 }
 IWL_EXPORT_SYMBOL(iwl_uefi_get_sgom_table);
 #endif /* CONFIG_ACPI */

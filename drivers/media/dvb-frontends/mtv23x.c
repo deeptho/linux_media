@@ -671,7 +671,7 @@ static int mtv_configTS(struct mtv23x_dev*dev)
 {
 	u8 REG9F;
 	int temp;
-	
+
 	regmap_write(dev->regmap,MAP_SEL_REG,FEC_PAGE);
 	regmap_read(dev->regmap,0x9F,&temp);
 	REG9F = temp & 0x55;
@@ -735,10 +735,10 @@ static int rtv_softReset(struct mtv23x_dev*dev)
 		regmap_write(dev->regmap,MAP_SEL_REG,LPOFDM_PAGE);
 	else
 		regmap_write(dev->regmap,MAP_SEL_REG,OFDM_PAGE);
-	
+
 	regmap_update_bits(dev->regmap,0x10, 0x01, 0x01);
 	regmap_update_bits(dev->regmap,0x10, 0x01, 0x00);
-	
+
 	regmap_write(dev->regmap,MAP_SEL_REG,FEC_PAGE);
 	regmap_update_bits(dev->regmap,0xFB, 0x01, 0x01);
 	regmap_update_bits(dev->regmap,0xFB, 0x01, 0x00);
@@ -753,7 +753,7 @@ static int mtv23x_init(struct dvb_frontend *fe)
 	int ret,i,temp,read0,read1 ;
 	u8 rev_num;
 	u8 ALDO_OUT = 6,DLDO_OUT = 1;
-	
+
 	ret  = regmap_write(dev->regmap,MAP_SEL_REG,TOP_PAGE);
 	ret |= regmap_write(dev->regmap,0x0C,0xC3);
 	for(i = 0; i < 100 ; i++){
@@ -766,7 +766,7 @@ static int mtv23x_init(struct dvb_frontend *fe)
 	}
 	dev_err(&client->dev,"MTV23x Power on failed!!\n");
 	return -1;
-	
+
 RTV_POWER_ON_SUCCESS:
 	ret  = regmap_write(dev->regmap,MAP_SEL_REG,RF_PAGE);
 	ret |= regmap_read(dev->regmap,0x10,&temp);
@@ -812,7 +812,7 @@ RTV_POWER_ON_SUCCESS:
 	regmap_write(dev->regmap,0x34, 0x9F);
 	regmap_write(dev->regmap,0x35, 0xFF);
 	regmap_write(dev->regmap,0x36, 0x01);
-	
+
 	regmap_write(dev->regmap,0x71, 0xAA);
 	regmap_write(dev->regmap,0x8E, 0x15);
 
@@ -868,7 +868,7 @@ RTV_POWER_ON_SUCCESS:
 
 	mtv_configTS(dev);
 	rtv_softReset(dev);
-	
+
 	return 0;
 
 
@@ -881,7 +881,7 @@ err:
 static int rtvRF_LockCheck(struct mtv23x_dev*dev,u8 bCheckBlock)
 {
 	int temp, i = 0,ret = 0;
-	
+
 	u8 nLockCheck = 0;
 
 	regmap_write(dev->regmap,MAP_SEL_REG,RF_PAGE);
@@ -932,27 +932,27 @@ static int rtvRF_SetOfdmPara(struct mtv23x_dev*dev,enum E_RTV_SERVICE_TYPE eServ
 	int nNumAdcType = 0;
 	const struct RTV_ADC_CFG_INFO *ptOfdmCfgTbl = NULL;
 	int freqMHz = dwChFreqKHz / 1000;
-	
+
 	struct RTV_ADC_CFG_INFO g_atAdcCfgTbl_ISDBT_6MHz[] = {
 	/*8*/	 {0x00, 0x06, 0x48, 0x2E, 0x29,0x10410410,0x1B6C8B43,0x208208,0x41},
 	/*9*/	 {0x00, 0x04, 0x36, 0x2E, 0x29,0x0E72AE47,0x18607BCA,0x1CE55C,0x39},
 	/*19.2*/ {0x08, 0x05, 0x48, 0x2E, 0x29,0x6C5C1B17,0x00000000,0x0D8B83,0x1B},
 	/*20.0*/ {0x08, 0x05, 0x4B, 0x2E, 0x29,0x68068068,0x00000000,0x0D00D0,0x1A},
-	/*20.48*/{0x08, 0x19, 0x80, 0x6E, 0x29,0x65965965,0x00000000,0x0CB2CB,0x19} 
+	/*20.48*/{0x08, 0x19, 0x80, 0x6E, 0x29,0x65965965,0x00000000,0x0CB2CB,0x19}
 	};
 	struct RTV_ADC_CFG_INFO g_atAdcCfgTbl_ISDBT_7MHz[] = {
 	/*8*/	 {0x00, 0x06, 0x48, 0x2E, 0x29,0x12F684BD,0x1B6C8B43,0x25ED09,0x4B},
 	/*9*/	 {0x00, 0x04, 0x36, 0x2E, 0x29,0x10DB20A8,0x18607BCA,0x21B641,0x43},
 	/*19.2*/ {0x08, 0x05, 0x48, 0x2E, 0x29,0x7E6B74F0,0x00000000,0x0FCD6E,0x1F},
 	/*20.0*/ {0x08, 0x05, 0x4B, 0x2E, 0x29,0x795CEB24,0x00000000,0x0F2B9D,0x1E},
-	/*20.48*/{0x08, 0x19, 0x80, 0x6E, 0x29,0x7684BDA1,0x00000000,0x0ED097,0x1D} 
+	/*20.48*/{0x08, 0x19, 0x80, 0x6E, 0x29,0x7684BDA1,0x00000000,0x0ED097,0x1D}
 	};
 	struct RTV_ADC_CFG_INFO g_atAdcCfgTbl_ISDBT_8MHz[] = {
 	/*8*/	 {0x00, 0x06, 0x48, 0x2E, 0x29,0x15AC056B,0x1B6C8B43,0x2B580A,0x56},
 	/*9*/	 {0x00, 0x04, 0x36, 0x2E, 0x29,0x13439309,0x18607BCA,0x268726,0x4D},
 	/*19.2*/ {0x08, 0x05, 0x48, 0x2E, 0x29,0x907ACEC9,0x00000000,0x120F59,0x24},
 	/*20.0*/ {0x08, 0x05, 0x4B, 0x2E, 0x29,0x8AB355E0,0x00000000,0x11566A,0x22},
-	/*20.48*/{0x08, 0x19, 0x80, 0x6E, 0x29,0x877321DC,0x00000000,0x10EE64,0x21} 
+	/*20.48*/{0x08, 0x19, 0x80, 0x6E, 0x29,0x877321DC,0x00000000,0x10EE64,0x21}
 	};
 	switch (eServiceType) {
 	case RTV_SERVICE_UHF_ISDBT_1seg:
@@ -1137,7 +1137,7 @@ static int rtvRF_ConfigureClkCKSYN(struct mtv23x_dev*dev,enum E_RTV_BANDWIDTH_TY
 	u8 WR6D = 0, WR6E = 0, WR70 = 0, WR71 = 0;
 	u8 WR2A = 0, WR72 = 0, WR73 = 0, WR74 = 0, WR75 = 0;
 
-	const u16 g_atBW_TABLE_CKSYN[MAX_NUM_RTV_BW_MODE_TYPE][9] = 
+	const u16 g_atBW_TABLE_CKSYN[MAX_NUM_RTV_BW_MODE_TYPE][9] =
 	{
 	/*RTV_BW_MODE_5MHZ*/	{0x19,0x180,0x01,0x01,0x2E,0x13,0x0E,0x01,0x29},
 	/*RTV_BW_MODE_6MHZ*/	{0x19,0x180,0x01,0x01,0x2E,0x13,0x0E,0x01,0x29},
@@ -1191,14 +1191,14 @@ static int rtvRF_ConfigureIIRFilter(struct mtv23x_dev*dev,enum E_RTV_BANDWIDTH_T
 {
 	int temp;
 	u8 WR95 = 0;
-	int g_atBW_TABLE_IIR[MAX_NUM_RTV_BW_MODE_TYPE][14] = 
+	int g_atBW_TABLE_IIR[MAX_NUM_RTV_BW_MODE_TYPE][14] =
 	{
 	/*RTV_BW_MODE_5MHZ*/	{0x02,0xBB83E,0x436A1,0xC12C0,0xC3472,0x43762,0xC1CD3,0x43000,0x43000,0x43000,0x43000,0x43000,0x43000,0x398FD},
 	/*RTV_BW_MODE_6MHZ*/	{0x02,0x3F019,0x43426,0xC108E,0xC3063,0x43405,0xC1C85,0x43000,0x43000,0x43000,0x43000,0x43000,0x43000,0x3B1B1},
 	/*RTV_BW_MODE_7MHZ*/	{0x02,0x416DF,0x43084,0xBFBDC,0xC1331,0x41CF0,0xC1C18,0x43000,0x43000,0x43000,0x43000,0x43000,0x43000,0x3B78B}, //19.2MHz
 	/*RTV_BW_MODE_8MHZ*/	{0x02,0x41F50,0x41B43,0xBF8A5,0xBF1E8,0x413E4,0xC1BEC,0x43000,0x43000,0x43000,0x43000,0x43000,0x43000,0x3BDB2},  //19.2MHz IIR
-	/*RTV_BW_MODE_430KHZ*/	{0x02,0x43721,0x43400,0xBFDE1,0x3D238,0x4329D,0xC1965,0x43000,0x43000,0x43000,0x43000,0x43000,0x43000,0x371E2},  
-	/*RTV_BW_MODE_500KHZ*/	{0x03,0x435CF,0x43466,0xC1185,0x43000,0x43000,0x43000,0x43000,0x43000,0x43000,0x43000,0x43000,0x43000,0x3B27E}, 
+	/*RTV_BW_MODE_430KHZ*/	{0x02,0x43721,0x43400,0xBFDE1,0x3D238,0x4329D,0xC1965,0x43000,0x43000,0x43000,0x43000,0x43000,0x43000,0x371E2},
+	/*RTV_BW_MODE_500KHZ*/	{0x03,0x435CF,0x43466,0xC1185,0x43000,0x43000,0x43000,0x43000,0x43000,0x43000,0x43000,0x43000,0x43000,0x3B27E},
 	/*RTV_BW_MODE_571KHZ*/	{0x02,0x43000,0x43000,0x43000,0x43000,0x43000,0x43000,0x43000,0x43000,0x43000,0x43000,0x43000,0x43000,0x43000},
 	/*RTV_BW_MODE_768KHZ*/	{0x02,0xC17A9,0x437A7,0xC1414,0xC38C3,0x439AA,0xC1DD4,0x43000,0x43000,0x43000,0x43000,0x43000,0x43000,0x3B394},
 	/*RTV_BW_MODE_1290KHZ*/ {0x02,0xC37D0,0x43989,0xC1523,0xBF6D4,0x43B26,0xC1DFB,0x43000,0x43000,0x43000,0x43000,0x43000,0x43000,0x3732E}
@@ -1256,7 +1256,7 @@ static int rtvRF_ConfigureBBA(struct mtv23x_dev*dev,enum E_RTV_BANDWIDTH_TYPE eB
 {
 	int temp;
 	u8 WR3E = 0, WR3F = 0, WR50 = 0, WR51 = 0, WR4F = 0, WR4E = 0, WR77 = 0;
-	int g_atBW_TABLE_BBA[MAX_NUM_RTV_BW_MODE_TYPE][7] = 
+	int g_atBW_TABLE_BBA[MAX_NUM_RTV_BW_MODE_TYPE][7] =
 	{
 	/*RTV_BW_MODE_5MHZ*/	{0x2D,0x20,0x03,0x03,0x02,0x02,0x01},
 	/*RTV_BW_MODE_6MHZ*/	{0x2D,0x20,0x03,0x03,0x02,0x02,0x01},
@@ -1301,7 +1301,7 @@ static int rtvRF_ConfigureADC(struct mtv23x_dev*dev,enum E_RTV_BANDWIDTH_TYPE eB
 	u8 WRCD = 0, WRCE = 0;
 	u8 WRD1 = 0, WRD2 = 0, WRD3 = 0, WRD5 = 0, WRD6 = 0, WRD7 = 0;
 	u8 WRD8 = 0, WRD9 = 0, WRDA = 0;
-	u8 g_atBW_TABLE_ADC[MAX_NUM_RTV_BW_MODE_TYPE][47] = 
+	u8 g_atBW_TABLE_ADC[MAX_NUM_RTV_BW_MODE_TYPE][47] =
 	{
 	/*RTV_BW_MODE_5MHZ*/	{0x00,0x00,0x00,0x00,0x24,0x24,0x00,0x00,0x0A,0x20,0x1F,0x12,0x20,0x13,0x20,0x00,0x00,0x00,0x02,0x35,0x49,0x49,0x4A,0x4A,0x4A,0x4A,0x4A,0x4A,0x12,0x10,0x1F,0x1F,0x1F,0x10,0x1F,0x1F,0x1F,0x10,0x1F,0x1F,0x1F,0x30,0x30,0x30,0x18,0x00,0x00},
 	/*RTV_BW_MODE_6MHZ*/	{0x00,0x00,0x00,0x00,0x24,0x24,0x00,0x00,0x0A,0x20,0x1F,0x12,0x20,0x13,0x20,0x00,0x00,0x00,0x02,0x35,0x4F,0x4F,0x4A,0x4A,0x4A,0x4A,0x4A,0x4A,0x12,0x10,0x1F,0x1F,0x1F,0x10,0x1F,0x1F,0x1F,0x10,0x1F,0x1F,0x1F,0x30,0x30,0x30,0x18,0x00,0x00},
@@ -1414,7 +1414,7 @@ static int rtvRF_Lna_Tuning(struct mtv23x_dev*dev,u32 dwLoFreq)
 	u8 WR8E = 0, WR8F = 0;
 	u8 WR90 = 0, WR91 = 0, WR92 = 0, WR87 = 0, WR93 = 0, WR94 = 0;
 	int temp;
-	 const u8 g_atLNA_TABLE[20][29] = 
+	 const u8 g_atLNA_TABLE[20][29] =
 	{
 	/* 80 - 90*/ {0x07,0x02,0x0A,0x03,0x03,0x07,0x00,0x00,0x0F,0x00,0x03,0x03,0x1F,0x00,0x00,0x00,0x1F,0x00,0x00,0x00,0x3F,0x00,0x00,0x00,0x3F,0x00,0x00,0x00,0x00},
 	/* 90 - 100*/{0x07,0x02,0x0A,0x03,0x02,0x07,0x00,0x00,0x0F,0x00,0x03,0x03,0x1F,0x00,0x00,0x00,0x1F,0x00,0x00,0x00,0x3F,0x00,0x00,0x00,0x3F,0x00,0x00,0x00,0x00},
@@ -1754,7 +1754,7 @@ static int rtvRF_SelectService(struct mtv23x_dev*dev,enum E_RTV_SERVICE_TYPE eSe
 
 		regmap_write(dev->regmap,0xFC, 0x83);
 		regmap_write(dev->regmap,0xFF, 0x03);
-		
+
 #if 0
 		regmap_write(dev->regmap,0x44, 0xE8);
 		regmap_write(dev->regmap,0x47, 0x40);
@@ -1828,7 +1828,7 @@ static int rtvRF_SetFrequency(struct mtv23x_dev*dev,enum E_RTV_SERVICE_TYPE eSer
 	u8 pllf_mul = 0, r_div = 4;
 	u32 dwPLLN = 0, dwPLLF = 0, dwPLLNF = 0;
 	u32 dwPllFreq = 0, dwLoFreq = 0;
-	
+
 	regmap_write(dev->regmap,MAP_SEL_REG,RF_PAGE);
 	rtvRF_ConfigureClkCKSYN(dev,eBwType);
 	rtvRF_ConfigureIIRFilter(dev,eBwType);
@@ -2196,7 +2196,7 @@ static s32 rtvMTV23x_GetRSSI(struct mtv23x_dev*dev)
 	s32 nRssi = 0;
 	s32 nRssiAppDelta = 4*10;
 	int RD11 = 0, GVBB = 0;
-	
+
 	if (dev->rtv_1seglpmode)
 		nRssiAppDelta = 0;
 
@@ -2250,7 +2250,7 @@ static s32 rtvMTV23x_GetRSSI(struct mtv23x_dev*dev)
 	return nRssi + nRssiAppDelta;
 }
 
-static int mtv23x_read_status(struct dvb_frontend *fe, enum fe_status *status) 
+static int mtv23x_read_status(struct dvb_frontend *fe, enum fe_status *status)
 {
 	struct i2c_client*client = fe->demodulator_priv;
 	struct mtv23x_dev*dev = i2c_get_clientdata(client);
@@ -2260,11 +2260,11 @@ static int mtv23x_read_status(struct dvb_frontend *fe, enum fe_status *status)
 	int lock_st = 0, rssi = 0, cnr = 0;
 
 	rssi = rtvMTV23x_GetRSSI(dev);
-	
+
 	c->strength.len = 2;
 	c->strength.stat[0].scale = FE_SCALE_DECIBEL;
 	c->strength.stat[0].svalue = rssi * 100;
-	
+
 	c->strength.stat[1].scale = FE_SCALE_RELATIVE;
 	c->strength.stat[1].uvalue = (1000 + rssi) * 65;
 
@@ -2285,7 +2285,7 @@ static int mtv23x_read_status(struct dvb_frontend *fe, enum fe_status *status)
 
 	regmap_write(dev->regmap,MAP_SEL_REG,FEC_PAGE);
 	regmap_read(dev->regmap,0x10,&TMCCL);
-	
+
 	if (TMCCL & 0x01)
 		lock_st |= RTV_ISDBT_TMCC_LOCK_MASK;
 
@@ -2381,7 +2381,7 @@ static int mtv23x_read_ber(struct dvb_frontend *fe,u32 *ber)
 		c->post_bit_count.stat[0].scale = FE_SCALE_COUNTER;
 		c->post_bit_count.stat[0].uvalue = period*8*204;
 	}
-	
+
 	*ber = ber_temp/1000;
 	return 0;
 
@@ -2413,13 +2413,13 @@ static struct dvb_frontend_ops mtv23x_ops = {
 	.read_snr = mtv23x_read_snr,
 	.read_ber = mtv23x_read_ber,
 };
-static int mtv23x_probe(struct i2c_client*client,
-						const struct i2c_device_id *id)
+
+static int mtv23x_probe(struct i2c_client*client)
 {
 	struct mtv23x_config *cfg = client->dev.platform_data;
 	struct mtv23x_dev *dev ;
 	int ret,temp;
-		
+
 	static const struct regmap_config regmap_config = {
 		.reg_bits = 8,
 		.val_bits = 8,
@@ -2456,11 +2456,11 @@ static int mtv23x_probe(struct i2c_client*client,
 	dev->fe.demodulator_priv = client;
 	*cfg->fe	= &dev->fe;
 	i2c_set_clientdata(client,dev);
-	
-	dev_info(&client->dev, "RAONTECH MTV23X successfully identified\n");	
+
+	dev_info(&client->dev, "RAONTECH MTV23X successfully identified\n");
 
 	return 0;
-	
+
 err_regmap_exit:
 	regmap_exit(dev->regmap);
 err_kfree:
@@ -2469,13 +2469,13 @@ err:
 	dev_dbg(&client->dev,"failed = %d\n",ret);
 	return ret;
 }
+
 static int mtv23x_remove(struct i2c_client*client)
 {
 	struct mtv23x_dev*dev = i2c_get_clientdata(client);
 
 	regmap_exit(dev->regmap);
 	kfree(dev);
-
 	return 0;
 }
 
@@ -2491,7 +2491,7 @@ static struct i2c_driver mtv23x_driver = {
 	.driver = {
 		.name = "mtv23x",
 	},
-	.probe = mtv23x_probe,
+	.probe_new = mtv23x_probe,
 	.remove = mtv23x_remove,
 	.id_table = mtv23x_id_table,
 
@@ -2503,4 +2503,3 @@ module_i2c_driver(mtv23x_driver);
 MODULE_AUTHOR("Davin <smiledavin@gmail.com>");
 MODULE_DESCRIPTION(" ISDB-T Demodulator driver");
 MODULE_LICENSE("GPL");
-

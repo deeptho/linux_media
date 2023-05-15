@@ -393,8 +393,7 @@ static int __simple_for_each_link(struct asoc_simple_priv *priv,
 			 * or has convert-xxx property
 			 */
 			if (dpcm_selectable &&
-			    (num > 2 ||
-			     adata.convert_rate || adata.convert_channels)) {
+			    (num > 2 || asoc_simple_is_convert_required(&adata))) {
 				/*
 				 * np
 				 *	 |1(CPU)|0(Codec)  li->cpu
@@ -621,6 +620,10 @@ static int simple_soc_probe(struct snd_soc_card *card)
 		return ret;
 
 	ret = asoc_simple_init_mic(card, &priv->mic_jack, PREFIX);
+	if (ret < 0)
+		return ret;
+
+	ret = asoc_simple_init_aux_jacks(priv, PREFIX);
 	if (ret < 0)
 		return ret;
 

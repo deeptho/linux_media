@@ -10,6 +10,7 @@
 #include "en/tc_tun_encap.h"
 #include "en/tc_priv.h"
 #include "en_rep.h"
+#include "lag/lag.h"
 
 static bool
 same_vf_reps(struct mlx5e_priv *priv, struct net_device *out_dev)
@@ -230,6 +231,9 @@ parse_mirred(struct mlx5e_tc_act_parse_state *parse_state,
 	parse_state->ifindexes[if_count] = out_dev->ifindex;
 	parse_state->if_count++;
 
+	if (mlx5_lag_mpesw_do_mirred(priv->mdev, out_dev, extack))
+		return -EOPNOTSUPP;
+
 	out_dev = get_fdb_out_dev(uplink_dev, out_dev);
 	if (!out_dev)
 		return -ENODEV;
@@ -268,6 +272,7 @@ parse_mirred(struct mlx5e_tc_act_parse_state *parse_state,
 	rpriv = out_priv->ppriv;
 	esw_attr->dests[esw_attr->out_count].rep = rpriv->rep;
 	esw_attr->dests[esw_attr->out_count].mdev = out_priv->mdev;
+
 	esw_attr->out_count++;
 
 	return 0;
@@ -320,4 +325,11 @@ tc_act_parse_mirred(struct mlx5e_tc_act_parse_state *parse_state,
 struct mlx5e_tc_act mlx5e_tc_act_mirred = {
 	.can_offload = tc_act_can_offload_mirred,
 	.parse_action = tc_act_parse_mirred,
+	.is_terminating_action = false,
+};
+
+struct mlx5e_tc_act mlx5e_tc_act_redirect = {
+	.can_offload = tc_act_can_offload_mirred,
+	.parse_action = tc_act_parse_mirred,
+	.is_terminating_action = true,
 };

@@ -5,7 +5,6 @@
  * Copyright (C) 2022, Alibaba Cloud
  */
 #include "xattr.h"
-
 #include <trace/events/erofs.h>
 
 struct erofs_qstr {
@@ -87,18 +86,12 @@ static struct erofs_dirent *find_target_dirent(struct erofs_qstr *name,
 	return ERR_PTR(-ENOENT);
 }
 
-static void *find_target_block_classic(struct erofs_buf *target,
-				       struct inode *dir,
-				       struct erofs_qstr *name,
-				       int *_ndirents)
+static void *erofs_find_target_block(struct erofs_buf *target,
+		struct inode *dir, struct erofs_qstr *name, int *_ndirents)
 {
-	unsigned int startprfx, endprfx;
-	int head, back;
+	int head = 0, back = DIV_ROUND_UP(dir->i_size, EROFS_BLKSIZ) - 1;
+	unsigned int startprfx = 0, endprfx = 0;
 	void *candidate = ERR_PTR(-ENOENT);
-
-	startprfx = endprfx = 0;
-	head = 0;
-	back = erofs_inode_datablocks(dir) - 1;
 
 	while (head <= back) {
 		const int mid = head + (back - head) / 2;
@@ -165,9 +158,8 @@ out:		/* free if the candidate is valid */
 	return candidate;
 }
 
-int erofs_namei(struct inode *dir,
-		struct qstr *name,
-		erofs_nid_t *nid, unsigned int *d_type)
+int erofs_namei(struct inode *dir, const struct qstr *name, erofs_nid_t *nid,
+		unsigned int *d_type)
 {
 	int ndirents;
 	struct erofs_buf buf = __EROFS_BUF_INITIALIZER;
@@ -181,12 +173,10 @@ int erofs_namei(struct inode *dir,
 	qn.end = name->name + name->len;
 
 	ndirents = 0;
-
-	de = find_target_block_classic(&buf, dir, &qn, &ndirents);
+	de = erofs_find_target_block(&buf, dir, &qn, &ndirents);
 	if (IS_ERR(de))
 		return PTR_ERR(de);
 
-	/* the target page has been mapped */
 	if (ndirents)
 		de = find_target_dirent(&qn, (u8 *)de, EROFS_BLKSIZ, ndirents);
 
@@ -198,9 +188,7 @@ int erofs_namei(struct inode *dir,
 	return PTR_ERR_OR_ZERO(de);
 }
 
-/* NOTE: i_mutex is already held by vfs */
-static struct dentry *erofs_lookup(struct inode *dir,
-				   struct dentry *dentry,
+static struct dentry *erofs_lookup(struct inode *dir, struct dentry *dentry,
 				   unsigned int flags)
 {
 	int err;
@@ -208,17 +196,11 @@ static struct dentry *erofs_lookup(struct inode *dir,
 	unsigned int d_type;
 	struct inode *inode;
 
-	DBG_BUGON(!d_really_is_negative(dentry));
-	/* dentry must be unhashed in lookup, no need to worry about */
-	DBG_BUGON(!d_unhashed(dentry));
-
 	trace_erofs_lookup(dir, dentry, flags);
 
-	/* file name exceeds fs limit */
 	if (dentry->d_name.len > EROFS_NAME_LEN)
 		return ERR_PTR(-ENAMETOOLONG);
 
-	/* false uninitialized warnings on gcc 4.8.x */
 	err = erofs_namei(dir, &dentry->d_name, &nid, &d_type);
 
 	if (err == -ENOENT) {
@@ -229,7 +211,7 @@ static struct dentry *erofs_lookup(struct inode *dir,
 	} else {
 		erofs_dbg("%s, %pd (nid %llu) found, d_type %u", __func__,
 			  dentry, nid, d_type);
-		inode = erofs_iget(dir->i_sb, nid, d_type == FT_DIR);
+		inode = erofs_iget(dir->i_sb, nid);
 	}
 	return d_splice_alias(inode, dentry);
 }
@@ -238,6 +220,6 @@ const struct inode_operations erofs_dir_iops = {
 	.lookup = erofs_lookup,
 	.getattr = erofs_getattr,
 	.listxattr = erofs_listxattr,
-	.get_acl = erofs_get_acl,
+	.get_inode_acl = erofs_get_acl,
 	.fiemap = erofs_fiemap,
 };

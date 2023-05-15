@@ -1720,16 +1720,16 @@ Typically, you'll have a hardware descriptor as below:
 -  ``rate_min`` and ``rate_max`` define the minimum and maximum sample
    rate. This should correspond somehow to ``rates`` bits.
 
--  ``channel_min`` and ``channel_max`` define, as you might already
+-  ``channels_min`` and ``channels_max`` define, as you might already
    expected, the minimum and maximum number of channels.
 
 -  ``buffer_bytes_max`` defines the maximum buffer size in
    bytes. There is no ``buffer_bytes_min`` field, since it can be
    calculated from the minimum period size and the minimum number of
-   periods. Meanwhile, ``period_bytes_min`` and define the minimum and
-   maximum size of the period in bytes. ``periods_max`` and
-   ``periods_min`` define the maximum and minimum number of periods in
-   the buffer.
+   periods. Meanwhile, ``period_bytes_min`` and ``period_bytes_max``
+   define the minimum and maximum size of the period in bytes.
+   ``periods_max`` and ``periods_min`` define the maximum and minimum
+   number of periods in the buffer.
 
    The “period” is a term that corresponds to a fragment in the OSS
    world. The period defines the size at which a PCM interrupt is
@@ -3565,13 +3565,17 @@ given size.
 The second argument (type) and the third argument (device pointer) are
 dependent on the bus. For normal devices, pass the device pointer
 (typically identical as ``card->dev``) to the third argument with
-``SNDRV_DMA_TYPE_DEV`` type. For the continuous buffer unrelated to the
+``SNDRV_DMA_TYPE_DEV`` type.
+
+For the continuous buffer unrelated to the
 bus can be pre-allocated with ``SNDRV_DMA_TYPE_CONTINUOUS`` type.
 You can pass NULL to the device pointer in that case, which is the
 default mode implying to allocate with ``GFP_KERNEL`` flag.
-If you need a different GFP flag, you can pass it by encoding the flag
-into the device pointer via a special macro
-:c:func:`snd_dma_continuous_data()`.
+If you need a restricted (lower) address, set up the coherent DMA mask
+bits for the device, and pass the device pointer, like the normal
+device memory allocations.  For this type, it's still allowed to pass
+NULL to the device pointer, too, if no address restriction is needed.
+
 For the scatter-gather buffers, use ``SNDRV_DMA_TYPE_DEV_SG`` with the
 device pointer (see the `Non-Contiguous Buffers`_ section).
 
@@ -3810,15 +3814,6 @@ Also, note that zero is passed to both the size and the max size
 arguments here.  Since each vmalloc call should succeed at any time,
 we don't need to pre-allocate the buffers like other continuous
 pages.
-
-If you need the 32bit DMA allocation, pass the device pointer encoded
-by :c:func:`snd_dma_continuous_data()` with ``GFP_KERNEL|__GFP_DMA32``
-argument.
-
-::
-
-  snd_pcm_set_managed_buffer_all(pcm, SNDRV_DMA_TYPE_VMALLOC,
-          snd_dma_continuous_data(GFP_KERNEL | __GFP_DMA32), 0, 0);
 
 Proc Interface
 ==============

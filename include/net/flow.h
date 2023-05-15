@@ -8,11 +8,12 @@
 #ifndef _NET_FLOW_H
 #define _NET_FLOW_H
 
-#include <linux/socket.h>
 #include <linux/in6.h>
 #include <linux/atomic.h>
-#include <net/flow_dissector.h>
+#include <linux/container_of.h>
 #include <linux/uidgid.h>
+
+struct flow_keys;
 
 /*
  * ifindex generation is per-net namespace, and loopback is
@@ -53,11 +54,6 @@ union flowi_uli {
 		__u8	type;
 		__u8	code;
 	} icmpt;
-
-	struct {
-		__le16	dport;
-		__le16	sport;
-	} dnports;
 
 	__be32		gre_key;
 
@@ -156,27 +152,11 @@ struct flowi6 {
 	__u32			mp_hash;
 } __attribute__((__aligned__(BITS_PER_LONG/8)));
 
-struct flowidn {
-	struct flowi_common	__fl_common;
-#define flowidn_oif		__fl_common.flowic_oif
-#define flowidn_iif		__fl_common.flowic_iif
-#define flowidn_mark		__fl_common.flowic_mark
-#define flowidn_scope		__fl_common.flowic_scope
-#define flowidn_proto		__fl_common.flowic_proto
-#define flowidn_flags		__fl_common.flowic_flags
-	__le16			daddr;
-	__le16			saddr;
-	union flowi_uli		uli;
-#define fld_sport		uli.ports.sport
-#define fld_dport		uli.ports.dport
-} __attribute__((__aligned__(BITS_PER_LONG/8)));
-
 struct flowi {
 	union {
 		struct flowi_common	__fl_common;
 		struct flowi4		ip4;
 		struct flowi6		ip6;
-		struct flowidn		dn;
 	} u;
 #define flowi_oif	u.__fl_common.flowic_oif
 #define flowi_iif	u.__fl_common.flowic_iif
@@ -209,11 +189,6 @@ static inline struct flowi *flowi6_to_flowi(struct flowi6 *fl6)
 static inline struct flowi_common *flowi6_to_flowi_common(struct flowi6 *fl6)
 {
 	return &(fl6->__fl_common);
-}
-
-static inline struct flowi *flowidn_to_flowi(struct flowidn *fldn)
-{
-	return container_of(fldn, struct flowi, u.dn);
 }
 
 __u32 __get_hash_from_flowi6(const struct flowi6 *fl6, struct flow_keys *keys);

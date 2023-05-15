@@ -1,5 +1,3 @@
-
-
 #include "mxl603_priv.h"
 
 static const struct dvb_tuner_ops si2168_ops;
@@ -28,6 +26,7 @@ static int reg_read(struct i2c_client *client,u8 reg_addr,u8 *val)
 	return 0 ;
 
 }
+
 static int reg_write(struct i2c_client *client,u8 reg_addr,u8 val)
 {
 	int ret;
@@ -41,6 +40,7 @@ static int reg_write(struct i2c_client *client,u8 reg_addr,u8 val)
 	}
 	return 0;
 }
+
 static int mxl603_ctrl_programRegisters(struct i2c_client *client, PMXL603_REG_CTRL_INFO_T ctrlRegInfoPtr)
 {
 	struct mxl603_dev* dev = i2c_get_clientdata(client);
@@ -55,7 +55,7 @@ static int mxl603_ctrl_programRegisters(struct i2c_client *client, PMXL603_REG_C
 		// Check if partial bits of register were updated
 		if (ctrlRegInfoPtr[i].mask != 0xFF)
 		{
-			ret = reg_read(dev->client,ctrlRegInfoPtr[i].regAddr, &tmp);
+			ret = reg_read(dev->client,ctrlRegInfoPtr[i].regAddr, (int)&tmp);
 			if (ret) break;;
 		}
 
@@ -72,6 +72,7 @@ static int mxl603_ctrl_programRegisters(struct i2c_client *client, PMXL603_REG_C
 	return ret;
 
 }
+
 static int mxl603_init(struct dvb_frontend *fe)
 {
 	struct i2c_client*client = fe->tuner_priv;
@@ -79,6 +80,7 @@ static int mxl603_init(struct dvb_frontend *fe)
 
 	int ret;
 	u8 readData;
+	u8 dfeRegData;
 	u8 control = 0;
 	u16 ifFcw;
 	MXL603_REG_CTRL_INFO_T MxL603_OverwriteDefaults[] =
@@ -109,7 +111,6 @@ static int mxl603_init(struct dvb_frontend *fe)
 	  {0x00, 0xFF, 0x00},
 	  {0,	 0,    0}
 	};
-
 
 	 /*reset the chip*/
 	ret = reg_write(dev->client,AIC_RESET_REG, 0x00);
@@ -207,6 +208,7 @@ err:
 	pr_err("%s_failed = %d",__FUNCTION__,ret);
 	return ret;
 }
+
 static int mxl603_set_params(struct dvb_frontend *fe)
 {
 	struct i2c_client *client =fe->tuner_priv;
@@ -218,6 +220,12 @@ static int mxl603_set_params(struct dvb_frontend *fe)
 	u32 freq = 0;
 	u8 tmp;
 
+	pr_info("delivery_system=%d frequency=%d\n",
+			c->delivery_system, c->frequency);
+	if (!dev->active) {
+		ret = -EAGAIN;
+		goto err;
+	}
 	MXL603_REG_CTRL_INFO_T MxL603_DigitalDvbc[] =
 	{
 	  {0x0C, 0xFF, 0x00},
@@ -276,13 +284,6 @@ static int mxl603_set_params(struct dvb_frontend *fe)
 	  {0xD9, 0xFF, 0x04},
 	  {0,	 0,    0}
 	};
-
-	 pr_info("delivery_system=%d frequency=%d\n",
-					 c->delivery_system, c->frequency);
-	if (!dev->active) {
-		ret = -EAGAIN;
-		goto err;
-	}
 
 	switch (c->delivery_system) {
 	case SYS_ATSC:
@@ -483,7 +484,6 @@ static int mxl603_get_status(struct dvb_frontend *fe,u32*status)
 
 }
 
-
 static const struct dvb_tuner_ops mxl603_ops ={
 	.info = {
 		.name = "MaxLinear tuner MXL603",
@@ -495,8 +495,8 @@ static const struct dvb_tuner_ops mxl603_ops ={
 	.get_status = mxl603_get_status,
 
 };
-static int mxl603_probe(struct i2c_client *client,
-		const struct i2c_device_id *id)
+
+static int mxl603_probe(struct i2c_client *client)
 {
 	struct mxl603_config *cfg = client->dev.platform_data;
 	struct dvb_frontend *fe = cfg->fe;
@@ -554,16 +554,16 @@ err:
 	pr_err("%s___failed=%d\n",__FUNCTION__, ret);
 	return ret;
 }
+
 static int mxl603_remove(struct i2c_client *client)
 {
 	struct mxl603_dev *dev = i2c_get_clientdata(client);
 
 	kfree(dev);
-
 	return 0;
 }
 
- static const struct i2c_device_id mxl603_id_table[] = {
+static const struct i2c_device_id mxl603_id_table[] = {
 	{"mxl603", 0},
 	{}
 };
@@ -573,7 +573,7 @@ static struct i2c_driver mxl603_driver = {
 	.driver = {
 		.name	= "mxl603",
 	},
-	.probe		= mxl603_probe,
+	.probe_new	= mxl603_probe,
 	.remove		= mxl603_remove,
 	.id_table	= mxl603_id_table,
 };

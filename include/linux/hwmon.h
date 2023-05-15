@@ -436,6 +436,10 @@ struct hwmon_chip_info {
 /* hwmon_device_register() is deprecated */
 struct device *hwmon_device_register(struct device *dev);
 
+/*
+ * hwmon_device_register_with_groups() and
+ * devm_hwmon_device_register_with_groups() are deprecated.
+ */
 struct device *
 hwmon_device_register_with_groups(struct device *dev, const char *name,
 				  void *drvdata,
@@ -450,6 +454,9 @@ hwmon_device_register_with_info(struct device *dev,
 				const struct hwmon_chip_info *info,
 				const struct attribute_group **extra_groups);
 struct device *
+hwmon_device_register_for_thermal(struct device *dev, const char *name,
+				  void *drvdata);
+struct device *
 devm_hwmon_device_register_with_info(struct device *dev,
 				const char *name, void *drvdata,
 				const struct hwmon_chip_info *info,
@@ -460,6 +467,9 @@ void devm_hwmon_device_unregister(struct device *dev);
 
 int hwmon_notify_event(struct device *dev, enum hwmon_sensor_types type,
 		       u32 attr, int channel);
+
+char *hwmon_sanitize_name(const char *name);
+char *devm_hwmon_sanitize_name(struct device *dev, const char *name);
 
 /**
  * hwmon_is_bad_char - Is the char invalid in a hwmon name

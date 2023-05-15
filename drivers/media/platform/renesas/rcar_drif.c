@@ -3,11 +3,6 @@
  * R-Car Gen3 Digital Radio Interface (DRIF) driver
  *
  * Copyright (C) 2017 Renesas Electronics Corporation
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
  */
 
 /*
@@ -1438,19 +1433,17 @@ static int rcar_drif_probe(struct platform_device *pdev)
 }
 
 /* DRIF channel remove */
-static int rcar_drif_remove(struct platform_device *pdev)
+static void rcar_drif_remove(struct platform_device *pdev)
 {
 	struct rcar_drif *ch = platform_get_drvdata(pdev);
 	struct rcar_drif_sdr *sdr = ch->sdr;
 
 	/* Channel 0 will be the SDR instance */
 	if (ch->num)
-		return 0;
+		return;
 
 	/* SDR instance */
 	rcar_drif_sdr_remove(sdr);
-
-	return 0;
 }
 
 /* FIXME: Implement suspend/resume support */
@@ -1477,11 +1470,11 @@ MODULE_DEVICE_TABLE(of, rcar_drif_of_table);
 static struct platform_driver rcar_drif_driver = {
 	.driver = {
 		.name = RCAR_DRIF_DRV_NAME,
-		.of_match_table = of_match_ptr(rcar_drif_of_table),
+		.of_match_table = rcar_drif_of_table,
 		.pm = &rcar_drif_pm_ops,
 		},
 	.probe = rcar_drif_probe,
-	.remove = rcar_drif_remove,
+	.remove_new = rcar_drif_remove,
 };
 
 module_platform_driver(rcar_drif_driver);

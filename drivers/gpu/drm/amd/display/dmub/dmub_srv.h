@@ -98,8 +98,11 @@ enum dmub_asic {
 	DMUB_ASIC_DCN303,
 	DMUB_ASIC_DCN31,
 	DMUB_ASIC_DCN31B,
+	DMUB_ASIC_DCN314,
 	DMUB_ASIC_DCN315,
 	DMUB_ASIC_DCN316,
+	DMUB_ASIC_DCN32,
+	DMUB_ASIC_DCN321,
 	DMUB_ASIC_MAX,
 };
 
@@ -123,7 +126,19 @@ enum dmub_notification_type {
 	DMUB_NOTIFICATION_HPD,
 	DMUB_NOTIFICATION_HPD_IRQ,
 	DMUB_NOTIFICATION_SET_CONFIG_REPLY,
+	DMUB_NOTIFICATION_DPIA_NOTIFICATION,
 	DMUB_NOTIFICATION_MAX
+};
+
+/**
+ * DPIA NOTIFICATION Response Type
+ */
+enum dpia_notify_bw_alloc_status {
+
+	DPIA_BW_REQ_FAILED = 0,
+	DPIA_BW_REQ_SUCCESS,
+	DPIA_EST_BW_CHANGED,
+	DPIA_BW_ALLOC_CAPS_CHANGED
 };
 
 /**
@@ -243,6 +258,9 @@ struct dmub_srv_hw_params {
 	bool power_optimization;
 	bool dpia_supported;
 	bool disable_dpia;
+	bool usb4_cm_version;
+	bool fw_in_system_memory;
+	bool dpia_hpd_int_enable_supported;
 };
 
 /**
@@ -307,6 +325,9 @@ struct dmub_srv_hw_funcs {
 			      const struct dmub_window *cw0,
 			      const struct dmub_window *cw1);
 
+	void (*backdoor_load_zfb_mode)(struct dmub_srv *dmub,
+			      const struct dmub_window *cw0,
+			      const struct dmub_window *cw1);
 	void (*setup_windows)(struct dmub_srv *dmub,
 			      const struct dmub_window *cw2,
 			      const struct dmub_window *cw3,
@@ -362,6 +383,7 @@ struct dmub_srv_hw_funcs {
 
 	uint32_t (*get_gpint_dataout)(struct dmub_srv *dmub);
 
+	void (*configure_dmub_in_system_memory)(struct dmub_srv *dmub);
 	void (*clear_inbox0_ack_register)(struct dmub_srv *dmub);
 	uint32_t (*read_inbox0_ack_register)(struct dmub_srv *dmub);
 	void (*send_inbox0_cmd)(struct dmub_srv *dmub, union dmub_inbox0_data_register data);
@@ -409,6 +431,7 @@ struct dmub_srv {
 	/* private: internal use only */
 	const struct dmub_srv_common_regs *regs;
 	const struct dmub_srv_dcn31_regs *regs_dcn31;
+	const struct dmub_srv_dcn32_regs *regs_dcn32;
 
 	struct dmub_srv_base_funcs funcs;
 	struct dmub_srv_hw_funcs hw_funcs;
@@ -431,6 +454,7 @@ struct dmub_srv {
 
 	/* Feature capabilities reported by fw */
 	struct dmub_feature_caps feature_caps;
+	struct dmub_visual_confirm_color visual_confirm_color;
 };
 
 /**
@@ -441,6 +465,7 @@ struct dmub_srv {
  * @pending_notification: Indicates there are other pending notifications
  * @aux_reply: aux reply
  * @hpd_status: hpd status
+ * @bw_alloc_reply: BW Allocation reply from CM/DPIA
  */
 struct dmub_notification {
 	enum dmub_notification_type type;
@@ -451,6 +476,10 @@ struct dmub_notification {
 		struct aux_reply_data aux_reply;
 		enum dp_hpd_status hpd_status;
 		enum set_config_status sc_status;
+		/**
+		 * DPIA notification command.
+		 */
+		struct dmub_rb_cmd_dpia_notification dpia_notification;
 	};
 };
 

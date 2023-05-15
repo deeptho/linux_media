@@ -8,7 +8,7 @@
  *				      for convergence integrated media GmbH
  *
  * Copyright (C) 2004 Andrew de Quincey (tuning thread cleanup)
- * Copyright (C) 2020 Deep Thought <deeptho@gmail.com> (modifications) *
+ * Copyright (C) 2020-2023 Deep Thought <deeptho@gmail.com> (modifications) *
  */
 
 /* Enables DVBv3 compatibility bits at the headers */
@@ -151,7 +151,7 @@ static void __dvb_frontend_free(struct dvb_frontend *fe)
 	struct dvb_frontend_private *fepriv = fe->frontend_priv;
 
 	if (fepriv)
-		dvb_free_device(fepriv->dvbdev);
+		dvb_device_put(fepriv->dvbdev);
 
 	dvb_frontend_invoke_release(fe, fe->ops.release); //decreases demod refcount by 1
 	release_dtv_fe_spectrum_scan(fe);

@@ -339,8 +339,7 @@ static int get_plane_info(struct gsc_frame *frm, u32 addr, u32 *index, u32 *ret_
 
 void gsc_set_prefbuf(struct gsc_dev *gsc, struct gsc_frame *frm)
 {
-	u32 f_chk_addr, f_chk_len, s_chk_addr, s_chk_len;
-	f_chk_addr = f_chk_len = s_chk_addr = s_chk_len = 0;
+	u32 f_chk_addr, f_chk_len, s_chk_addr = 0, s_chk_len = 0;
 
 	f_chk_addr = frm->addr.y;
 	f_chk_len = frm->payload[0];
@@ -1202,7 +1201,7 @@ err_clk:
 	return ret;
 }
 
-static int gsc_remove(struct platform_device *pdev)
+static void gsc_remove(struct platform_device *pdev)
 {
 	struct gsc_dev *gsc = platform_get_drvdata(pdev);
 	int i;
@@ -1221,7 +1220,6 @@ static int gsc_remove(struct platform_device *pdev)
 	pm_runtime_set_suspended(&pdev->dev);
 
 	dev_dbg(&pdev->dev, "%s driver unloaded\n", pdev->name);
-	return 0;
 }
 
 #ifdef CONFIG_PM
@@ -1312,7 +1310,7 @@ static const struct dev_pm_ops gsc_pm_ops = {
 
 static struct platform_driver gsc_driver = {
 	.probe		= gsc_probe,
-	.remove		= gsc_remove,
+	.remove_new	= gsc_remove,
 	.driver = {
 		.name	= GSC_MODULE_NAME,
 		.pm	= &gsc_pm_ops,

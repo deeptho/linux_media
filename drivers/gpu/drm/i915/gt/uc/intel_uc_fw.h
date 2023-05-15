@@ -6,6 +6,7 @@
 #ifndef _INTEL_UC_FW_H_
 #define _INTEL_UC_FW_H_
 
+#include <linux/sizes.h>
 #include <linux/types.h>
 #include "intel_uc_fw_abi.h"
 #include "intel_device_info.h"
@@ -60,9 +61,26 @@ enum intel_uc_fw_status {
 
 enum intel_uc_fw_type {
 	INTEL_UC_FW_TYPE_GUC = 0,
-	INTEL_UC_FW_TYPE_HUC
+	INTEL_UC_FW_TYPE_HUC,
+	INTEL_UC_FW_TYPE_GSC,
 };
-#define INTEL_UC_FW_NUM_TYPES 2
+#define INTEL_UC_FW_NUM_TYPES 3
+
+struct intel_uc_fw_ver {
+	u32 major;
+	u32 minor;
+	u32 patch;
+};
+
+/*
+ * The firmware build process will generate a version header file with major and
+ * minor version defined. The versions are built into CSS header of firmware.
+ * i915 kernel driver set the minimal firmware version required per platform.
+ */
+struct intel_uc_fw_file {
+	const char *path;
+	struct intel_uc_fw_ver ver;
+};
 
 /*
  * This structure encapsulates all the data needed during the process
@@ -74,10 +92,12 @@ struct intel_uc_fw {
 		const enum intel_uc_fw_status status;
 		enum intel_uc_fw_status __status; /* no accidental overwrites */
 	};
-	const char *path;
+	struct intel_uc_fw_file file_wanted;
+	struct intel_uc_fw_file file_selected;
 	bool user_overridden;
 	size_t size;
 	struct drm_i915_gem_object *obj;
+
 	/**
 	 * @dummy: A vma used in binding the uc fw to ggtt. We can't define this
 	 * vma on the stack as it can lead to a stack overflow, so we define it
@@ -88,21 +108,25 @@ struct intel_uc_fw {
 	struct i915_vma_resource dummy;
 	struct i915_vma *rsa_data;
 
-	/*
-	 * The firmware build process will generate a version header file with major and
-	 * minor version defined. The versions are built into CSS header of firmware.
-	 * i915 kernel driver set the minimal firmware version required per platform.
-	 */
-	u16 major_ver_wanted;
-	u16 minor_ver_wanted;
-	u16 major_ver_found;
-	u16 minor_ver_found;
-
 	u32 rsa_size;
 	u32 ucode_size;
-
 	u32 private_data_size;
+
+	bool loaded_via_gsc;
 };
+
+/*
+ * When we load the uC binaries, we pin them in a reserved section at the top of
+ * the GGTT, which is ~18 MBs. On multi-GT systems where the GTs share the GGTT,
+ * we also need to make sure that each binary is pinned to a unique location
+ * during load, because the different GT can go through the FW load at the same
+ * time (see uc_fw_ggtt_offset() for details).
+ * Given that the available space is much greater than what is required by the
+ * binaries, to keep things simple instead of dynamically partitioning the
+ * reserved section to make space for all the blobs we can just reserve a static
+ * chunk for each binary.
+ */
+#define INTEL_UC_RSVD_GGTT_PER_FW SZ_2M
 
 #ifdef CONFIG_DRM_I915_DEBUG_GUC
 void intel_uc_fw_change_status(struct intel_uc_fw *uc_fw,
@@ -181,6 +205,8 @@ static inline const char *intel_uc_fw_type_repr(enum intel_uc_fw_type type)
 		return "GuC";
 	case INTEL_UC_FW_TYPE_HUC:
 		return "HuC";
+	case INTEL_UC_FW_TYPE_GSC:
+		return "GSC";
 	}
 	return "uC";
 }
@@ -263,6 +289,7 @@ int intel_uc_fw_upload(struct intel_uc_fw *uc_fw, u32 offset, u32 dma_flags);
 int intel_uc_fw_init(struct intel_uc_fw *uc_fw);
 void intel_uc_fw_fini(struct intel_uc_fw *uc_fw);
 size_t intel_uc_fw_copy_rsa(struct intel_uc_fw *uc_fw, void *dst, u32 max_len);
+int intel_uc_fw_mark_load_failed(struct intel_uc_fw *uc_fw, int err);
 void intel_uc_fw_dump(const struct intel_uc_fw *uc_fw, struct drm_printer *p);
 
 #endif

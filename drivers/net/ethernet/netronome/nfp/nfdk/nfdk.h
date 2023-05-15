@@ -46,8 +46,7 @@
 struct nfp_nfdk_tx_desc {
 	union {
 		struct {
-			u8 dma_addr_hi;  /* High bits of host buf address */
-			u8 padding;  /* Must be zero */
+			__le16 dma_addr_hi;  /* High bits of host buf address */
 			__le16 dma_len_type; /* Length to DMA for this desc */
 			__le32 dma_addr_lo;  /* Low 32bit of host buf addr */
 		};
@@ -126,4 +125,12 @@ nfp_nfdk_ctrl_tx_one(struct nfp_net *nn, struct nfp_net_r_vector *r_vec,
 void nfp_nfdk_ctrl_poll(struct tasklet_struct *t);
 void nfp_nfdk_rx_ring_fill_freelist(struct nfp_net_dp *dp,
 				    struct nfp_net_rx_ring *rx_ring);
+#ifndef CONFIG_NFP_NET_IPSEC
+static inline u64 nfp_nfdk_ipsec_tx(u64 flags, struct sk_buff *skb)
+{
+	return flags;
+}
+#else
+u64 nfp_nfdk_ipsec_tx(u64 flags, struct sk_buff *skb);
+#endif
 #endif

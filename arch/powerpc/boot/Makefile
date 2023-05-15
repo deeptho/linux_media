@@ -34,6 +34,7 @@ endif
 
 BOOTCFLAGS    := -Wall -Wundef -Wstrict-prototypes -Wno-trigraphs \
 		 -fno-strict-aliasing -O2 -msoft-float -mno-altivec -mno-vsx \
+		 $(call cc-option,-mno-spe) $(call cc-option,-mspe=no) \
 		 -pipe -fomit-frame-pointer -fno-builtin -fPIC -nostdinc \
 		 $(LINUXINCLUDE)
 
@@ -43,12 +44,24 @@ else
 BOOTCFLAGS	+= -m32
 endif
 
+ifdef CONFIG_TARGET_CPU_BOOL
+BOOTCFLAGS	+= -mcpu=$(CONFIG_TARGET_CPU)
+else ifdef CONFIG_PPC64_BOOT_WRAPPER
+ifdef CONFIG_CPU_LITTLE_ENDIAN
+BOOTCFLAGS	+= -mcpu=powerpc64le
+else
+BOOTCFLAGS	+= -mcpu=powerpc64
+endif
+endif
+
 BOOTCFLAGS	+= -isystem $(shell $(BOOTCC) -print-file-name=include)
 
 ifdef CONFIG_CPU_BIG_ENDIAN
 BOOTCFLAGS	+= -mbig-endian
 else
 BOOTCFLAGS	+= -mlittle-endian
+endif
+ifdef CONFIG_PPC64_ELF_ABI_V2
 BOOTCFLAGS	+= $(call cc-option,-mabi=elfv2)
 endif
 
@@ -453,8 +466,8 @@ clean-files += $(image-) $(initrd-) cuImage.* dtbImage.* treeImage.* \
 clean-kernel-base := vmlinux.strip vmlinux.bin
 clean-kernel := $(addsuffix .gz,$(clean-kernel-base))
 clean-kernel += $(addsuffix .xz,$(clean-kernel-base))
-# If not absolute clean-files are relative to $(obj).
-clean-files += $(addprefix $(objtree)/, $(clean-kernel))
+# clean-files are relative to $(obj).
+clean-files += $(addprefix ../../../, $(clean-kernel))
 
 WRAPPER_OBJDIR := /usr/lib/kernel-wrapper
 WRAPPER_DTSDIR := /usr/lib/kernel-wrapper/dts

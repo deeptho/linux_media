@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0+
 /* Copyright (c) 2016-2017 Hisilicon Limited. */
 
+#include <linux/sched/clock.h>
+
 #include "hclge_err.h"
 
 static const struct hclge_hw_error hclge_imp_tcm_ecc_int[] = {
@@ -1977,7 +1979,7 @@ static int hclge_handle_mpf_ras_error(struct hclge_dev *hdev,
  * @num:  number of extended command structures
  *
  * This function handles all the PF RAS errors in the
- * hw register/s using command.
+ * hw registers using command.
  */
 static int hclge_handle_pf_ras_error(struct hclge_dev *hdev,
 				     struct hclge_desc *desc,

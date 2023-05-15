@@ -4,7 +4,7 @@
 Intel(R) Dynamic Platform and Thermal Framework Sysfs Interface
 ===============================================================
 
-:Copyright: |copy| 2022 Intel Corporation
+:Copyright: © 2022 Intel Corporation
 
 :Author: Srinivas Pandruvada <srinivas.pandruvada@linux.intel.com>
 
@@ -84,6 +84,9 @@ DPTF ACPI Drivers interface
 	https:/github.com/intel/thermal_daemon for decoding
 	thermal table.
 
+``production_mode`` (RO)
+	When different from zero, manufacturer locked thermal configuration
+	from further changes.
 
 ACPI Thermal Relationship table interface
 ------------------------------------------

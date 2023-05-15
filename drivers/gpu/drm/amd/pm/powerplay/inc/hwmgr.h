@@ -313,6 +313,8 @@ struct pp_hwmgr_func {
 	int (*get_max_high_clocks)(struct pp_hwmgr *hwmgr, struct amd_pp_simple_clock_info *clocks);
 	int (*power_off_asic)(struct pp_hwmgr *hwmgr);
 	int (*force_clock_level)(struct pp_hwmgr *hwmgr, enum pp_clock_type type, uint32_t mask);
+	int (*emit_clock_levels)(struct pp_hwmgr *hwmgr,
+				 enum pp_clock_type type, char *buf, int *offset);
 	int (*print_clock_levels)(struct pp_hwmgr *hwmgr, enum pp_clock_type type, char *buf);
 	int (*powergate_gfx)(struct pp_hwmgr *hwmgr, bool enable);
 	int (*get_sclk_od)(struct pp_hwmgr *hwmgr);
@@ -807,6 +809,8 @@ struct pp_hwmgr {
 	uint32_t workload_prority[Workload_Policy_Max];
 	uint32_t workload_setting[Workload_Policy_Max];
 	bool gfxoff_state_changed_by_workload;
+	uint32_t pstate_sclk_peak;
+	uint32_t pstate_mclk_peak;
 };
 
 int hwmgr_early_init(struct pp_hwmgr *hwmgr);

@@ -71,6 +71,11 @@ module_param(check_ranges, int, 0644);
 MODULE_PARM_DESC(check_ranges,
 		 "checks rx_buffer pattern are valid");
 
+static unsigned int delay_ms = 100;
+module_param(delay_ms, uint, 0644);
+MODULE_PARM_DESC(delay_ms,
+		 "delay between tests, in milliseconds (default: 100)");
+
 /* the actual tests to execute */
 static struct spi_test spi_tests[] = {
 	{
@@ -310,6 +315,33 @@ static struct spi_test spi_tests[] = {
 					.value = 1000,
 					.unit = SPI_DELAY_UNIT_USECS,
 				},
+			},
+		},
+	},
+	{
+		.description	= "three tx+rx transfers with overlapping cache lines",
+		.fill_option	= FILL_COUNT_8,
+		/*
+		 * This should be large enough for the controller driver to
+		 * choose to transfer it with DMA.
+		 */
+		.iterate_len    = { 512, -1 },
+		.iterate_transfer_mask = BIT(1),
+		.transfer_count = 3,
+		.transfers		= {
+			{
+				.len = 1,
+				.tx_buf = TX(0),
+				.rx_buf = RX(0),
+			},
+			{
+				.tx_buf = TX(1),
+				.rx_buf = RX(1),
+			},
+			{
+				.len = 1,
+				.tx_buf = TX(513),
+				.rx_buf = RX(513),
 			},
 		},
 	},
@@ -1071,7 +1103,8 @@ int spi_test_run_tests(struct spi_device *spi,
 		 * detect the individual tests when using a logic analyzer
 		 * we also add scheduling to avoid potential spi_timeouts...
 		 */
-		mdelay(100);
+		if (delay_ms)
+			mdelay(delay_ms);
 		schedule();
 	}
 

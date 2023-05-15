@@ -888,7 +888,7 @@ static int __snd_bt87x_probe(struct pci_dev *pci,
 	++dev;
 	return 0;
 }
-
+extern int snd_card_free_on_error(struct device *dev, int ret);
 static int snd_bt87x_probe(struct pci_dev *pci,
 			   const struct pci_device_id *pci_id)
 {

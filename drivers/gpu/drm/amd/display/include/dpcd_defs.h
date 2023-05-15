@@ -26,7 +26,7 @@
 #ifndef __DAL_DPCD_DEFS_H__
 #define __DAL_DPCD_DEFS_H__
 
-#include <drm/dp/drm_dp_helper.h>
+#include <drm/display/drm_dp_helper.h>
 #ifndef DP_SINK_HW_REVISION_START // can remove this once the define gets into linux drm_dp_helper.h
 #define DP_SINK_HW_REVISION_START 0x409
 #endif
@@ -88,7 +88,10 @@ enum dpcd_phy_test_patterns {
 	PHY_TEST_PATTERN_PRBS23 = 0x30,
 	PHY_TEST_PATTERN_PRBS31 = 0x38,
 	PHY_TEST_PATTERN_264BIT_CUSTOM = 0x40,
-	PHY_TEST_PATTERN_SQUARE_PULSE = 0x48,
+	PHY_TEST_PATTERN_SQUARE = 0x48,
+	PHY_TEST_PATTERN_SQUARE_PRESHOOT_DISABLED = 0x49,
+	PHY_TEST_PATTERN_SQUARE_DEEMPHASIS_DISABLED = 0x4A,
+	PHY_TEST_PATTERN_SQUARE_PRESHOOT_DEEMPHASIS_DISABLED = 0x4B,
 };
 
 enum dpcd_test_dyn_range {

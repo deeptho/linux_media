@@ -102,8 +102,7 @@ int nmi_alloc_mcesa(u64 *mcesad);
 void nmi_free_mcesa(u64 *mcesad);
 
 void s390_handle_mcck(void);
-void __s390_handle_mcck(void);
-int s390_do_machine_check(struct pt_regs *regs);
+void s390_do_machine_check(struct pt_regs *regs);
 
 #endif /* __ASSEMBLY__ */
 #endif /* _ASM_S390_NMI_H */

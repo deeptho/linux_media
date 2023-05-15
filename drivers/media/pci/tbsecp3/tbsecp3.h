@@ -83,10 +83,12 @@
 #define TBSECP3_BOARD_TBS6281TD	39
 #define TBSECP3_BOARD_TBS6205SE	40
 #define TBSECP3_BOARD_TBS6909SE	41
+#define TBSECP3_BOARD_TBS6304T	42
+#define TBSECP3_BOARD_TBS6522H	43
+#define TBSECP3_BOARD_TBS6504H	44
+#define TBSECP3_BOARD_TBS6590SE	45
+
 #define TBSECP3_MAX_ADAPTERS	(16)
-
-
-
 #define TBSECP3_MAX_I2C_BUS	(4)
 
 #define TBSECP3_GPIODEF_NONE	(0)
@@ -229,7 +231,7 @@ void tbsecp3_gpio_set_pin(struct tbsecp3_dev *dev,
 extern int tbsecp3_i2c_init(struct tbsecp3_dev *dev);
 extern void tbsecp3_i2c_exit(struct tbsecp3_dev *dev);
 extern void tbsecp3_i2c_reg_init(struct tbsecp3_dev *dev);
-
+extern void tbsecp3_i2c_remove_clients(struct tbsecp3_adapter *adapter);
 
 /* tbspcie-cards.c */
 extern struct tbsecp3_board tbsecp3_boards[];

@@ -313,7 +313,7 @@ mv_xor_v2_tx_submit(struct dma_async_tx_descriptor *tx)
 		"%s sw_desc %p: async_tx %p\n",
 		__func__, sw_desc, &sw_desc->async_tx);
 
-	/* assign coookie */
+	/* assign cookie */
 	spin_lock_bh(&xor_dev->lock);
 	cookie = dma_cookie_assign(tx);
 
@@ -591,14 +591,14 @@ static void mv_xor_v2_tasklet(struct tasklet_struct *t)
 		dma_run_dependencies(&next_pending_sw_desc->async_tx);
 
 		/* Lock the channel */
-		spin_lock_bh(&xor_dev->lock);
+		spin_lock(&xor_dev->lock);
 
 		/* add the SW descriptor to the free descriptors list */
 		list_add(&next_pending_sw_desc->free_list,
 			 &xor_dev->free_sw_desc);
 
 		/* Release the channel */
-		spin_unlock_bh(&xor_dev->lock);
+		spin_unlock(&xor_dev->lock);
 
 		/* increment the next descriptor */
 		pending_ptr++;
@@ -714,7 +714,6 @@ static int mv_xor_v2_resume(struct platform_device *dev)
 static int mv_xor_v2_probe(struct platform_device *pdev)
 {
 	struct mv_xor_v2_device *xor_dev;
-	struct resource *res;
 	int i, ret = 0;
 	struct dma_device *dma_dev;
 	struct mv_xor_v2_sw_desc *sw_desc;
@@ -726,13 +725,11 @@ static int mv_xor_v2_probe(struct platform_device *pdev)
 	if (!xor_dev)
 		return -ENOMEM;
 
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	xor_dev->dma_base = devm_ioremap_resource(&pdev->dev, res);
+	xor_dev->dma_base = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(xor_dev->dma_base))
 		return PTR_ERR(xor_dev->dma_base);
 
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 1);
-	xor_dev->glob_base = devm_ioremap_resource(&pdev->dev, res);
+	xor_dev->glob_base = devm_platform_ioremap_resource(pdev, 1);
 	if (IS_ERR(xor_dev->glob_base))
 		return PTR_ERR(xor_dev->glob_base);
 
@@ -893,6 +890,7 @@ static int mv_xor_v2_remove(struct platform_device *pdev)
 	tasklet_kill(&xor_dev->irq_tasklet);
 
 	clk_disable_unprepare(xor_dev->clk);
+	clk_disable_unprepare(xor_dev->reg_clk);
 
 	return 0;
 }

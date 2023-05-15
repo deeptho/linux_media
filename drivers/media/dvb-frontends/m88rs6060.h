@@ -140,6 +140,7 @@ struct m88rs6060_cfg {
 	 * for parallel or CI mode ,swap the order of D0 ~D7
 	 */
 	bool ts_pinswitch;
+	bool ts_autoclock;
 	u32 clk;
 	u16 i2c_wr_max;
 	u8 envelope_mode;	//for diseqc   default 0
@@ -163,6 +164,8 @@ struct m88rs6060_cfg {
 	void (*read_properties)(struct i2c_adapter * i2c, u8 reg, u32 * buf);
 	void (*write_eeprom) (struct i2c_adapter *i2c,u8 reg, u8 buf);
 	void (*read_eeprom) (struct i2c_adapter *i2c,u8 reg, u8 *buf);
+	/*rf switch for 6590se*/
+	void (*RF_switch)(struct i2c_adapter * i2c,u8 rf_in,u8 flag);
 };
 
 extern struct i2c_client*  m88rs6060_attach(struct i2c_adapter *i2c, struct i2c_board_info* board_info, int adapterno);

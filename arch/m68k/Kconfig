@@ -18,6 +18,8 @@ config M68K
 	select GENERIC_CPU_DEVICES
 	select GENERIC_IOMAP
 	select GENERIC_IRQ_SHOW
+	select HAVE_ARCH_SECCOMP
+	select HAVE_ARCH_SECCOMP_FILTER
 	select HAVE_ASM_MODVERSIONS
 	select HAVE_DEBUG_BUGVERBOSE
 	select HAVE_EFFICIENT_UNALIGNED_ACCESS if !CPU_HAS_NO_UNALIGNED
@@ -30,7 +32,6 @@ config M68K
 	select OLD_SIGACTION
 	select OLD_SIGSUSPEND3
 	select UACCESS_MEMCPY if !MMU
-	select VIRT_TO_BUS
 	select ZONE_DMA
 
 config CPU_BIG_ENDIAN
@@ -88,7 +89,7 @@ config MMU_SUN3
 
 config KEXEC
 	bool "kexec system call"
-	depends on M68KCLASSIC
+	depends on M68KCLASSIC && MMU
 	select KEXEC_CORE
 	help
 	  kexec is a system call that implements the ability to shutdown your

@@ -31,7 +31,17 @@
    this, and makes other things simpler.  Anton?
    --RR.  */
 
-#ifdef PPC64_ELF_ABI_v2
+bool module_elf_check_arch(Elf_Ehdr *hdr)
+{
+	unsigned long abi_level = hdr->e_flags & 0x3;
+
+	if (IS_ENABLED(CONFIG_PPC64_ELF_ABI_V2))
+		return abi_level == 2;
+	else
+		return abi_level < 2;
+}
+
+#ifdef CONFIG_PPC64_ELF_ABI_V2
 
 static func_desc_t func_desc(unsigned long addr)
 {
@@ -122,7 +132,7 @@ static u32 ppc64_stub_insns[] = {
 	/* Save current r2 value in magic place on the stack. */
 	PPC_RAW_STD(_R2, _R1, R2_STACK_OFFSET),
 	PPC_RAW_LD(_R12, _R11, 32),
-#ifdef PPC64_ELF_ABI_v1
+#ifdef CONFIG_PPC64_ELF_ABI_V1
 	/* Set up new r2 from function descriptor */
 	PPC_RAW_LD(_R2, _R11, 40),
 #endif
@@ -194,7 +204,7 @@ static unsigned long get_stubs_size(const Elf64_Ehdr *hdr,
 
 			/* Sort the relocation information based on a symbol and
 			 * addend key. This is a stable O(n*log n) complexity
-			 * alogrithm but it will reduce the complexity of
+			 * algorithm but it will reduce the complexity of
 			 * count_relocs() to linear complexity O(n)
 			 */
 			sort((void *)sechdrs[i].sh_addr,
@@ -361,7 +371,7 @@ static inline int create_ftrace_stub(struct ppc64_stub_entry *entry,
 	entry->jump[1] |= PPC_HA(reladdr);
 	entry->jump[2] |= PPC_LO(reladdr);
 
-	/* Eventhough we don't use funcdata in the stub, it's needed elsewhere. */
+	/* Even though we don't use funcdata in the stub, it's needed elsewhere. */
 	entry->funcdata = func_desc(addr);
 	entry->magic = STUB_MAGIC;
 
@@ -492,9 +502,10 @@ static unsigned long stub_for_addr(const Elf64_Shdr *sechdrs,
 static int restore_r2(const char *name, u32 *instruction, struct module *me)
 {
 	u32 *prev_insn = instruction - 1;
+	u32 insn_val = *instruction;
 
 	if (is_mprofile_ftrace_call(name))
-		return 1;
+		return 0;
 
 	/*
 	 * Make sure the branch isn't a sibling call.  Sibling calls aren't
@@ -502,19 +513,25 @@ static int restore_r2(const char *name, u32 *instruction, struct module *me)
 	 * restore afterwards.
 	 */
 	if (!instr_is_relative_link_branch(ppc_inst(*prev_insn)))
-		return 1;
-
-	if (*instruction != PPC_RAW_NOP()) {
-		pr_err("%s: Expected nop after call, got %08x at %pS\n",
-			me->name, *instruction, instruction);
 		return 0;
+
+	/*
+	 * For livepatch, the restore r2 instruction might have already been
+	 * written previously, if the referenced symbol is in a previously
+	 * unloaded module which is now being loaded again.  In that case, skip
+	 * the warning and the instruction write.
+	 */
+	if (insn_val == PPC_INST_LD_TOC)
+		return 0;
+
+	if (insn_val != PPC_RAW_NOP()) {
+		pr_err("%s: Expected nop after call, got %08x at %pS\n",
+			me->name, insn_val, instruction);
+		return -ENOEXEC;
 	}
 
 	/* ld r2,R2_STACK_OFFSET(r1) */
-	if (patch_instruction(instruction, ppc_inst(PPC_INST_LD_TOC)))
-		return 0;
-
-	return 1;
+	return patch_instruction(instruction, ppc_inst(PPC_INST_LD_TOC));
 }
 
 int apply_relocate_add(Elf64_Shdr *sechdrs,
@@ -638,8 +655,8 @@ int apply_relocate_add(Elf64_Shdr *sechdrs,
 						strtab + sym->st_name);
 				if (!value)
 					return -ENOENT;
-				if (!restore_r2(strtab + sym->st_name,
-							(u32 *)location + 1, me))
+				if (restore_r2(strtab + sym->st_name,
+					       (u32 *)location + 1, me))
 					return -ENOEXEC;
 			} else
 				value += local_entry_offset(sym);
@@ -653,8 +670,7 @@ int apply_relocate_add(Elf64_Shdr *sechdrs,
 			}
 
 			/* Only replace bits 2 through 26 */
-			value = (*(uint32_t *)location & ~0x03fffffc)
-				| (value & 0x03fffffc);
+			value = (*(uint32_t *)location & ~PPC_LI_MASK) | PPC_LI(value);
 
 			if (patch_instruction((u32 *)location, ppc_inst(value)))
 				return -EFAULT;

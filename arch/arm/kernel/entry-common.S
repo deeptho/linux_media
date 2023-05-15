@@ -16,19 +16,10 @@
 
 	.equ	NR_syscalls, __NR_syscalls
 
-	.macro  arch_ret_to_user, tmp
-#ifdef CONFIG_ARCH_IOP32X
-	mrc	p15, 0, \tmp, c15, c1, 0
-	tst	\tmp, #(1 << 6)
-	bicne	\tmp, \tmp, #(1 << 6)
-	mcrne	p15, 0, \tmp, c15, c1, 0	@ Disable cp6 access
-#endif
-	.endm
-
 #include "entry-header.S"
 
 saved_psr	.req	r8
-#if defined(CONFIG_TRACE_IRQFLAGS) || defined(CONFIG_CONTEXT_TRACKING)
+#if defined(CONFIG_TRACE_IRQFLAGS) || defined(CONFIG_CONTEXT_TRACKING_USER)
 saved_pc	.req	r9
 #define TRACE(x...) x
 #else
@@ -38,7 +29,7 @@ saved_pc	.req	lr
 
 	.section .entry.text,"ax",%progbits
 	.align	5
-#if !(IS_ENABLED(CONFIG_TRACE_IRQFLAGS) || IS_ENABLED(CONFIG_CONTEXT_TRACKING) || \
+#if !(IS_ENABLED(CONFIG_TRACE_IRQFLAGS) || IS_ENABLED(CONFIG_CONTEXT_TRACKING_USER) || \
 	IS_ENABLED(CONFIG_DEBUG_RSEQ))
 /*
  * This is the fast syscall return path.  We do as little as possible here,
@@ -54,10 +45,6 @@ __ret_fast_syscall:
 	ldr	r1, [tsk, #TI_FLAGS]		@ re-check for syscall tracing
 	movs	r1, r1, lsl #16
 	bne	fast_work_pending
-
-
-	/* perform architecture specific actions before user return */
-	arch_ret_to_user r1
 
 	restore_user_regs fast = 1, offset = S_OFF
  UNWIND(.fnend		)
@@ -129,8 +116,6 @@ ENTRY(ret_to_user_from_irq)
 no_work_pending:
 	asm_trace_hardirqs_on save = 0
 
-	/* perform architecture specific actions before user return */
-	arch_ret_to_user r1
 	ct_user_enter save = 0
 
 	restore_user_regs fast = 0, offset = 0
@@ -164,7 +149,7 @@ ENTRY(vector_bhb_loop8_swi)
 1:	b	2f
 2:	subs	r8, r8, #1
 	bne	1b
-	dsb
+	dsb	nsh
 	isb
 	b	3f
 ENDPROC(vector_bhb_loop8_swi)
@@ -198,7 +183,7 @@ ENTRY(vector_swi)
 #endif
 	reload_current r10, ip
 	zero_fp
-	alignment_trap r10, ip, __cr_alignment
+	alignment_trap r10, ip, cr_alignment
 	asm_trace_hardirqs_on save=0
 	enable_irq_notrace
 	ct_user_exit save=0
@@ -302,6 +287,7 @@ local_restart:
 	b	ret_fast_syscall
 #endif
 ENDPROC(vector_swi)
+	.ltorg
 
 	/*
 	 * This is the really slow path.  We're going to be doing
@@ -327,14 +313,6 @@ __sys_trace_return:
 	mov	r0, sp
 	bl	syscall_trace_exit
 	b	ret_slow_syscall
-
-	.align	5
-#ifdef CONFIG_ALIGNMENT_TRAP
-	.type	__cr_alignment, #object
-__cr_alignment:
-	.word	cr_alignment
-#endif
-	.ltorg
 
 	.macro	syscall_table_start, sym
 	.equ	__sys_nr, 0

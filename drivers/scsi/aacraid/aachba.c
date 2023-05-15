@@ -818,8 +818,8 @@ static void aac_probe_container_scsi_done(struct scsi_cmnd *scsi_cmnd)
 
 int aac_probe_container(struct aac_dev *dev, int cid)
 {
-	struct scsi_cmnd *scsicmd = kzalloc(sizeof(*scsicmd), GFP_KERNEL);
-	struct aac_cmd_priv *cmd_priv = aac_priv(scsicmd);
+	struct aac_cmd_priv *cmd_priv;
+	struct scsi_cmnd *scsicmd = kzalloc(sizeof(*scsicmd) + sizeof(*cmd_priv), GFP_KERNEL);
 	struct scsi_device *scsidev = kzalloc(sizeof(*scsidev), GFP_KERNEL);
 	int status;
 
@@ -838,6 +838,7 @@ int aac_probe_container(struct aac_dev *dev, int cid)
 		while (scsicmd->device == scsidev)
 			schedule();
 	kfree(scsidev);
+	cmd_priv = aac_priv(scsicmd);
 	status = cmd_priv->status;
 	kfree(scsicmd);
 	return status;
@@ -1050,7 +1051,7 @@ static void get_container_serial_callback(void *context, struct fib * fibptr)
 				vpdpage83data.type1.productid));
 
 			/* Convert to ascii based serial number.
-			 * The LSB is the the end.
+			 * The LSB is the end.
 			 */
 			for (i = 0; i < 8; i++) {
 				u8 temp =

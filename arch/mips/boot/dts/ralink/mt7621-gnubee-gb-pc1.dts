@@ -20,16 +20,10 @@
 		bootargs = "console=ttyS0,57600";
 	};
 
-	palmbus: palmbus@1e000000 {
-		i2c@900 {
-			status = "okay";
-		};
-	};
-
 	gpio-keys {
 		compatible = "gpio-keys";
 
-		reset {
+		key-reset {
 			label = "reset";
 			gpios = <&gpio 18 GPIO_ACTIVE_HIGH>;
 			linux,code = <KEY_RESTART>;
@@ -39,13 +33,13 @@
 	gpio-leds {
 		compatible = "gpio-leds";
 
-		power {
+		led-power {
 			label = "green:power";
 			gpios = <&gpio 6 GPIO_ACTIVE_LOW>;
 			linux,default-trigger = "default-on";
 		};
 
-		system {
+		led-system {
 			label = "green:system";
 			gpios = <&gpio 8 GPIO_ACTIVE_LOW>;
 			linux,default-trigger = "disk-activity";
@@ -53,14 +47,14 @@
 	};
 };
 
-&sdhci {
+&mmc {
 	status = "okay";
 };
 
 &spi0 {
 	status = "okay";
 
-	m25p80@0 {
+	flash@0 {
 		#address-cells = <1>;
 		#size-cells = <1>;
 		compatible = "jedec,spi-nor";
@@ -95,22 +89,6 @@
 
 &pcie {
 	status = "okay";
-};
-
-&pinctrl {
-	pinctrl-names = "default";
-	pinctrl-0 = <&state_default>;
-
-	state_default: state-default {
-		gpio-pinmux {
-			groups = "rgmii2", "uart3", "wdt";
-			function = "gpio";
-		};
-	};
-};
-
-&ethernet {
-	pinctrl-0 = <&mdio_pins>, <&rgmii1_pins>;
 };
 
 &switch0 {

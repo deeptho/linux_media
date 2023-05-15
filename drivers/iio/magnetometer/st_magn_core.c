@@ -305,6 +305,7 @@ static const struct st_sensor_settings st_magn_sensors_settings[] = {
 		.sensors_supported = {
 			[0] = LIS3MDL_MAGN_DEV_NAME,
 			[1] = LSM9DS1_MAGN_DEV_NAME,
+			[2] = LSM303C_MAGN_DEV_NAME,
 		},
 		.ch = (struct iio_chan_spec *)st_magn_2_16bit_channels,
 		.odr = {
@@ -540,24 +541,17 @@ read_error:
 static int st_magn_write_raw(struct iio_dev *indio_dev,
 		struct iio_chan_spec const *chan, int val, int val2, long mask)
 {
-	int err;
-
 	switch (mask) {
 	case IIO_CHAN_INFO_SCALE:
-		err = st_sensors_set_fullscale_by_gain(indio_dev, val2);
-		break;
+		return st_sensors_set_fullscale_by_gain(indio_dev, val2);
 	case IIO_CHAN_INFO_SAMP_FREQ:
 		if (val2)
 			return -EINVAL;
-		mutex_lock(&indio_dev->mlock);
-		err = st_sensors_set_odr(indio_dev, val);
-		mutex_unlock(&indio_dev->mlock);
-		return err;
-	default:
-		err = -EINVAL;
-	}
 
-	return err;
+		return st_sensors_set_odr(indio_dev, val);
+	default:
+		return -EINVAL;
+	}
 }
 
 static ST_SENSORS_DEV_ATTR_SAMP_FREQ_AVAIL();

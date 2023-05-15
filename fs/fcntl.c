@@ -10,6 +10,7 @@
 #include <linux/mm.h>
 #include <linux/sched/task.h>
 #include <linux/fs.h>
+#include <linux/filelock.h>
 #include <linux/file.h>
 #include <linux/fdtable.h>
 #include <linux/capability.h>
@@ -47,7 +48,7 @@ static int setfl(int fd, struct file * filp, unsigned long arg)
 
 	/* O_NOATIME can only be set by the owner or superuser */
 	if ((arg & O_NOATIME) && !(filp->f_flags & O_NOATIME))
-		if (!inode_owner_or_capable(file_mnt_user_ns(filp), inode))
+		if (!inode_owner_or_capable(file_mnt_idmap(filp), inode))
 			return -EPERM;
 
 	/* required for strict SunOS emulation */
@@ -56,11 +57,10 @@ static int setfl(int fd, struct file * filp, unsigned long arg)
 		   arg |= O_NONBLOCK;
 
 	/* Pipe packetized mode is controlled by O_DIRECT flag */
-	if (!S_ISFIFO(inode->i_mode) && (arg & O_DIRECT)) {
-		if (!filp->f_mapping || !filp->f_mapping->a_ops ||
-			!filp->f_mapping->a_ops->direct_IO)
-				return -EINVAL;
-	}
+	if (!S_ISFIFO(inode->i_mode) &&
+	    (arg & O_DIRECT) &&
+	    !(filp->f_mode & FMODE_CAN_ODIRECT))
+		return -EINVAL;
 
 	if (filp->f_op->check_flags)
 		error = filp->f_op->check_flags(arg);
@@ -79,6 +79,7 @@ static int setfl(int fd, struct file * filp, unsigned long arg)
 	}
 	spin_lock(&filp->f_lock);
 	filp->f_flags = (arg & SETFL_MASK) | (filp->f_flags & ~SETFL_MASK);
+	filp->f_iocb_flags = iocb_flags(filp);
 	spin_unlock(&filp->f_lock);
 
  out:

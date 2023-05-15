@@ -10,7 +10,6 @@ Block
    bfq-iosched
    biovecs
    blk-mq
-   capability
    cmdline-partition
    data-integrity
    deadline-iosched
@@ -23,3 +22,4 @@ Block
    stat
    switching-sched
    writeback_cache_control
+   ublk

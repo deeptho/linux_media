@@ -1913,8 +1913,8 @@ static int wcd934x_trigger(struct snd_pcm_substream *substream, int cmd,
 	case SNDRV_PCM_TRIGGER_STOP:
 	case SNDRV_PCM_TRIGGER_SUSPEND:
 	case SNDRV_PCM_TRIGGER_PAUSE_PUSH:
-		slim_stream_unprepare(dai_data->sruntime);
 		slim_stream_disable(dai_data->sruntime);
+		slim_stream_unprepare(dai_data->sruntime);
 		break;
 	default:
 		break;
@@ -4737,13 +4737,9 @@ static u32 wcd934x_get_dmic_sample_rate(struct snd_soc_component *comp,
 	if (dec_found && adc_mux_index <= 8) {
 		tx_fs_reg = WCD934X_CDC_TX0_TX_PATH_CTL + (16 * adc_mux_index);
 		tx_stream_fs = snd_soc_component_read(comp, tx_fs_reg) & 0x0F;
-		if (tx_stream_fs <= 4)  {
-			if (wcd->dmic_sample_rate <=
-					WCD9XXX_DMIC_SAMPLE_RATE_2P4MHZ)
-				dmic_fs = wcd->dmic_sample_rate;
-			else
-				dmic_fs = WCD9XXX_DMIC_SAMPLE_RATE_2P4MHZ;
-		} else
+		if (tx_stream_fs <= 4)
+			dmic_fs = min(wcd->dmic_sample_rate, WCD9XXX_DMIC_SAMPLE_RATE_2P4MHZ);
+		else
 			dmic_fs = WCD9XXX_DMIC_SAMPLE_RATE_4P8MHZ;
 	} else {
 		dmic_fs = wcd->dmic_sample_rate;
@@ -5847,6 +5843,7 @@ static const struct snd_soc_component_driver wcd934x_component_drv = {
 	.dapm_routes = wcd934x_audio_map,
 	.num_dapm_routes = ARRAY_SIZE(wcd934x_audio_map),
 	.set_jack = wcd934x_codec_set_jack,
+	.endianness = 1,
 };
 
 static int wcd934x_codec_parse_data(struct wcd934x_codec *wcd)

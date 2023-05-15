@@ -140,7 +140,7 @@ static int fimc_is_enable_clocks(struct fimc_is *is)
 			dev_err(&is->pdev->dev, "clock %s enable failed\n",
 				fimc_is_clocks[i]);
 			for (--i; i >= 0; i--)
-				clk_disable(is->clocks[i]);
+				clk_disable_unprepare(is->clocks[i]);
 			return ret;
 		}
 		pr_debug("enabled clock: %s\n", fimc_is_clocks[i]);
@@ -213,6 +213,7 @@ static int fimc_is_register_subdevs(struct fimc_is *is)
 
 			if (ret < 0 || index >= FIMC_IS_SENSORS_NUM) {
 				of_node_put(child);
+				of_node_put(i2c_bus);
 				return ret;
 			}
 			index++;
@@ -830,7 +831,7 @@ static int fimc_is_probe(struct platform_device *pdev)
 
 	ret = pm_runtime_resume_and_get(dev);
 	if (ret < 0)
-		goto err_irq;
+		goto err_pm_disable;
 
 	vb2_dma_contig_set_max_seg_size(dev, DMA_BIT_MASK(32));
 
@@ -864,6 +865,8 @@ err_pm:
 	pm_runtime_put_noidle(dev);
 	if (!pm_runtime_enabled(dev))
 		fimc_is_runtime_suspend(dev);
+err_pm_disable:
+	pm_runtime_disable(dev);
 err_irq:
 	free_irq(is->irq, is);
 err_clk:
@@ -912,7 +915,7 @@ static int fimc_is_suspend(struct device *dev)
 }
 #endif /* CONFIG_PM_SLEEP */
 
-static int fimc_is_remove(struct platform_device *pdev)
+static void fimc_is_remove(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct fimc_is *is = dev_get_drvdata(dev);
@@ -929,8 +932,6 @@ static int fimc_is_remove(struct platform_device *pdev)
 	fimc_is_debugfs_remove(is);
 	release_firmware(is->fw.f_w);
 	fimc_is_free_cpu_memory(is);
-
-	return 0;
 }
 
 static const struct of_device_id fimc_is_of_match[] = {
@@ -947,7 +948,7 @@ static const struct dev_pm_ops fimc_is_pm_ops = {
 
 static struct platform_driver fimc_is_driver = {
 	.probe		= fimc_is_probe,
-	.remove		= fimc_is_remove,
+	.remove_new	= fimc_is_remove,
 	.driver = {
 		.of_match_table	= fimc_is_of_match,
 		.name		= FIMC_IS_DRV_NAME,

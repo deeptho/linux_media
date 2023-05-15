@@ -26,7 +26,6 @@
  **************************************************************************/
 
 #include "vmwgfx_drv.h"
-#include <drm/ttm/ttm_bo_driver.h>
 #include <drm/ttm/ttm_placement.h>
 
 static const struct ttm_place vram_placement_flags = {
@@ -517,7 +516,7 @@ static struct ttm_tt *vmw_ttm_tt_create(struct ttm_buffer_object *bo,
 				     ttm_cached);
 	else
 		ret = ttm_tt_init(&vmw_be->dma_ttm, bo, page_flags,
-				  ttm_cached);
+				  ttm_cached, 0);
 	if (unlikely(ret != 0))
 		goto out_no_init;
 

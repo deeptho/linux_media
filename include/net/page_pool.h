@@ -117,6 +117,10 @@ struct page_pool_stats {
 	struct page_pool_recycle_stats recycle_stats;
 };
 
+int page_pool_ethtool_stats_get_count(void);
+u8 *page_pool_ethtool_stats_get_strings(u8 *data);
+u64 *page_pool_ethtool_stats_get(u64 *data, void *stats);
+
 /*
  * Drivers that wish to harvest page pool stats and report them to users
  * (perhaps via ethtool, debugfs, or another mechanism) can allocate a
@@ -124,6 +128,23 @@ struct page_pool_stats {
  */
 bool page_pool_get_stats(struct page_pool *pool,
 			 struct page_pool_stats *stats);
+#else
+
+static inline int page_pool_ethtool_stats_get_count(void)
+{
+	return 0;
+}
+
+static inline u8 *page_pool_ethtool_stats_get_strings(u8 *data)
+{
+	return data;
+}
+
+static inline u64 *page_pool_ethtool_stats_get(u64 *data, void *stats)
+{
+	return data;
+}
+
 #endif
 
 struct page_pool {
@@ -256,6 +277,16 @@ void page_pool_put_defragged_page(struct page_pool *pool, struct page *page,
 				  unsigned int dma_sync_size,
 				  bool allow_direct);
 
+/* pp_frag_count represents the number of writers who can update the page
+ * either by updating skb->data or via DMA mappings for the device.
+ * We can't rely on the page refcnt for that as we don't know who might be
+ * holding page references and we can't reliably destroy or sync DMA mappings
+ * of the fragments.
+ *
+ * When pp_frag_count reaches 0 we can either recycle the page if the page
+ * refcnt is 1 or return it back to the memory allocator and destroy any
+ * mappings we have.
+ */
 static inline void page_pool_fragment_page(struct page *page, long nr)
 {
 	atomic_long_set(&page->pp_frag_count, nr);
@@ -365,7 +396,7 @@ static inline void page_pool_nid_changed(struct page_pool *pool, int new_nid)
 static inline void page_pool_ring_lock(struct page_pool *pool)
 	__acquires(&pool->ring.producer_lock)
 {
-	if (in_serving_softirq())
+	if (in_softirq())
 		spin_lock(&pool->ring.producer_lock);
 	else
 		spin_lock_bh(&pool->ring.producer_lock);
@@ -374,7 +405,7 @@ static inline void page_pool_ring_lock(struct page_pool *pool)
 static inline void page_pool_ring_unlock(struct page_pool *pool)
 	__releases(&pool->ring.producer_lock)
 {
-	if (in_serving_softirq())
+	if (in_softirq())
 		spin_unlock(&pool->ring.producer_lock);
 	else
 		spin_unlock_bh(&pool->ring.producer_lock);

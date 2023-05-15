@@ -69,9 +69,24 @@
 #include <linux/context_tracking.h>
 #include <linux/hardirq.h>
 #include <asm/cputime.h>
+#include <asm/firmware.h>
 #include <asm/ftrace.h>
 #include <asm/kprobes.h>
 #include <asm/runlatch.h>
+
+#ifdef CONFIG_PPC_IRQ_SOFT_MASK_DEBUG
+/*
+ * WARN/BUG is handled with a program interrupt so minimise checks here to
+ * avoid recursion and maximise the chance of getting the first oops handled.
+ */
+#define INT_SOFT_MASK_BUG_ON(regs, cond)				\
+do {									\
+	if ((user_mode(regs) || (TRAP(regs) != INTERRUPT_PROGRAM)))	\
+		BUG_ON(cond);						\
+} while (0)
+#else
+#define INT_SOFT_MASK_BUG_ON(regs, cond)
+#endif
 
 #ifdef CONFIG_PPC_BOOK3S_64
 extern char __end_soft_masked[];
@@ -137,28 +152,8 @@ static inline void booke_restore_dbcr0(void)
 
 static inline void interrupt_enter_prepare(struct pt_regs *regs)
 {
-#ifdef CONFIG_PPC32
-	if (!arch_irq_disabled_regs(regs))
-		trace_hardirqs_off();
-
-	if (user_mode(regs))
-		kuap_lock();
-	else
-		kuap_save_and_lock(regs);
-
-	if (user_mode(regs))
-		account_cpu_user_entry();
-#endif
-
 #ifdef CONFIG_PPC64
-	bool trace_enable = false;
-
-	if (IS_ENABLED(CONFIG_TRACE_IRQFLAGS)) {
-		if (irq_soft_mask_set_return(IRQS_ALL_DISABLED) == IRQS_ENABLED)
-			trace_enable = true;
-	} else {
-		irq_soft_mask_set(IRQS_ALL_DISABLED);
-	}
+	irq_soft_mask_set(IRQS_ALL_DISABLED);
 
 	/*
 	 * If the interrupt was taken with HARD_DIS clear, then enable MSR[EE].
@@ -169,15 +164,15 @@ static inline void interrupt_enter_prepare(struct pt_regs *regs)
 	 * context.
 	 */
 	if (!(local_paca->irq_happened & PACA_IRQ_HARD_DIS)) {
-		if (IS_ENABLED(CONFIG_PPC_IRQ_SOFT_MASK_DEBUG))
-			BUG_ON(!(regs->msr & MSR_EE));
+		INT_SOFT_MASK_BUG_ON(regs, !(regs->msr & MSR_EE));
 		__hard_irq_enable();
 	} else {
 		__hard_RI_enable();
 	}
+	/* Enable MSR[RI] early, to support kernel SLB and hash faults */
+#endif
 
-	/* Do this when RI=1 because it can cause SLB faults */
-	if (trace_enable)
+	if (!arch_irq_disabled_regs(regs))
 		trace_hardirqs_off();
 
 	if (user_mode(regs)) {
@@ -193,20 +188,15 @@ static inline void interrupt_enter_prepare(struct pt_regs *regs)
 		 * CT_WARN_ON comes here via program_check_exception,
 		 * so avoid recursion.
 		 */
-		if (TRAP(regs) != INTERRUPT_PROGRAM) {
-			CT_WARN_ON(ct_state() != CONTEXT_KERNEL);
-			if (IS_ENABLED(CONFIG_PPC_IRQ_SOFT_MASK_DEBUG))
-				BUG_ON(is_implicit_soft_masked(regs));
-		}
-
-		/* Move this under a debugging check */
-		if (IS_ENABLED(CONFIG_PPC_IRQ_SOFT_MASK_DEBUG) &&
-				arch_irq_disabled_regs(regs))
-			BUG_ON(search_kernel_restart_table(regs->nip));
+		if (TRAP(regs) != INTERRUPT_PROGRAM)
+			CT_WARN_ON(ct_state() != CONTEXT_KERNEL &&
+				   ct_state() != CONTEXT_IDLE);
+		INT_SOFT_MASK_BUG_ON(regs, is_implicit_soft_masked(regs));
+		INT_SOFT_MASK_BUG_ON(regs, arch_irq_disabled_regs(regs) &&
+					   search_kernel_restart_table(regs->nip));
 	}
-	if (IS_ENABLED(CONFIG_PPC_IRQ_SOFT_MASK_DEBUG))
-		BUG_ON(!arch_irq_disabled_regs(regs) && !(regs->msr & MSR_EE));
-#endif
+	INT_SOFT_MASK_BUG_ON(regs, !arch_irq_disabled_regs(regs) &&
+				   !(regs->msr & MSR_EE));
 
 	booke_restore_dbcr0();
 }
@@ -280,7 +270,7 @@ static inline bool nmi_disables_ftrace(struct pt_regs *regs)
 		if (TRAP(regs) == INTERRUPT_PERFMON)
 		       return false;
 	}
-	if (IS_ENABLED(CONFIG_PPC_BOOK3E)) {
+	if (IS_ENABLED(CONFIG_PPC_BOOK3E_64)) {
 		if (TRAP(regs) == INTERRUPT_PERFMON)
 			return false;
 	}
@@ -324,22 +314,46 @@ static inline void interrupt_nmi_enter_prepare(struct pt_regs *regs, struct inte
 	}
 #endif
 
+	/* If data relocations are enabled, it's safe to use nmi_enter() */
+	if (mfmsr() & MSR_DR) {
+		nmi_enter();
+		return;
+	}
+
 	/*
-	 * Do not use nmi_enter() for pseries hash guest taking a real-mode
+	 * But do not use nmi_enter() for pseries hash guest taking a real-mode
 	 * NMI because not everything it touches is within the RMA limit.
 	 */
-	if (!IS_ENABLED(CONFIG_PPC_BOOK3S_64) ||
-			!firmware_has_feature(FW_FEATURE_LPAR) ||
-			radix_enabled() || (mfmsr() & MSR_DR))
-		nmi_enter();
+	if (IS_ENABLED(CONFIG_PPC_BOOK3S_64) &&
+	    firmware_has_feature(FW_FEATURE_LPAR) &&
+	    !radix_enabled())
+		return;
+
+	/*
+	 * Likewise, don't use it if we have some form of instrumentation (like
+	 * KASAN shadow) that is not safe to access in real mode (even on radix)
+	 */
+	if (IS_ENABLED(CONFIG_KASAN))
+		return;
+
+	/* Otherwise, it should be safe to call it */
+	nmi_enter();
 }
 
 static inline void interrupt_nmi_exit_prepare(struct pt_regs *regs, struct interrupt_nmi_state *state)
 {
-	if (!IS_ENABLED(CONFIG_PPC_BOOK3S_64) ||
-			!firmware_has_feature(FW_FEATURE_LPAR) ||
-			radix_enabled() || (mfmsr() & MSR_DR))
+	if (mfmsr() & MSR_DR) {
+		// nmi_exit if relocations are on
 		nmi_exit();
+	} else if (IS_ENABLED(CONFIG_PPC_BOOK3S_64) &&
+		   firmware_has_feature(FW_FEATURE_LPAR) &&
+		   !radix_enabled()) {
+		// no nmi_exit for a pseries hash guest taking a real mode exception
+	} else if (IS_ENABLED(CONFIG_KASAN)) {
+		// no nmi_exit for KASAN in real mode
+	} else {
+		nmi_exit();
+	}
 
 	/*
 	 * nmi does not call nap_adjust_return because nmi should not create
@@ -407,7 +421,8 @@ static inline void interrupt_nmi_exit_prepare(struct pt_regs *regs, struct inter
  * Specific handlers may have additional restrictions.
  */
 #define DEFINE_INTERRUPT_HANDLER_RAW(func)				\
-static __always_inline long ____##func(struct pt_regs *regs);		\
+static __always_inline __no_sanitize_address __no_kcsan long		\
+____##func(struct pt_regs *regs);					\
 									\
 interrupt_handler long func(struct pt_regs *regs)			\
 {									\
@@ -421,7 +436,8 @@ interrupt_handler long func(struct pt_regs *regs)			\
 }									\
 NOKPROBE_SYMBOL(func);							\
 									\
-static __always_inline long ____##func(struct pt_regs *regs)
+static __always_inline __no_sanitize_address __no_kcsan long		\
+____##func(struct pt_regs *regs)
 
 /**
  * DECLARE_INTERRUPT_HANDLER - Declare synchronous interrupt handler function
@@ -541,7 +557,8 @@ static __always_inline void ____##func(struct pt_regs *regs)
  * body with a pair of curly brackets.
  */
 #define DEFINE_INTERRUPT_HANDLER_NMI(func)				\
-static __always_inline long ____##func(struct pt_regs *regs);		\
+static __always_inline __no_sanitize_address __no_kcsan long		\
+____##func(struct pt_regs *regs);					\
 									\
 interrupt_handler long func(struct pt_regs *regs)			\
 {									\
@@ -558,13 +575,15 @@ interrupt_handler long func(struct pt_regs *regs)			\
 }									\
 NOKPROBE_SYMBOL(func);							\
 									\
-static __always_inline long ____##func(struct pt_regs *regs)
+static __always_inline  __no_sanitize_address __no_kcsan long		\
+____##func(struct pt_regs *regs)
 
 
 /* Interrupt handlers */
 /* kernel/traps.c */
 DECLARE_INTERRUPT_HANDLER_NMI(system_reset_exception);
 #ifdef CONFIG_PPC_BOOK3S_64
+DECLARE_INTERRUPT_HANDLER_RAW(machine_check_early_boot);
 DECLARE_INTERRUPT_HANDLER_ASYNC(machine_check_exception_async);
 #endif
 DECLARE_INTERRUPT_HANDLER_NMI(machine_check_exception);
@@ -636,8 +655,7 @@ static inline void interrupt_cond_local_irq_enable(struct pt_regs *regs)
 		local_irq_enable();
 }
 
-long system_call_exception(long r3, long r4, long r5, long r6, long r7, long r8,
-			   unsigned long r0, struct pt_regs *regs);
+long system_call_exception(struct pt_regs *regs, unsigned long r0);
 notrace unsigned long syscall_exit_prepare(unsigned long r3, struct pt_regs *regs, long scv);
 notrace unsigned long interrupt_exit_user_prepare(struct pt_regs *regs);
 notrace unsigned long interrupt_exit_kernel_prepare(struct pt_regs *regs);

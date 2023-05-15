@@ -21,6 +21,7 @@
 #include "xfs_quota.h"
 #include "xfs_trace.h"
 #include "xfs_rmap.h"
+#include "xfs_ag.h"
 
 static struct kmem_cache	*xfs_bmbt_cur_cache;
 
@@ -184,11 +185,11 @@ xfs_bmbt_update_cursor(
 	struct xfs_btree_cur	*src,
 	struct xfs_btree_cur	*dst)
 {
-	ASSERT((dst->bc_tp->t_firstblock != NULLFSBLOCK) ||
+	ASSERT((dst->bc_tp->t_highest_agno != NULLAGNUMBER) ||
 	       (dst->bc_ino.ip->i_diflags & XFS_DIFLAG_REALTIME));
 
 	dst->bc_ino.allocated += src->bc_ino.allocated;
-	dst->bc_tp->t_firstblock = src->bc_tp->t_firstblock;
+	dst->bc_tp->t_highest_agno = src->bc_tp->t_highest_agno;
 
 	src->bc_ino.allocated = 0;
 }
@@ -200,46 +201,32 @@ xfs_bmbt_alloc_block(
 	union xfs_btree_ptr		*new,
 	int				*stat)
 {
-	xfs_alloc_arg_t		args;		/* block allocation args */
-	int			error;		/* error return value */
+	struct xfs_alloc_arg	args;
+	int			error;
 
 	memset(&args, 0, sizeof(args));
 	args.tp = cur->bc_tp;
 	args.mp = cur->bc_mp;
-	args.fsbno = cur->bc_tp->t_firstblock;
 	xfs_rmap_ino_bmbt_owner(&args.oinfo, cur->bc_ino.ip->i_ino,
 			cur->bc_ino.whichfork);
-
-	if (args.fsbno == NULLFSBLOCK) {
-		args.fsbno = be64_to_cpu(start->l);
-		args.type = XFS_ALLOCTYPE_START_BNO;
-		/*
-		 * Make sure there is sufficient room left in the AG to
-		 * complete a full tree split for an extent insert.  If
-		 * we are converting the middle part of an extent then
-		 * we may need space for two tree splits.
-		 *
-		 * We are relying on the caller to make the correct block
-		 * reservation for this operation to succeed.  If the
-		 * reservation amount is insufficient then we may fail a
-		 * block allocation here and corrupt the filesystem.
-		 */
-		args.minleft = args.tp->t_blk_res;
-	} else if (cur->bc_tp->t_flags & XFS_TRANS_LOWMODE) {
-		args.type = XFS_ALLOCTYPE_START_BNO;
-	} else {
-		args.type = XFS_ALLOCTYPE_NEAR_BNO;
-	}
-
 	args.minlen = args.maxlen = args.prod = 1;
 	args.wasdel = cur->bc_ino.flags & XFS_BTCUR_BMBT_WASDEL;
-	if (!args.wasdel && args.tp->t_blk_res == 0) {
-		error = -ENOSPC;
-		goto error0;
-	}
-	error = xfs_alloc_vextent(&args);
+	if (!args.wasdel && args.tp->t_blk_res == 0)
+		return -ENOSPC;
+
+	/*
+	 * If we are coming here from something like unwritten extent
+	 * conversion, there has been no data extent allocation already done, so
+	 * we have to ensure that we attempt to locate the entire set of bmbt
+	 * allocations in the same AG, as xfs_bmapi_write() would have reserved.
+	 */
+	if (cur->bc_tp->t_highest_agno == NULLAGNUMBER)
+		args.minleft = xfs_bmapi_minleft(cur->bc_tp, cur->bc_ino.ip,
+					cur->bc_ino.whichfork);
+
+	error = xfs_alloc_vextent_start_ag(&args, be64_to_cpu(start->l));
 	if (error)
-		goto error0;
+		return error;
 
 	if (args.fsbno == NULLFSBLOCK && args.minleft) {
 		/*
@@ -247,11 +234,10 @@ xfs_bmbt_alloc_block(
 		 * a full btree split.  Try again and if
 		 * successful activate the lowspace algorithm.
 		 */
-		args.fsbno = 0;
-		args.type = XFS_ALLOCTYPE_FIRST_AG;
-		error = xfs_alloc_vextent(&args);
+		args.minleft = 0;
+		error = xfs_alloc_vextent_start_ag(&args, 0);
 		if (error)
-			goto error0;
+			return error;
 		cur->bc_tp->t_flags |= XFS_TRANS_LOWMODE;
 	}
 	if (WARN_ON_ONCE(args.fsbno == NULLFSBLOCK)) {
@@ -260,7 +246,6 @@ xfs_bmbt_alloc_block(
 	}
 
 	ASSERT(args.len == 1);
-	cur->bc_tp->t_firstblock = args.fsbno;
 	cur->bc_ino.allocated++;
 	cur->bc_ino.ip->i_nblocks++;
 	xfs_trans_log_inode(args.tp, cur->bc_ino.ip, XFS_ILOG_CORE);
@@ -271,9 +256,6 @@ xfs_bmbt_alloc_block(
 
 	*stat = 1;
 	return 0;
-
- error0:
-	return error;
 }
 
 STATIC int
@@ -304,7 +286,7 @@ xfs_bmbt_get_minrecs(
 	if (level == cur->bc_nlevels - 1) {
 		struct xfs_ifork	*ifp;
 
-		ifp = XFS_IFORK_PTR(cur->bc_ino.ip,
+		ifp = xfs_ifork_ptr(cur->bc_ino.ip,
 				    cur->bc_ino.whichfork);
 
 		return xfs_bmbt_maxrecs(cur->bc_mp,
@@ -322,7 +304,7 @@ xfs_bmbt_get_maxrecs(
 	if (level == cur->bc_nlevels - 1) {
 		struct xfs_ifork	*ifp;
 
-		ifp = XFS_IFORK_PTR(cur->bc_ino.ip,
+		ifp = xfs_ifork_ptr(cur->bc_ino.ip,
 				    cur->bc_ino.whichfork);
 
 		return xfs_bmbt_maxrecs(cur->bc_mp,
@@ -550,7 +532,7 @@ xfs_bmbt_init_cursor(
 	struct xfs_inode	*ip,		/* inode owning the btree */
 	int			whichfork)	/* data or attr fork */
 {
-	struct xfs_ifork	*ifp = XFS_IFORK_PTR(ip, whichfork);
+	struct xfs_ifork	*ifp = xfs_ifork_ptr(ip, whichfork);
 	struct xfs_btree_cur	*cur;
 	ASSERT(whichfork != XFS_COW_FORK);
 
@@ -564,7 +546,7 @@ xfs_bmbt_init_cursor(
 	if (xfs_has_crc(mp))
 		cur->bc_flags |= XFS_BTREE_CRC_BLOCKS;
 
-	cur->bc_ino.forksize = XFS_IFORK_SIZE(ip, whichfork);
+	cur->bc_ino.forksize = xfs_inode_fork_size(ip, whichfork);
 	cur->bc_ino.ip = ip;
 	cur->bc_ino.allocated = 0;
 	cur->bc_ino.flags = 0;
@@ -597,7 +579,11 @@ xfs_bmbt_maxrecs(
 	return xfs_bmbt_block_maxrecs(blocklen, leaf);
 }
 
-/* Compute the max possible height for block mapping btrees. */
+/*
+ * Calculate the maximum possible height of the btree that the on-disk format
+ * supports. This is used for sizing structures large enough to support every
+ * possible configuration of a filesystem that might get mounted.
+ */
 unsigned int
 xfs_bmbt_maxlevels_ondisk(void)
 {
@@ -611,7 +597,8 @@ xfs_bmbt_maxlevels_ondisk(void)
 	minrecs[1] = xfs_bmbt_block_maxrecs(blocklen, false) / 2;
 
 	/* One extra level for the inode root. */
-	return xfs_btree_compute_maxlevels(minrecs, MAXEXTNUM) + 1;
+	return xfs_btree_compute_maxlevels(minrecs,
+			XFS_MAX_EXTCNT_DATA_FORK_LARGE) + 1;
 }
 
 /*
@@ -659,7 +646,7 @@ xfs_bmbt_change_owner(
 
 	ASSERT(tp || buffer_list);
 	ASSERT(!(tp && buffer_list));
-	ASSERT(XFS_IFORK_PTR(ip, whichfork)->if_format == XFS_DINODE_FMT_BTREE);
+	ASSERT(xfs_ifork_ptr(ip, whichfork)->if_format == XFS_DINODE_FMT_BTREE);
 
 	cur = xfs_bmbt_init_cursor(ip->i_mount, tp, ip, whichfork);
 	cur->bc_ino.flags |= XFS_BTCUR_BMBT_INVALID_OWNER;

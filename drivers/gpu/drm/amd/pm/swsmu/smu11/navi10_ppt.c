@@ -494,6 +494,8 @@ static int navi10_tables_init(struct smu_context *smu)
 {
 	struct smu_table_context *smu_table = &smu->smu_table;
 	struct smu_table *tables = smu_table->tables;
+	struct smu_table *dummy_read_1_table =
+			&smu_table->dummy_read_1_table;
 
 	SMU_TABLE_INIT(tables, SMU_TABLE_PPTABLE, sizeof(PPTable_t),
 		       PAGE_SIZE, AMDGPU_GEM_DOMAIN_VRAM);
@@ -512,6 +514,10 @@ static int navi10_tables_init(struct smu_context *smu)
 		       AMDGPU_GEM_DOMAIN_VRAM);
 	SMU_TABLE_INIT(tables, SMU_TABLE_DRIVER_SMU_CONFIG, sizeof(DriverSmuConfig_t),
 		       PAGE_SIZE, AMDGPU_GEM_DOMAIN_VRAM);
+
+	dummy_read_1_table->size = 0x40000;
+	dummy_read_1_table->align = PAGE_SIZE;
+	dummy_read_1_table->domain = AMDGPU_GEM_DOMAIN_VRAM;
 
 	smu_table->metrics_table = kzalloc(sizeof(SmuMetrics_NV1X_t),
 					   GFP_KERNEL);
@@ -3580,4 +3586,5 @@ void navi10_set_ppt_funcs(struct smu_context *smu)
 	smu->table_map = navi10_table_map;
 	smu->pwr_src_map = navi10_pwr_src_map;
 	smu->workload_map = navi10_workload_map;
+	smu_v11_0_set_smu_mailbox_registers(smu);
 }

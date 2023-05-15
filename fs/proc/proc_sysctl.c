@@ -19,18 +19,14 @@
 #include <linux/kmemleak.h>
 #include "internal.h"
 
+#define list_for_each_table_entry(entry, table) \
+	for ((entry) = (table); (entry)->procname; (entry)++)
+
 static const struct dentry_operations proc_sys_dentry_operations;
 static const struct file_operations proc_sys_file_operations;
 static const struct inode_operations proc_sys_inode_operations;
 static const struct file_operations proc_sys_dir_file_operations;
 static const struct inode_operations proc_sys_dir_operations;
-
-/* shared constants to be used in various sysctls */
-const int sysctl_vals[] = { -1, 0, 1, 2, 4, 100, 200, 1000, 3000, INT_MAX, 65535 };
-EXPORT_SYMBOL(sysctl_vals);
-
-const unsigned long sysctl_long_vals[] = { 0, 1, LONG_MAX };
-EXPORT_SYMBOL_GPL(sysctl_long_vals);
 
 /* Support for permanently empty directories */
 
@@ -215,15 +211,19 @@ static void init_header(struct ctl_table_header *head,
 	INIT_HLIST_HEAD(&head->inodes);
 	if (node) {
 		struct ctl_table *entry;
-		for (entry = table; entry->procname; entry++, node++)
+
+		list_for_each_table_entry(entry, table) {
 			node->header = head;
+			node++;
+		}
 	}
 }
 
 static void erase_header(struct ctl_table_header *head)
 {
 	struct ctl_table *entry;
-	for (entry = head->ctl_table; entry->procname; entry++)
+
+	list_for_each_table_entry(entry, head->ctl_table)
 		erase_entry(head, entry);
 }
 
@@ -248,7 +248,7 @@ static int insert_header(struct ctl_dir *dir, struct ctl_table_header *header)
 	err = insert_links(header);
 	if (err)
 		goto fail_links;
-	for (entry = header->ctl_table; entry->procname; entry++) {
+	list_for_each_table_entry(entry, header->ctl_table) {
 		err = insert_entry(header, entry);
 		if (err)
 			goto fail;
@@ -798,7 +798,7 @@ out:
 	return 0;
 }
 
-static int proc_sys_permission(struct user_namespace *mnt_userns,
+static int proc_sys_permission(struct mnt_idmap *idmap,
 			       struct inode *inode, int mask)
 {
 	/*
@@ -827,7 +827,7 @@ static int proc_sys_permission(struct user_namespace *mnt_userns,
 	return error;
 }
 
-static int proc_sys_setattr(struct user_namespace *mnt_userns,
+static int proc_sys_setattr(struct mnt_idmap *idmap,
 			    struct dentry *dentry, struct iattr *attr)
 {
 	struct inode *inode = d_inode(dentry);
@@ -836,16 +836,16 @@ static int proc_sys_setattr(struct user_namespace *mnt_userns,
 	if (attr->ia_valid & (ATTR_MODE | ATTR_UID | ATTR_GID))
 		return -EPERM;
 
-	error = setattr_prepare(&init_user_ns, dentry, attr);
+	error = setattr_prepare(&nop_mnt_idmap, dentry, attr);
 	if (error)
 		return error;
 
-	setattr_copy(&init_user_ns, inode, attr);
+	setattr_copy(&nop_mnt_idmap, inode, attr);
 	mark_inode_dirty(inode);
 	return 0;
 }
 
-static int proc_sys_getattr(struct user_namespace *mnt_userns,
+static int proc_sys_getattr(struct mnt_idmap *idmap,
 			    const struct path *path, struct kstat *stat,
 			    u32 request_mask, unsigned int query_flags)
 {
@@ -856,7 +856,7 @@ static int proc_sys_getattr(struct user_namespace *mnt_userns,
 	if (IS_ERR(head))
 		return PTR_ERR(head);
 
-	generic_fillattr(&init_user_ns, inode, stat);
+	generic_fillattr(&nop_mnt_idmap, inode, stat);
 	if (table)
 		stat->mode = (stat->mode & S_IFMT) | table->mode;
 
@@ -978,7 +978,6 @@ static struct ctl_dir *new_dir(struct ctl_table_set *set,
 	table = (struct ctl_table *)(node + 1);
 	new_name = (char *)(table + 2);
 	memcpy(new_name, name, namelen);
-	new_name[namelen] = '\0';
 	table[0].procname = new_name;
 	table[0].mode = S_IFDIR|S_IRUGO|S_IXUGO;
 	init_header(&new->header, set->dir.header.root, set, node, table);
@@ -1125,40 +1124,47 @@ static int sysctl_check_table_array(const char *path, struct ctl_table *table)
 			err |= sysctl_err(path, table, "array not allowed");
 	}
 
+	if (table->proc_handler == proc_dobool) {
+		if (table->maxlen != sizeof(bool))
+			err |= sysctl_err(path, table, "array not allowed");
+	}
+
 	return err;
 }
 
 static int sysctl_check_table(const char *path, struct ctl_table *table)
 {
+	struct ctl_table *entry;
 	int err = 0;
-	for (; table->procname; table++) {
-		if (table->child)
-			err |= sysctl_err(path, table, "Not a file");
+	list_for_each_table_entry(entry, table) {
+		if (entry->child)
+			err |= sysctl_err(path, entry, "Not a file");
 
-		if ((table->proc_handler == proc_dostring) ||
-		    (table->proc_handler == proc_dointvec) ||
-		    (table->proc_handler == proc_douintvec) ||
-		    (table->proc_handler == proc_douintvec_minmax) ||
-		    (table->proc_handler == proc_dointvec_minmax) ||
-		    (table->proc_handler == proc_dou8vec_minmax) ||
-		    (table->proc_handler == proc_dointvec_jiffies) ||
-		    (table->proc_handler == proc_dointvec_userhz_jiffies) ||
-		    (table->proc_handler == proc_dointvec_ms_jiffies) ||
-		    (table->proc_handler == proc_doulongvec_minmax) ||
-		    (table->proc_handler == proc_doulongvec_ms_jiffies_minmax)) {
-			if (!table->data)
-				err |= sysctl_err(path, table, "No data");
-			if (!table->maxlen)
-				err |= sysctl_err(path, table, "No maxlen");
+		if ((entry->proc_handler == proc_dostring) ||
+		    (entry->proc_handler == proc_dobool) ||
+		    (entry->proc_handler == proc_dointvec) ||
+		    (entry->proc_handler == proc_douintvec) ||
+		    (entry->proc_handler == proc_douintvec_minmax) ||
+		    (entry->proc_handler == proc_dointvec_minmax) ||
+		    (entry->proc_handler == proc_dou8vec_minmax) ||
+		    (entry->proc_handler == proc_dointvec_jiffies) ||
+		    (entry->proc_handler == proc_dointvec_userhz_jiffies) ||
+		    (entry->proc_handler == proc_dointvec_ms_jiffies) ||
+		    (entry->proc_handler == proc_doulongvec_minmax) ||
+		    (entry->proc_handler == proc_doulongvec_ms_jiffies_minmax)) {
+			if (!entry->data)
+				err |= sysctl_err(path, entry, "No data");
+			if (!entry->maxlen)
+				err |= sysctl_err(path, entry, "No maxlen");
 			else
-				err |= sysctl_check_table_array(path, table);
+				err |= sysctl_check_table_array(path, entry);
 		}
-		if (!table->proc_handler)
-			err |= sysctl_err(path, table, "No proc_handler");
+		if (!entry->proc_handler)
+			err |= sysctl_err(path, entry, "No proc_handler");
 
-		if ((table->mode & (S_IRUGO|S_IWUGO)) != table->mode)
-			err |= sysctl_err(path, table, "bogus .mode 0%o",
-				table->mode);
+		if ((entry->mode & (S_IRUGO|S_IWUGO)) != entry->mode)
+			err |= sysctl_err(path, entry, "bogus .mode 0%o",
+				entry->mode);
 	}
 	return err;
 }
@@ -1174,7 +1180,7 @@ static struct ctl_table_header *new_links(struct ctl_dir *dir, struct ctl_table 
 
 	name_bytes = 0;
 	nr_entries = 0;
-	for (entry = table; entry->procname; entry++) {
+	list_for_each_table_entry(entry, table) {
 		nr_entries++;
 		name_bytes += strlen(entry->procname) + 1;
 	}
@@ -1191,14 +1197,16 @@ static struct ctl_table_header *new_links(struct ctl_dir *dir, struct ctl_table 
 	node = (struct ctl_node *)(links + 1);
 	link_table = (struct ctl_table *)(node + nr_entries);
 	link_name = (char *)&link_table[nr_entries + 1];
+	link = link_table;
 
-	for (link = link_table, entry = table; entry->procname; link++, entry++) {
+	list_for_each_table_entry(entry, table) {
 		int len = strlen(entry->procname) + 1;
 		memcpy(link_name, entry->procname, len);
 		link->procname = link_name;
 		link->mode = S_IFLNK|S_IRWXUGO;
 		link->data = link_root;
 		link_name += len;
+		link++;
 	}
 	init_header(links, dir->header.root, dir->header.set, node, link_table);
 	links->nreg = nr_entries;
@@ -1213,7 +1221,7 @@ static bool get_links(struct ctl_dir *dir,
 	struct ctl_table *entry, *link;
 
 	/* Are there links available for every entry in table? */
-	for (entry = table; entry->procname; entry++) {
+	list_for_each_table_entry(entry, table) {
 		const char *procname = entry->procname;
 		link = find_entry(&head, dir, procname, strlen(procname));
 		if (!link)
@@ -1226,7 +1234,7 @@ static bool get_links(struct ctl_dir *dir,
 	}
 
 	/* The checks passed.  Increase the registration count on the links */
-	for (entry = table; entry->procname; entry++) {
+	list_for_each_table_entry(entry, table) {
 		const char *procname = entry->procname;
 		link = find_entry(&head, dir, procname, strlen(procname));
 		head->nreg++;
@@ -1237,7 +1245,7 @@ static bool get_links(struct ctl_dir *dir,
 static int insert_links(struct ctl_table_header *head)
 {
 	struct ctl_table_set *root_set = &sysctl_table_root.default_set;
-	struct ctl_dir *core_parent = NULL;
+	struct ctl_dir *core_parent;
 	struct ctl_table_header *links;
 	int err;
 
@@ -1329,11 +1337,11 @@ struct ctl_table_header *__register_sysctl_table(
 	struct ctl_node *node;
 	int nr_entries = 0;
 
-	for (entry = table; entry->procname; entry++)
+	list_for_each_table_entry(entry, table)
 		nr_entries++;
 
 	header = kzalloc(sizeof(struct ctl_table_header) +
-			 sizeof(struct ctl_node)*nr_entries, GFP_KERNEL);
+			 sizeof(struct ctl_node)*nr_entries, GFP_KERNEL_ACCOUNT);
 	if (!header)
 		return NULL;
 
@@ -1456,7 +1464,7 @@ static int count_subheaders(struct ctl_table *table)
 	if (!table || !table->procname)
 		return 1;
 
-	for (entry = table; entry->procname; entry++) {
+	list_for_each_table_entry(entry, table) {
 		if (entry->child)
 			nr_subheaders += count_subheaders(entry->child);
 		else
@@ -1475,7 +1483,7 @@ static int register_leaf_sysctl_tables(const char *path, char *pos,
 	int nr_dirs = 0;
 	int err = -ENOMEM;
 
-	for (entry = table; entry->procname; entry++) {
+	list_for_each_table_entry(entry, table) {
 		if (entry->child)
 			nr_dirs++;
 		else
@@ -1492,7 +1500,9 @@ static int register_leaf_sysctl_tables(const char *path, char *pos,
 			goto out;
 
 		ctl_table_arg = files;
-		for (new = files, entry = table; entry->procname; entry++) {
+		new = files;
+
+		list_for_each_table_entry(entry, table) {
 			if (entry->child)
 				continue;
 			*new = *entry;
@@ -1516,7 +1526,7 @@ static int register_leaf_sysctl_tables(const char *path, char *pos,
 	}
 
 	/* Recurse into the subdirectories. */
-	for (entry = table; entry->procname; entry++) {
+	list_for_each_table_entry(entry, table) {
 		char *child_pos;
 
 		if (!entry->child)
@@ -1670,7 +1680,7 @@ static void put_links(struct ctl_table_header *header)
 	if (IS_ERR(core_parent))
 		return;
 
-	for (entry = header->ctl_table; entry->procname; entry++) {
+	list_for_each_table_entry(entry, header->ctl_table) {
 		struct ctl_table_header *link_head;
 		struct ctl_table *link;
 		const char *name = entry->procname;

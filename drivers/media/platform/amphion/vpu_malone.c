@@ -68,6 +68,8 @@
 #define STREAM_CONFIG_NUM_DBE_SET(x, y)		CONFIG_SET(x, y, 30, 0x40000000)
 #define STREAM_CONFIG_FS_CTRL_MODE_SET(x, y)	CONFIG_SET(x, y, 31, 0x80000000)
 
+#define MALONE_DEC_FMT_RV_MASK			BIT(21)
+
 enum vpu_malone_stream_input_mode {
 	INVALID_MODE = 0,
 	FRAME_LVL,
@@ -170,6 +172,7 @@ enum {
 	VID_API_EVENT_DEC_CHECK_RES		= 0x24,
 	VID_API_EVENT_DEC_CFG_INFO		= 0x25,
 	VID_API_EVENT_UNSUPPORTED_STREAM	= 0x26,
+	VID_API_EVENT_PIC_SKIPPED		= 0x27,
 	VID_API_EVENT_STR_SUSPENDED		= 0x30,
 	VID_API_EVENT_SNAPSHOT_DONE		= 0x40,
 	VID_API_EVENT_FW_STATUS                 = 0xF0,
@@ -308,6 +311,7 @@ struct malone_padding_scode {
 struct malone_fmt_mapping {
 	u32 pixelformat;
 	enum vpu_malone_format malone_format;
+	u32 is_disabled;
 };
 
 struct malone_scode_t {
@@ -476,6 +480,9 @@ u32 vpu_malone_get_version(struct vpu_shared_addr *shared)
 {
 	struct malone_iface *iface = shared->iface;
 
+	vpu_malone_enable_format(V4L2_PIX_FMT_RV30, iface->fw_version & MALONE_DEC_FMT_RV_MASK);
+	vpu_malone_enable_format(V4L2_PIX_FMT_RV40, iface->fw_version & MALONE_DEC_FMT_RV_MASK);
+
 	return iface->fw_version;
 }
 
@@ -560,18 +567,49 @@ static struct malone_fmt_mapping fmt_mappings[] = {
 	{V4L2_PIX_FMT_H263,        MALONE_FMT_ASP},
 	{V4L2_PIX_FMT_JPEG,        MALONE_FMT_JPG},
 	{V4L2_PIX_FMT_VP8,         MALONE_FMT_VP8},
+	{V4L2_PIX_FMT_SPK,         MALONE_FMT_SPK},
+	{V4L2_PIX_FMT_RV30,        MALONE_FMT_RV},
+	{V4L2_PIX_FMT_RV40,        MALONE_FMT_RV},
 };
+
+void vpu_malone_enable_format(u32 pixelformat, int enable)
+{
+	u32 i;
+
+	for (i = 0; i < ARRAY_SIZE(fmt_mappings); i++) {
+		if (pixelformat == fmt_mappings[i].pixelformat) {
+			fmt_mappings[i].is_disabled = enable ? 0 : 1;
+			return;
+		}
+	}
+}
 
 static enum vpu_malone_format vpu_malone_format_remap(u32 pixelformat)
 {
 	u32 i;
 
 	for (i = 0; i < ARRAY_SIZE(fmt_mappings); i++) {
+		if (fmt_mappings[i].is_disabled)
+			continue;
 		if (pixelformat == fmt_mappings[i].pixelformat)
 			return fmt_mappings[i].malone_format;
 	}
 
 	return MALONE_FMT_NULL;
+}
+
+bool vpu_malone_check_fmt(enum vpu_core_type type, u32 pixelfmt)
+{
+	if (!vpu_imx8q_check_fmt(type, pixelfmt))
+		return false;
+
+	if (pixelfmt == V4L2_PIX_FMT_NV12_8L128 || pixelfmt == V4L2_PIX_FMT_NV12_10BE_8L128 ||
+	    pixelfmt == V4L2_PIX_FMT_NV12M_8L128 || pixelfmt == V4L2_PIX_FMT_NV12M_10BE_8L128)
+		return true;
+	if (vpu_malone_format_remap(pixelfmt) == MALONE_FMT_NULL)
+		return false;
+
+	return true;
 }
 
 static void vpu_malone_set_stream_cfg(struct vpu_shared_addr *shared,
@@ -609,6 +647,8 @@ static int vpu_malone_set_params(struct vpu_shared_addr *shared,
 	enum vpu_malone_format malone_format;
 
 	malone_format = vpu_malone_format_remap(params->codec_format);
+	if (WARN_ON(malone_format == MALONE_FMT_NULL))
+		return -EINVAL;
 	iface->udata_buffer[instance].base = params->udata.base;
 	iface->udata_buffer[instance].slot_size = params->udata.size;
 
@@ -621,7 +661,9 @@ static int vpu_malone_set_params(struct vpu_shared_addr *shared,
 		hc->jpg[instance].jpg_mjpeg_interlaced = 0;
 	}
 
-	hc->codec_param[instance].disp_imm = params->b_dis_reorder ? 1 : 0;
+	hc->codec_param[instance].disp_imm = params->display_delay_enable ? 1 : 0;
+	if (malone_format != MALONE_FMT_AVC)
+		hc->codec_param[instance].disp_imm = 0;
 	hc->codec_param[instance].dbglog_enable = 0;
 	iface->dbglog_desc.level = 0;
 
@@ -673,6 +715,7 @@ int vpu_malone_set_decode_params(struct vpu_shared_addr *shared,
 }
 
 static struct vpu_pair malone_cmds[] = {
+	{VPU_CMD_ID_NOOP, VID_API_CMD_NULL},
 	{VPU_CMD_ID_START, VID_API_CMD_START},
 	{VPU_CMD_ID_STOP, VID_API_CMD_STOP},
 	{VPU_CMD_ID_ABORT, VID_API_CMD_ABORT},
@@ -703,6 +746,7 @@ static struct vpu_pair malone_msgs[] = {
 	{VPU_MSG_ID_BS_ERROR, VID_API_EVENT_BS_ERROR},
 	{VPU_MSG_ID_UNSUPPORTED, VID_API_EVENT_UNSUPPORTED_STREAM},
 	{VPU_MSG_ID_FIRMWARE_XCPT, VID_API_EVENT_FIRMWARE_XCPT},
+	{VPU_MSG_ID_PIC_SKIPPED, VID_API_EVENT_PIC_SKIPPED},
 };
 
 static void vpu_malone_pack_fs_alloc(struct vpu_rpc_event *pkt,
@@ -965,6 +1009,9 @@ static const struct malone_padding_scode padding_scodes[] = {
 	{SCODE_PADDING_EOS,      V4L2_PIX_FMT_XVID,        {0xb1010000, 0x0}},
 	{SCODE_PADDING_EOS,      V4L2_PIX_FMT_H263,        {0xb1010000, 0x0}},
 	{SCODE_PADDING_EOS,      V4L2_PIX_FMT_VP8,         {0x34010000, 0x0}},
+	{SCODE_PADDING_EOS,      V4L2_PIX_FMT_SPK,         {0x34010000, 0x0}},
+	{SCODE_PADDING_EOS,      V4L2_PIX_FMT_RV30,        {0x34010000, 0x0}},
+	{SCODE_PADDING_EOS,      V4L2_PIX_FMT_RV40,        {0x34010000, 0x0}},
 	{SCODE_PADDING_EOS,      V4L2_PIX_FMT_JPEG,        {0xefff0000, 0x0}},
 	{SCODE_PADDING_ABORT,    V4L2_PIX_FMT_H264,        {0x0B010000, 0}},
 	{SCODE_PADDING_ABORT,    V4L2_PIX_FMT_H264_MVC,    {0x0B010000, 0}},
@@ -976,6 +1023,9 @@ static const struct malone_padding_scode padding_scodes[] = {
 	{SCODE_PADDING_ABORT,    V4L2_PIX_FMT_XVID,        {0xb1010000, 0x0}},
 	{SCODE_PADDING_ABORT,    V4L2_PIX_FMT_H263,        {0xb1010000, 0x0}},
 	{SCODE_PADDING_ABORT,    V4L2_PIX_FMT_VP8,         {0x34010000, 0x0}},
+	{SCODE_PADDING_ABORT,    V4L2_PIX_FMT_SPK,         {0x34010000, 0x0}},
+	{SCODE_PADDING_ABORT,    V4L2_PIX_FMT_RV30,        {0x34010000, 0x0}},
+	{SCODE_PADDING_ABORT,    V4L2_PIX_FMT_RV40,        {0x34010000, 0x0}},
 	{SCODE_PADDING_EOS,      V4L2_PIX_FMT_JPEG,        {0x0, 0x0}},
 	{SCODE_PADDING_BUFFLUSH, V4L2_PIX_FMT_H264,        {0x15010000, 0x0}},
 	{SCODE_PADDING_BUFFLUSH, V4L2_PIX_FMT_H264_MVC,    {0x15010000, 0x0}},
@@ -1273,7 +1323,7 @@ static int vpu_malone_insert_scode_vc1_g_pic(struct malone_scode_t *scode)
 	vbuf = to_vb2_v4l2_buffer(scode->vb);
 	data = vb2_plane_vaddr(scode->vb, 0);
 
-	if (vbuf->sequence == 0 || vpu_vb_is_codecconfig(vbuf))
+	if (scode->inst->total_input_count == 0 || vpu_vb_is_codecconfig(vbuf))
 		return 0;
 	if (MALONE_VC1_CONTAIN_NAL(*data))
 		return 0;
@@ -1294,6 +1344,8 @@ static int vpu_malone_insert_scode_vc1_l_seq(struct malone_scode_t *scode)
 	int size = 0;
 	u8 rcv_seqhdr[MALONE_VC1_RCV_SEQ_HEADER_LEN];
 
+	if (scode->inst->total_input_count)
+		return 0;
 	scode->need_data = 0;
 
 	ret = vpu_malone_insert_scode_seq(scode, MALONE_CODEC_ID_VC1_SIMPLE, sizeof(rcv_seqhdr));
@@ -1387,6 +1439,16 @@ static int vpu_malone_insert_scode_vp8_pic(struct malone_scode_t *scode)
 	return size;
 }
 
+static int vpu_malone_insert_scode_spk_seq(struct malone_scode_t *scode)
+{
+	return vpu_malone_insert_scode_seq(scode, MALONE_CODEC_ID_SPK, 0);
+}
+
+static int vpu_malone_insert_scode_spk_pic(struct malone_scode_t *scode)
+{
+	return vpu_malone_insert_scode_pic(scode, MALONE_CODEC_ID_SPK, 0);
+}
+
 static const struct malone_scode_handler scode_handlers[] = {
 	{
 		/* fix me, need to swap return operation after gstreamer swap */
@@ -1402,6 +1464,11 @@ static const struct malone_scode_handler scode_handlers[] = {
 		.pixelformat = V4L2_PIX_FMT_VP8,
 		.insert_scode_seq = vpu_malone_insert_scode_vp8_seq,
 		.insert_scode_pic = vpu_malone_insert_scode_vp8_pic,
+	},
+	{
+		.pixelformat = V4L2_PIX_FMT_SPK,
+		.insert_scode_seq = vpu_malone_insert_scode_spk_seq,
+		.insert_scode_pic = vpu_malone_insert_scode_spk_pic,
 	},
 };
 
@@ -1556,7 +1623,7 @@ int vpu_malone_input_frame(struct vpu_shared_addr *shared,
 	 * merge the data to next frame
 	 */
 	vbuf = to_vb2_v4l2_buffer(vb);
-	if (vpu_vb_is_codecconfig(vbuf) && (s64)vb->timestamp < 0) {
+	if (vpu_vb_is_codecconfig(vbuf)) {
 		inst->extra_size += size;
 		return 0;
 	}

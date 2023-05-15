@@ -63,10 +63,10 @@ void nilfs_inode_sub_blocks(struct inode *inode, int n)
 
 /**
  * nilfs_get_block() - get a file block on the filesystem (callback function)
- * @inode - inode struct of the target file
- * @blkoff - file block number
- * @bh_result - buffer head to be mapped on
- * @create - indicate whether allocating the block or not when it has not
+ * @inode: inode struct of the target file
+ * @blkoff: file block number
+ * @bh_result: buffer head to be mapped on
+ * @create: indicate whether allocating the block or not when it has not
  *      been allocated yet.
  *
  * This function does not issue actual read request of the specified data
@@ -140,14 +140,14 @@ int nilfs_get_block(struct inode *inode, sector_t blkoff,
 }
 
 /**
- * nilfs_readpage() - implement readpage() method of nilfs_aops {}
+ * nilfs_read_folio() - implement read_folio() method of nilfs_aops {}
  * address_space_operations.
- * @file - file struct of the file to be read
- * @page - the page to be read
+ * @file: file struct of the file to be read
+ * @folio: the folio to be read
  */
-static int nilfs_readpage(struct file *file, struct page *page)
+static int nilfs_read_folio(struct file *file, struct folio *folio)
 {
-	return mpage_readpage(page, nilfs_get_block);
+	return mpage_read_folio(folio, nilfs_get_block);
 }
 
 static void nilfs_readahead(struct readahead_control *rac)
@@ -248,7 +248,7 @@ void nilfs_write_failed(struct address_space *mapping, loff_t to)
 }
 
 static int nilfs_write_begin(struct file *file, struct address_space *mapping,
-			     loff_t pos, unsigned len, unsigned flags,
+			     loff_t pos, unsigned len,
 			     struct page **pagep, void **fsdata)
 
 {
@@ -258,8 +258,7 @@ static int nilfs_write_begin(struct file *file, struct address_space *mapping,
 	if (unlikely(err))
 		return err;
 
-	err = block_write_begin(mapping, pos, len, flags, pagep,
-				nilfs_get_block);
+	err = block_write_begin(mapping, pos, len, pagep, nilfs_get_block);
 	if (unlikely(err)) {
 		nilfs_write_failed(mapping, pos + len);
 		nilfs_transaction_abort(inode->i_sb);
@@ -299,13 +298,12 @@ nilfs_direct_IO(struct kiocb *iocb, struct iov_iter *iter)
 
 const struct address_space_operations nilfs_aops = {
 	.writepage		= nilfs_writepage,
-	.readpage		= nilfs_readpage,
+	.read_folio		= nilfs_read_folio,
 	.writepages		= nilfs_writepages,
 	.dirty_folio		= nilfs_dirty_folio,
 	.readahead		= nilfs_readahead,
 	.write_begin		= nilfs_write_begin,
 	.write_end		= nilfs_write_end,
-	/* .releasepage		= nilfs_releasepage, */
 	.invalidate_folio	= block_invalidate_folio,
 	.direct_IO		= nilfs_direct_IO,
 	.is_partially_uptodate  = block_is_partially_uptodate,
@@ -330,6 +328,7 @@ struct inode *nilfs_new_inode(struct inode *dir, umode_t mode)
 	struct inode *inode;
 	struct nilfs_inode_info *ii;
 	struct nilfs_root *root;
+	struct buffer_head *bh;
 	int err = -ENOMEM;
 	ino_t ino;
 
@@ -345,13 +344,27 @@ struct inode *nilfs_new_inode(struct inode *dir, umode_t mode)
 	ii->i_state = BIT(NILFS_I_NEW);
 	ii->i_root = root;
 
-	err = nilfs_ifile_create_inode(root->ifile, &ino, &ii->i_bh);
+	err = nilfs_ifile_create_inode(root->ifile, &ino, &bh);
 	if (unlikely(err))
 		goto failed_ifile_create_inode;
 	/* reference count of i_bh inherits from nilfs_mdt_read_block() */
 
+	if (unlikely(ino < NILFS_USER_INO)) {
+		nilfs_warn(sb,
+			   "inode bitmap is inconsistent for reserved inodes");
+		do {
+			brelse(bh);
+			err = nilfs_ifile_create_inode(root->ifile, &ino, &bh);
+			if (unlikely(err))
+				goto failed_ifile_create_inode;
+		} while (ino < NILFS_USER_INO);
+
+		nilfs_info(sb, "repaired inode bitmap for reserved inodes");
+	}
+	ii->i_bh = bh;
+
 	atomic64_inc(&root->inodes_count);
-	inode_init_owner(&init_user_ns, inode, dir, mode);
+	inode_init_owner(&nop_mnt_idmap, inode, dir, mode);
 	inode->i_ino = ino;
 	inode->i_mtime = inode->i_atime = inode->i_ctime = current_time(inode);
 
@@ -442,6 +455,8 @@ int nilfs_read_inode_common(struct inode *inode,
 	inode->i_atime.tv_nsec = le32_to_cpu(raw_inode->i_mtime_nsec);
 	inode->i_ctime.tv_nsec = le32_to_cpu(raw_inode->i_ctime_nsec);
 	inode->i_mtime.tv_nsec = le32_to_cpu(raw_inode->i_mtime_nsec);
+	if (nilfs_is_metadata_file_inode(inode) && !S_ISREG(inode->i_mode))
+		return -EIO; /* this inode is for metadata and corrupted */
 	if (inode->i_nlink == 0)
 		return -ESTALE; /* this inode is deleted */
 
@@ -934,7 +949,7 @@ void nilfs_evict_inode(struct inode *inode)
 	 */
 }
 
-int nilfs_setattr(struct user_namespace *mnt_userns, struct dentry *dentry,
+int nilfs_setattr(struct mnt_idmap *idmap, struct dentry *dentry,
 		  struct iattr *iattr)
 {
 	struct nilfs_transaction_info ti;
@@ -942,7 +957,7 @@ int nilfs_setattr(struct user_namespace *mnt_userns, struct dentry *dentry,
 	struct super_block *sb = inode->i_sb;
 	int err;
 
-	err = setattr_prepare(&init_user_ns, dentry, iattr);
+	err = setattr_prepare(&nop_mnt_idmap, dentry, iattr);
 	if (err)
 		return err;
 
@@ -957,7 +972,7 @@ int nilfs_setattr(struct user_namespace *mnt_userns, struct dentry *dentry,
 		nilfs_truncate(inode);
 	}
 
-	setattr_copy(&init_user_ns, inode, iattr);
+	setattr_copy(&nop_mnt_idmap, inode, iattr);
 	mark_inode_dirty(inode);
 
 	if (iattr->ia_valid & ATTR_MODE) {
@@ -973,7 +988,7 @@ out_err:
 	return err;
 }
 
-int nilfs_permission(struct user_namespace *mnt_userns, struct inode *inode,
+int nilfs_permission(struct mnt_idmap *idmap, struct inode *inode,
 		     int mask)
 {
 	struct nilfs_root *root = NILFS_I(inode)->i_root;
@@ -982,7 +997,7 @@ int nilfs_permission(struct user_namespace *mnt_userns, struct inode *inode,
 	    root->cno != NILFS_CPTREE_CURRENT_CNO)
 		return -EROFS; /* snapshot is not writable */
 
-	return generic_permission(&init_user_ns, inode, mask);
+	return generic_permission(&nop_mnt_idmap, inode, mask);
 }
 
 int nilfs_load_inode_block(struct inode *inode, struct buffer_head **pbh)
@@ -1088,6 +1103,7 @@ int __nilfs_mark_inode_dirty(struct inode *inode, int flags)
 /**
  * nilfs_dirty_inode - reflect changes on given inode to an inode block.
  * @inode: inode of the file to be registered.
+ * @flags: flags to determine the dirty state of the inode
  *
  * nilfs_dirty_inode() loads a inode block containing the specified
  * @inode and copies data from a nilfs_inode to a corresponding inode

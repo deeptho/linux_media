@@ -8,7 +8,7 @@
 # Uses the following environment variables:
 # SUBARCH, SRCARCH, srctree
 
-if [ "$KBUILD_VERBOSE" = "1" ]; then
+if [[ "$KBUILD_VERBOSE" =~ 1 ]]; then
 	set -x
 fi
 
@@ -17,19 +17,19 @@ ignore="$(echo "$RCS_FIND_IGNORE" | sed 's|\\||g' )"
 # tags and cscope files should also ignore MODVERSION *.mod.c files
 ignore="$ignore ( -name *.mod.c ) -prune -o"
 
+# ignore arbitrary directories
+if [ -n "${IGNORE_DIRS}" ]; then
+	for i in ${IGNORE_DIRS}; do
+		ignore="${ignore} ( -path $i ) -prune -o"
+	done
+fi
+
 # Use make KBUILD_ABS_SRCTREE=1 {tags|cscope}
 # to force full paths for a non-O= build
 if [ "${srctree}" = "." -o -z "${srctree}" ]; then
 	tree=
 else
 	tree=${srctree}/
-fi
-
-# ignore userspace tools
-if [ -n "$COMPILED_SOURCE" ]; then
-	ignore="$ignore ( -path ./tools ) -prune -o"
-else
-	ignore="$ignore ( -path ${tree}tools ) -prune -o"
 fi
 
 # Detect if ALLSOURCE_ARCHS is set. If not, we assume SRCARCH
@@ -95,10 +95,13 @@ all_sources()
 
 all_compiled_sources()
 {
-	realpath -es $([ -z "$KBUILD_ABS_SRCTREE" ] && echo --relative-to=.) \
-		include/generated/autoconf.h $(find $ignore -name "*.cmd" -exec \
-		grep -Poh '(?(?=^source_.* \K).*|(?=^  \K\S).*(?= \\))' {} \+ |
-		awk '!a[$0]++') | sort -u
+	{
+		echo include/generated/autoconf.h
+		find $ignore -name "*.cmd" -exec \
+			sed -n -E 's/^source_.* (.*)/\1/p; s/^  (\S.*) \\/\1/p' {} \+ |
+		awk '!a[$0]++'
+	} | xargs realpath -esq $([ -z "$KBUILD_ABS_SRCTREE" ] && echo --relative-to=.) |
+	sort -u
 }
 
 all_target_sources()
@@ -268,10 +271,12 @@ exuberant()
 	--$CTAGS_EXTRA=+fq --c-kinds=+px --fields=+iaS --langmap=c:+.h \
 	"${regex[@]}"
 
-	setup_regex exuberant kconfig
-	all_kconfigs | xargs $1 -a                              \
-	--langdef=kconfig --language-force=kconfig "${regex[@]}"
-
+	KCONFIG_ARGS=()
+	if ! $1 --list-languages | grep -iq kconfig; then
+		setup_regex exuberant kconfig
+		KCONFIG_ARGS=(--langdef=kconfig --language-force=kconfig "${regex[@]}")
+	fi
+	all_kconfigs | xargs $1 -a "${KCONFIG_ARGS[@]}"
 }
 
 emacs()

@@ -117,6 +117,15 @@ struct drm_panel_funcs {
 			 struct drm_connector *connector);
 
 	/**
+	 * @get_orientation:
+	 *
+	 * Return the panel orientation set by device tree or EDID.
+	 *
+	 * This function is optional.
+	 */
+	enum drm_panel_orientation (*get_orientation)(struct drm_panel *panel);
+
+	/**
 	 * @get_timings:
 	 *
 	 * Copy display timings into the provided array and return
@@ -179,6 +188,16 @@ struct drm_panel {
 	 * Panel entry in registry.
 	 */
 	struct list_head list;
+
+	/**
+	 * @prepare_prev_first:
+	 *
+	 * The previous controller should be prepared first, before the prepare
+	 * for the panel is called. This is largely required for DSI panels
+	 * where the DSI host controller should be initialised to LP-11 before
+	 * the panel is powered up.
+	 */
+	bool prepare_prev_first;
 };
 
 void drm_panel_init(struct drm_panel *panel, struct device *dev,

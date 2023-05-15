@@ -130,7 +130,7 @@ int ldsem_down_write_nested(struct ld_semaphore *sem, int subclass,
  *	a pointer to wordsize-sensitive structure belongs here, but most of
  *	ldiscs will happily leave it %NULL.
  *
- * @set_termios: [TTY] ``void ()(struct tty_struct *tty, struct ktermios *old)``
+ * @set_termios: [TTY] ``void ()(struct tty_struct *tty, const struct ktermios *old)``
  *
  *	This function notifies the line discpline that a change has been made
  *	to the termios structure.
@@ -170,7 +170,7 @@ int ldsem_down_write_nested(struct ld_semaphore *sem, int subclass,
  *	send, please arise a tasklet or workqueue to do the real data transfer.
  *	Do not send data in this hook, it may lead to a deadlock.
  *
- * @dcd_change: [DRV] ``void ()(struct tty_struct *tty, unsigned int status)``
+ * @dcd_change: [DRV] ``void ()(struct tty_struct *tty, bool active)``
  *
  *	Tells the discipline that the DCD pin has changed its status. Used
  *	exclusively by the %N_PPS (Pulse-Per-Second) line discipline.
@@ -185,6 +185,18 @@ int ldsem_down_write_nested(struct ld_semaphore *sem, int subclass,
  *	character was received with a parity error, etc. @fp may be %NULL to
  *	indicate all data received is %TTY_NORMAL. If assigned, prefer this
  *	function for automatic flow control.
+ *
+ * @lookahead_buf: [DRV] ``void ()(struct tty_struct *tty,
+ *			const unsigned char *cp, const char *fp, int count)``
+ *
+ *	This function is called by the low-level tty driver for characters
+ *	not eaten by ->receive_buf() or ->receive_buf2(). It is useful for
+ *	processing high-priority characters such as software flow-control
+ *	characters that could otherwise get stuck into the intermediate
+ *	buffer until tty has room to receive them. Ldisc must be able to
+ *	handle later a ->receive_buf() or ->receive_buf2() call for the
+ *	same characters (e.g. by skipping the actions for high-priority
+ *	characters already handled by ->lookahead_buf()).
  *
  * @owner: module containting this ldisc (for reference counting)
  *
@@ -215,7 +227,7 @@ struct tty_ldisc_ops {
 			unsigned long arg);
 	int	(*compat_ioctl)(struct tty_struct *tty, unsigned int cmd,
 			unsigned long arg);
-	void	(*set_termios)(struct tty_struct *tty, struct ktermios *old);
+	void	(*set_termios)(struct tty_struct *tty, const struct ktermios *old);
 	__poll_t (*poll)(struct tty_struct *tty, struct file *file,
 			     struct poll_table_struct *wait);
 	void	(*hangup)(struct tty_struct *tty);
@@ -226,9 +238,11 @@ struct tty_ldisc_ops {
 	void	(*receive_buf)(struct tty_struct *tty, const unsigned char *cp,
 			       const char *fp, int count);
 	void	(*write_wakeup)(struct tty_struct *tty);
-	void	(*dcd_change)(struct tty_struct *tty, unsigned int status);
+	void	(*dcd_change)(struct tty_struct *tty, bool active);
 	int	(*receive_buf2)(struct tty_struct *tty, const unsigned char *cp,
 				const char *fp, int count);
+	void	(*lookahead_buf)(struct tty_struct *tty, const unsigned char *cp,
+				 const unsigned char *fp, unsigned int count);
 
 	struct  module *owner;
 };

@@ -30,6 +30,7 @@
 #include <linux/efi.h>
 #include <linux/psci.h>
 #include <linux/sched/task.h>
+#include <linux/scs.h>
 #include <linux/mm.h>
 
 #include <asm/acpi.h>
@@ -42,6 +43,7 @@
 #include <asm/cpu_ops.h>
 #include <asm/kasan.h>
 #include <asm/numa.h>
+#include <asm/scs.h>
 #include <asm/sections.h>
 #include <asm/setup.h>
 #include <asm/smp_plat.h>
@@ -56,6 +58,7 @@ static int num_standard_resources;
 static struct resource *standard_resources;
 
 phys_addr_t __fdt_pointer __initdata;
+u64 mmu_enabled_at_boot __initdata;
 
 /*
  * Standard memory resources
@@ -225,6 +228,8 @@ static void __init request_standard_resources(void)
 	kernel_code.end     = __pa_symbol(__init_begin - 1);
 	kernel_data.start   = __pa_symbol(_sdata);
 	kernel_data.end     = __pa_symbol(_end - 1);
+	insert_resource(&iomem_resource, &kernel_code);
+	insert_resource(&iomem_resource, &kernel_data);
 
 	num_standard_resources = memblock.memory.cnt;
 	res_size = num_standard_resources * sizeof(*standard_resources);
@@ -246,20 +251,7 @@ static void __init request_standard_resources(void)
 			res->end = __pfn_to_phys(memblock_region_memory_end_pfn(region)) - 1;
 		}
 
-		request_resource(&iomem_resource, res);
-
-		if (kernel_code.start >= res->start &&
-		    kernel_code.end <= res->end)
-			request_resource(res, &kernel_code);
-		if (kernel_data.start >= res->start &&
-		    kernel_data.end <= res->end)
-			request_resource(res, &kernel_data);
-#ifdef CONFIG_KEXEC_CORE
-		/* Userspace will find "Crash kernel" region in /proc/iomem. */
-		if (crashk_res.end && crashk_res.start >= res->start &&
-		    crashk_res.end <= res->end)
-			request_resource(res, &crashk_res);
-#endif
+		insert_resource(&iomem_resource, res);
 	}
 }
 
@@ -323,6 +315,8 @@ void __init __no_sanitize_address setup_arch(char **cmdline_p)
 	jump_label_init();
 	parse_early_param();
 
+	dynamic_scs_init();
+
 	/*
 	 * Unmask asynchronous aborts and fiq after bringing up possible
 	 * earlycon. (Report possible System Errors once we can report this
@@ -339,8 +333,12 @@ void __init __no_sanitize_address setup_arch(char **cmdline_p)
 	xen_early_init();
 	efi_init();
 
-	if (!efi_enabled(EFI_BOOT) && ((u64)_text % MIN_KIMG_ALIGN) != 0)
-	     pr_warn(FW_BUG "Kernel image misaligned at boot, please fix your bootloader!");
+	if (!efi_enabled(EFI_BOOT)) {
+		if ((u64)_text % MIN_KIMG_ALIGN)
+			pr_warn(FW_BUG "Kernel image misaligned at boot, please fix your bootloader!");
+		WARN_TAINT(mmu_enabled_at_boot, TAINT_FIRMWARE_WORKAROUND,
+			   FW_BUG "Booted with MMU enabled!");
+	}
 
 	arm64_memblock_init();
 
@@ -449,3 +447,11 @@ static int __init register_arm64_panic_block(void)
 	return 0;
 }
 device_initcall(register_arm64_panic_block);
+
+static int __init check_mmu_enabled_at_boot(void)
+{
+	if (!efi_enabled(EFI_BOOT) && mmu_enabled_at_boot)
+		panic("Non-EFI boot detected with MMU and caches enabled");
+	return 0;
+}
+device_initcall_sync(check_mmu_enabled_at_boot);

@@ -441,7 +441,7 @@ struct mcp251xfd_hw_tef_obj {
 /* The tx_obj_raw version is used in spi async, i.e. without
  * regmap. We have to take care of endianness ourselves.
  */
-struct mcp251xfd_hw_tx_obj_raw {
+struct __packed mcp251xfd_hw_tx_obj_raw {
 	__le32 id;
 	__le32 flags;
 	u8 data[sizeof_field(struct canfd_frame, data)];
@@ -504,6 +504,11 @@ union mcp251xfd_write_reg_buf {
 		u8 data[4];
 		__be16 crc;
 	} crc;
+	struct __packed {
+		struct mcp251xfd_buf_cmd cmd;
+		u8 data[1];
+		__be16 crc;
+	} safe;
 } ____cacheline_aligned;
 
 struct mcp251xfd_tx_obj {
@@ -586,7 +591,8 @@ struct mcp251xfd_regs_status {
 enum mcp251xfd_model {
 	MCP251XFD_MODEL_MCP2517FD = 0x2517,
 	MCP251XFD_MODEL_MCP2518FD = 0x2518,
-	MCP251XFD_MODEL_MCP251XFD = 0xffff,	/* autodetect model */
+	MCP251XFD_MODEL_MCP251863 = 0x251863,
+	MCP251XFD_MODEL_MCP251XFD = 0xffffffff,	/* autodetect model */
 };
 
 struct mcp251xfd_devtype_data {
@@ -659,12 +665,13 @@ struct mcp251xfd_priv {
 static inline bool \
 mcp251xfd_is_##_model(const struct mcp251xfd_priv *priv) \
 { \
-	return priv->devtype_data.model == MCP251XFD_MODEL_MCP##_model##FD; \
+	return priv->devtype_data.model == MCP251XFD_MODEL_MCP##_model; \
 }
 
-MCP251XFD_IS(2517);
-MCP251XFD_IS(2518);
-MCP251XFD_IS(251X);
+MCP251XFD_IS(2517FD);
+MCP251XFD_IS(2518FD);
+MCP251XFD_IS(251863);
+MCP251XFD_IS(251XFD);
 
 static inline bool mcp251xfd_is_fd_mode(const struct mcp251xfd_priv *priv)
 {
@@ -757,6 +764,13 @@ mcp251xfd_spi_cmd_write_crc_set_addr(struct mcp251xfd_buf_cmd_crc *cmd,
 }
 
 static inline void
+mcp251xfd_spi_cmd_write_safe_set_addr(struct mcp251xfd_buf_cmd *cmd,
+				     u16 addr)
+{
+	cmd->cmd = cpu_to_be16(MCP251XFD_SPI_INSTRUCTION_WRITE_CRC_SAFE | addr);
+}
+
+static inline void
 mcp251xfd_spi_cmd_write_crc(struct mcp251xfd_buf_cmd_crc *cmd,
 			    u16 addr, u16 len)
 {
@@ -767,14 +781,20 @@ mcp251xfd_spi_cmd_write_crc(struct mcp251xfd_buf_cmd_crc *cmd,
 static inline u8 *
 mcp251xfd_spi_cmd_write(const struct mcp251xfd_priv *priv,
 			union mcp251xfd_write_reg_buf *write_reg_buf,
-			u16 addr)
+			u16 addr, u8 len)
 {
 	u8 *data;
 
 	if (priv->devtype_data.quirks & MCP251XFD_QUIRK_CRC_REG) {
-		mcp251xfd_spi_cmd_write_crc_set_addr(&write_reg_buf->crc.cmd,
-						     addr);
-		data = write_reg_buf->crc.data;
+		if (len == 1) {
+			mcp251xfd_spi_cmd_write_safe_set_addr(&write_reg_buf->safe.cmd,
+							     addr);
+			data = write_reg_buf->safe.data;
+		} else {
+			mcp251xfd_spi_cmd_write_crc_set_addr(&write_reg_buf->crc.cmd,
+							     addr);
+			data = write_reg_buf->crc.data;
+		}
 	} else {
 		mcp251xfd_spi_cmd_write_nocrc(&write_reg_buf->nocrc.cmd,
 					      addr);

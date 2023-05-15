@@ -65,7 +65,7 @@ static int f2fs_xattr_generic_get(const struct xattr_handler *handler,
 }
 
 static int f2fs_xattr_generic_set(const struct xattr_handler *handler,
-		struct user_namespace *mnt_userns,
+		struct mnt_idmap *idmap,
 		struct dentry *unused, struct inode *inode,
 		const char *name, const void *value,
 		size_t size, int flags)
@@ -109,7 +109,7 @@ static int f2fs_xattr_advise_get(const struct xattr_handler *handler,
 }
 
 static int f2fs_xattr_advise_set(const struct xattr_handler *handler,
-		struct user_namespace *mnt_userns,
+		struct mnt_idmap *idmap,
 		struct dentry *unused, struct inode *inode,
 		const char *name, const void *value,
 		size_t size, int flags)
@@ -117,7 +117,7 @@ static int f2fs_xattr_advise_set(const struct xattr_handler *handler,
 	unsigned char old_advise = F2FS_I(inode)->i_advise;
 	unsigned char new_advise;
 
-	if (!inode_owner_or_capable(&init_user_ns, inode))
+	if (!inode_owner_or_capable(&nop_mnt_idmap, inode))
 		return -EPERM;
 	if (value == NULL)
 		return -EINVAL;
@@ -367,6 +367,8 @@ static int lookup_all_xattrs(struct inode *inode, struct page *ipage,
 								inode->i_ino);
 		set_sbi_flag(F2FS_I_SB(inode), SBI_NEED_FSCK);
 		err = -EFSCORRUPTED;
+		f2fs_handle_error(F2FS_I_SB(inode),
+					ERROR_CORRUPTED_XATTR);
 		goto out;
 	}
 check:
@@ -583,6 +585,8 @@ ssize_t f2fs_listxattr(struct dentry *dentry, char *buffer, size_t buffer_size)
 						inode->i_ino);
 			set_sbi_flag(F2FS_I_SB(inode), SBI_NEED_FSCK);
 			error = -EFSCORRUPTED;
+			f2fs_handle_error(F2FS_I_SB(inode),
+						ERROR_CORRUPTED_XATTR);
 			goto cleanup;
 		}
 
@@ -658,6 +662,8 @@ static int __f2fs_setxattr(struct inode *inode, int index,
 								inode->i_ino);
 		set_sbi_flag(F2FS_I_SB(inode), SBI_NEED_FSCK);
 		error = -EFSCORRUPTED;
+		f2fs_handle_error(F2FS_I_SB(inode),
+					ERROR_CORRUPTED_XATTR);
 		goto exit;
 	}
 
@@ -684,6 +690,8 @@ static int __f2fs_setxattr(struct inode *inode, int index,
 					inode->i_ino, ENTRY_SIZE(last));
 			set_sbi_flag(F2FS_I_SB(inode), SBI_NEED_FSCK);
 			error = -EFSCORRUPTED;
+			f2fs_handle_error(F2FS_I_SB(inode),
+						ERROR_CORRUPTED_XATTR);
 			goto exit;
 		}
 		last = XATTR_NEXT_ENTRY(last);
