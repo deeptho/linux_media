@@ -15,6 +15,7 @@
 #include <linux/atomic.h>
 #include <linux/dma-fence.h>
 #include <linux/sched/signal.h>
+#include <linux/seq_file.h>
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/dma_fence.h>
@@ -135,6 +136,10 @@ struct dma_fence *dma_fence_get_stub(void)
 			       &dma_fence_stub_ops,
 			       &dma_fence_stub_lock,
 			       0, 0);
+
+		set_bit(DMA_FENCE_FLAG_ENABLE_SIGNAL_BIT,
+			&dma_fence_stub.flags);
+
 		dma_fence_signal_locked(&dma_fence_stub);
 	}
 	spin_unlock(&dma_fence_stub_lock);
@@ -160,6 +165,10 @@ struct dma_fence *dma_fence_allocate_private_stub(void)
 		       &dma_fence_stub_ops,
 		       &dma_fence_stub_lock,
 		       0, 0);
+
+	set_bit(DMA_FENCE_FLAG_ENABLE_SIGNAL_BIT,
+		&fence->flags);
+
 	dma_fence_signal(fence);
 
 	return fence;
@@ -499,6 +508,8 @@ dma_fence_wait_timeout(struct dma_fence *fence, bool intr, signed long timeout)
 
 	__dma_fence_might_wait();
 
+	dma_fence_enable_sw_signaling(fence);
+
 	trace_dma_fence_wait_start(fence);
 	if (fence->ops->wait)
 		ret = fence->ops->wait(fence, intr, timeout);
@@ -599,9 +610,6 @@ static bool __dma_fence_enable_signaling(struct dma_fence *fence)
 void dma_fence_enable_sw_signaling(struct dma_fence *fence)
 {
 	unsigned long flags;
-
-	if (test_bit(DMA_FENCE_FLAG_SIGNALED_BIT, &fence->flags))
-		return;
 
 	spin_lock_irqsave(fence->lock, flags);
 	__dma_fence_enable_signaling(fence);
@@ -755,18 +763,15 @@ dma_fence_default_wait(struct dma_fence *fence, bool intr, signed long timeout)
 	unsigned long flags;
 	signed long ret = timeout ? timeout : 1;
 
-	if (test_bit(DMA_FENCE_FLAG_SIGNALED_BIT, &fence->flags))
-		return ret;
-
 	spin_lock_irqsave(fence->lock, flags);
+
+	if (test_bit(DMA_FENCE_FLAG_SIGNALED_BIT, &fence->flags))
+		goto out;
 
 	if (intr && signal_pending(current)) {
 		ret = -ERESTARTSYS;
 		goto out;
 	}
-
-	if (!__dma_fence_enable_signaling(fence))
-		goto out;
 
 	if (!timeout) {
 		ret = 0;
@@ -906,6 +911,22 @@ err_free_cb:
 	return ret;
 }
 EXPORT_SYMBOL(dma_fence_wait_any_timeout);
+
+/**
+ * dma_fence_describe - Dump fence describtion into seq_file
+ * @fence: the 6fence to describe
+ * @seq: the seq_file to put the textual description into
+ *
+ * Dump a textual description of the fence and it's state into the seq_file.
+ */
+void dma_fence_describe(struct dma_fence *fence, struct seq_file *seq)
+{
+	seq_printf(seq, "%s %s seq %llu %ssignalled\n",
+		   fence->ops->get_driver_name(fence),
+		   fence->ops->get_timeline_name(fence), fence->seqno,
+		   dma_fence_is_signaled(fence) ? "" : "un");
+}
+EXPORT_SYMBOL(dma_fence_describe);
 
 /**
  * dma_fence_init - Initialize a custom fence.

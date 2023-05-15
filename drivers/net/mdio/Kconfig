@@ -141,7 +141,7 @@ config MDIO_MVUSB
 
 config MDIO_MSCC_MIIM
 	tristate "Microsemi MIIM interface support"
-	depends on HAS_IOMEM
+	depends on HAS_IOMEM && REGMAP_MMIO
 	select MDIO_DEVRES
 	help
 	  This driver supports the MIIM (MDIO) interface found in the network
@@ -213,6 +213,17 @@ config MDIO_BUS_MUX_MESON_G12A
 	help
 	  This module provides a driver for the MDIO multiplexer/glue of
 	  the amlogic g12a SoC. The multiplexers connects either the external
+	  or the internal MDIO bus to the parent bus.
+
+config MDIO_BUS_MUX_MESON_GXL
+	tristate "Amlogic GXL based MDIO bus multiplexer"
+	depends on ARCH_MESON || COMPILE_TEST
+	depends on OF_MDIO && HAS_IOMEM && COMMON_CLK
+	select MDIO_BUS_MUX
+	default m if ARCH_MESON
+	help
+	  This module provides a driver for the MDIO multiplexer/glue of
+	  the amlogic GXL SoC. The multiplexer connects either the external
 	  or the internal MDIO bus to the parent bus.
 
 config MDIO_BUS_MUX_BCM6368

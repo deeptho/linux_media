@@ -34,6 +34,7 @@
 #include "amdgpu.h"
 #include "amdgpu_pm.h"
 #include "amdgpu_vce.h"
+#include "amdgpu_cs.h"
 #include "cikd.h"
 
 /* 1 second timeout */
@@ -157,19 +158,11 @@ int amdgpu_vce_sw_init(struct amdgpu_device *adev, unsigned long size)
 		return -EINVAL;
 	}
 
-	r = request_firmware(&adev->vce.fw, fw_name, adev->dev);
-	if (r) {
-		dev_err(adev->dev, "amdgpu_vce: Can't load firmware \"%s\"\n",
-			fw_name);
-		return r;
-	}
-
-	r = amdgpu_ucode_validate(adev->vce.fw);
+	r = amdgpu_ucode_request(adev, &adev->vce.fw, fw_name);
 	if (r) {
 		dev_err(adev->dev, "amdgpu_vce: Can't validate firmware \"%s\"\n",
 			fw_name);
-		release_firmware(adev->vce.fw);
-		adev->vce.fw = NULL;
+		amdgpu_ucode_release(&adev->vce.fw);
 		return r;
 	}
 
@@ -185,7 +178,9 @@ int amdgpu_vce_sw_init(struct amdgpu_device *adev, unsigned long size)
 				(binary_id << 8));
 
 	r = amdgpu_bo_create_kernel(adev, size, PAGE_SIZE,
-				    AMDGPU_GEM_DOMAIN_VRAM, &adev->vce.vcpu_bo,
+				    AMDGPU_GEM_DOMAIN_VRAM |
+				    AMDGPU_GEM_DOMAIN_GTT,
+				    &adev->vce.vcpu_bo,
 				    &adev->vce.gpu_addr, &adev->vce.cpu_addr);
 	if (r) {
 		dev_err(adev->dev, "(%d) failed to allocate VCE bo\n", r);
@@ -225,7 +220,7 @@ int amdgpu_vce_sw_fini(struct amdgpu_device *adev)
 	for (i = 0; i < adev->vce.num_rings; i++)
 		amdgpu_ring_fini(&adev->vce.ring[i]);
 
-	release_firmware(adev->vce.fw);
+	amdgpu_ucode_release(&adev->vce.fw);
 	mutex_destroy(&adev->vce.idle_mutex);
 
 	return 0;
@@ -434,7 +429,6 @@ void amdgpu_vce_free_handles(struct amdgpu_device *adev, struct drm_file *filp)
  *
  * @ring: ring we should submit the msg to
  * @handle: VCE session handle to use
- * @bo: amdgpu object for which we query the offset
  * @fence: optional fence to return
  *
  * Open up a stream for HW test
@@ -450,8 +444,10 @@ static int amdgpu_vce_get_create_msg(struct amdgpu_ring *ring, uint32_t handle,
 	uint64_t addr;
 	int i, r;
 
-	r = amdgpu_job_alloc_with_ib(ring->adev, ib_size_dw * 4,
-				     AMDGPU_IB_POOL_DIRECT, &job);
+	r = amdgpu_job_alloc_with_ib(ring->adev, &ring->adev->vce.entity,
+				     AMDGPU_FENCE_OWNER_UNDEFINED,
+				     ib_size_dw * 4, AMDGPU_IB_POOL_DIRECT,
+				     &job);
 	if (r)
 		return r;
 
@@ -538,7 +534,9 @@ static int amdgpu_vce_get_destroy_msg(struct amdgpu_ring *ring, uint32_t handle,
 	struct dma_fence *f = NULL;
 	int i, r;
 
-	r = amdgpu_job_alloc_with_ib(ring->adev, ib_size_dw * 4,
+	r = amdgpu_job_alloc_with_ib(ring->adev, &ring->adev->vce.entity,
+				     AMDGPU_FENCE_OWNER_UNDEFINED,
+				     ib_size_dw * 4,
 				     direct ? AMDGPU_IB_POOL_DIRECT :
 				     AMDGPU_IB_POOL_DELAYED, &job);
 	if (r)
@@ -570,8 +568,7 @@ static int amdgpu_vce_get_destroy_msg(struct amdgpu_ring *ring, uint32_t handle,
 	if (direct)
 		r = amdgpu_job_submit_direct(job, ring, &f);
 	else
-		r = amdgpu_job_submit(job, &ring->adev->vce.entity,
-				      AMDGPU_FENCE_OWNER_UNDEFINED, &f);
+		f = amdgpu_job_submit(job);
 	if (r)
 		goto err;
 
@@ -588,8 +585,7 @@ err:
 /**
  * amdgpu_vce_validate_bo - make sure not to cross 4GB boundary
  *
- * @p: parser context
- * @ib_idx: indirect buffer to use
+ * @ib: indirect buffer to use
  * @lo: address of lower dword
  * @hi: address of higher dword
  * @size: minimum size
@@ -597,8 +593,9 @@ err:
  *
  * Make sure that no BO cross a 4GB boundary.
  */
-static int amdgpu_vce_validate_bo(struct amdgpu_cs_parser *p, uint32_t ib_idx,
-				  int lo, int hi, unsigned size, int32_t index)
+static int amdgpu_vce_validate_bo(struct amdgpu_cs_parser *p,
+				  struct amdgpu_ib *ib, int lo, int hi,
+				  unsigned size, int32_t index)
 {
 	int64_t offset = ((uint64_t)size) * ((int64_t)index);
 	struct ttm_operation_ctx ctx = { false, false };
@@ -608,8 +605,8 @@ static int amdgpu_vce_validate_bo(struct amdgpu_cs_parser *p, uint32_t ib_idx,
 	uint64_t addr;
 	int r;
 
-	addr = ((uint64_t)amdgpu_get_ib_value(p, ib_idx, lo)) |
-	       ((uint64_t)amdgpu_get_ib_value(p, ib_idx, hi)) << 32;
+	addr = ((uint64_t)amdgpu_ib_get_value(ib, lo)) |
+	       ((uint64_t)amdgpu_ib_get_value(ib, hi)) << 32;
 	if (index >= 0) {
 		addr += offset;
 		fpfn = PAGE_ALIGN(offset) >> PAGE_SHIFT;
@@ -639,7 +636,7 @@ static int amdgpu_vce_validate_bo(struct amdgpu_cs_parser *p, uint32_t ib_idx,
  * amdgpu_vce_cs_reloc - command submission relocation
  *
  * @p: parser context
- * @ib_idx: indirect buffer to use
+ * @ib: indirect buffer to use
  * @lo: address of lower dword
  * @hi: address of higher dword
  * @size: minimum size
@@ -647,7 +644,7 @@ static int amdgpu_vce_validate_bo(struct amdgpu_cs_parser *p, uint32_t ib_idx,
  *
  * Patch relocation inside command stream with real buffer address
  */
-static int amdgpu_vce_cs_reloc(struct amdgpu_cs_parser *p, uint32_t ib_idx,
+static int amdgpu_vce_cs_reloc(struct amdgpu_cs_parser *p, struct amdgpu_ib *ib,
 			       int lo, int hi, unsigned size, uint32_t index)
 {
 	struct amdgpu_bo_va_mapping *mapping;
@@ -658,8 +655,8 @@ static int amdgpu_vce_cs_reloc(struct amdgpu_cs_parser *p, uint32_t ib_idx,
 	if (index == 0xffffffff)
 		index = 0;
 
-	addr = ((uint64_t)amdgpu_get_ib_value(p, ib_idx, lo)) |
-	       ((uint64_t)amdgpu_get_ib_value(p, ib_idx, hi)) << 32;
+	addr = ((uint64_t)amdgpu_ib_get_value(ib, lo)) |
+	       ((uint64_t)amdgpu_ib_get_value(ib, hi)) << 32;
 	addr += ((uint64_t)size) * ((uint64_t)index);
 
 	r = amdgpu_cs_find_mapping(p, addr, &bo, &mapping);
@@ -680,8 +677,8 @@ static int amdgpu_vce_cs_reloc(struct amdgpu_cs_parser *p, uint32_t ib_idx,
 	addr += amdgpu_bo_gpu_offset(bo);
 	addr -= ((uint64_t)size) * ((uint64_t)index);
 
-	amdgpu_set_ib_value(p, ib_idx, lo, lower_32_bits(addr));
-	amdgpu_set_ib_value(p, ib_idx, hi, upper_32_bits(addr));
+	amdgpu_ib_set_value(ib, lo, lower_32_bits(addr));
+	amdgpu_ib_set_value(ib, hi, upper_32_bits(addr));
 
 	return 0;
 }
@@ -730,11 +727,13 @@ static int amdgpu_vce_validate_handle(struct amdgpu_cs_parser *p,
  * amdgpu_vce_ring_parse_cs - parse and validate the command stream
  *
  * @p: parser context
- * @ib_idx: indirect buffer to use
+ * @job: the job to parse
+ * @ib: the IB to patch
  */
-int amdgpu_vce_ring_parse_cs(struct amdgpu_cs_parser *p, uint32_t ib_idx)
+int amdgpu_vce_ring_parse_cs(struct amdgpu_cs_parser *p,
+			     struct amdgpu_job *job,
+			     struct amdgpu_ib *ib)
 {
-	struct amdgpu_ib *ib = &p->job->ibs[ib_idx];
 	unsigned fb_idx = 0, bs_idx = 0;
 	int session_idx = -1;
 	uint32_t destroyed = 0;
@@ -745,12 +744,12 @@ int amdgpu_vce_ring_parse_cs(struct amdgpu_cs_parser *p, uint32_t ib_idx)
 	unsigned idx;
 	int i, r = 0;
 
-	p->job->vm = NULL;
+	job->vm = NULL;
 	ib->gpu_addr = amdgpu_sa_bo_gpu_addr(ib->sa_bo);
 
 	for (idx = 0; idx < ib->length_dw;) {
-		uint32_t len = amdgpu_get_ib_value(p, ib_idx, idx);
-		uint32_t cmd = amdgpu_get_ib_value(p, ib_idx, idx + 1);
+		uint32_t len = amdgpu_ib_get_value(ib, idx);
+		uint32_t cmd = amdgpu_ib_get_value(ib, idx + 1);
 
 		if ((len < 8) || (len & 3)) {
 			DRM_ERROR("invalid VCE command length (%d)!\n", len);
@@ -760,52 +759,52 @@ int amdgpu_vce_ring_parse_cs(struct amdgpu_cs_parser *p, uint32_t ib_idx)
 
 		switch (cmd) {
 		case 0x00000002: /* task info */
-			fb_idx = amdgpu_get_ib_value(p, ib_idx, idx + 6);
-			bs_idx = amdgpu_get_ib_value(p, ib_idx, idx + 7);
+			fb_idx = amdgpu_ib_get_value(ib, idx + 6);
+			bs_idx = amdgpu_ib_get_value(ib, idx + 7);
 			break;
 
 		case 0x03000001: /* encode */
-			r = amdgpu_vce_validate_bo(p, ib_idx, idx + 10,
-						   idx + 9, 0, 0);
+			r = amdgpu_vce_validate_bo(p, ib, idx + 10, idx + 9,
+						   0, 0);
 			if (r)
 				goto out;
 
-			r = amdgpu_vce_validate_bo(p, ib_idx, idx + 12,
-						   idx + 11, 0, 0);
+			r = amdgpu_vce_validate_bo(p, ib, idx + 12, idx + 11,
+						   0, 0);
 			if (r)
 				goto out;
 			break;
 
 		case 0x05000001: /* context buffer */
-			r = amdgpu_vce_validate_bo(p, ib_idx, idx + 3,
-						   idx + 2, 0, 0);
+			r = amdgpu_vce_validate_bo(p, ib, idx + 3, idx + 2,
+						   0, 0);
 			if (r)
 				goto out;
 			break;
 
 		case 0x05000004: /* video bitstream buffer */
-			tmp = amdgpu_get_ib_value(p, ib_idx, idx + 4);
-			r = amdgpu_vce_validate_bo(p, ib_idx, idx + 3, idx + 2,
+			tmp = amdgpu_ib_get_value(ib, idx + 4);
+			r = amdgpu_vce_validate_bo(p, ib, idx + 3, idx + 2,
 						   tmp, bs_idx);
 			if (r)
 				goto out;
 			break;
 
 		case 0x05000005: /* feedback buffer */
-			r = amdgpu_vce_validate_bo(p, ib_idx, idx + 3, idx + 2,
+			r = amdgpu_vce_validate_bo(p, ib, idx + 3, idx + 2,
 						   4096, fb_idx);
 			if (r)
 				goto out;
 			break;
 
 		case 0x0500000d: /* MV buffer */
-			r = amdgpu_vce_validate_bo(p, ib_idx, idx + 3,
-							idx + 2, 0, 0);
+			r = amdgpu_vce_validate_bo(p, ib, idx + 3, idx + 2,
+						   0, 0);
 			if (r)
 				goto out;
 
-			r = amdgpu_vce_validate_bo(p, ib_idx, idx + 8,
-							idx + 7, 0, 0);
+			r = amdgpu_vce_validate_bo(p, ib, idx + 8, idx + 7,
+						   0, 0);
 			if (r)
 				goto out;
 			break;
@@ -815,12 +814,12 @@ int amdgpu_vce_ring_parse_cs(struct amdgpu_cs_parser *p, uint32_t ib_idx)
 	}
 
 	for (idx = 0; idx < ib->length_dw;) {
-		uint32_t len = amdgpu_get_ib_value(p, ib_idx, idx);
-		uint32_t cmd = amdgpu_get_ib_value(p, ib_idx, idx + 1);
+		uint32_t len = amdgpu_ib_get_value(ib, idx);
+		uint32_t cmd = amdgpu_ib_get_value(ib, idx + 1);
 
 		switch (cmd) {
 		case 0x00000001: /* session */
-			handle = amdgpu_get_ib_value(p, ib_idx, idx + 2);
+			handle = amdgpu_ib_get_value(ib, idx + 2);
 			session_idx = amdgpu_vce_validate_handle(p, handle,
 								 &allocated);
 			if (session_idx < 0) {
@@ -831,8 +830,8 @@ int amdgpu_vce_ring_parse_cs(struct amdgpu_cs_parser *p, uint32_t ib_idx)
 			break;
 
 		case 0x00000002: /* task info */
-			fb_idx = amdgpu_get_ib_value(p, ib_idx, idx + 6);
-			bs_idx = amdgpu_get_ib_value(p, ib_idx, idx + 7);
+			fb_idx = amdgpu_ib_get_value(ib, idx + 6);
+			bs_idx = amdgpu_ib_get_value(ib, idx + 7);
 			break;
 
 		case 0x01000001: /* create */
@@ -847,8 +846,8 @@ int amdgpu_vce_ring_parse_cs(struct amdgpu_cs_parser *p, uint32_t ib_idx)
 				goto out;
 			}
 
-			*size = amdgpu_get_ib_value(p, ib_idx, idx + 8) *
-				amdgpu_get_ib_value(p, ib_idx, idx + 10) *
+			*size = amdgpu_ib_get_value(ib, idx + 8) *
+				amdgpu_ib_get_value(ib, idx + 10) *
 				8 * 3 / 2;
 			break;
 
@@ -877,12 +876,12 @@ int amdgpu_vce_ring_parse_cs(struct amdgpu_cs_parser *p, uint32_t ib_idx)
 			break;
 
 		case 0x03000001: /* encode */
-			r = amdgpu_vce_cs_reloc(p, ib_idx, idx + 10, idx + 9,
+			r = amdgpu_vce_cs_reloc(p, ib, idx + 10, idx + 9,
 						*size, 0);
 			if (r)
 				goto out;
 
-			r = amdgpu_vce_cs_reloc(p, ib_idx, idx + 12, idx + 11,
+			r = amdgpu_vce_cs_reloc(p, ib, idx + 12, idx + 11,
 						*size / 3, 0);
 			if (r)
 				goto out;
@@ -893,35 +892,35 @@ int amdgpu_vce_ring_parse_cs(struct amdgpu_cs_parser *p, uint32_t ib_idx)
 			break;
 
 		case 0x05000001: /* context buffer */
-			r = amdgpu_vce_cs_reloc(p, ib_idx, idx + 3, idx + 2,
+			r = amdgpu_vce_cs_reloc(p, ib, idx + 3, idx + 2,
 						*size * 2, 0);
 			if (r)
 				goto out;
 			break;
 
 		case 0x05000004: /* video bitstream buffer */
-			tmp = amdgpu_get_ib_value(p, ib_idx, idx + 4);
-			r = amdgpu_vce_cs_reloc(p, ib_idx, idx + 3, idx + 2,
+			tmp = amdgpu_ib_get_value(ib, idx + 4);
+			r = amdgpu_vce_cs_reloc(p, ib, idx + 3, idx + 2,
 						tmp, bs_idx);
 			if (r)
 				goto out;
 			break;
 
 		case 0x05000005: /* feedback buffer */
-			r = amdgpu_vce_cs_reloc(p, ib_idx, idx + 3, idx + 2,
+			r = amdgpu_vce_cs_reloc(p, ib, idx + 3, idx + 2,
 						4096, fb_idx);
 			if (r)
 				goto out;
 			break;
 
 		case 0x0500000d: /* MV buffer */
-			r = amdgpu_vce_cs_reloc(p, ib_idx, idx + 3,
-							idx + 2, *size, 0);
+			r = amdgpu_vce_cs_reloc(p, ib, idx + 3,
+						idx + 2, *size, 0);
 			if (r)
 				goto out;
 
-			r = amdgpu_vce_cs_reloc(p, ib_idx, idx + 8,
-							idx + 7, *size / 12, 0);
+			r = amdgpu_vce_cs_reloc(p, ib, idx + 8,
+						idx + 7, *size / 12, 0);
 			if (r)
 				goto out;
 			break;
@@ -966,11 +965,13 @@ out:
  * amdgpu_vce_ring_parse_cs_vm - parse the command stream in VM mode
  *
  * @p: parser context
- * @ib_idx: indirect buffer to use
+ * @job: the job to parse
+ * @ib: the IB to patch
  */
-int amdgpu_vce_ring_parse_cs_vm(struct amdgpu_cs_parser *p, uint32_t ib_idx)
+int amdgpu_vce_ring_parse_cs_vm(struct amdgpu_cs_parser *p,
+				struct amdgpu_job *job,
+				struct amdgpu_ib *ib)
 {
-	struct amdgpu_ib *ib = &p->job->ibs[ib_idx];
 	int session_idx = -1;
 	uint32_t destroyed = 0;
 	uint32_t created = 0;
@@ -979,8 +980,8 @@ int amdgpu_vce_ring_parse_cs_vm(struct amdgpu_cs_parser *p, uint32_t ib_idx)
 	int i, r = 0, idx = 0;
 
 	while (idx < ib->length_dw) {
-		uint32_t len = amdgpu_get_ib_value(p, ib_idx, idx);
-		uint32_t cmd = amdgpu_get_ib_value(p, ib_idx, idx + 1);
+		uint32_t len = amdgpu_ib_get_value(ib, idx);
+		uint32_t cmd = amdgpu_ib_get_value(ib, idx + 1);
 
 		if ((len < 8) || (len & 3)) {
 			DRM_ERROR("invalid VCE command length (%d)!\n", len);
@@ -990,7 +991,7 @@ int amdgpu_vce_ring_parse_cs_vm(struct amdgpu_cs_parser *p, uint32_t ib_idx)
 
 		switch (cmd) {
 		case 0x00000001: /* session */
-			handle = amdgpu_get_ib_value(p, ib_idx, idx + 2);
+			handle = amdgpu_ib_get_value(ib, idx + 2);
 			session_idx = amdgpu_vce_validate_handle(p, handle,
 								 &allocated);
 			if (session_idx < 0) {

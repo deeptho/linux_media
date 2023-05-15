@@ -99,7 +99,7 @@ static inline void xgpio_set_value32(unsigned long *map, int bit, u32 v)
 	const unsigned long offset = (bit % BITS_PER_LONG) & BIT(5);
 
 	map[index] &= ~(0xFFFFFFFFul << offset);
-	map[index] |= v << offset;
+	map[index] |= (unsigned long)v << offset;
 }
 
 static inline int xgpio_regoffset(struct xgpio_instance *chip, int ch)
@@ -117,12 +117,14 @@ static inline int xgpio_regoffset(struct xgpio_instance *chip, int ch)
 static void xgpio_read_ch(struct xgpio_instance *chip, int reg, int bit, unsigned long *a)
 {
 	void __iomem *addr = chip->regs + reg + xgpio_regoffset(chip, bit / 32);
+
 	xgpio_set_value32(a, bit, xgpio_readreg(addr));
 }
 
 static void xgpio_write_ch(struct xgpio_instance *chip, int reg, int bit, unsigned long *a)
 {
 	void __iomem *addr = chip->regs + reg + xgpio_regoffset(chip, bit / 32);
+
 	xgpio_writereg(addr, xgpio_get_value32(a, bit));
 }
 
@@ -556,7 +558,6 @@ static int xgpio_probe(struct platform_device *pdev)
 	int status = 0;
 	struct device_node *np = pdev->dev.of_node;
 	u32 is_dual = 0;
-	u32 cells = 2;
 	u32 width[2];
 	u32 state[2];
 	u32 dir[2];
@@ -589,15 +590,6 @@ static int xgpio_probe(struct platform_device *pdev)
 
 	bitmap_from_arr32(chip->dir, dir, 64);
 
-	/* Update cells with gpio-cells value */
-	if (of_property_read_u32(np, "#gpio-cells", &cells))
-		dev_dbg(&pdev->dev, "Missing gpio-cells property\n");
-
-	if (cells != 2) {
-		dev_err(&pdev->dev, "#gpio-cells mismatch\n");
-		return -EINVAL;
-	}
-
 	/*
 	 * Check device node and parent device node for device width
 	 * and assume default width of 32
@@ -628,7 +620,6 @@ static int xgpio_probe(struct platform_device *pdev)
 	chip->gc.parent = &pdev->dev;
 	chip->gc.direction_input = xgpio_dir_in;
 	chip->gc.direction_output = xgpio_dir_out;
-	chip->gc.of_gpio_n_cells = cells;
 	chip->gc.get = xgpio_get;
 	chip->gc.set = xgpio_set;
 	chip->gc.request = xgpio_request;

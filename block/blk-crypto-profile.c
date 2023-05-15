@@ -32,6 +32,7 @@
 #include <linux/wait.h>
 #include <linux/blkdev.h>
 #include <linux/blk-integrity.h>
+#include "blk-crypto-internal.h"
 
 struct blk_crypto_keyslot {
 	atomic_t slot_refs;
@@ -462,11 +463,6 @@ bool blk_crypto_register(struct blk_crypto_profile *profile,
 	return true;
 }
 EXPORT_SYMBOL_GPL(blk_crypto_register);
-
-void blk_crypto_unregister(struct request_queue *q)
-{
-	q->crypto_profile = NULL;
-}
 
 /**
  * blk_crypto_intersect_capabilities() - restrict supported crypto capabilities

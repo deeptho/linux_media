@@ -99,24 +99,24 @@ static irqreturn_t pcf8523_irq(int irq, void *dev_id)
 static int pcf8523_rtc_read_time(struct device *dev, struct rtc_time *tm)
 {
 	struct pcf8523 *pcf8523 = dev_get_drvdata(dev);
-	u8 regs[7];
+	u8 regs[10];
 	int err;
 
-	err = regmap_bulk_read(pcf8523->regmap, PCF8523_REG_SECONDS, regs,
+	err = regmap_bulk_read(pcf8523->regmap, PCF8523_REG_CONTROL1, regs,
 			       sizeof(regs));
 	if (err < 0)
 		return err;
 
-	if (regs[0] & PCF8523_SECONDS_OS)
+	if ((regs[0] & PCF8523_CONTROL1_STOP) || (regs[3] & PCF8523_SECONDS_OS))
 		return -EINVAL;
 
-	tm->tm_sec = bcd2bin(regs[0] & 0x7f);
-	tm->tm_min = bcd2bin(regs[1] & 0x7f);
-	tm->tm_hour = bcd2bin(regs[2] & 0x3f);
-	tm->tm_mday = bcd2bin(regs[3] & 0x3f);
-	tm->tm_wday = regs[4] & 0x7;
-	tm->tm_mon = bcd2bin(regs[5] & 0x1f) - 1;
-	tm->tm_year = bcd2bin(regs[6]) + 100;
+	tm->tm_sec = bcd2bin(regs[3] & 0x7f);
+	tm->tm_min = bcd2bin(regs[4] & 0x7f);
+	tm->tm_hour = bcd2bin(regs[5] & 0x3f);
+	tm->tm_mday = bcd2bin(regs[6] & 0x3f);
+	tm->tm_wday = regs[7] & 0x7;
+	tm->tm_mon = bcd2bin(regs[8] & 0x1f) - 1;
+	tm->tm_year = bcd2bin(regs[9]) + 100;
 
 	return 0;
 }
@@ -212,14 +212,6 @@ static int pcf8523_rtc_set_alarm(struct device *dev, struct rtc_wkalrm *tm)
 	if (err < 0)
 		return err;
 
-	/* The alarm has no seconds, round up to nearest minute */
-	if (tm->time.tm_sec) {
-		time64_t alarm_time = rtc_tm_to_time64(&tm->time);
-
-		alarm_time += 60 - tm->time.tm_sec;
-		rtc_time64_to_tm(alarm_time, &tm->time);
-	}
-
 	regs[0] = bin2bcd(tm->time.tm_min);
 	regs[1] = bin2bcd(tm->time.tm_hour);
 	regs[2] = bin2bcd(tm->time.tm_mday);
@@ -240,9 +232,9 @@ static int pcf8523_param_get(struct device *dev, struct rtc_param *param)
 {
 	struct pcf8523 *pcf8523 = dev_get_drvdata(dev);
 	int ret;
+	u32 value;
 
 	switch(param->param) {
-		u32 value;
 
 	case RTC_PARAM_BACKUP_SWITCH_MODE:
 		ret = regmap_read(pcf8523->regmap, PCF8523_REG_CONTROL3, &value);
@@ -279,9 +271,9 @@ static int pcf8523_param_get(struct device *dev, struct rtc_param *param)
 static int pcf8523_param_set(struct device *dev, struct rtc_param *param)
 {
 	struct pcf8523 *pcf8523 = dev_get_drvdata(dev);
+	u8 mode;
 
 	switch(param->param) {
-		u8 mode;
 	case RTC_PARAM_BACKUP_SWITCH_MODE:
 		switch (param->uvalue) {
 		case RTC_BSM_DISABLED:
@@ -398,8 +390,7 @@ static const struct regmap_config regmap_config = {
         .max_register = 0x13,
 };
 
-static int pcf8523_probe(struct i2c_client *client,
-			 const struct i2c_device_id *id)
+static int pcf8523_probe(struct i2c_client *client)
 {
 	struct pcf8523 *pcf8523;
 	struct rtc_device *rtc;
@@ -450,16 +441,22 @@ static int pcf8523_probe(struct i2c_client *client,
 	rtc->ops = &pcf8523_rtc_ops;
 	rtc->range_min = RTC_TIMESTAMP_BEGIN_2000;
 	rtc->range_max = RTC_TIMESTAMP_END_2099;
-	rtc->uie_unsupported = 1;
+	set_bit(RTC_FEATURE_ALARM_RES_MINUTE, rtc->features);
+	clear_bit(RTC_FEATURE_UPDATE_INTERRUPT, rtc->features);
 
 	if (client->irq > 0) {
+		unsigned long irqflags = IRQF_TRIGGER_LOW;
+
+		if (dev_fwnode(&client->dev))
+			irqflags = 0;
+
 		err = regmap_write(pcf8523->regmap, PCF8523_TMR_CLKOUT_CTRL, 0x38);
 		if (err < 0)
 			return err;
 
 		err = devm_request_threaded_irq(&client->dev, client->irq,
 						NULL, pcf8523_irq,
-						IRQF_SHARED | IRQF_ONESHOT | IRQF_TRIGGER_LOW,
+						IRQF_SHARED | IRQF_ONESHOT | irqflags,
 						dev_name(&rtc->dev), pcf8523);
 		if (err)
 			return err;
@@ -492,7 +489,7 @@ static struct i2c_driver pcf8523_driver = {
 		.name = "rtc-pcf8523",
 		.of_match_table = pcf8523_of_match,
 	},
-	.probe = pcf8523_probe,
+	.probe_new = pcf8523_probe,
 	.id_table = pcf8523_id,
 };
 module_i2c_driver(pcf8523_driver);

@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
 /*
- * Copyright (C) 2005-2014, 2018-2021 Intel Corporation
+ * Copyright (C) 2005-2014, 2018-2022 Intel Corporation
  * Copyright (C) 2013-2015 Intel Mobile Communications GmbH
  * Copyright (C) 2016 Intel Deutschland GmbH
  */
@@ -347,19 +347,17 @@
 #define RADIO_REG_SYS_MANUAL_DFT_0	0xAD4078
 #define RFIC_REG_RD			0xAD0470
 #define WFPM_CTRL_REG			0xA03030
-#define WFPM_CTRL_REG_GEN2		0xd03030
 #define WFPM_OTP_CFG1_ADDR		0x00a03098
-#define WFPM_OTP_CFG1_ADDR_GEN2		0x00d03098
 #define WFPM_OTP_CFG1_IS_JACKET_BIT	BIT(4)
 #define WFPM_OTP_CFG1_IS_CDB_BIT	BIT(5)
 
 #define WFPM_GP2			0xA030B4
 
 /* DBGI SRAM Register details */
-#define DBGI_SRAM_TARGET_ACCESS_CFG			0x00A2E14C
-#define DBGI_SRAM_TARGET_ACCESS_CFG_RESET_ADDRESS_MSK	0x10000
 #define DBGI_SRAM_TARGET_ACCESS_RDATA_LSB		0x00A2E154
 #define DBGI_SRAM_TARGET_ACCESS_RDATA_MSB		0x00A2E158
+#define DBGI_SRAM_FIFO_POINTERS				0x00A2E148
+#define DBGI_SRAM_FIFO_POINTERS_WR_PTR_MSK		0x00000FFF
 
 enum {
 	ENABLE_WFPM = BIT(31),
@@ -370,6 +368,7 @@ enum {
 #define CNVR_AUX_MISC_CHIP				0xA2B800
 #define CNVR_SCU_SD_REGS_SD_REG_DIG_DCDC_VTRIM		0xA29890
 #define CNVR_SCU_SD_REGS_SD_REG_ACTIVE_VDIG_MIRROR	0xA29938
+#define CNVI_SCU_SEQ_DATA_DW9				0xA27488
 
 #define PREG_AUX_BUS_WPROT_0		0xA04CC0
 
@@ -379,6 +378,7 @@ enum {
 #define PREG_PRPH_WPROT_22000		0xA04D00
 
 #define SB_MODIFY_CFG_FLAG		0xA03088
+#define SB_CFG_RESIDES_IN_OTP_MASK	0x10
 #define SB_CPU_1_STATUS			0xA01E30
 #define SB_CPU_2_STATUS			0xA01E34
 #define UMAG_SB_CPU_1_STATUS		0xA038C0
@@ -387,6 +387,13 @@ enum {
 #define UREG_UMAC_CURRENT_PC		0xa05c18
 #define UREG_LMAC1_CURRENT_PC		0xa05c1c
 #define UREG_LMAC2_CURRENT_PC		0xa05c20
+
+#define WFPM_LMAC1_PD_NOTIFICATION      0xa0338c
+#define WFPM_ARC1_PD_NOTIFICATION       0xa03044
+#define HPM_SECONDARY_DEVICE_STATE      0xa03404
+#define WFPM_MAC_OTP_CFG7_ADDR		0xa03338
+#define WFPM_MAC_OTP_CFG7_DATA		0xa0333c
+
 
 /* For UMAG_GEN_HW_STATUS reg check */
 enum {
@@ -455,6 +462,13 @@ enum {
 #define UREG_DOORBELL_TO_ISR6_RESUME	BIT(19)
 #define UREG_DOORBELL_TO_ISR6_PNVM	BIT(20)
 
+/*
+ * From BZ family driver triggers this bit for suspend and resume
+ * The driver should update CSR_IPC_SLEEP_CONTROL before triggering
+ * this interrupt with suspend/resume value
+ */
+#define UREG_DOORBELL_TO_ISR6_SLEEP_CTRL	BIT(31)
+
 #define CNVI_MBOX_C			0xA3400C
 
 #define FSEQ_ERROR_CODE			0xA340C8
@@ -485,5 +499,10 @@ enum {
 #define WFPM_PHYRF_STATE_ON 5
 #define HBUS_TIMEOUT 0xA5A5A5A1
 #define WFPM_DPHY_OFF 0xDF10FF
+
+#define REG_OTP_MINOR 0xA0333C
+
+#define WFPM_LMAC2_PD_NOTIFICATION 0xA033CC
+#define WFPM_LMAC2_PD_RE_READ BIT(31)
 
 #endif				/* __iwl_prph_h__ */

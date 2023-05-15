@@ -30,8 +30,6 @@
 #include <drm/ttm/ttm_resource.h>
 #include <drm/ttm/ttm_pool.h>
 
-#define TTM_NUM_MEM_TYPES 8
-
 struct ttm_device;
 struct ttm_placement;
 struct ttm_buffer_object;
@@ -201,15 +199,6 @@ struct ttm_device_funcs {
 			     void *buf, int len, int write);
 
 	/**
-	 * struct ttm_bo_driver member del_from_lru_notify
-	 *
-	 * @bo: the buffer object deleted from lru
-	 *
-	 * notify driver that a BO was deleted from LRU.
-	 */
-	void (*del_from_lru_notify)(struct ttm_buffer_object *bo);
-
-	/**
 	 * Notify the driver that we're about to release a BO
 	 *
 	 * @bo: BO that is about to be released
@@ -263,11 +252,6 @@ struct ttm_device {
 	spinlock_t lru_lock;
 
 	/**
-	 * @ddestroy: Destroyed but not yet cleaned up buffer objects.
-	 */
-	struct list_head ddestroy;
-
-	/**
 	 * @pinned: Buffer objects which are pinned and so not on any LRU list.
 	 */
 	struct list_head pinned;
@@ -281,7 +265,7 @@ struct ttm_device {
 	/**
 	 * @wq: Work queue structure for the delayed delete workqueue.
 	 */
-	struct delayed_work wq;
+	struct workqueue_struct *wq;
 };
 
 int ttm_global_swapout(struct ttm_operation_ctx *ctx, gfp_t gfp_flags);

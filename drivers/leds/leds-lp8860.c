@@ -375,8 +375,7 @@ static const struct regmap_config lp8860_eeprom_regmap_config = {
 	.cache_type = REGCACHE_NONE,
 };
 
-static int lp8860_probe(struct i2c_client *client,
-			const struct i2c_device_id *id)
+static int lp8860_probe(struct i2c_client *client)
 {
 	int ret;
 	struct lp8860_led *led;
@@ -445,7 +444,7 @@ static int lp8860_probe(struct i2c_client *client,
 	return 0;
 }
 
-static int lp8860_remove(struct i2c_client *client)
+static void lp8860_remove(struct i2c_client *client)
 {
 	struct lp8860_led *led = i2c_get_clientdata(client);
 	int ret;
@@ -461,8 +460,6 @@ static int lp8860_remove(struct i2c_client *client)
 	}
 
 	mutex_destroy(&led->lock);
-
-	return 0;
 }
 
 static const struct i2c_device_id lp8860_id[] = {
@@ -482,7 +479,7 @@ static struct i2c_driver lp8860_driver = {
 		.name	= "lp8860",
 		.of_match_table = of_lp8860_leds_match,
 	},
-	.probe		= lp8860_probe,
+	.probe_new	= lp8860_probe,
 	.remove		= lp8860_remove,
 	.id_table	= lp8860_id,
 };

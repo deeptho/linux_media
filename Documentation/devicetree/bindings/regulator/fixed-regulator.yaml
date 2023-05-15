@@ -18,23 +18,27 @@ description:
 
 allOf:
   - $ref: "regulator.yaml#"
-
-if:
-  properties:
-    compatible:
-      contains:
-        const: regulator-fixed-clock
-  required:
-    - clocks
-else:
-  if:
-    properties:
-      compatible:
-        contains:
-          const: regulator-fixed-domain
-    required:
-      - power-domains
-      - required-opps
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: regulator-fixed-clock
+    then:
+      required:
+        - clocks
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: regulator-fixed-domain
+    then:
+      required:
+        - power-domains
+        - required-opps
+  - not:
+      required:
+        - gpio
+        - gpios
 
 properties:
   compatible:
@@ -47,6 +51,9 @@ properties:
 
   gpio:
     description: gpio to use for enable control
+    maxItems: 1
+
+  gpios:
     maxItems: 1
 
   clocks:

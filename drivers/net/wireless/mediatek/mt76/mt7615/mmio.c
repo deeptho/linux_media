@@ -63,22 +63,6 @@ const u32 mt7663e_reg_map[] = {
 	[MT_EFUSE_ADDR_BASE]	= 0x78011000,
 };
 
-u32 mt7615_reg_map(struct mt7615_dev *dev, u32 addr)
-{
-	u32 base, offset;
-
-	if (is_mt7663(&dev->mt76)) {
-		base = addr & MT7663_MCU_PCIE_REMAP_2_BASE;
-		offset = addr & MT7663_MCU_PCIE_REMAP_2_OFFSET;
-	} else {
-		base = addr & MT_MCU_PCIE_REMAP_2_BASE;
-		offset = addr & MT_MCU_PCIE_REMAP_2_OFFSET;
-	}
-	mt76_wr(dev, MT_MCU_PCIE_REMAP_2, base);
-
-	return MT_PCIE_REMAP_BASE_2 + offset;
-}
-
 static void
 mt7615_rx_poll_complete(struct mt76_dev *mdev, enum mt76_rxq_id q)
 {
@@ -135,6 +119,7 @@ static void mt7615_irq_tasklet(struct tasklet_struct *t)
 	if (is_mt7663(&dev->mt76)) {
 		mcu_int = mt76_rr(dev, MT_MCU2HOST_INT_STATUS);
 		mcu_int &= MT7663_MCU_CMD_ERROR_MASK;
+		mt76_wr(dev, MT_MCU2HOST_INT_STATUS, mcu_int);
 	} else {
 		mcu_int = mt76_rr(dev, MT_MCU_CMD);
 		mcu_int &= MT_MCU_CMD_ERROR_MASK;
@@ -144,7 +129,7 @@ static void mt7615_irq_tasklet(struct tasklet_struct *t)
 		return;
 
 	dev->reset_state = mcu_int;
-	ieee80211_queue_work(mt76_hw(dev), &dev->reset_work);
+	queue_work(dev->mt76.wq, &dev->reset_work);
 	wake_up(&dev->reset_wait);
 }
 
@@ -185,14 +170,15 @@ int mt7615_mmio_probe(struct device *pdev, void __iomem *mem_base,
 {
 	static const struct mt76_driver_ops drv_ops = {
 		/* txwi_size = txd size + txp size */
-		.txwi_size = MT_TXD_SIZE + sizeof(struct mt7615_txp_common),
+		.txwi_size = MT_TXD_SIZE + sizeof(struct mt76_connac_txp_common),
 		.drv_flags = MT_DRV_TXWI_NO_FREE | MT_DRV_HW_MGMT_TXQ,
 		.survey_flags = SURVEY_INFO_TIME_TX |
 				SURVEY_INFO_TIME_RX |
 				SURVEY_INFO_TIME_BSS_RX,
 		.token_size = MT7615_TOKEN_SIZE,
 		.tx_prepare_skb = mt7615_tx_prepare_skb,
-		.tx_complete_skb = mt7615_tx_complete_skb,
+		.tx_complete_skb = mt76_connac_tx_complete_skb,
+		.rx_check = mt7615_rx_check,
 		.rx_skb = mt7615_queue_rx_skb,
 		.rx_poll_complete = mt7615_rx_poll_complete,
 		.sta_ps = mt7615_sta_ps,

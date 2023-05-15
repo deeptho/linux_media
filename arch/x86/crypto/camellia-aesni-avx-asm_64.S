@@ -192,7 +192,7 @@ SYM_FUNC_START_LOCAL(roundsm16_x0_x1_x2_x3_x4_x5_x6_x7_y0_y1_y2_y3_y4_y5_y6_y7_c
 	roundsm16(%xmm0, %xmm1, %xmm2, %xmm3, %xmm4, %xmm5, %xmm6, %xmm7,
 		  %xmm8, %xmm9, %xmm10, %xmm11, %xmm12, %xmm13, %xmm14, %xmm15,
 		  %rcx, (%r9));
-	ret;
+	RET;
 SYM_FUNC_END(roundsm16_x0_x1_x2_x3_x4_x5_x6_x7_y0_y1_y2_y3_y4_y5_y6_y7_cd)
 
 .align 8
@@ -200,7 +200,7 @@ SYM_FUNC_START_LOCAL(roundsm16_x4_x5_x6_x7_x0_x1_x2_x3_y4_y5_y6_y7_y0_y1_y2_y3_a
 	roundsm16(%xmm4, %xmm5, %xmm6, %xmm7, %xmm0, %xmm1, %xmm2, %xmm3,
 		  %xmm12, %xmm13, %xmm14, %xmm15, %xmm8, %xmm9, %xmm10, %xmm11,
 		  %rax, (%r9));
-	ret;
+	RET;
 SYM_FUNC_END(roundsm16_x4_x5_x6_x7_x0_x1_x2_x3_y4_y5_y6_y7_y0_y1_y2_y3_ab)
 
 /*
@@ -712,7 +712,6 @@ SYM_FUNC_END(roundsm16_x4_x5_x6_x7_x0_x1_x2_x3_y4_y5_y6_y7_y0_y1_y2_y3_ab)
 
 .text
 
-.align 8
 SYM_FUNC_START_LOCAL(__camellia_enc_blk16)
 	/* input:
 	 *	%rdi: ctx, CTX
@@ -778,7 +777,7 @@ SYM_FUNC_START_LOCAL(__camellia_enc_blk16)
 		    %xmm15, (key_table)(CTX, %r8, 8), (%rax), 1 * 16(%rax));
 
 	FRAME_END
-	ret;
+	RET;
 
 .align 8
 .Lenc_max32:
@@ -799,7 +798,6 @@ SYM_FUNC_START_LOCAL(__camellia_enc_blk16)
 	jmp .Lenc_done;
 SYM_FUNC_END(__camellia_enc_blk16)
 
-.align 8
 SYM_FUNC_START_LOCAL(__camellia_dec_blk16)
 	/* input:
 	 *	%rdi: ctx, CTX
@@ -865,7 +863,7 @@ SYM_FUNC_START_LOCAL(__camellia_dec_blk16)
 		    %xmm15, (key_table)(CTX), (%rax), 1 * 16(%rax));
 
 	FRAME_END
-	ret;
+	RET;
 
 .align 8
 .Ldec_max32:
@@ -906,7 +904,7 @@ SYM_FUNC_START(camellia_ecb_enc_16way)
 		     %xmm8, %rsi);
 
 	FRAME_END
-	ret;
+	RET;
 SYM_FUNC_END(camellia_ecb_enc_16way)
 
 SYM_FUNC_START(camellia_ecb_dec_16way)
@@ -936,7 +934,7 @@ SYM_FUNC_START(camellia_ecb_dec_16way)
 		     %xmm8, %rsi);
 
 	FRAME_END
-	ret;
+	RET;
 SYM_FUNC_END(camellia_ecb_dec_16way)
 
 SYM_FUNC_START(camellia_cbc_dec_16way)
@@ -987,5 +985,5 @@ SYM_FUNC_START(camellia_cbc_dec_16way)
 		     %xmm8, %rsi);
 
 	FRAME_END
-	ret;
+	RET;
 SYM_FUNC_END(camellia_cbc_dec_16way)

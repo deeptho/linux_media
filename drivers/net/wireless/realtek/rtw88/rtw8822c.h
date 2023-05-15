@@ -118,6 +118,8 @@ enum rtw8822c_dpk_one_shot_action {
 void rtw8822c_parse_tbl_dpk(struct rtw_dev *rtwdev,
 			    const struct rtw_table *tbl);
 
+extern const struct rtw_chip_info rtw8822c_hw_spec;
+
 #define RTW_DECL_TABLE_DPK(name)			\
 const struct rtw_table name ## _tbl = {			\
 	.data = name,					\
@@ -137,6 +139,8 @@ const struct rtw_table name ## _tbl = {			\
 	le32_get_bits(*((__le32 *)(phy_stat) + 0x04), GENMASK(7, 0))
 #define GET_PHY_STAT_P0_GAIN_A(phy_stat)                                       \
 	le32_get_bits(*((__le32 *)(phy_stat) + 0x00), GENMASK(21, 16))
+#define GET_PHY_STAT_P0_CHANNEL(phy_stat)				       \
+	le32_get_bits(*((__le32 *)(phy_stat) + 0x01), GENMASK(23, 16))
 #define GET_PHY_STAT_P0_GAIN_B(phy_stat)                                       \
 	le32_get_bits(*((__le32 *)(phy_stat) + 0x04), GENMASK(29, 24))
 
@@ -149,6 +153,8 @@ const struct rtw_table name ## _tbl = {			\
 	le32_get_bits(*((__le32 *)(phy_stat) + 0x01), GENMASK(11, 8))
 #define GET_PHY_STAT_P1_HT_RXSC(phy_stat)                                      \
 	le32_get_bits(*((__le32 *)(phy_stat) + 0x01), GENMASK(15, 12))
+#define GET_PHY_STAT_P1_CHANNEL(phy_stat)				       \
+	le32_get_bits(*((__le32 *)(phy_stat) + 0x01), GENMASK(23, 16))
 #define GET_PHY_STAT_P1_RXEVM_A(phy_stat)                                      \
 	le32_get_bits(*((__le32 *)(phy_stat) + 0x04), GENMASK(7, 0))
 #define GET_PHY_STAT_P1_RXEVM_B(phy_stat)                                      \

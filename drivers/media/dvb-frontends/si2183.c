@@ -1695,8 +1695,7 @@ static struct si_base *match_base(struct i2c_adapter *i2c, u8 adr)
 	return NULL;
 }
 
-static int si2183_probe(struct i2c_client *client,
-		const struct i2c_device_id *id)
+static int si2183_probe(struct i2c_client *client)
 {
 	struct si2183_config *config = client->dev.platform_data;
 	struct si2183_dev *dev;
@@ -1799,7 +1798,7 @@ err:
 	return ret;
 }
 
-static int si2183_remove(struct i2c_client *client)
+static void si2183_remove(struct i2c_client *client)
 {
 	struct si2183_dev *dev = i2c_get_clientdata(client);
 
@@ -1822,8 +1821,6 @@ static int si2183_remove(struct i2c_client *client)
 	dev->fe.demodulator_priv = NULL;
 
 	kfree(dev);
-
-	return 0;
 }
 
 static const struct i2c_device_id si2183_id_table[] = {
@@ -1836,7 +1833,7 @@ static struct i2c_driver si2183_driver = {
 	.driver = {
 		.name	= "si2183",
 	},
-	.probe		= si2183_probe,
+	.probe_new	= si2183_probe,
 	.remove		= si2183_remove,
 	.id_table	= si2183_id_table,
 };

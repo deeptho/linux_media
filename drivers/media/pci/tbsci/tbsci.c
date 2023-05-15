@@ -29,6 +29,10 @@
 DVB_DEFINE_MOD_OPT_ADAPTER_NR(adapter_nr);
 struct workqueue_struct *wq;
 
+static bool enable_msi = true;
+module_param(enable_msi, bool, 0444);
+MODULE_PARM_DESC(enable_msi, "use an msi interrupt if available");
+
 static int write_block_cell = 64;
 module_param(write_block_cell, int, 0444);
 MODULE_PARM_DESC(
@@ -1038,6 +1042,10 @@ static void tbsci_remove(struct pci_dev *pdev)
 
 	/* disable interrupts */
 	free_irq(dev->pdev->irq, dev);
+	if (dev->msi) {
+		pci_disable_msi(pdev);
+		dev->msi = false;
+	}
 
 	if (dev->mmio)
 		iounmap(dev->mmio);
@@ -1045,6 +1053,38 @@ static void tbsci_remove(struct pci_dev *pdev)
 	kfree(dev);
 	pci_disable_device(pdev);
 	pci_set_drvdata(pdev, NULL);
+}
+
+static bool tbsci_enable_msi(struct pci_dev *pdev, struct tbs_pcie_dev *dev)
+{
+	int err;
+
+	if (!enable_msi) {
+		dev_warn(&dev->pdev->dev,
+			"MSI disabled by module parameter 'enable_msi'\n");
+		return false;
+	}
+
+	err = pci_enable_msi(pdev);
+	if (err) {
+		dev_err(&dev->pdev->dev,
+			"Failed to enable MSI interrupt."
+			" Falling back to a shared IRQ\n");
+		return false;
+	}
+
+	/* no error - so request an msi interrupt */
+	err = request_irq(pdev->irq, tbsci_irq, 0,
+				KBUILD_MODNAME, dev);
+	if (err) {
+		/* fall back to legacy interrupt */
+		dev_err(&dev->pdev->dev,
+			"Failed to get an MSI interrupt."
+			" Falling back to a shared IRQ\n");
+		pci_disable_msi(pdev);
+		return false;
+	}
+	return true;
 }
 
 
@@ -1091,19 +1131,30 @@ static int tbsci_probe(struct pci_dev *pdev,
 		goto fail2;
 	}
 
-	ret = request_irq(dev->pdev->irq, tbsci_irq, IRQF_SHARED,
-			  KBUILD_MODNAME, (void *)dev);
-	if (ret < 0) {
-		printk("%s ERROR: IRQ registration failed <%d>\n", __func__,
-		       ret);
-		ret = -ENODEV;
-		goto fail3;
+	//interrupts 
+	if (tbsci_enable_msi(pdev, dev)) {
+		printk("KBUILD_MODNAME : %s --MSI!\n",KBUILD_MODNAME);
+		dev->msi = true;
+	} else {
+		printk("KBUILD_MODNAME : %s --INTx\n\n",KBUILD_MODNAME);
+		ret = request_irq(pdev->irq, tbsci_irq,
+				IRQF_SHARED, KBUILD_MODNAME, dev);
+		if (ret < 0) {
+			printk(KERN_ERR "%s ERROR: IRQ registration failed <%d>\n", __func__, ret);
+			ret = -ENODEV;
+			goto fail3;
+		}
+		dev->msi = false;
 	}
 
 	return 0;
 
 fail3:
 	free_irq(dev->pdev->irq, dev);
+	if (dev->msi) {
+		pci_disable_msi(pdev);
+		dev->msi = false;
+	}
 	if (dev->mmio)
 		iounmap(dev->mmio);
 fail2:

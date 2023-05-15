@@ -385,7 +385,7 @@ static int imx8ulp_clk_pcc3_init(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
-	imx_register_uart_clocks(1);
+	imx_register_uart_clocks();
 
 	/* register the pcc3 reset controller */
 	return imx8ulp_pcc_reset_init(pdev, base, pcc3_resets, ARRAY_SIZE(pcc3_resets));
@@ -559,6 +559,7 @@ static struct platform_driver imx8ulp_clk_driver = {
 	.probe	= imx8ulp_clk_probe,
 	.driver = {
 		.name		= KBUILD_MODNAME,
+		.suppress_bind_attrs = true,
 		.of_match_table	= imx8ulp_clk_dt_ids,
 	},
 };

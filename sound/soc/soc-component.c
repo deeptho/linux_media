@@ -256,6 +256,26 @@ int snd_soc_component_set_jack(struct snd_soc_component *component,
 }
 EXPORT_SYMBOL_GPL(snd_soc_component_set_jack);
 
+/**
+ * snd_soc_component_get_jack_type
+ * @component: COMPONENTs
+ *
+ * Returns the jack type of the component
+ * This can either be the supported type or one read from
+ * devicetree with the property: jack-type.
+ */
+int snd_soc_component_get_jack_type(
+	struct snd_soc_component *component)
+{
+	int ret = -ENOTSUPP;
+
+	if (component->driver->get_jack_type)
+		ret = component->driver->get_jack_type(component);
+
+	return soc_component_ret(component, ret);
+}
+EXPORT_SYMBOL_GPL(snd_soc_component_get_jack_type);
+
 int snd_soc_component_module_get(struct snd_soc_component *component,
 				 void *mark, int upon_open)
 {
@@ -930,6 +950,48 @@ int snd_soc_pcm_component_pointer(struct snd_pcm_substream *substream)
 			return component->driver->pointer(component, substream);
 
 	return 0;
+}
+
+static bool snd_soc_component_is_codec_on_rtd(struct snd_soc_pcm_runtime *rtd,
+					      struct snd_soc_component *component)
+{
+	struct snd_soc_dai *dai;
+	int i;
+
+	for_each_rtd_codec_dais(rtd, i, dai) {
+		if (dai->component == component)
+			return true;
+	}
+
+	return false;
+}
+
+void snd_soc_pcm_component_delay(struct snd_pcm_substream *substream,
+				 snd_pcm_sframes_t *cpu_delay,
+				 snd_pcm_sframes_t *codec_delay)
+{
+	struct snd_soc_pcm_runtime *rtd = asoc_substream_to_rtd(substream);
+	struct snd_soc_component *component;
+	snd_pcm_sframes_t delay;
+	int i;
+
+	/*
+	 * We're looking for the delay through the full audio path so it needs to
+	 * be the maximum of the Components doing transmit and the maximum of the
+	 * Components doing receive (ie, all CPUs and all CODECs) rather than
+	 * just the maximum of all Components.
+	 */
+	for_each_rtd_components(rtd, i, component) {
+		if (!component->driver->delay)
+			continue;
+
+		delay = component->driver->delay(component, substream);
+
+		if (snd_soc_component_is_codec_on_rtd(rtd, component))
+			*codec_delay = max(*codec_delay, delay);
+		else
+			*cpu_delay = max(*cpu_delay, delay);
+	}
 }
 
 int snd_soc_pcm_component_ioctl(struct snd_pcm_substream *substream,

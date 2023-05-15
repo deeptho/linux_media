@@ -331,7 +331,6 @@ struct cdns_torrent_phy {
 	struct cdns_torrent_inst phys[MAX_NUM_LANES];
 	int nsubnodes;
 	const struct cdns_torrent_data *init_data;
-	struct regmap *regmap;
 	struct regmap *regmap_common_cdb;
 	struct regmap *regmap_phy_pcs_common_cdb;
 	struct regmap *regmap_phy_pma_common_cdb;
@@ -2278,7 +2277,7 @@ int cdns_torrent_phy_configure_multilink(struct cdns_torrent_phy *cdns_phy)
 	struct cdns_torrent_vals *cmn_vals, *tx_ln_vals, *rx_ln_vals;
 	enum cdns_torrent_ref_clk ref_clk = cdns_phy->ref_clk_rate;
 	struct cdns_torrent_vals *link_cmn_vals, *xcvr_diag_vals;
-	enum cdns_torrent_phy_type phy_t1, phy_t2, tmp_phy_type;
+	enum cdns_torrent_phy_type phy_t1, phy_t2;
 	struct cdns_torrent_vals *pcs_cmn_vals;
 	int i, j, node, mlane, num_lanes, ret;
 	struct cdns_reg_pairs *reg_pairs;
@@ -2304,9 +2303,7 @@ int cdns_torrent_phy_configure_multilink(struct cdns_torrent_phy *cdns_phy)
 			 * configure the PHY for second link with phy_t2.
 			 * Get the array values as [phy_t2][phy_t1][ssc].
 			 */
-			tmp_phy_type = phy_t1;
-			phy_t1 = phy_t2;
-			phy_t2 = tmp_phy_type;
+			swap(phy_t1, phy_t2);
 		}
 
 		mlane = cdns_phy->phys[node].mlane;

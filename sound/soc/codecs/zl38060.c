@@ -385,7 +385,6 @@ static const struct snd_soc_component_driver zl38_component_dev = {
 	.dapm_routes		= zl38_dapm_routes,
 	.num_dapm_routes	= ARRAY_SIZE(zl38_dapm_routes),
 	.endianness		= 1,
-	.non_legacy_dai_naming	= 1,
 };
 
 static void chip_gpio_set(struct gpio_chip *c, unsigned int offset, int val)
@@ -589,9 +588,7 @@ static int zl38_spi_probe(struct spi_device *spi)
 				       sizeof(template_chip), GFP_KERNEL);
 	if (!priv->gpio_chip)
 		return -ENOMEM;
-#ifdef CONFIG_OF_GPIO
-	priv->gpio_chip->of_node = dev->of_node;
-#endif
+	priv->gpio_chip->parent = dev;
 	err = devm_gpiochip_add_data(dev, priv->gpio_chip, priv->regmap);
 	if (err)
 		return err;

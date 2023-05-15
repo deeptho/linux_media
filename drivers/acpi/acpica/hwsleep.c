@@ -4,7 +4,7 @@
  * Name: hwsleep.c - ACPI Hardware Sleep/Wake Support functions for the
  *                   original/legacy sleep/PM registers.
  *
- * Copyright (C) 2000 - 2021, Intel Corp.
+ * Copyright (C) 2000 - 2022, Intel Corp.
  *
  *****************************************************************************/
 
@@ -110,7 +110,9 @@ acpi_status acpi_hw_legacy_sleep(u8 sleep_state)
 
 	/* Flush caches, as per ACPI specification */
 
-	ACPI_FLUSH_CPU_CACHE();
+	if (sleep_state < ACPI_STATE_S4) {
+		ACPI_FLUSH_CPU_CACHE();
+	}
 
 	status = acpi_os_enter_sleep(sleep_state, pm1a_control, pm1b_control);
 	if (status == AE_CTRL_TERMINATE) {
@@ -308,6 +310,20 @@ acpi_status acpi_hw_legacy_wake(u8 sleep_state)
 	    acpi_write_bit_register(acpi_gbl_fixed_event_info
 				    [ACPI_EVENT_SLEEP_BUTTON].
 				    status_register_id, ACPI_CLEAR_STATUS);
+
+	/* Enable pcie wake event if support */
+	if ((acpi_gbl_FADT.flags & ACPI_FADT_PCI_EXPRESS_WAKE)) {
+		(void)
+		    acpi_write_bit_register(acpi_gbl_fixed_event_info
+					    [ACPI_EVENT_PCIE_WAKE].
+					    enable_register_id,
+					    ACPI_DISABLE_EVENT);
+		(void)
+		    acpi_write_bit_register(acpi_gbl_fixed_event_info
+					    [ACPI_EVENT_PCIE_WAKE].
+					    status_register_id,
+					    ACPI_CLEAR_STATUS);
+	}
 
 	acpi_hw_execute_sleep_method(METHOD_PATHNAME__SST, ACPI_SST_WORKING);
 	return_ACPI_STATUS(status);

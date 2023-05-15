@@ -11,13 +11,11 @@
 
 #include <linux/clk.h>
 #include <linux/delay.h>
-#include <linux/gpio.h>
 #include <linux/gpio/consumer.h>
 #include <linux/i2c.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
-#include <linux/of_gpio.h>
 #include <linux/pm_runtime.h>
 #include <linux/regmap.h>
 #include <linux/regulator/consumer.h>
@@ -2062,9 +2060,8 @@ static int imx274_probe(struct i2c_client *client)
 	imx274->reset_gpio = devm_gpiod_get_optional(dev, "reset",
 						     GPIOD_OUT_HIGH);
 	if (IS_ERR(imx274->reset_gpio)) {
-		if (PTR_ERR(imx274->reset_gpio) != -EPROBE_DEFER)
-			dev_err(dev, "Reset GPIO not setup in DT");
-		ret = PTR_ERR(imx274->reset_gpio);
+		ret = dev_err_probe(dev, PTR_ERR(imx274->reset_gpio),
+				    "Reset GPIO not setup in DT\n");
 		goto err_me;
 	}
 
@@ -2144,7 +2141,7 @@ err_regmap:
 	return ret;
 }
 
-static int imx274_remove(struct i2c_client *client)
+static void imx274_remove(struct i2c_client *client)
 {
 	struct v4l2_subdev *sd = i2c_get_clientdata(client);
 	struct stimx274 *imx274 = to_imx274(sd);
@@ -2159,7 +2156,6 @@ static int imx274_remove(struct i2c_client *client)
 
 	media_entity_cleanup(&sd->entity);
 	mutex_destroy(&imx274->lock);
-	return 0;
 }
 
 static const struct dev_pm_ops imx274_pm_ops = {

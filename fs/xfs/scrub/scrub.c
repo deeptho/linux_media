@@ -173,12 +173,8 @@ xchk_teardown(
 		mnt_drop_write_file(sc->file);
 	if (sc->flags & XCHK_REAPING_DISABLED)
 		xchk_start_reaping(sc);
-	if (sc->flags & XCHK_HAS_QUOTAOFFLOCK) {
-		mutex_unlock(&sc->mp->m_quotainfo->qi_quotaofflock);
-		sc->flags &= ~XCHK_HAS_QUOTAOFFLOCK;
-	}
 	if (sc->buf) {
-		kmem_free(sc->buf);
+		kvfree(sc->buf);
 		sc->buf = NULL;
 	}
 	return error;
@@ -344,20 +340,6 @@ static const struct xchk_meta_ops meta_scrub_ops[] = {
 	},
 };
 
-/* This isn't a stable feature, warn once per day. */
-static inline void
-xchk_experimental_warning(
-	struct xfs_mount	*mp)
-{
-	static struct ratelimit_state scrub_warning = RATELIMIT_STATE_INIT(
-			"xchk_warning", 86400 * HZ, 1);
-	ratelimit_set_flags(&scrub_warning, RATELIMIT_MSG_ON_RELEASE);
-
-	if (__ratelimit(&scrub_warning))
-		xfs_alert(mp,
-"EXPERIMENTAL online scrub feature in use. Use at your own risk!");
-}
-
 static int
 xchk_validate_inputs(
 	struct xfs_mount		*mp,
@@ -482,9 +464,10 @@ xfs_scrub_metadata(
 	if (error)
 		goto out;
 
-	xchk_experimental_warning(mp);
+	xfs_warn_mount(mp, XFS_OPSTATE_WARNED_SCRUB,
+ "EXPERIMENTAL online scrub feature in use. Use at your own risk!");
 
-	sc = kmem_zalloc(sizeof(struct xfs_scrub), KM_NOFS | KM_MAYFAIL);
+	sc = kzalloc(sizeof(struct xfs_scrub), XCHK_GFP_FLAGS);
 	if (!sc) {
 		error = -ENOMEM;
 		goto out;
@@ -574,7 +557,7 @@ out_nofix:
 out_teardown:
 	error = xchk_teardown(sc, error);
 out_sc:
-	kmem_free(sc);
+	kfree(sc);
 out:
 	trace_xchk_done(XFS_I(file_inode(file)), sm, error);
 	if (error == -EFSCORRUPTED || error == -EFSBADCRC) {

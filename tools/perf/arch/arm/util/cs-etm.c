@@ -53,7 +53,17 @@ static const char * const metadata_etmv4_ro[] = {
 	[CS_ETMV4_TRCIDR2]		= "trcidr/trcidr2",
 	[CS_ETMV4_TRCIDR8]		= "trcidr/trcidr8",
 	[CS_ETMV4_TRCAUTHSTATUS]	= "mgmt/trcauthstatus",
-	[CS_ETE_TRCDEVARCH]		= "mgmt/trcdevarch"
+	[CS_ETMV4_TS_SOURCE]		= "ts_source",
+};
+
+static const char * const metadata_ete_ro[] = {
+	[CS_ETE_TRCIDR0]		= "trcidr/trcidr0",
+	[CS_ETE_TRCIDR1]		= "trcidr/trcidr1",
+	[CS_ETE_TRCIDR2]		= "trcidr/trcidr2",
+	[CS_ETE_TRCIDR8]		= "trcidr/trcidr8",
+	[CS_ETE_TRCAUTHSTATUS]		= "mgmt/trcauthstatus",
+	[CS_ETE_TRCDEVARCH]		= "mgmt/trcdevarch",
+	[CS_ETE_TS_SOURCE]		= "ts_source",
 };
 
 static bool cs_etm_is_etmv4(struct auxtrace_record *itr, int cpu);
@@ -199,13 +209,15 @@ static int cs_etm_set_option(struct auxtrace_record *itr,
 			     struct evsel *evsel, u32 option)
 {
 	int i, err = -EINVAL;
-	struct perf_cpu_map *event_cpus = evsel->evlist->core.cpus;
+	struct perf_cpu_map *event_cpus = evsel->evlist->core.user_requested_cpus;
 	struct perf_cpu_map *online_cpus = perf_cpu_map__new(NULL);
 
 	/* Set option of each CPU we have */
-	for (i = 0; i < cpu__max_cpu(); i++) {
-		if (!cpu_map__has(event_cpus, i) ||
-		    !cpu_map__has(online_cpus, i))
+	for (i = 0; i < cpu__max_cpu().cpu; i++) {
+		struct perf_cpu cpu = { .cpu = i, };
+
+		if (!perf_cpu_map__has(event_cpus, cpu) ||
+		    !perf_cpu_map__has(online_cpus, cpu))
 			continue;
 
 		if (option & BIT(ETM_OPT_CTXTID)) {
@@ -271,9 +283,15 @@ static int cs_etm_set_sink_attr(struct perf_pmu *pmu,
 
 		ret = perf_pmu__scan_file(pmu, path, "%x", &hash);
 		if (ret != 1) {
-			pr_err("failed to set sink \"%s\" on event %s with %d (%s)\n",
-			       sink, evsel__name(evsel), errno,
-			       str_error_r(errno, msg, sizeof(msg)));
+			if (errno == ENOENT)
+				pr_err("Couldn't find sink \"%s\" on event %s\n"
+				       "Missing kernel or device support?\n\n"
+				       "Hint: An appropriate sink will be picked automatically if one isn't specified.\n",
+				       sink, evsel__name(evsel));
+			else
+				pr_err("Failed to set sink \"%s\" on event %s with %d (%s)\n",
+				       sink, evsel__name(evsel), errno,
+				       str_error_r(errno, msg, sizeof(msg)));
 			return ret;
 		}
 
@@ -297,7 +315,7 @@ static int cs_etm_recording_options(struct auxtrace_record *itr,
 				container_of(itr, struct cs_etm_recording, itr);
 	struct perf_pmu *cs_etm_pmu = ptr->cs_etm_pmu;
 	struct evsel *evsel, *cs_etm_evsel = NULL;
-	struct perf_cpu_map *cpus = evlist->core.cpus;
+	struct perf_cpu_map *cpus = evlist->core.user_requested_cpus;
 	bool privileged = perf_event_paranoid_check(-1);
 	int err = 0;
 
@@ -317,6 +335,7 @@ static int cs_etm_recording_options(struct auxtrace_record *itr,
 			}
 			evsel->core.attr.freq = 0;
 			evsel->core.attr.sample_period = 1;
+			evsel->needs_auxtrace_mmap = true;
 			cs_etm_evsel = evsel;
 			opts->full_auxtrace = true;
 		}
@@ -407,25 +426,6 @@ static int cs_etm_recording_options(struct auxtrace_record *itr,
 
 	}
 
-	/* Validate auxtrace_mmap_pages provided by user */
-	if (opts->auxtrace_mmap_pages) {
-		unsigned int max_page = (KiB(128) / page_size);
-		size_t sz = opts->auxtrace_mmap_pages * (size_t)page_size;
-
-		if (!privileged &&
-		    opts->auxtrace_mmap_pages > max_page) {
-			opts->auxtrace_mmap_pages = max_page;
-			pr_err("auxtrace too big, truncating to %d\n",
-			       max_page);
-		}
-
-		if (!is_power_of_2(sz)) {
-			pr_err("Invalid mmap size for %s: must be a power of 2\n",
-			       CORESIGHT_ETM_PMU_NAME);
-			return -EINVAL;
-		}
-	}
-
 	if (opts->auxtrace_snapshot_mode)
 		pr_debug2("%s snapshot size: %zu\n", CORESIGHT_ETM_PMU_NAME,
 			  opts->auxtrace_snapshot_size);
@@ -454,7 +454,7 @@ static int cs_etm_recording_options(struct auxtrace_record *itr,
 	if (opts->full_auxtrace) {
 		struct evsel *tracking_evsel;
 
-		err = parse_events(evlist, "dummy:u", NULL);
+		err = parse_event(evlist, "dummy:u");
 		if (err)
 			goto out;
 
@@ -527,6 +527,9 @@ static u64 cs_etmv4_get_config(struct auxtrace_record *itr)
 	if (config_opts & BIT(ETM_OPT_CTXTID2))
 		config |= BIT(ETM4_CFG_BIT_VMID) |
 			  BIT(ETM4_CFG_BIT_VMID_OPT);
+	if (config_opts & BIT(ETM_OPT_BRANCH_BROADCAST))
+		config |= BIT(ETM4_CFG_BIT_BB);
+
 	return config;
 }
 
@@ -536,14 +539,16 @@ cs_etm_info_priv_size(struct auxtrace_record *itr __maybe_unused,
 {
 	int i;
 	int etmv3 = 0, etmv4 = 0, ete = 0;
-	struct perf_cpu_map *event_cpus = evlist->core.cpus;
+	struct perf_cpu_map *event_cpus = evlist->core.user_requested_cpus;
 	struct perf_cpu_map *online_cpus = perf_cpu_map__new(NULL);
 
 	/* cpu map is not empty, we have specific CPUs to work with */
 	if (!perf_cpu_map__empty(event_cpus)) {
-		for (i = 0; i < cpu__max_cpu(); i++) {
-			if (!cpu_map__has(event_cpus, i) ||
-			    !cpu_map__has(online_cpus, i))
+		for (i = 0; i < cpu__max_cpu().cpu; i++) {
+			struct perf_cpu cpu = { .cpu = i, };
+
+			if (!perf_cpu_map__has(event_cpus, cpu) ||
+			    !perf_cpu_map__has(online_cpus, cpu))
 				continue;
 
 			if (cs_etm_is_ete(itr, i))
@@ -555,8 +560,10 @@ cs_etm_info_priv_size(struct auxtrace_record *itr __maybe_unused,
 		}
 	} else {
 		/* get configuration for all CPUs in the system */
-		for (i = 0; i < cpu__max_cpu(); i++) {
-			if (!cpu_map__has(online_cpus, i))
+		for (i = 0; i < cpu__max_cpu().cpu; i++) {
+			struct perf_cpu cpu = { .cpu = i, };
+
+			if (!perf_cpu_map__has(online_cpus, cpu))
 				continue;
 
 			if (cs_etm_is_ete(itr, i))
@@ -614,6 +621,32 @@ static int cs_etm_get_ro(struct perf_pmu *pmu, int cpu, const char *path)
 	return val;
 }
 
+static int cs_etm_get_ro_signed(struct perf_pmu *pmu, int cpu, const char *path)
+{
+	char pmu_path[PATH_MAX];
+	int scan;
+	int val = 0;
+
+	/* Get RO metadata from sysfs */
+	snprintf(pmu_path, PATH_MAX, "cpu%d/%s", cpu, path);
+
+	scan = perf_pmu__scan_file(pmu, pmu_path, "%d", &val);
+	if (scan != 1)
+		pr_err("%s: error reading: %s\n", __func__, pmu_path);
+
+	return val;
+}
+
+static bool cs_etm_pmu_path_exists(struct perf_pmu *pmu, int cpu, const char *path)
+{
+	char pmu_path[PATH_MAX];
+
+	/* Get RO metadata from sysfs */
+	snprintf(pmu_path, PATH_MAX, "cpu%d/%s", cpu, path);
+
+	return perf_pmu__file_exists(pmu, pmu_path);
+}
+
 #define TRCDEVARCH_ARCHPART_SHIFT 0
 #define TRCDEVARCH_ARCHPART_MASK  GENMASK(11, 0)
 #define TRCDEVARCH_ARCHPART(x)    (((x) & TRCDEVARCH_ARCHPART_MASK) >> TRCDEVARCH_ARCHPART_SHIFT)
@@ -626,7 +659,7 @@ static bool cs_etm_is_ete(struct auxtrace_record *itr, int cpu)
 {
 	struct cs_etm_recording *ptr = container_of(itr, struct cs_etm_recording, itr);
 	struct perf_pmu *cs_etm_pmu = ptr->cs_etm_pmu;
-	int trcdevarch = cs_etm_get_ro(cs_etm_pmu, cpu, metadata_etmv4_ro[CS_ETE_TRCDEVARCH]);
+	int trcdevarch = cs_etm_get_ro(cs_etm_pmu, cpu, metadata_ete_ro[CS_ETE_TRCDEVARCH]);
 
 	/*
 	 * ETE if ARCHVER is 5 (ARCHVER is 4 for ETM) and ARCHPART is 0xA13.
@@ -655,6 +688,51 @@ static void cs_etm_save_etmv4_header(__u64 data[], struct auxtrace_record *itr, 
 					       metadata_etmv4_ro[CS_ETMV4_TRCIDR8]);
 	data[CS_ETMV4_TRCAUTHSTATUS] = cs_etm_get_ro(cs_etm_pmu, cpu,
 						     metadata_etmv4_ro[CS_ETMV4_TRCAUTHSTATUS]);
+
+	/* Kernels older than 5.19 may not expose ts_source */
+	if (cs_etm_pmu_path_exists(cs_etm_pmu, cpu, metadata_etmv4_ro[CS_ETMV4_TS_SOURCE]))
+		data[CS_ETMV4_TS_SOURCE] = (__u64) cs_etm_get_ro_signed(cs_etm_pmu, cpu,
+				metadata_etmv4_ro[CS_ETMV4_TS_SOURCE]);
+	else {
+		pr_warning("[%03d] pmu file 'ts_source' not found. Fallback to safe value (-1)\n",
+			   cpu);
+		data[CS_ETMV4_TS_SOURCE] = (__u64) -1;
+	}
+}
+
+static void cs_etm_save_ete_header(__u64 data[], struct auxtrace_record *itr, int cpu)
+{
+	struct cs_etm_recording *ptr = container_of(itr, struct cs_etm_recording, itr);
+	struct perf_pmu *cs_etm_pmu = ptr->cs_etm_pmu;
+
+	/* Get trace configuration register */
+	data[CS_ETE_TRCCONFIGR] = cs_etmv4_get_config(itr);
+	/* Get traceID from the framework */
+	data[CS_ETE_TRCTRACEIDR] = coresight_get_trace_id(cpu);
+	/* Get read-only information from sysFS */
+	data[CS_ETE_TRCIDR0] = cs_etm_get_ro(cs_etm_pmu, cpu,
+					     metadata_ete_ro[CS_ETE_TRCIDR0]);
+	data[CS_ETE_TRCIDR1] = cs_etm_get_ro(cs_etm_pmu, cpu,
+					     metadata_ete_ro[CS_ETE_TRCIDR1]);
+	data[CS_ETE_TRCIDR2] = cs_etm_get_ro(cs_etm_pmu, cpu,
+					     metadata_ete_ro[CS_ETE_TRCIDR2]);
+	data[CS_ETE_TRCIDR8] = cs_etm_get_ro(cs_etm_pmu, cpu,
+					     metadata_ete_ro[CS_ETE_TRCIDR8]);
+	data[CS_ETE_TRCAUTHSTATUS] = cs_etm_get_ro(cs_etm_pmu, cpu,
+						   metadata_ete_ro[CS_ETE_TRCAUTHSTATUS]);
+	/* ETE uses the same registers as ETMv4 plus TRCDEVARCH */
+	data[CS_ETE_TRCDEVARCH] = cs_etm_get_ro(cs_etm_pmu, cpu,
+						metadata_ete_ro[CS_ETE_TRCDEVARCH]);
+
+	/* Kernels older than 5.19 may not expose ts_source */
+	if (cs_etm_pmu_path_exists(cs_etm_pmu, cpu, metadata_ete_ro[CS_ETE_TS_SOURCE]))
+		data[CS_ETE_TS_SOURCE] = (__u64) cs_etm_get_ro_signed(cs_etm_pmu, cpu,
+				metadata_ete_ro[CS_ETE_TS_SOURCE]);
+	else {
+		pr_warning("[%03d] pmu file 'ts_source' not found. Fallback to safe value (-1)\n",
+			   cpu);
+		data[CS_ETE_TS_SOURCE] = (__u64) -1;
+	}
 }
 
 static void cs_etm_get_metadata(int cpu, u32 *offset,
@@ -670,11 +748,7 @@ static void cs_etm_get_metadata(int cpu, u32 *offset,
 	/* first see what kind of tracer this cpu is affined to */
 	if (cs_etm_is_ete(itr, cpu)) {
 		magic = __perf_cs_ete_magic;
-		/* ETE uses the same registers as ETMv4 plus TRCDEVARCH */
-		cs_etm_save_etmv4_header(&info->priv[*offset], itr, cpu);
-		info->priv[*offset + CS_ETE_TRCDEVARCH] =
-			cs_etm_get_ro(cs_etm_pmu, cpu,
-				      metadata_etmv4_ro[CS_ETE_TRCDEVARCH]);
+		cs_etm_save_ete_header(&info->priv[*offset], itr, cpu);
 
 		/* How much space was used */
 		increment = CS_ETE_PRIV_MAX;
@@ -723,7 +797,7 @@ static int cs_etm_info_fill(struct auxtrace_record *itr,
 	u32 offset;
 	u64 nr_cpu, type;
 	struct perf_cpu_map *cpu_map;
-	struct perf_cpu_map *event_cpus = session->evlist->core.cpus;
+	struct perf_cpu_map *event_cpus = session->evlist->core.user_requested_cpus;
 	struct perf_cpu_map *online_cpus = perf_cpu_map__new(NULL);
 	struct cs_etm_recording *ptr =
 			container_of(itr, struct cs_etm_recording, itr);
@@ -741,8 +815,10 @@ static int cs_etm_info_fill(struct auxtrace_record *itr,
 	} else {
 		/* Make sure all specified CPUs are online */
 		for (i = 0; i < perf_cpu_map__nr(event_cpus); i++) {
-			if (cpu_map__has(event_cpus, i) &&
-			    !cpu_map__has(online_cpus, i))
+			struct perf_cpu cpu = { .cpu = i, };
+
+			if (perf_cpu_map__has(event_cpus, cpu) &&
+			    !perf_cpu_map__has(online_cpus, cpu))
 				return -EINVAL;
 		}
 
@@ -762,9 +838,12 @@ static int cs_etm_info_fill(struct auxtrace_record *itr,
 
 	offset = CS_ETM_SNAPSHOT + 1;
 
-	for (i = 0; i < cpu__max_cpu() && offset < priv_size; i++)
-		if (cpu_map__has(cpu_map, i))
+	for (i = 0; i < cpu__max_cpu().cpu && offset < priv_size; i++) {
+		struct perf_cpu cpu = { .cpu = i, };
+
+		if (perf_cpu_map__has(cpu_map, cpu))
 			cs_etm_get_metadata(i, &offset, itr, info);
+	}
 
 	perf_cpu_map__put(online_cpus);
 

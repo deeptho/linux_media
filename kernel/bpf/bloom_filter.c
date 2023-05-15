@@ -7,6 +7,7 @@
 #include <linux/err.h>
 #include <linux/jhash.h>
 #include <linux/random.h>
+#include <linux/btf_ids.h>
 
 #define BLOOM_CREATE_FLAG_MASK \
 	(BPF_F_NUMA_NODE | BPF_F_ZERO_SEED | BPF_F_ACCESS_MASK)
@@ -82,6 +83,11 @@ static int bloom_map_delete_elem(struct bpf_map *map, void *value)
 	return -EOPNOTSUPP;
 }
 
+static int bloom_map_get_next_key(struct bpf_map *map, void *key, void *next_key)
+{
+	return -EOPNOTSUPP;
+}
+
 static struct bpf_map *bloom_map_alloc(union bpf_attr *attr)
 {
 	u32 bitset_bytes, bitset_mask, nr_hash_funcs, nr_bits;
@@ -152,7 +158,7 @@ static struct bpf_map *bloom_map_alloc(union bpf_attr *attr)
 			attr->value_size / sizeof(u32);
 
 	if (!(attr->map_flags & BPF_F_ZERO_SEED))
-		bloom->hash_seed = get_random_int();
+		bloom->hash_seed = get_random_u32();
 
 	return &bloom->map;
 }
@@ -187,11 +193,12 @@ static int bloom_map_check_btf(const struct bpf_map *map,
 	return btf_type_is_void(key_type) ? 0 : -EINVAL;
 }
 
-static int bpf_bloom_map_btf_id;
+BTF_ID_LIST_SINGLE(bpf_bloom_map_btf_ids, struct, bpf_bloom_filter)
 const struct bpf_map_ops bloom_filter_map_ops = {
 	.map_meta_equal = bpf_map_meta_equal,
 	.map_alloc = bloom_map_alloc,
 	.map_free = bloom_map_free,
+	.map_get_next_key = bloom_map_get_next_key,
 	.map_push_elem = bloom_map_push_elem,
 	.map_peek_elem = bloom_map_peek_elem,
 	.map_pop_elem = bloom_map_pop_elem,
@@ -199,6 +206,5 @@ const struct bpf_map_ops bloom_filter_map_ops = {
 	.map_update_elem = bloom_map_update_elem,
 	.map_delete_elem = bloom_map_delete_elem,
 	.map_check_btf = bloom_map_check_btf,
-	.map_btf_name = "bpf_bloom_filter",
-	.map_btf_id = &bpf_bloom_map_btf_id,
+	.map_btf_id = &bpf_bloom_map_btf_ids[0],
 };

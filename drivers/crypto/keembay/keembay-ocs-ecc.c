@@ -930,6 +930,7 @@ static int kmb_ocs_ecc_probe(struct platform_device *pdev)
 	ecc_dev->engine = crypto_engine_alloc_init(dev, 1);
 	if (!ecc_dev->engine) {
 		dev_err(dev, "Could not allocate crypto engine\n");
+		rc = -ENOMEM;
 		goto list_del;
 	}
 
@@ -975,8 +976,6 @@ static int kmb_ocs_ecc_remove(struct platform_device *pdev)
 	struct ocs_ecc_dev *ecc_dev;
 
 	ecc_dev = platform_get_drvdata(pdev);
-	if (!ecc_dev)
-		return -ENODEV;
 
 	crypto_unregister_kpp(&ocs_ecdh_p384);
 	crypto_unregister_kpp(&ocs_ecdh_p256);

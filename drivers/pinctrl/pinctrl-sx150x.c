@@ -1094,9 +1094,9 @@ static const struct regmap_config sx150x_regmap_config = {
 	.volatile_reg = sx150x_reg_volatile,
 };
 
-static int sx150x_probe(struct i2c_client *client,
-			const struct i2c_device_id *id)
+static int sx150x_probe(struct i2c_client *client)
 {
+	const struct i2c_device_id *id = i2c_client_get_device_id(client);
 	static const u32 i2c_funcs = I2C_FUNC_SMBUS_BYTE_DATA |
 				     I2C_FUNC_SMBUS_WRITE_WORD_DATA;
 	struct device *dev = &client->dev;
@@ -1163,9 +1163,6 @@ static int sx150x_probe(struct i2c_client *client,
 	pctl->gpio.set = sx150x_gpio_set;
 	pctl->gpio.set_config = gpiochip_generic_config;
 	pctl->gpio.parent = dev;
-#ifdef CONFIG_OF_GPIO
-	pctl->gpio.of_node = dev->of_node;
-#endif
 	pctl->gpio.can_sleep = true;
 	pctl->gpio.label = devm_kstrdup(dev, client->name, GFP_KERNEL);
 	if (!pctl->gpio.label)
@@ -1255,7 +1252,7 @@ static struct i2c_driver sx150x_driver = {
 		.name = "sx150x-pinctrl",
 		.of_match_table = of_match_ptr(sx150x_of_match),
 	},
-	.probe    = sx150x_probe,
+	.probe_new = sx150x_probe,
 	.id_table = sx150x_id,
 };
 

@@ -133,6 +133,15 @@
 #define CRYPTO_ALG_ALLOCATES_MEMORY	0x00010000
 
 /*
+ * Mark an algorithm as a service implementation only usable by a
+ * template and never by a normal user of the kernel crypto API.
+ * This is intended to be used by algorithms that are themselves
+ * not FIPS-approved but may instead be used to implement parts of
+ * a FIPS-approved algorithm (e.g., dh vs. ffdhe2048(dh)).
+ */
+#define CRYPTO_ALG_FIPS_INTERNAL	0x00020000
+
+/*
  * Transform masks and values (for crt_flags).
  */
 #define CRYPTO_TFM_NEED_KEY		0x00000001
@@ -167,7 +176,7 @@ struct crypto_async_request;
 struct crypto_tfm;
 struct crypto_type;
 
-typedef void (*crypto_completion_t)(struct crypto_async_request *req, int err);
+typedef void (*crypto_completion_t)(void *req, int err);
 
 /**
  * DOC: Block Cipher Context Data Structures
@@ -586,7 +595,7 @@ struct crypto_wait {
 /*
  * Async ops completion helper functioons
  */
-void crypto_req_done(struct crypto_async_request *req, int err);
+void crypto_req_done(void *req, int err);
 
 static inline int crypto_wait_req(int err, struct crypto_wait *wait)
 {
@@ -703,11 +712,6 @@ static inline void crypto_tfm_set_flags(struct crypto_tfm *tfm, u32 flags)
 static inline void crypto_tfm_clear_flags(struct crypto_tfm *tfm, u32 flags)
 {
 	tfm->crt_flags &= ~flags;
-}
-
-static inline void *crypto_tfm_ctx(struct crypto_tfm *tfm)
-{
-	return tfm->__crt_ctx;
 }
 
 static inline unsigned int crypto_tfm_ctx_alignment(void)

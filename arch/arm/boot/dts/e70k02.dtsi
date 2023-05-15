@@ -26,14 +26,14 @@
 	gpio_keys: gpio-keys {
 		compatible = "gpio-keys";
 
-		power {
+		key-power {
 			label = "Power";
 			gpios = <&gpio4 25 GPIO_ACTIVE_LOW>;
 			linux,code = <KEY_POWER>;
 			wakeup-source;
 		};
 
-		cover {
+		key-cover {
 			label = "Cover";
 			gpios = <&gpio4 23 GPIO_ACTIVE_LOW>;
 			linux,code = <SW_LID>;
@@ -41,13 +41,13 @@
 			wakeup-source;
 		};
 
-		pageup {
+		key-pageup {
 			label = "PageUp";
 			gpios = <&gpio4 0 GPIO_ACTIVE_LOW>;
 			linux,code = <KEY_PAGEUP>;
 		};
 
-		pagedown {
+		key-pagedown {
 			label = "PageDown";
 			gpios = <&gpio4 2 GPIO_ACTIVE_LOW>;
 			linux,code = <KEY_PAGEDOWN>;
@@ -122,7 +122,16 @@
 	clock-frequency = <100000>;
 	status = "okay";
 
-	/* TODO: CYTTSP5 touch controller at 0x24 */
+	touchscreen@24 {
+		compatible = "cypress,tt21000";
+		reg = <0x24>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_cyttsp5_gpio>;
+		interrupt-parent = <&gpio4>;
+		interrupts = <24 IRQ_TYPE_EDGE_FALLING>;
+		reset-gpios = <&gpio4 18 GPIO_ACTIVE_LOW>;
+		vdd-supply = <&ldo5_reg>;
+	};
 
 	/* TODO: SY7636 PMIC for E Ink at 0x62 */
 

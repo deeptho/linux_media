@@ -20,16 +20,6 @@ long kvm_arch_dev_ioctl(struct file *filp,
 	return -EINVAL;
 }
 
-int kvm_arch_check_processor_compat(void *opaque)
-{
-	return 0;
-}
-
-int kvm_arch_hardware_setup(void *opaque)
-{
-	return 0;
-}
-
 int kvm_arch_hardware_enable(void)
 {
 	unsigned long hideleg, hedeleg;
@@ -49,7 +39,8 @@ int kvm_arch_hardware_enable(void)
 	hideleg |= (1UL << IRQ_VS_EXT);
 	csr_write(CSR_HIDELEG, hideleg);
 
-	csr_write(CSR_HCOUNTEREN, -1UL);
+	/* VS should access only the time counter directly. Everything else should trap */
+	csr_write(CSR_HCOUNTEREN, 0x02);
 
 	csr_write(CSR_HVIP, 0);
 
@@ -58,11 +49,19 @@ int kvm_arch_hardware_enable(void)
 
 void kvm_arch_hardware_disable(void)
 {
+	/*
+	 * After clearing the hideleg CSR, the host kernel will receive
+	 * spurious interrupts if hvip CSR has pending interrupts and the
+	 * corresponding enable bits in vsie CSR are asserted. To avoid it,
+	 * hvip CSR and vsie CSR must be cleared before clearing hideleg CSR.
+	 */
+	csr_write(CSR_VSIE, 0);
+	csr_write(CSR_HVIP, 0);
 	csr_write(CSR_HEDELEG, 0);
 	csr_write(CSR_HIDELEG, 0);
 }
 
-int kvm_arch_init(void *opaque)
+static int __init riscv_kvm_init(void)
 {
 	const char *str;
 
@@ -81,13 +80,13 @@ int kvm_arch_init(void *opaque)
 		return -ENODEV;
 	}
 
-	kvm_riscv_stage2_mode_detect();
+	kvm_riscv_gstage_mode_detect();
 
-	kvm_riscv_stage2_vmid_detect();
+	kvm_riscv_gstage_vmid_detect();
 
 	kvm_info("hypervisor extension available\n");
 
-	switch (kvm_riscv_stage2_mode()) {
+	switch (kvm_riscv_gstage_mode()) {
 	case HGATP_MODE_SV32X4:
 		str = "Sv32x4";
 		break;
@@ -97,22 +96,22 @@ int kvm_arch_init(void *opaque)
 	case HGATP_MODE_SV48X4:
 		str = "Sv48x4";
 		break;
+	case HGATP_MODE_SV57X4:
+		str = "Sv57x4";
+		break;
 	default:
 		return -ENODEV;
 	}
 	kvm_info("using %s G-stage page table format\n", str);
 
-	kvm_info("VMID %ld bits available\n", kvm_riscv_stage2_vmid_bits());
+	kvm_info("VMID %ld bits available\n", kvm_riscv_gstage_vmid_bits());
 
-	return 0;
-}
-
-void kvm_arch_exit(void)
-{
-}
-
-static int riscv_kvm_init(void)
-{
-	return kvm_init(NULL, sizeof(struct kvm_vcpu), 0, THIS_MODULE);
+	return kvm_init(sizeof(struct kvm_vcpu), 0, THIS_MODULE);
 }
 module_init(riscv_kvm_init);
+
+static void __exit riscv_kvm_exit(void)
+{
+	kvm_exit();
+}
+module_exit(riscv_kvm_exit);

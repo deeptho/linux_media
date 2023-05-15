@@ -327,6 +327,7 @@ static int z2ram_register_disk(int minor)
 	disk->major = Z2RAM_MAJOR;
 	disk->first_minor = minor;
 	disk->minors = 1;
+	disk->flags |= GENHD_FL_NO_PART;
 	disk->fops = &z2_fops;
 	if (minor)
 		sprintf(disk->disk_name, "z2ram%d", minor);
@@ -336,7 +337,7 @@ static int z2ram_register_disk(int minor)
 	z2ram_gendisk[minor] = disk;
 	err = add_disk(disk);
 	if (err)
-		blk_cleanup_disk(disk);
+		put_disk(disk);
 	return err;
 }
 
@@ -383,7 +384,6 @@ static void __exit z2_exit(void)
 
 	for (i = 0; i < Z2MINOR_COUNT; i++) {
 		del_gendisk(z2ram_gendisk[i]);
-		blk_cleanup_queue(z2ram_gendisk[i]->queue);
 		put_disk(z2ram_gendisk[i]);
 	}
 	blk_mq_free_tag_set(&tag_set);
