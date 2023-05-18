@@ -9,6 +9,125 @@ It contains patches for the following drivers
 * m88rs6060 based cards: tbs6902SE and tbs904SE. On these cards there is not IQ-scan (constellation display)
 to support blindscan, to fix bugs and to make improvements.
 
+# Changes in release-1.0.0
+
+##Kernel support
+* Update for linux 6 kernel
+* compiles 6.1
+
+## Various bugs and improvements
+* Improved logging.
+* Avoid null pointer dereference when short_name not sent for 2nd frontend
+* tbsecp3: set default mode to 1
+* Do not send diseqc in mode=0; remove dead code
+* Experimental fix for cards without short name; short name for tbs6908
+* Bug: incorrect tone and voltage returned when tone and voltage are set via ioctl
+* Bug: bbframe mode not reset in some cases
+* Set rf_in=0 for non neumodvb cards
+* Different way to initialize rf_inputs.
+* rename tuner_active to rf_in_selected.
+* Improved debug logging: add demod number; use numbering starting at 0
+* Enable bbframes for GSE
+* ts_nosync (code not yet active
+* wideband support (untested)
+* matype not set in some cases.
+* select_min_isi sometimes fails, resulting in no tune
+* Bug: after pls_seacrch fails, restore default pls
+* Redefine FE_HAS_TIMING_LOCK to be different from FE_OUT_OF_RESOURCES, which confuses dvblast
+* cx231xx correct MAC extraction after power cycle
+* BUG: incorrect reporting of FE_OUT_OF_RESOURCES when lock fails
+* Temporary fix to avoid crash on module unload
+* Bug: when auto-selecting a stream_id, ensure that selected stream_id is returned to driver, rather than -1
+* Introduce state_sleep; release mutex during sleep, to avoid delays in parallel operation of multiple demods
+* Introduce base_lock, base_unlock, base_trylock
+* Increase number of events in event queue
+* Bug: slow closing of frontend because of needless locking
+* Disallow turning off voltage when tuner is still in use
+* Defaults for rf_inputs property; More stable faking of missing mac_address
+* Possible module unload bug for tbs6590
+* Incorrect processing of DVB_STOP ioctl. Fix includes workaround for bad user space code containing the same bug
+* Bug: interrupting fft spectrum sometimes causes crash
+* Bug: need to lock mutex during spectrum scan sweep.
+* Adapter name retrieval; add short names for adapters.
+* Add FE_SET_RF_INPUT ioctl; add rf_inputs fields to extended frontend info;
+* Add card_short_name
+* Bug: memory access beyond end of array causing kernel crash
+* Do not apply center frequency shift for low symbol rates. Improves locking of low symbol rate muxes?
+* Bug: voltage remains on after frontend is released
+* Bug: crash on module onload (chip_proc_close)
+* Always use "local" value for faked mac addresses.
+* distinghuish between mac address of card and adapter
+* Suppress some compiler warnings
+* Expose default rf_in for each dvb adapter
+
+## stv091x based cards
+* Fixes for tbs6983 (UNTESTED; may break other stv091x cards)
+* Bug: tone not set on high band with stv091x
+* Bug: stv091x needs mutex protection when called from dvb_frontend;
+* tbs5927 - set correct frequency limits
+* tbs5927: add card_address
+* tbs5927 add "usb" to bus address
+* set_voltage call accidentally removed from tbs5927
+* Proper mac address and card name for tbs5927
+
+## stid135 based cards
+* tbs6903x: Reduce overclocking to avoid i2c nack errors at startup
+* tbs6903x_V2 has only 2 rf inputs.
+* tbs6903x: allow both tuners to connect to both rf inputs
+* Allow exposing registers of multiple stid135 cards in /proc
+* Updated spectral scan algorithm (algo 5)
+* debug logging
+* Bug: force frame and continous mode not reset
+* Add more error detection
+* Add dummy plf detection
+* simplify fe_stid135_get_signal_info
+* stid135 Bug: Add code which ran in get_frontend into read_status because get_frontend is no longer called
+* Remove stid135-fe.h; make some functions static
+* Improved debug logging: add demod number; use numbering starting at 0
+* stid135: improved lock status reporting
+* stid135: deadlock in spectrum_scan
+* In stid135_fft, assume all functions are called with base_lock held.
+* stid135: correctly handle low rolloff factors indicated by alternating matype
+* stid135: disable get_frontend
+* Handle out of llr condition
+* stid135: allow writing registers
+* Overclock i2c bus on stid135 based cards.
+* Rename spectrum scan related enum; allow rf_input selection on stid135;
+* stid135: report that only 4 out of 8 tuners support fft scan.
+* Bug: stid135 22kHz still on when device not in use
+* Bug: incorrect docs for stid135-fe module parameter
+* Bug: accidentally disabled fe_stid135_init_fft
+* Re-add tbs6916 (16 tuner optical card)
+
+## em28xx based cards
+* em28xx crash on usb disconnect.
+* em28xx crash on module unload
+
+## m88rs6060 based cards
+* m88rs6060: remove uneeeded reads
+* tbs6904se: increase i2c speed (experimental)
+* m88rs6060: faster spectrum scan (psyborg55)
+* shortname for tbs6522
+
+## tas2101 based cards
+* tas2101: pause after activating demod, to return correct SNR
+* tas2101: set proper lock flags
+* tas2101: set timing lock status
+* tas2101: increase constellation size
+* tbs5990: set proper card_mac_address and rf_input.
+* tbs5990: add bus address
+* tbs5990: incorrect mac address read.
+
+## si283 based cards
+* si2183 patch
+* si2183: report timing lock to avoid problems in user apps.
+* Bug: si2183 sets incorrect frequency limits
+* Bug: si2183 sets incorrect frequency limits
+* tbs6504: ensure all frontends on the same adapter have same faked macaddress
+* Workaround for tbs6504 not detecting stream_type correctly
+
+
+
 # Changes in release-0.9.0
 
 * Blindscan and spectrum upport for montage m88rs60606 based cards: tbs6902SE and tbs2904SE.
