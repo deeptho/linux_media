@@ -204,6 +204,22 @@ sudo systemctl enable rsyslog
 sudo systemctl start rsyslog #to have log messages in /var/log/debug
 ```
 
+
+Now install the firmware (if needed):
+
+```
+wget http://www.tbsdtv.com/download/document/linux/tbs-tuner-firmwares_v1.0.tar.bz2
+sudo tar jxvf tbs-tuner-firmwares_v1.0.tar.bz2 -C /lib/firmware/
+```
+
+If you cannot find the 6909 firmware:
+
+```
+wget http://www.tbsdtv.com/download/document/linux/dvb-fe-mxl5xx.fw
+sudo cp dvb-fe-mxl5xx.fw /lib/firmware/
+```
+
+
 Now load the drivers: either reboot, or try loading the proper module for your card, e.g., tbsecp3
 for many cards:
 
