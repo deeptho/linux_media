@@ -2734,6 +2734,8 @@ static int saa716x_tbs6983_frontend_attach(struct saa716x_adapter *adapter, int 
 		memcpy(adapter->dvb_adapter.proposed_mac, mac, 6);
 		dev_notice(&dev->pdev->dev, "%s MAC[%d]=%pM\n", dev->config->model_name, count, adapter->dvb_adapter.proposed_mac);
 	}
+	memcpy(&adapter->fe->ops.info.card_mac_address, mac, sizeof(mac));
+	strlcpy(adapter->fe->ops.info.card_short_name, "TBS 6983", sizeof(adapter->fe->ops.info.card_short_name));
 
 	return 0;
 err:
