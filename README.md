@@ -3,7 +3,7 @@ This repository is a clone of tbs/linux_media.
 It contains patches for the following drivers
 
 * stid135: ts6909x and tbs6903x cards (v1 and v2)
-* stv091x: tbs5927 tbs6908 tbs6903 tbs6983 tbs6522
+* stv091x: tbs5927 tbs6908 tbs6903 tbs6983 tbs6522 tbs6983 tbs6903 tbs6909
 * tas2101: tbs5990, tbs6904
 * si2183 based cards: tbs6504
 * m88rs6060 based cards: tbs6902SE and tbs904SE. On these cards there is not IQ-scan (constellation display)
