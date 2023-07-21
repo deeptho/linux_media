@@ -1427,9 +1427,9 @@ static int stid135_set_tone(struct dvb_frontend* fe, enum fe_sec_tone_mode tone)
 	}
 
 	/*
-		when multiple adapters use the same tuner, only one can chnage voltage, send tones, diseqc etc
+		when multiple adapters use the same tuner, only one can change voltage, send tones, diseqc etc
 		This is the tuner_owner. tuner_owner=-1 means no owner.
-		We ignore any request to change voltage unless tuner_owner== state->nr or
+		We ignore any request to change voltage unless tuner_owner== state->nr
 	 */
 	if(state->base->tuner_owner[state->rf_in] == -1) {
 		//take ownership
