@@ -1011,7 +1011,6 @@ static void si2157_remove(struct i2c_client *client)
 
 	memset(&fe->ops.tuner_ops, 0, sizeof(struct dvb_tuner_ops));
 	fe->tuner_priv = NULL;
-	kfree(dev);
 }
 
 /*
