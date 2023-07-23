@@ -492,11 +492,10 @@ static int si2157_set_params(struct dvb_frontend *fe)
 		delivery_system = 0x20; //DVBT
 		break;
 	case SYS_DVBC_ANNEX_A:
+	case SYS_DVBC_ANNEX_B:
 	case SYS_DVBC_ANNEX_C:
 		delivery_system = 0x30; //DVBC
 		break;
-	case SYS_DVBC_ANNEX_B:
-		delivery_system = 0x10; //QAM_US
 		break;
 	case SYS_ISDBT:
 		delivery_system = 0x40; //ISDB_T
