@@ -51,7 +51,7 @@ static int dw_mci_starfive_execute_tuning(struct dw_mci_slot *slot,
 	struct dw_mci *host = slot->host;
 	struct starfive_priv *priv = host->priv;
 	int rise_point = -1, fall_point = -1;
-	int err, prev_err;
+	int err, prev_err = 0;
 	int i;
 	bool found = 0;
 	u32 regval;
@@ -172,7 +172,7 @@ static int dw_mci_starfive_probe(struct platform_device *pdev)
 
 static struct platform_driver dw_mci_starfive_driver = {
 	.probe = dw_mci_starfive_probe,
-	.remove = dw_mci_pltfm_remove,
+	.remove_new = dw_mci_pltfm_remove,
 	.driver = {
 		.name = "dwmmc_starfive",
 		.probe_type = PROBE_PREFER_ASYNCHRONOUS,

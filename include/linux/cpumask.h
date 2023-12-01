@@ -351,6 +351,23 @@ unsigned int __pure cpumask_next_wrap(int n, const struct cpumask *mask, int sta
 	for_each_andnot_bit(cpu, cpumask_bits(mask1), cpumask_bits(mask2), small_cpumask_bits)
 
 /**
+ * for_each_cpu_or - iterate over every cpu present in either mask
+ * @cpu: the (optionally unsigned) integer iterator
+ * @mask1: the first cpumask pointer
+ * @mask2: the second cpumask pointer
+ *
+ * This saves a temporary CPU mask in many places.  It is equivalent to:
+ *	struct cpumask tmp;
+ *	cpumask_or(&tmp, &mask1, &mask2);
+ *	for_each_cpu(cpu, &tmp)
+ *		...
+ *
+ * After the loop, cpu is >= nr_cpu_ids.
+ */
+#define for_each_cpu_or(cpu, mask1, mask2)				\
+	for_each_or_bit(cpu, cpumask_bits(mask1), cpumask_bits(mask2), small_cpumask_bits)
+
+/**
  * cpumask_any_but - return a "random" in a cpumask, but not this one.
  * @mask: the cpumask to search
  * @cpu: the cpu to ignore.
@@ -1054,7 +1071,7 @@ static inline const struct cpumask *get_cpu_mask(unsigned int cpu)
  */
 static __always_inline unsigned int num_online_cpus(void)
 {
-	return arch_atomic_read(&__num_online_cpus);
+	return raw_atomic_read(&__num_online_cpus);
 }
 #define num_possible_cpus()	cpumask_weight(cpu_possible_mask)
 #define num_present_cpus()	cpumask_weight(cpu_present_mask)

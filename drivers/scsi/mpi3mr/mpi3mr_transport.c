@@ -2,15 +2,12 @@
 /*
  * Driver for Broadcom MPI3 Storage Controllers
  *
- * Copyright (C) 2017-2022 Broadcom Inc.
+ * Copyright (C) 2017-2023 Broadcom Inc.
  *  (mailto: mpi3mr-linuxdrv.pdl@broadcom.com)
  *
  */
 
 #include "mpi3mr.h"
-
-static void mpi3mr_expander_node_remove(struct mpi3mr_ioc *mrioc,
-	struct mpi3mr_sas_node *sas_expander);
 
 /**
  * mpi3mr_post_transport_req - Issue transport requests and wait
@@ -2061,7 +2058,7 @@ int mpi3mr_expander_add(struct mpi3mr_ioc *mrioc, u16 handle)
 	sas_expander = kzalloc(sizeof(struct mpi3mr_sas_node),
 	    GFP_KERNEL);
 	if (!sas_expander)
-		return -1;
+		return -ENOMEM;
 
 	sas_expander->handle = handle;
 	sas_expander->num_phys = expander_pg0.num_phys;
@@ -2164,7 +2161,7 @@ out_fail:
  *
  * Return nothing.
  */
-static void mpi3mr_expander_node_remove(struct mpi3mr_ioc *mrioc,
+void mpi3mr_expander_node_remove(struct mpi3mr_ioc *mrioc,
 	struct mpi3mr_sas_node *sas_expander)
 {
 	struct mpi3mr_sas_port *mr_sas_port, *next;
