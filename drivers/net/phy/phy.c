@@ -52,9 +52,22 @@ static const char *phy_state_to_str(enum phy_state st)
 	PHY_STATE_STR(NOLINK)
 	PHY_STATE_STR(CABLETEST)
 	PHY_STATE_STR(HALTED)
+	PHY_STATE_STR(ERROR)
 	}
 
 	return NULL;
+}
+
+static void phy_process_state_change(struct phy_device *phydev,
+				     enum phy_state old_state)
+{
+	if (old_state != phydev->state) {
+		phydev_dbg(phydev, "PHY state change %s -> %s\n",
+			   phy_state_to_str(old_state),
+			   phy_state_to_str(phydev->state));
+		if (phydev->drv && phydev->drv->link_change_notify)
+			phydev->drv->link_change_notify(phydev);
+	}
 }
 
 static void phy_link_up(struct phy_device *phydev)
@@ -1169,11 +1182,27 @@ void phy_stop_machine(struct phy_device *phydev)
 	mutex_unlock(&phydev->lock);
 }
 
+static void phy_process_error(struct phy_device *phydev)
+{
+	mutex_lock(&phydev->lock);
+	phydev->state = PHY_ERROR;
+	mutex_unlock(&phydev->lock);
+
+	phy_trigger_machine(phydev);
+}
+
+static void phy_error_precise(struct phy_device *phydev,
+			      const void *func, int err)
+{
+	WARN(1, "%pS: returned: %d\n", func, err);
+	phy_process_error(phydev);
+}
+
 /**
- * phy_error - enter HALTED state for this PHY device
+ * phy_error - enter ERROR state for this PHY device
  * @phydev: target phy_device struct
  *
- * Moves the PHY to the HALTED state in response to a read
+ * Moves the PHY to the ERROR state in response to a read
  * or write error, and tells the controller the link is down.
  * Must not be called from interrupt context, or while the
  * phydev->lock is held.
@@ -1181,12 +1210,7 @@ void phy_stop_machine(struct phy_device *phydev)
 void phy_error(struct phy_device *phydev)
 {
 	WARN_ON(1);
-
-	mutex_lock(&phydev->lock);
-	phydev->state = PHY_HALTED;
-	mutex_unlock(&phydev->lock);
-
-	phy_trigger_machine(phydev);
+	phy_process_error(phydev);
 }
 EXPORT_SYMBOL(phy_error);
 
@@ -1301,14 +1325,17 @@ EXPORT_SYMBOL(phy_free_interrupt);
 void phy_stop(struct phy_device *phydev)
 {
 	struct net_device *dev = phydev->attached_dev;
+	enum phy_state old_state;
 
-	if (!phy_is_started(phydev) && phydev->state != PHY_DOWN) {
+	if (!phy_is_started(phydev) && phydev->state != PHY_DOWN &&
+	    phydev->state != PHY_ERROR) {
 		WARN(1, "called from state %s\n",
 		     phy_state_to_str(phydev->state));
 		return;
 	}
 
 	mutex_lock(&phydev->lock);
+	old_state = phydev->state;
 
 	if (phydev->state == PHY_CABLETEST) {
 		phy_abort_cable_test(phydev);
@@ -1319,6 +1346,7 @@ void phy_stop(struct phy_device *phydev)
 		sfp_upstream_stop(phydev->sfp_bus);
 
 	phydev->state = PHY_HALTED;
+	phy_process_state_change(phydev, old_state);
 
 	mutex_unlock(&phydev->lock);
 
@@ -1378,6 +1406,7 @@ void phy_state_machine(struct work_struct *work)
 	struct net_device *dev = phydev->attached_dev;
 	bool needs_aneg = false, do_suspend = false;
 	enum phy_state old_state;
+	const void *func = NULL;
 	bool finished = false;
 	int err = 0;
 
@@ -1396,6 +1425,7 @@ void phy_state_machine(struct work_struct *work)
 	case PHY_NOLINK:
 	case PHY_RUNNING:
 		err = phy_check_link_status(phydev);
+		func = &phy_check_link_status;
 		break;
 	case PHY_CABLETEST:
 		err = phydev->drv->cable_test_get_status(phydev, &finished);
@@ -1415,6 +1445,7 @@ void phy_state_machine(struct work_struct *work)
 		}
 		break;
 	case PHY_HALTED:
+	case PHY_ERROR:
 		if (phydev->link) {
 			phydev->link = 0;
 			phy_link_down(phydev);
@@ -1425,24 +1456,20 @@ void phy_state_machine(struct work_struct *work)
 
 	mutex_unlock(&phydev->lock);
 
-	if (needs_aneg)
+	if (needs_aneg) {
 		err = phy_start_aneg(phydev);
-	else if (do_suspend)
+		func = &phy_start_aneg;
+	} else if (do_suspend) {
 		phy_suspend(phydev);
+	}
 
 	if (err == -ENODEV)
 		return;
 
 	if (err < 0)
-		phy_error(phydev);
+		phy_error_precise(phydev, func, err);
 
-	if (old_state != phydev->state) {
-		phydev_dbg(phydev, "PHY state change %s -> %s\n",
-			   phy_state_to_str(old_state),
-			   phy_state_to_str(phydev->state));
-		if (phydev->drv && phydev->drv->link_change_notify)
-			phydev->drv->link_change_notify(phydev);
-	}
+	phy_process_state_change(phydev, old_state);
 
 	/* Only re-schedule a PHY state machine change if we are polling the
 	 * PHY, if PHY_MAC_INTERRUPT is set, then we will be moving

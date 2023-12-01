@@ -5258,7 +5258,7 @@ error:
 	kfree(state);
 	return NULL;
 }
-EXPORT_SYMBOL(stv090x_attach);
+EXPORT_SYMBOL_GPL(stv090x_attach);
 
 static const struct i2c_device_id stv090x_id_table[] = {
 	{"stv090x", 0},
@@ -5271,7 +5271,7 @@ static struct i2c_driver stv090x_driver = {
 		.name	= "stv090x",
 		.suppress_bind_attrs = true,
 	},
-	.probe_new	= stv090x_probe,
+	.probe		= stv090x_probe,
 	.remove		= stv090x_remove,
 	.id_table	= stv090x_id_table,
 };

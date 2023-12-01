@@ -52,7 +52,6 @@
 #define TBSECP3_I2C_IE(_n)	(0x0008 + 4 * _n)
 #define TBSECP3_DMA_IE(_n)	(0x0018 + 4 * _n)
 #define TBSECP3_I2C_IF(_n)	(0x0001 << _n)
-//#define TBSECP3_DMA_IF(_n)	(_n<8)?(0x0010 << _n):(0x10000<<(_n - 8))
 #define TBSECP3_DMA_IF(_n)	(0x0010 << _n)
 #define TBSECP3_DMA_IF1(_n) (0x10000<<(_n - 8))
 
@@ -65,7 +64,7 @@
 #define SPI_RD_DATA     	 0x1c
 #define SPI_ENABLE       	 0x1c
 
-/* ASI */ 
+/* ASI */
 #define ASI0_BASEADDRESS  0x4000
 #define ASI_CHIP_RST  	0x00
 #define ASI_SPI_CONFIG  0x04

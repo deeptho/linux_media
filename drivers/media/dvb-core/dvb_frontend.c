@@ -293,14 +293,22 @@ static int dvb_frontend_get_event(struct dvb_frontend *fe,
 	}
 
 	if (events->eventw == events->eventr) {
-		int ret;
+		struct wait_queue_entry wait;
+		int ret = 0;
 
 		if (flags & O_NONBLOCK)
 			return -EWOULDBLOCK;
 
-		ret = wait_event_interruptible(events->wait_queue,
-					       dvb_frontend_test_event(fepriv, events));
-
+		init_waitqueue_entry(&wait, current);
+		add_wait_queue(&events->wait_queue, &wait);
+		while (!dvb_frontend_test_event(fepriv, events)) {
+			wait_woken(&wait, TASK_INTERRUPTIBLE, 0);
+			if (signal_pending(current)) {
+				ret = -ERESTARTSYS;
+				break;
+			}
+		}
+		remove_wait_queue(&events->wait_queue, &wait);
 		if (ret < 0)
 			return ret;
 	}
@@ -2460,7 +2468,7 @@ static int dvb_frontend_handle_ioctl(struct file *file,
 	case FE_ECP3FW_READ:
 		//printk("FE_ECP3FW_READ *****************");
 		if (fe->ops.spi_read) {
-			struct ecp3_info *info = parg;
+			struct ecp3_info *info = parg;	
 			fe->ops.spi_read(fe, info);
 		}
 		err = 0;
@@ -2468,9 +2476,9 @@ static int dvb_frontend_handle_ioctl(struct file *file,
 	case FE_ECP3FW_WRITE:
 		//printk("FE_ECP3FW_WRITE *****************");
 		if (fe->ops.spi_write) {
-			struct ecp3_info *info = parg;
+			struct ecp3_info *info = parg;	
 			fe->ops.spi_write(fe, info);
-
+		
 		}
 		err = 0;
 		break;
@@ -2478,7 +2486,7 @@ static int dvb_frontend_handle_ioctl(struct file *file,
 	case FE_24CXX_READ:
 		//printk("FE_24CXX_READ *****************");
 		if (fe->ops.mcu_read) {
-			struct mcu24cxx_info *info = parg;
+			struct mcu24cxx_info *info = parg;	
 			fe->ops.mcu_read(fe, info);
 		}
 		err = 0;
@@ -2486,36 +2494,36 @@ static int dvb_frontend_handle_ioctl(struct file *file,
 	case FE_24CXX_WRITE:
 		//printk("FE_24CXX_WRITE *****************");
 		if (fe->ops.mcu_write) {
-			struct mcu24cxx_info *info = parg;
+			struct mcu24cxx_info *info = parg;	
 			fe->ops.mcu_write(fe, info);
-
+		
 		}
 		err = 0;
 		break;
 	case FE_REGI2C_READ:
 		if (fe->ops.reg_i2cread) {
-			struct usbi2c_access *info = parg;
+			struct usbi2c_access *info = parg;	
 			fe->ops.reg_i2cread(fe, info);
 		}
 		err = 0;
 		break;
 	case FE_REGI2C_WRITE:
 		if (fe->ops.reg_i2cwrite) {
-			struct usbi2c_access *info = parg;
+			struct usbi2c_access *info = parg;	
 			fe->ops.reg_i2cwrite(fe, info);
 		}
 		err = 0;
 		break;
 	case FE_EEPROM_READ:
 		if (fe->ops.eeprom_read) {
-			struct eeprom_info *info = parg;
+			struct eeprom_info *info = parg;	
 			fe->ops.eeprom_read(fe, info);
 		}
 		err = 0;
 		break;
 	case FE_EEPROM_WRITE:
 		if (fe->ops.eeprom_write) {
-			struct eeprom_info *info = parg;
+			struct eeprom_info *info = parg;	
 			fe->ops.eeprom_write(fe, info);
 		}
 		err = 0;

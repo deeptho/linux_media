@@ -81,19 +81,15 @@ static void tbsecp3_dma_tasklet(unsigned long adap)
 void tbsecp3_dma_enable(struct tbsecp3_adapter *adap)
 {
 	struct tbsecp3_dev *dev = adap->dev;
-	//u32 tmp;
+
 	spin_lock_irq(&adap->adap_lock);
 	adap->dma.offset = 0;
 	adap->dma.cnt = 0;
 	adap->dma.next_buffer= 0;
 	tbs_read(adap->dma.base, TBSECP3_DMA_STAT);
-	tbs_write(TBSECP3_INT_BASE, TBSECP3_DMA_IE(adap->cfg->ts_in), 1); 
+	tbs_write(TBSECP3_INT_BASE, TBSECP3_DMA_IE(adap->cfg->ts_in), 1);
 	tbs_write(adap->dma.base, TBSECP3_DMA_EN, 1);
-
-//	tmp=tbs_read(TBSECP3_INT_BASE, 8); //add for test
 	spin_unlock_irq(&adap->adap_lock);
-
-//	printk("tmp = 0x%x DMA Mask =0x%x\n",tmp,TBSECP3_DMA_IE(adap->cfg->ts_in));
 }
 
 void tbsecp3_dma_disable(struct tbsecp3_adapter *adap)
@@ -112,10 +108,7 @@ void tbsecp3_dma_reg_init(struct tbsecp3_dev *dev)
 	int i;
 	struct tbsecp3_adapter *adapter = dev->adapter;
 
-
-
 	for (i = 0; i < dev->info->adapters; i++) {
-		printk("@@@@@@@@@base = 0x%x @@@@@\n",adapter->dma.base);
 		tbs_write(adapter->dma.base, TBSECP3_DMA_EN, 0);
 		tbs_write(adapter->dma.base, TBSECP3_DMA_ADDRH, 0);
 		tbs_write(adapter->dma.base, TBSECP3_DMA_ADDRL, (u32) adapter->dma.dma_addr);
@@ -123,7 +116,6 @@ void tbsecp3_dma_reg_init(struct tbsecp3_dev *dev)
 		tbs_write(adapter->dma.base, TBSECP3_DMA_BSIZE, adapter->dma.buffer_size);
 		adapter++;
 	}
-
 }
 
 void tbsecp3_dma_free(struct tbsecp3_dev *dev)
@@ -164,7 +156,7 @@ int tbsecp3_dma_init(struct tbsecp3_dev *dev)
 			goto err;
 
 		dev_dbg(&dev->pci_dev->dev,
-			"TS in %d: DMA page %d bytes, %d bytes (%d TS packets) per %d buffers\n", adapter->cfg->ts_in, 
+			"TS in %d: DMA page %d bytes, %d bytes (%d TS packets) per %d buffers\n", adapter->cfg->ts_in,
 			 adapter->dma.page_size, adapter->dma.buffer_size, adapter->dma.buffer_pkts, TBSECP3_DMA_BUFFERS);
 
 		adapter->dma.base = TBSECP3_DMA_BASE(adapter->cfg->ts_in);
