@@ -633,9 +633,10 @@ static u32 DVBS2_nBCH(enum DVBS2_ModCod ModCod, enum DVBS2_FECType FECType)
 		{58320, 16000}, /* 32APSK_9_10 */
 	};
 
-	if (ModCod >= DVBS2_QPSK_1_4 &&
-	 ModCod <= DVBS2_32APSK_9_10 && FECType <= DVBS2_16K)
-		return nBCH[FECType][ModCod];
+	if (ModCod >= 0 &&
+			ModCod < sizeof(nBCH)/ sizeof(nBCH[0]) &&
+			FECType >=0 && FECType < 2)
+		return nBCH[ModCod][FECType];
 	return 64800;
 }
 
