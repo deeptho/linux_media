@@ -1735,6 +1735,7 @@ fe_lla_error_t fe_stid135_get_lock_status(struct stv* state, bool*carrier_lock, 
 
 	struct fe_stid135_internal_param *pParams;
 	enum fe_sat_search_state demodState;
+	enum fe_sat_search_state demodState1;
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	s32 fld_value[5];
 	int error1 = FE_LLA_NO_ERROR;
@@ -1763,10 +1764,16 @@ fe_lla_error_t fe_stid135_get_lock_status(struct stv* state, bool*carrier_lock, 
 		state->signal_info.has_carrier = false;
 		state->signal_info.has_viterbi = false;
 		state->signal_info.has_sync = false;
+		error = (error1 =  ChipGetField(state->base->ip.handle_demod,
+																		FLD_FC8CODEW_DVBSX_DEMOD_DMDSTATE_HEADER_MODE(state->nr+1), &(fld_value[0])));
+		demodState1 = (enum fe_sat_search_state)(fld_value[0]);
+
+		if(error1)
+			dprintk("demodstate1=%d error=%d\n", demodState, error1);
+		dprintk("demod=%d demodState=%d/%d\n", state->nr, demodState, demodState1);
 		break;
 	case FE_SAT_DVBS2_FOUND:
 		state->signal_info.has_carrier = 	true;
-
 		error |= (error1=ChipGetField(state->base->ip.handle_demod,
 																	FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS_LOCK_DEFINITIF(state->nr+1), &(fld_value[0])));
 		state->signal_info.has_lock = fld_value[0];
@@ -1781,13 +1788,13 @@ fe_lla_error_t fe_stid135_get_lock_status(struct stv* state, bool*carrier_lock, 
 			dprintk("error getting pktdelin\n");
 		}
 
-
 		//TODO: stv091x does not check TSFIFO_LINEOK
 		//fld_value[2]==0 means that packets with errors have been received
 		error |= (error1=ChipGetField(state->base->ip.handle_demod,
 																	FLD_FC8CODEW_DVBSX_HWARE_TSSTATUS_TSFIFO_LINEOK(state->nr+1), &(fld_value[2])));
 
 		state->signal_info.has_sync = fld_value[0] & fld_value[1] & fld_value[2];
+
 		if(error1) {
 			dprintk("error getting TSFIFO\n");
 		}
@@ -1801,6 +1808,7 @@ fe_lla_error_t fe_stid135_get_lock_status(struct stv* state, bool*carrier_lock, 
 													FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS_TMGLOCK_QUALITY(state->nr+1),
 																	&(fld_value[4])));
 		state->signal_info.has_timing_lock =  fld_value[4]&2;
+
 		if(error1) {
 			dprintk("error getting tmglockquality\n");
 		}
@@ -1821,6 +1829,9 @@ fe_lla_error_t fe_stid135_get_lock_status(struct stv* state, bool*carrier_lock, 
 																				 state->signal_info.has_sync)) {
 			print_signal_info(state);
 		}
+		dprintk("demod=%d demodState=%d carr=%d lock=%d vit=%d sync=%d tmg=%d: 0x%x 0x%x 0x%x 0x%x\n", state->nr, demodState, state->signal_info.has_carrier,
+						state->signal_info.has_lock, state->signal_info.has_viterbi, state->signal_info.has_sync, state->signal_info.has_timing_lock,
+						fld_value[0],fld_value[1],fld_value[2], fld_value[4]);
 		//dprintk("demod=%d setting has_lock=%d error=%d\n", state->nr, fld_value[0], error);
 		break;
 
@@ -1874,6 +1885,9 @@ fe_lla_error_t fe_stid135_get_lock_status(struct stv* state, bool*carrier_lock, 
 																				 state->signal_info.has_sync)) {
 			print_signal_info(state);
 		}
+		dprintk("demod=%d demodState=%d carr=%d lock=%d vit=%d sync=%d tmg=%d: 0x%x 0x%x 0x%x 0x%x\n", state->nr, demodState, state->signal_info.has_carrier,
+						state->signal_info.has_lock, state->signal_info.has_viterbi, state->signal_info.has_sync, state->signal_info.has_timing_lock,
+						fld_value[0],fld_value[1],fld_value[2], fld_value[4]);
 		break;
 	}
 	state->signal_info.has_timedout = !state->signal_info.has_lock;
@@ -5717,7 +5731,7 @@ fe_lla_error_t fe_stid135_manage_matype_info(struct stv* state)
 				dprintk("demod=%d: error=%d\n", state->nr, error1);
 
 			/* If TS/GS = 11 (MPEG TS), reset matype force bit and do NOT load frames in MPEG packets */
-				if(((genuine_matype>>6) & 0x3) == 0x3) {
+			if(((genuine_matype>>6) & 0x3) == 0x3) { //TS
 				/* "TS FIFO Minimum latency mode */
 #ifdef TS_NOSYNC //def LASTCHANGE
 				if(!state->mis)
@@ -5763,7 +5777,7 @@ fe_lla_error_t fe_stid135_manage_matype_info(struct stv* state)
 				}
 			}
 			/* If TS/GS = 10 (GSE-HEM High Efficiency Mode) reset matype force bit, load frames in MPEG packets and disable latency regulation */
-			else if(((genuine_matype>>6) & 0x3) == 0x2){
+				else if(((genuine_matype>>6) & 0x3) == 0x2){ //GSE
 #ifdef USER1 //code not used
 				/* Force HEM mode */
 					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL0_HEMMODE_SELECT(Demod), 3);
@@ -5845,6 +5859,7 @@ fe_lla_error_t fe_stid135_manage_matype_info(struct stv* state)
 					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL2_FORCE_CONTINUOUS(Demod), 1);
 					error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL2_FRAME_MODE(Demod), 1);
 					//error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSSYNC_TSFIFO_SYNCMODE(Demod), 2);
+					//error |= ChipSetField(state->base->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG0_TSFIFO_EMBINDVB(Demod), 1); //TEST
 #endif
 					matype_info &= 0x0F;
 					/* Set bit 5 to ignore ISI/MIS bit because not compatible with NCR feature (latency regulation) */
