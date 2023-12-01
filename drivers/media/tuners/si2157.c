@@ -922,7 +922,6 @@ static int si2157_probe(struct i2c_client *client)
 	struct si2157_dev *dev;
 	struct si2157_cmd cmd;
 	int ret;
-
 	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
 	if (!dev) {
 		ret = -ENOMEM;
