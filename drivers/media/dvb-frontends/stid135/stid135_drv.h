@@ -322,6 +322,7 @@ struct stv_base {
 	s8 rf_inputs[4];
 	s8 tuner_use_count[4];
 	s8 tuner_owner[4]; // demod (0...7) which is allowed to change volttage/tone/diseqc on tuner
+	s8 voltage_is_on[4];
 	void (*write_properties) (struct i2c_adapter *i2c,u8 reg, u32 buf);
 	void (*read_properties) (struct i2c_adapter *i2c,u8 reg, u32 *buf);
 

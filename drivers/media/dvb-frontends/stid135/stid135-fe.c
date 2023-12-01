@@ -392,9 +392,13 @@ static int stid135_probe(struct stv *state)
 		err |= fe_stid135_diseqc_init(&state->base->ip,AFE_TUNER4, FE_SAT_22KHZ_Continues);
 		if (state->base->set_voltage) {
 			state->base->set_voltage(state->base->i2c, SEC_VOLTAGE_13, 0);
+			state->base->voltage_is_on[0] = 1;
 			state->base->set_voltage(state->base->i2c, SEC_VOLTAGE_13, 1);
+			state->base->voltage_is_on[1] = 1;
 			state->base->set_voltage(state->base->i2c, SEC_VOLTAGE_18, 2);
+			state->base->voltage_is_on[2] = 1;
 			state->base->set_voltage(state->base->i2c, SEC_VOLTAGE_18, 3);
+			state->base->voltage_is_on[3] = 1;
 		}
 	} else {
 		err |= fe_stid135_diseqc_init(&state->base->ip,AFE_TUNER1, FE_SAT_DISEQC_2_3_PWM);
@@ -403,9 +407,13 @@ static int stid135_probe(struct stv *state)
 		err |= fe_stid135_diseqc_init(&state->base->ip,AFE_TUNER4, FE_SAT_DISEQC_2_3_PWM);
 		if (state->base->set_voltage) {
 			state->base->set_voltage(state->base->i2c, SEC_VOLTAGE_OFF, 0);
+			state->base->voltage_is_on[0] = 0;
 			state->base->set_voltage(state->base->i2c, SEC_VOLTAGE_OFF, 1);
+			state->base->voltage_is_on[1] = 0;
 			state->base->set_voltage(state->base->i2c, SEC_VOLTAGE_OFF, 2);
+			state->base->voltage_is_on[2] = 0;
 			state->base->set_voltage(state->base->i2c, SEC_VOLTAGE_OFF, 3);
+			state->base->voltage_is_on[3] = 0;
 		}
 
 	}
@@ -494,9 +502,9 @@ static int stid135_select_rf_in_(struct stv* state, int rf_in)
 		dprintk("rf_in=%d out of range\n", rf_in);
 		return -EINVAL;
 	}
-	if(rf_in == state->rf_in && state->rf_in_selected)
+	if(rf_in == state->rf_in && state->rf_in_selected) {
 		return 0;  //already active
-
+	}
 	if(rf_in != state->rf_in && state->rf_in_selected) {
 		//change in rf_in
 		BUG_ON(state->base->tuner_use_count[state->rf_in] < 0 || state->base->tuner_use_count[state->rf_in] > 8 );
@@ -512,15 +520,19 @@ static int stid135_select_rf_in_(struct stv* state, int rf_in)
 
 		//if no demod uses the old tuner anymore, put it to sleep
 		if(state->base->tuner_use_count[state->rf_in] == 0) {
-			dprintk("demod=%d: Calling TunerStandby 0 state->base=%p\n", state->nr, state->base);
+
+			dprintk("demod=%d: rf_in=%d disabling tone state->base=%p\n", state->nr, state->rf_in, state->base);
 			err = fe_stid135_set_22khz_cont(&state->base->ip, state->rf_in + 1, false);
-			dprintk("demod=%d: Calling TunerStandby 0 done: state->base->i2c=%p\n", state->nr, state->base->i2c);
+			dprintk("demod=%d: rf_in=%d disabling tone done state->base=%p\n", state->nr, state->rf_in, state->base);
 			if(state->base->set_voltage) {
+				dprintk("demod=%d: rf_in=%d disabling voltage state->base=%p\n", state->nr, state->rf_in, state->base);
 				state->base->set_voltage(state->base->i2c, SEC_VOLTAGE_OFF, state->rf_in);
+				state->base->voltage_is_on[state->rf_in] = 0;
+				dprintk("demod=%d: rf_in=%d disabling voltage done state->base=%p\n", state->nr, state->rf_in, state->base);
 			}
-			dprintk("demod=%d: Set voltage OFF done\n", state->nr);
+			dprintk("demod=%d: rf_in=%d Calling TunerStandby 0 state->base=%p\n", state->nr, state->rf_in, state->base);
 			err |= FE_STiD135_TunerStandby(state->base->ip.handle_demod, state->rf_in + 1, 0);
-			dprintk("demod=%d: Tuner standby done done\n", state->nr);
+			dprintk("demod=%d: rf_in=%d Calling TunerStandby done state->base=%p\n", state->nr, state->rf_in, state->base);
 		}
 	}
 
@@ -1364,7 +1376,7 @@ static int stid135_set_voltage(struct dvb_frontend* fe, enum fe_sec_voltage volt
 	}
 
 	/*
-		when multiple adapters use the same tuner, only one can chnage voltage, send tones, diseqc etc
+		when multiple adapters use the same tuner, only one can change voltage, send tones, diseqc etc
 		This is the tuner_owner. tuner_owner=-1 means no owner.
 		We ignore any request to change voltage unless tuner_owner== state->nr or
 	 */
@@ -1392,14 +1404,18 @@ static int stid135_set_voltage(struct dvb_frontend* fe, enum fe_sec_voltage volt
 	}
 
 	if (state->base->set_voltage) {//official driver does not use mutex
+		int voltage_was_on = state->base->voltage_is_on[state->rf_in];
+		int voltage_is_on = (voltage != SEC_VOLTAGE_OFF);
 		base_lock(state); //DeepThought: this performs multiple i2c calls and needs to be protected
-		dprintk("demod=%d rf_in=%d calling state->base->set_voltage i2c=%p voltage=%d tune_use_count=%d owner=%d\n",
+		dprintk("demod=%d rf_in=%d calling state->base->set_voltage i2c=%p voltage=%d on=%d/%d "
+						"tune_use_count=%d owner=%d\n",
 						state->nr, state->rf_in,
-						state->base->i2c, voltage,
+						state->base->i2c, voltage, voltage_was_on, voltage_is_on,
 						state->base->tuner_use_count[state->rf_in],
 						state->base->tuner_owner[state->rf_in]);
 		stid135_select_rf_in_(state, state->rf_in);
 		state->base->set_voltage(state->base->i2c, voltage, state->rf_in);
+		state->base->voltage_is_on[state->rf_in] = voltage_is_on;
 		base_unlock(state);
 		dprintk("demod=%d: set_voltage done: rf_in=%d; use_count=%d\n", state->nr, state->rf_in,
 						state->base->tuner_use_count[state->rf_in]);
@@ -1585,6 +1601,7 @@ static int stid135_sleep(struct dvb_frontend* fe)
 			err = fe_stid135_set_22khz_cont(&state->base->ip, state->rf_in + 1, false);
 			if(state->base->set_voltage) {
 				state->base->set_voltage(state->base->i2c, SEC_VOLTAGE_OFF, state->rf_in);
+				state->base->voltage_is_on[state->rf_in] = 0;
 			}
 			err |= FE_STiD135_TunerStandby(p_params->handle_demod, state->rf_in + 1, 0);
 		}
