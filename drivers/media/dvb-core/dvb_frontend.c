@@ -327,7 +327,7 @@ static int dvb_frontend_get_event(struct dvb_frontend *fe,
 	if (events->overflow) {
 		events->overflow = 0;
 		events->eventr = events->eventw;
-		dprintk("Returning -EOVERFLOW=%d\n", -EOVERFLOW);
+		dprintk("Returning -EOVERFLOW=%d adapter=%d\n", -EOVERFLOW, fe->dvb->num);
 		return -EOVERFLOW;
 	}
 

@@ -27,6 +27,9 @@
 #include <linux/of.h>
 #include <linux/slab.h>
 #include <linux/sysfs.h>
+#define dprintk(fmt, arg...)																					\
+	printk(KERN_DEBUG pr_fmt("%s:%d " fmt), __func__, __LINE__, ##arg)
+
 
 /* multiplexer per channel data */
 struct i2c_mux_priv {
@@ -263,7 +266,7 @@ struct i2c_mux_core *i2c_mux_alloc(struct i2c_adapter *parent,
 	muxc->select = select;
 	muxc->deselect = deselect;
 	muxc->max_adapters = max_adapters;
-
+  dprintk("muxc=%p priv=%p dev=%p max_adapters=%d\n", muxc, muxc->priv, mux->dev, max_adapters);
 	return muxc;
 }
 EXPORT_SYMBOL_GPL(i2c_mux_alloc);
@@ -443,10 +446,11 @@ void i2c_mux_del_adapters(struct i2c_mux_core *muxc)
 	char symlink_name[20];
 
 	while (muxc->num_adapters) {
+		printk("i2c_mux_del_adapters: %d adapters\n", muxc->num_adapters);
 		struct i2c_adapter *adap = muxc->adapter[--muxc->num_adapters];
 		struct i2c_mux_priv *priv = adap->algo_data;
 		struct device_node *np = adap->dev.of_node;
-
+		printk("i2c_mux_del_adapters: adap=%p priv=%p np=%p\n", adap, adap->algo_data, adap->dev.of_node);
 		muxc->adapter[muxc->num_adapters] = NULL;
 
 		snprintf(symlink_name, sizeof(symlink_name),
@@ -454,9 +458,13 @@ void i2c_mux_del_adapters(struct i2c_mux_core *muxc)
 		sysfs_remove_link(&muxc->dev->kobj, symlink_name);
 
 		sysfs_remove_link(&priv->adap.dev.kobj, "mux_device");
+		printk("i2c_mux_del_adapters: before: adap=%p\n", adap);
 		i2c_del_adapter(adap);
+		printk("i2c_mux_del_adapters: after: adap=%p\n", adap);
 		of_node_put(np);
+		printk("i2c_mux_del_adapters: after of_node_put: np=%p\n", np);
 		kfree(priv);
+		printk("i2c_mux_del_adapters: after kpriv: prov=%p\n", priv);
 	}
 }
 EXPORT_SYMBOL_GPL(i2c_mux_del_adapters);
