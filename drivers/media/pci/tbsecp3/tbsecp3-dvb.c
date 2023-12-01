@@ -931,7 +931,7 @@ static int max_set_voltage(struct i2c_adapter *i2c,
 	struct tbsecp3_i2c *i2c_adap = i2c_get_adapdata(i2c);
 	struct tbsecp3_dev *dev = i2c_adap->dev;
 
-	u32 val, reg;
+	u32 val, val1, reg;
 
 	//printk("set voltage on %u = %d\n", rf_in, voltage);
 
@@ -939,7 +939,7 @@ static int max_set_voltage(struct i2c_adapter *i2c,
 		return -EINVAL;
 
 	reg = rf_in * 4;
-	val = tbs_read(TBSECP3_GPIO_BASE, reg) & ~4;
+	val = val1 =tbs_read(TBSECP3_GPIO_BASE, reg) & ~4;
 	switch (voltage) {
 	case SEC_VOLTAGE_13:
 		val &= ~2;
@@ -952,7 +952,7 @@ static int max_set_voltage(struct i2c_adapter *i2c,
 		val |= 4;
 		break;
 	}
-	//dprintk("set voltage: rf_in=%d voltage=%d reg=%d\n", rf_in, voltage, val);
+	dprintk("set voltage: rf_in=%d voltage=%d regval=%d/%d\n", rf_in, voltage, val1, val);
 	tbs_write(TBSECP3_GPIO_BASE, reg, val);
 	return 0;
 }
