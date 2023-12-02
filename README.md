@@ -88,7 +88,7 @@ to 9.
 If you have this problem then report it. Also report if the solution works,
 
 
-# Changes in release-1.1.0
+# Changes in release-1.1.1
 
 ## Kernel support
 * Update for linux 6.2 - 6.6 kernels
