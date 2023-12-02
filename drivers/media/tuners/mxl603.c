@@ -555,12 +555,11 @@ err:
 	return ret;
 }
 
-static int mxl603_remove(struct i2c_client *client)
+static void mxl603_remove(struct i2c_client *client)
 {
 	struct mxl603_dev *dev = i2c_get_clientdata(client);
 
 	kfree(dev);
-	return 0;
 }
 
 static const struct i2c_device_id mxl603_id_table[] = {

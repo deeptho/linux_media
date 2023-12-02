@@ -26,17 +26,17 @@ struct tbs5931_state {
 };
 
 
-static struct tas2101_config gx1132_cfg = {	
+static struct tas2101_config gx1132_cfg = {
 	.i2c_address   = 0x60,
 	.id            = ID_TAS2101,
 	.init          = {0x10, 0x32, 0x54, 0x76, 0xA8, 0x9B, 0x33},
-	.init2         = 0,	
+	.init2         = 0,
 
 };
 
-static struct gx1133_config gx1133_cfg = {	
+static struct gx1133_config gx1133_cfg = {
 	.i2c_address   = 0x52,
-	.ts_mode 	   = 0,	
+	.ts_mode 	   = 0,
 	.ts_cfg		= {data_0,data_1,data_2,data_3,data_4,data_5,data_6,  \
 				data_7,ts_sync,ts_err,ts_clk,ts_valid},
 };
@@ -51,7 +51,7 @@ static struct av201x_config av201x_cfg = {
 /* debug */
 static int dvb_usb_tbs5931_debug;
 module_param_named(debug, dvb_usb_tbs5931_debug, int, 0644);
-MODULE_PARM_DESC(debug, "set debugging level (1=info 2=xfer (or-able))." 
+MODULE_PARM_DESC(debug, "set debugging level (1=info 2=xfer (or-able))."
 							DVB_USB_DEBUG_STATUS);
 
 DVB_DEFINE_MOD_OPT_ADAPTER_NR(adapter_nr);
@@ -81,7 +81,7 @@ static int tbs5931_op_rw(struct usb_device *dev, u8 request, u16 value,
 }
 
 /* I2C */
-static int tbs5931_i2c_transfer(struct i2c_adapter *adap, 
+static int tbs5931_i2c_transfer(struct i2c_adapter *adap,
 					struct i2c_msg msg[], int num)
 {
 	struct dvb_usb_device *d = i2c_get_adapdata(adap);
@@ -93,7 +93,7 @@ static int tbs5931_i2c_transfer(struct i2c_adapter *adap,
 		return -ENODEV;
 	if (mutex_lock_interruptible(&d->i2c_mutex) < 0)
 		return -EAGAIN;
-   		
+
 	switch (num) {
 	case 2:
 		switch(msg[0].addr){
@@ -116,13 +116,13 @@ static int tbs5931_i2c_transfer(struct i2c_adapter *adap,
 			buf6[1]=msg[0].addr<<1;//demod addr
 			//register
 			memcpy(buf6+2,msg[0].buf,msg[0].len);
-			
+
 			tbs5931_op_rw(d->udev,  0x92, 0, 0,
 						buf6, msg[0].len+2, TBS5931_WRITE_MSG);
 			msleep(1);
 			tbs5931_op_rw(d->udev, 0x91, 0, 0,
 						inbuf, msg[1].len, TBS5931_READ_MSG);
-			
+
 			memcpy(msg[1].buf, inbuf, msg[1].len);
 
 			break;
@@ -138,7 +138,7 @@ static int tbs5931_i2c_transfer(struct i2c_adapter *adap,
 			buf6, msg[0].len+2, TBS5931_WRITE_MSG);
 		break;
 	}
-		
+
 	mutex_unlock(&d->i2c_mutex);
 	return num;
 }
@@ -174,7 +174,7 @@ static int tbs5931_read_mac_address(struct dvb_usb_device *d, u8 mac[6])
 				eepromline[i%16] = ibuf[0];
 				eeprom[i] = ibuf[0];
 			}
-			
+
 			if ((i % 16) == 15) {
 				deb_xfer("%02x: ", i - 15);
 				debug_dump(eepromline, 16, deb_xfer);
@@ -213,7 +213,8 @@ static int tbs5931_frontend_attach(struct dvb_usb_adapter *adap)
 				&b, buf[0], TBS5931_READ_MSG);
 	id = (b<<8|a);
 	if(id==0x444c){   //gx1132
-		adap->fe_adap->fe = dvb_attach(tas2101_attach,&gx1132_cfg,&d->i2c_adap);
+		int rf_in=0;
+		adap->fe_adap->fe = dvb_attach(tas2101_attach,&gx1132_cfg, &d->i2c_adap, adapter_nr);
 		if(adap->fe_adap->fe ==NULL)
 			goto err;
 
@@ -228,7 +229,7 @@ static int tbs5931_frontend_attach(struct dvb_usb_adapter *adap)
 	id = 0;
 	a = 0;
 	b = 0;
-	
+
 	buf[0]= 1;//lenth
 	buf[1]= 0xA4;//demod addr
 	//register
@@ -253,7 +254,7 @@ static int tbs5931_frontend_attach(struct dvb_usb_adapter *adap)
 		 adap->fe_adap->fe = dvb_attach(gx1133_attach,&gx1133_cfg,&d->i2c_adap);
 		 if(adap->fe_adap->fe ==NULL)
 			 goto err;
-		 
+
 		 if(dvb_attach(av201x_attach,adap->fe_adap->fe,&av201x_cfg,
 			 gx1133_get_i2c_adapter(adap->fe_adap->fe,2))==NULL){
 			 dvb_frontend_detach(adap->fe_adap->fe);
@@ -266,22 +267,22 @@ static int tbs5931_frontend_attach(struct dvb_usb_adapter *adap)
 	 	goto err;
 
 	}
-	
+
 	buf[0] = 0;
 	buf[1] = 0;
 	tbs5931_op_rw(d->udev, 0xb7, 0, 0,
 			buf, 2, TBS5931_WRITE_MSG);
-	
+
 	buf[0] = 8;
 	buf[1] = 1;
 	tbs5931_op_rw(d->udev, 0x8a, 0, 0,
 			buf, 2, TBS5931_WRITE_MSG);
 	msleep(10);
-	
+
 	strlcpy(adap->fe_adap->fe->ops.info.name,d->props.devices[0].name,52);
-	
+
 	return 0;
-	
+
 err:
 	return -ENODEV;
 }
@@ -384,7 +385,7 @@ static struct dvb_usb_device_properties tbs5931_properties = {
 		}
 
 		},
-		
+
 	}},
 
 	.num_device_descs = 1,

@@ -513,14 +513,18 @@ int dvb_register_device(struct dvb_adapter *adap, struct dvb_device **pdvbdev,
 	dvbdev->adapter = adap;
 	dvbdev->priv = priv;
 	dvbdev->fops = dvbdevfops;
-	init_waitqueue_head(&dvbdev->wait_queue);
+	init_waitqueue_head (&dvbdev->wait_queue);
+
 	dvbdevfops->owner = adap->module;
-	list_add_tail(&dvbdev->list_head, &adap->device_list);
+
+	list_add_tail (&dvbdev->list_head, &adap->device_list);
+
 	down_write(&minor_rwsem);
 #ifdef CONFIG_DVB_DYNAMIC_MINORS
 	for (minor = 0; minor < MAX_DVB_MINORS; minor++)
 		if (!dvb_minors[minor])
 			break;
+
 	if (minor == MAX_DVB_MINORS) {
 		if (new_node) {
 			list_del(&new_node->list_head);
@@ -536,9 +540,11 @@ int dvb_register_device(struct dvb_adapter *adap, struct dvb_device **pdvbdev,
 #else
 	minor = nums2minor(adap->num, type, id);
 #endif
+
 	dvbdev->minor = minor;
 	dvb_minors[minor] = dvb_device_get(dvbdev);
 	up_write(&minor_rwsem);
+
 	ret = dvb_register_media_device(dvbdev, type, minor, demux_sink_pads);
 	if (ret) {
 		pr_err("%s: dvb_register_media_device failed to create the mediagraph\n",
@@ -1071,51 +1077,10 @@ static char *dvb_devnode(const struct device *dev, umode_t *mode)
 		dvbdev->adapter->num, dnames[dvbdev->type], dvbdev->id);
 }
 
-static struct kobject *info_kobject;
-
-static ssize_t version_show(struct kobject *kobj, struct kobj_attribute *attr,
-                      char *buf)
-{
-	/*
-		show() must not use snprintf() when formatting the value to be
-		returned to user space. If you can guarantee that an overflow
-		will never happen you can use sprintf() otherwise you must use
-		scnprintf().*/
-	return sprintf(buf,
-								 "type = \"neumo\";\n"
-								 "version = \"1.5\";\n");
-}
-
-static ssize_t version_store(struct kobject *kobj, struct kobj_attribute *attr,
-                      const char *buf, size_t count)
-{
-	return 0;
-}
-
-static struct kobj_attribute version_attribute =__ATTR(version, 0444, version_show, version_store);
-
-static int dvb_module_make_info(void)
-{
-	int error = 0;
-	struct kobject* mod_kobj = &(((struct module*)(THIS_MODULE))->mkobj).kobj;
-	info_kobject = kobject_create_and_add("info", mod_kobj/*kernel_kobj*/);
-	if(!info_kobject)
-		return -ENOMEM;
-
-	error = sysfs_create_file(info_kobject, &version_attribute.attr);
-	if (error) {
-		pr_err("dvb-core failed to create the info file\n");
-	}
-
-	return error;
-}
-
 static int __init init_dvbdev(void)
 {
 	int retval;
 	dev_t dev = MKDEV(DVB_MAJOR, 0);
-	dvb_module_make_info();
-	if ((retval = register_chrdev_region(dev, MAX_DVB_MINORS, "DVB")) != 0) {
 
 	retval = register_chrdev_region(dev, MAX_DVB_MINORS, "DVB");
 	if (retval != 0) {
