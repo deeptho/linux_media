@@ -811,7 +811,7 @@ restart:
 			}
 			fepriv->reinitialise = 0;
 		}
-		if(fepriv->state == FESTATE_IDLE)
+		if(fepriv->state == FESTATE_IDLE || fepriv->state == FESTATE_DISEQC)
 			continue;
 		/* do an iteration of the tuning loop */
 		if (fe->ops.get_frontend_algo) {
@@ -2641,7 +2641,7 @@ static int dvb_frontend_handle_compat_ioctl(struct file *file, unsigned int cmd,
 		 * return crap, if they don't check if the data is available
 		 * before updating the properties cache.
 		 */
-		if (fepriv->state != FESTATE_IDLE) {
+		if (fepriv->state != FESTATE_IDLE && fepriv->state != FESTATE_DISEQC) {
 			err = dtv_get_frontend(fe, &getp, NULL);
 			if (err < 0) {
 				kfree(tvp);
@@ -2999,7 +2999,7 @@ static int dvb_get_property(struct dvb_frontend *fe, struct file *file,
 	 * return crap, if they don't check if the data is available
 	 * before updating the properties cache.
 	 */
-	if (fepriv->state != FESTATE_IDLE) {
+	if (fepriv->state != FESTATE_IDLE && fepriv->state != FESTATE_DISEQC) {
 		if(tvps->num > 1 || (tvp[0].cmd != DTV_SPECTRUM || tvp[0].cmd != DTV_CONSTELLATION)) {
 			err = dtv_get_frontend(fe, &getp, NULL);
 			if(err<0) {
@@ -3311,7 +3311,8 @@ static int dvb_frontend_handle_ioctl(struct file *file,
 	case FE_DISEQC_RESET_OVERLOAD:
 		if (fe->ops.diseqc_reset_overload) {
 			err = fe->ops.diseqc_reset_overload(fe);
-			fepriv->state = FESTATE_DISEQC;
+			if(fepriv->state == FESTATE_IDLE)
+				fepriv->state = FESTATE_DISEQC;
 			fepriv->status = 0;
 		}
 		break;
@@ -3326,7 +3327,8 @@ static int dvb_frontend_handle_ioctl(struct file *file,
 			}
 			err = fe->ops.diseqc_send_master_cmd(fe, cmd);
 			dprintk("sending master_cmd done err=%d\n", err);
-			fepriv->state = FESTATE_DISEQC;
+			if(fepriv->state == FESTATE_IDLE)
+				fepriv->state = FESTATE_DISEQC;
 			fepriv->status = 0;
 		}
 		break;
@@ -3335,7 +3337,8 @@ static int dvb_frontend_handle_ioctl(struct file *file,
 		if (fe->ops.diseqc_send_burst) {
 			err = fe->ops.diseqc_send_burst(fe,
 						(enum fe_sec_mini_cmd)parg);
-			fepriv->state = FESTATE_DISEQC;
+			if(fepriv->state == FESTATE_IDLE)
+				fepriv->state = FESTATE_DISEQC;
 			fepriv->status = 0;
 		}
 		break;
@@ -3346,7 +3349,8 @@ static int dvb_frontend_handle_ioctl(struct file *file,
 			err = fe->ops.set_tone(fe,
 								 (enum fe_sec_tone_mode)parg);
 			fepriv->tone = (enum fe_sec_tone_mode)parg;
-			fepriv->state = FESTATE_DISEQC;
+			if(fepriv->state == FESTATE_IDLE)
+				fepriv->state = FESTATE_DISEQC;
 			fepriv->status = 0;
 			c->sectone = fepriv->tone;
 		}
@@ -3358,7 +3362,8 @@ static int dvb_frontend_handle_ioctl(struct file *file,
 			err = fe->ops.set_voltage(fe,
 							(enum fe_sec_voltage)parg);
 			fepriv->voltage = (enum fe_sec_voltage)parg;
-			fepriv->state = FESTATE_DISEQC;
+			if(fepriv->state == FESTATE_IDLE)
+				fepriv->state = FESTATE_DISEQC;
 			fepriv->status = 0;
 		}
 		break;
@@ -3384,7 +3389,8 @@ static int dvb_frontend_handle_ioctl(struct file *file,
 		if (fe->ops.dishnetwork_send_legacy_command) {
 			err = fe->ops.dishnetwork_send_legacy_command(fe,
 							 (unsigned long)parg);
-			fepriv->state = FESTATE_DISEQC;
+			if(fepriv->state == FESTATE_IDLE)
+				fepriv->state = FESTATE_DISEQC;
 			fepriv->status = 0;
 		} else if (fe->ops.set_voltage) {
 			/*
@@ -3441,7 +3447,8 @@ static int dvb_frontend_handle_ioctl(struct file *file,
 						(int)ktime_us_delta(tv[i], tv[i - 1]));
 			}
 			err = 0;
-			fepriv->state = FESTATE_DISEQC;
+			if(fepriv->state == FESTATE_IDLE)
+				fepriv->state = FESTATE_DISEQC;
 			fepriv->status = 0;
 		}
 		break;
