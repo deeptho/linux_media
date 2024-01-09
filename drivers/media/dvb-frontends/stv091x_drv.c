@@ -1477,7 +1477,11 @@ static int stv091x_isi_scan(struct dvb_frontend *fe)
 	dprintk("ISI scan\n");
 	//disable ISI filtering so that we can observe all stream_id's
 	tmp = read_reg(state, RSTV0910_P2_PDELCTRL1 + state->regoff);
+#if 0
 	tmp |= 0x20; //0x20: enable mis filter
+#else
+	tmp &= ~0x20;
+#endif
 	write_reg(state, RSTV0910_P2_PDELCTRL1 + state->regoff, tmp);
 
 
@@ -1502,6 +1506,12 @@ static int stv091x_isi_scan(struct dvb_frontend *fe)
 
 		j = CurrentISI/32;
 		mask = ((uint32_t)1)<< (CurrentISI%32);
+		if( ! (p->isi_bitset[j] & mask)) {
+
+			dprintk("Found new ISI=%d matype=%d mis=%d\n",  CurrentISI, matype, state->mis_mode);
+			if(p->num_matypes < sizeof(p->matypes)/sizeof(p->matypes[0]))
+				p->matypes[p->num_matypes++] = (matype<<(int)8)|CurrentISI;
+		}
 		p->isi_bitset[j] |= mask;
 #ifdef TODO
 		if(CurrentISI == state->signal_info.isi) {
@@ -1609,7 +1619,6 @@ static bool stv091x_get_signal_info(struct dvb_frontend *fe)
 			need_retune = true; // ask tuner to change its bandwidth, except duting blind scan
 
 		dprintk("SR: %d, BW: %d => %d need_retune=%d\n", state->symbol_rate, state->tuner_bw, bandwidth_hz, need_retune);
-		stv091x_isi_scan(fe);
 		return need_retune;
 }
 
@@ -2010,6 +2019,9 @@ static int stv091x_read_status_(struct dvb_frontend* fe, enum fe_status *status)
 	p->pre_bit_count.stat[0].scale = FE_SCALE_COUNTER;
 	p->pre_bit_count.stat[0].uvalue = d;
 
+	if(state->mis_mode) {
+		stv091x_isi_scan(fe);
+	}
 	return 0;
 }
 
@@ -2463,6 +2475,7 @@ static int stv091x_tune(struct dvb_frontend *fe, bool re_tune,
 		*/
 		memset(&state->signal_info.isi_list, 0, sizeof(state->signal_info.isi_list));
 		stv091x_tune_once(fe, &need_retune);
+		stv091x_isi_scan(fe);
 #if 0
 		/*the following does not seem to work for a DVB-S2/QPSK transponder: 28.2E 11385H.
 			This TP also has a stream_id and m_type set
@@ -2644,6 +2657,7 @@ static int send_master_cmd(struct dvb_frontend *fe,
 	write_reg(state, RSTV0910_P1_DISTXCFG + offs, 0x02);
 	wait_dis(state, 0x20, 0x20);
 	mutex_unlock(&state->base->status_lock);
+	dprintk("Sent a diseqc command of len %d\n", cmd->msg_len);
 	return 0;
 }
 
