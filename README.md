@@ -87,6 +87,9 @@ to 9.
 
 If you have this problem then report it. Also report if the solution works,
 
+# Changes in release-1.1.2
+* Bug: isi scan not working on stv091x
+* Bug: tuning loop run without tuning parameters set (after sending diseqc)
 
 # Changes in release-1.1.1
 
