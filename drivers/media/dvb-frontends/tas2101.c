@@ -339,8 +339,8 @@ static int tas2101_read_status(struct dvb_frontend *fe, enum fe_status* status)
 
 	if(! (*status & FE_HAS_LOCK)) {
 		*status |= FE_TIMEDOUT;
-		dprintk("returning -1 because of timeout");
-		return -1;
+		dprintk("returning because of timeout");
+		return 0;
 	}
 	dprintk("lock status = 0x%02x\n", buf[0]);
 

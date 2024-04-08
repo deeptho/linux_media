@@ -2898,7 +2898,8 @@ void tbsecp3_dvb_exit(struct tbsecp3_adapter *adapter)
 		dvb_dmx_release(&adapter->demux);
 	}
 	if(adap) {
-		dprintk("Calling dvb_unregister_adapter\n");
+		dprintk("Calling dvb_unregister_adapter...\n");
 		dvb_unregister_adapter(adap);
+		dprintk("Calling dvb_unregister_adapter... done\n");
 	}
 }
