@@ -55,9 +55,8 @@ struct m88rs6060_dev {
 	u64 post_bit_count;
 	struct m88rs6060_base *base;
 	struct si5351_priv *priv;
-
 	bool newTP;
-	
+
 };
 
 static u16 mes_log10[] = {
@@ -1957,8 +1956,13 @@ static int m88rs6060_set_frontend(struct dvb_frontend *fe)
 	}
 
 	if(dev->config.RF_switch)
-		dev->config.RF_switch(i2c,dev->config.num,1);  //
+		dev->config.RF_switch(i2c,dev->config.num,0);  //
+	if(dev->config.TS_switch)
+		dev->config.TS_switch(i2c,1);  //
 		
+	if(dev->config.LED_switch)
+		dev->config.LED_switch(i2c,2);  //
+				
 	mutex_lock(&dev->base->i2c_mutex);
 	
 	symbol_rate_KSs = c->symbol_rate / 1000;
@@ -3484,6 +3488,8 @@ static int m88rs6060_probe(struct i2c_client *client)
 	dev->config.read_eeprom = cfg->read_eeprom;
 	dev->config.write_eeprom = cfg->write_eeprom;
 	dev->config.RF_switch	= cfg->RF_switch;
+	dev->config.TS_switch = cfg->TS_switch;
+	dev->config.LED_switch = cfg->LED_switch;
 	dev->config.envelope_mode = cfg->envelope_mode;
 	dev->config.disable_22k   = cfg->disable_22k;
 	dev->TsClockChecked = false;
@@ -3500,7 +3506,6 @@ static int m88rs6060_probe(struct i2c_client *client)
 		base->count++;
 		dev->base = base;
 	}else{
-		
 		base = kzalloc(sizeof(struct m88rs6060_base),GFP_KERNEL);
 		if(!base)
 			goto err_kfree;
@@ -3513,17 +3518,19 @@ static int m88rs6060_probe(struct i2c_client *client)
 	}
 	
 	dev->regmap = regmap_init_i2c(client, &regmap_config);
-		if (IS_ERR(dev->regmap)) {
-			ret = PTR_ERR(dev->regmap);
-			goto err_base_kfree;
-		}
-		/*check demod i2c */
-		ret = regmap_read(dev->regmap, 0x00, &tmp);
-		if (ret)
-			goto err_regmap_exit;	
-		if (tmp != 0xe2)
-			goto err_regmap_exit;
-				
+	if (IS_ERR(dev->regmap)) {
+		ret = PTR_ERR(dev->regmap);
+		goto err_base_kfree;
+	}
+	/*check demod i2c */
+	ret = regmap_read(dev->regmap, 0x00, &tmp);
+	if (ret)
+		goto err_regmap_exit;	
+	if (tmp != 0xe2)
+	{
+		ret = -ENODEV;
+		goto err_regmap_exit;
+	}
 
 	dev->mclk = 96000;
 
@@ -3531,7 +3538,6 @@ static int m88rs6060_probe(struct i2c_client *client)
 	*cfg->fe = &dev->fe;
 	dev->fe_status = 0;
 
-	
 	if(dev->config.HAS_CI){  //for 6910SECI
 		//for ci clk si5351
 		struct si5351_priv *priv;
@@ -3587,7 +3593,11 @@ static int m88rs6060_probe(struct i2c_client *client)
  err_regmap_exit:
 	regmap_exit(dev->regmap);
  err_base_kfree:
-	kfree(base);
+	base->count--;
+	if (base->count==0) {
+		list_del(&base->m88rs6060list);
+		kfree(base);
+	}
  err_kfree:
 	kfree(dev);
 	
@@ -3604,15 +3614,15 @@ static void m88rs6060_remove(struct i2c_client *client)
 	dev->base->count --;
 	if(dev->base->count==0)
 	{	
-	list_del(&dev->base->m88rs6060list);
-	kfree(dev->base);	 
+		list_del(&dev->base->m88rs6060list);
+		kfree(dev->base);	 
 	}
 	if(dev->priv){
 		dev->priv->base1->count --;
 		if(dev->priv->base1->count==0){
 			list_del(&dev->priv->base1->si5351list);
 			kfree(dev->priv);	 
-			}
+		}
 	}
 	regmap_exit(dev->regmap);
 	dev->fe.ops.release = NULL;
