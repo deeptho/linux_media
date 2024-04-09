@@ -36,7 +36,7 @@ static int build_id_cache__kcore_buildid(const char *proc_dir, char *sbuildid)
 	char root_dir[PATH_MAX];
 	char *p;
 
-	strlcpy(root_dir, proc_dir, sizeof(root_dir));
+	strscpy(root_dir, proc_dir, sizeof(root_dir));
 
 	p = strrchr(root_dir, '/');
 	if (!p)
@@ -104,7 +104,7 @@ static int build_id_cache__kcore_existing(const char *from_dir, char *to_dir,
 			  to_dir, dent->d_name);
 		if (!compare_proc_modules(from, to) &&
 		    same_kallsyms_reloc(from_dir, to_subdir)) {
-			strlcpy(to_dir, to_subdir, to_dir_sz);
+			strscpy(to_dir, to_subdir, to_dir_sz);
 			ret = 0;
 			break;
 		}
@@ -121,7 +121,7 @@ static int build_id_cache__add_kcore(const char *filename, bool force)
 	char from_dir[PATH_MAX], to_dir[PATH_MAX];
 	char *p;
 
-	strlcpy(from_dir, filename, sizeof(from_dir));
+	strscpy(from_dir, filename, sizeof(from_dir));
 
 	p = strrchr(from_dir, '/');
 	if (!p || strcmp(p + 1, "kcore"))

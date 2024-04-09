@@ -1981,7 +1981,7 @@ int dso__load(struct dso *dso, struct map *map)
 			char *new_name = dso__filename_with_chroot(dso, name);
 			if (new_name) {
 				is_reg = is_regular_file(new_name);
-				strlcpy(name, new_name, PATH_MAX);
+				strscpy(name, new_name, PATH_MAX);
 				free(new_name);
 			}
 		}
@@ -2268,7 +2268,7 @@ static int find_matching_kcore(struct map *map, char *dir, size_t dir_sz)
 		scnprintf(kallsyms_filename, sizeof(kallsyms_filename),
 			  "%s/%s/kallsyms", dir, nd->s);
 		if (!validate_kcore_addresses(kallsyms_filename, map)) {
-			strlcpy(dir, kallsyms_filename, dir_sz);
+			strscpy(dir, kallsyms_filename, dir_sz);
 			ret = 0;
 			break;
 		}

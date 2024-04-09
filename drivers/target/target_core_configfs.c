@@ -1395,7 +1395,7 @@ static ssize_t target_wwn_vendor_id_store(struct config_item *item,
 	size_t len;
 	ssize_t ret;
 
-	len = strlcpy(buf, page, sizeof(buf));
+	len = strscpy(buf, page, sizeof(buf));
 	if (len < sizeof(buf)) {
 		/* Strip any newline added from userspace. */
 		stripped = strstrip(buf);
@@ -1451,7 +1451,7 @@ static ssize_t target_wwn_product_id_store(struct config_item *item,
 	size_t len;
 	ssize_t ret;
 
-	len = strlcpy(buf, page, sizeof(buf));
+	len = strscpy(buf, page, sizeof(buf));
 	if (len < sizeof(buf)) {
 		/* Strip any newline added from userspace. */
 		stripped = strstrip(buf);
@@ -1507,7 +1507,7 @@ static ssize_t target_wwn_revision_store(struct config_item *item,
 	size_t len;
 	ssize_t ret;
 
-	len = strlcpy(buf, page, sizeof(buf));
+	len = strscpy(buf, page, sizeof(buf));
 	if (len < sizeof(buf)) {
 		/* Strip any newline added from userspace. */
 		stripped = strstrip(buf);

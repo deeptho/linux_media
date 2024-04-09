@@ -1213,7 +1213,7 @@ void auxtrace_synth_guest_error(struct perf_record_auxtrace_error *auxtrace_erro
 	auxtrace_error->fmt = 1;
 	auxtrace_error->ip = ip;
 	auxtrace_error->time = timestamp;
-	strlcpy(auxtrace_error->msg, msg, MAX_AUXTRACE_ERROR_MSG);
+	strscpy(auxtrace_error->msg, msg, MAX_AUXTRACE_ERROR_MSG);
 	if (machine_pid) {
 		auxtrace_error->fmt = 2;
 		auxtrace_error->machine_pid = machine_pid;

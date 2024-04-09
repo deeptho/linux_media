@@ -1792,7 +1792,7 @@ fallback:
 		if (access(filename, R_OK) && errno == ENOENT && dso->nsinfo) {
 			char *new_name = dso__filename_with_chroot(dso, filename);
 			if (new_name) {
-				strlcpy(filename, new_name, filename_size);
+				strscpy(filename, new_name, filename_size);
 				free(new_name);
 			}
 		}
@@ -2092,7 +2092,7 @@ static int symbol__disassemble(struct symbol *sym, struct annotate_args *args)
 		kce.len = sym->end - sym->start;
 		if (!kcore_extract__create(&kce)) {
 			delete_extract = true;
-			strlcpy(symfs_filename, kce.extract_filename,
+			strscpy(symfs_filename, kce.extract_filename,
 				sizeof(symfs_filename));
 		}
 	} else if (dso__needs_decompress(dso)) {

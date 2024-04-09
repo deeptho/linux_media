@@ -64,7 +64,7 @@ int perf_event__synthesize_extra_kmaps(struct perf_tool *tool,
 		event->mmap.pgoff = map__pgoff(map);
 		event->mmap.pid   = machine->pid;
 
-		strlcpy(event->mmap.filename, kmap->name, PATH_MAX);
+		strscpy(event->mmap.filename, kmap->name, PATH_MAX);
 
 		if (perf_tool__process_synth_event(tool, event, machine,
 						   process) != 0) {

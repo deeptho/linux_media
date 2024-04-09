@@ -40,7 +40,7 @@ static int add_extra_kernel_map(struct extra_kernel_map_info *mi, u64 start,
 	mi->maps[mi->cnt].start = start;
 	mi->maps[mi->cnt].end   = end;
 	mi->maps[mi->cnt].pgoff = pgoff;
-	strlcpy(mi->maps[mi->cnt].name, name, KMAP_NAME_LEN);
+	strscpy(mi->maps[mi->cnt].name, name, KMAP_NAME_LEN);
 
 	mi->cnt += 1;
 

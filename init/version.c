@@ -23,7 +23,7 @@ static int __init early_hostname(char *arg)
 	size_t maxlen  = bufsize - 1;
 	size_t arglen;
 
-	arglen = strlcpy(init_uts_ns.name.nodename, arg, bufsize);
+	arglen = strscpy(init_uts_ns.name.nodename, arg, bufsize);
 	if (arglen > maxlen) {
 		pr_warn("hostname parameter exceeds %zd characters and will be truncated",
 			maxlen);

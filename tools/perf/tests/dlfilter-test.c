@@ -234,7 +234,7 @@ static int get_dlfilters_path(char *buf, size_t sz)
 		if (access(path, R_OK))
 			return -1;
 	}
-	strlcpy(buf, dirname(path), sz);
+	strscpy(buf, dirname(path), sz);
 	return 0;
 }
 

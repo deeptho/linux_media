@@ -48,7 +48,7 @@ static const char *get_pwd_cwd(char *buf, size_t sz)
 		if (!stat(pwd, &pwd_stat) &&
 		    pwd_stat.st_dev == cwd_stat.st_dev &&
 		    pwd_stat.st_ino == cwd_stat.st_ino) {
-			strlcpy(buf, pwd, sz);
+			strscpy(buf, pwd, sz);
 		}
 	}
 	return buf;
@@ -57,7 +57,7 @@ static const char *get_pwd_cwd(char *buf, size_t sz)
 static const char *make_nonrelative_path(char *buf, size_t sz, const char *path)
 {
 	if (is_absolute_path(path)) {
-		if (strlcpy(buf, path, sz) >= sz)
+		if (strscpy(buf, path, sz) >= sz)
 			die("Too long path: %.*s", 60, path);
 	} else {
 		const char *cwd = get_pwd_cwd(buf, sz);

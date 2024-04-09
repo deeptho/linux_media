@@ -284,7 +284,7 @@ static struct rpc_xprt *rpc_clnt_set_transport(struct rpc_clnt *clnt,
 
 static void rpc_clnt_set_nodename(struct rpc_clnt *clnt, const char *nodename)
 {
-	clnt->cl_nodelen = strlcpy(clnt->cl_nodename,
+	clnt->cl_nodelen = strscpy(clnt->cl_nodename,
 			nodename, sizeof(clnt->cl_nodename));
 }
 

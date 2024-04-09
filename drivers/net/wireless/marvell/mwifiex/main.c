@@ -725,7 +725,7 @@ static int mwifiex_init_hw_fw(struct mwifiex_adapter *adapter,
 	 * manufacturing mode is enabled
 	 */
 	if (mfg_mode) {
-		if (strlcpy(adapter->fw_name, MFG_FIRMWARE,
+		if (strscpy(adapter->fw_name, MFG_FIRMWARE,
 			    sizeof(adapter->fw_name)) >=
 			    sizeof(adapter->fw_name)) {
 			pr_err("%s: fw_name too long!\n", __func__);

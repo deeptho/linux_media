@@ -914,7 +914,7 @@ static int get_symbol_name_offset(struct map *map, struct symbol *sym, u64 ip,
 	if (offset)
 		return scnprintf(buf, size, "%s+%#lx", sym->name, offset);
 	else
-		return strlcpy(buf, sym->name, size);
+		return strscpy(buf, sym->name, size);
 }
 static int lock_contention_caller(struct evsel *evsel, struct perf_sample *sample,
 				  char *buf, int size)

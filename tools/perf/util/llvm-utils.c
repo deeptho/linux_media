@@ -80,7 +80,7 @@ search_program(const char *def, const char *name,
 	if (def && def[0] != '\0') {
 		if (def[0] == '/') {
 			if (access(def, F_OK) == 0) {
-				strlcpy(output, def, PATH_MAX);
+				strscpy(output, def, PATH_MAX);
 				return 0;
 			}
 		} else if (def[0] != '\0')
@@ -99,7 +99,7 @@ search_program(const char *def, const char *name,
 	while (path) {
 		scnprintf(buf, sizeof(buf), "%s/%s", path, name);
 		if (access(buf, F_OK) == 0) {
-			strlcpy(output, buf, PATH_MAX);
+			strscpy(output, buf, PATH_MAX);
 			ret = 0;
 			break;
 		}

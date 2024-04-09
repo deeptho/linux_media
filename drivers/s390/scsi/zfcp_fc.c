@@ -904,7 +904,7 @@ static void zfcp_fc_rspn(struct zfcp_adapter *adapter,
 	zfcp_fc_ct_ns_init(&rspn_req->ct_hdr, FC_NS_RSPN_ID,
 			   FC_SYMBOLIC_NAME_SIZE);
 	hton24(rspn_req->rspn.fr_fid.fp_fid, fc_host_port_id(shost));
-	len = strlcpy(rspn_req->rspn.fr_name, fc_host_symbolic_name(shost),
+	len = strscpy(rspn_req->rspn.fr_name, fc_host_symbolic_name(shost),
 		      FC_SYMBOLIC_NAME_SIZE);
 	rspn_req->rspn.fr_name_len = len;
 

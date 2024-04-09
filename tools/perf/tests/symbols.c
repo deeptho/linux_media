@@ -44,7 +44,7 @@ static void exit_test_info(struct test_info *ti)
 static void get_test_dso_filename(char *filename, size_t max_sz)
 {
 	if (dso_to_test)
-		strlcpy(filename, dso_to_test, max_sz);
+		strscpy(filename, dso_to_test, max_sz);
 	else
 		perf_exe(filename, max_sz);
 }

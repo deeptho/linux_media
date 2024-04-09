@@ -606,7 +606,7 @@ static int setup_server_socket(struct daemon *daemon)
 	memset(&addr, 0, sizeof(addr));
 	addr.sun_family = AF_UNIX;
 
-	strlcpy(addr.sun_path, path, sizeof(addr.sun_path) - 1);
+	strscpy(addr.sun_path, path, sizeof(addr.sun_path) - 1);
 	unlink(path);
 
 	if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) == -1) {
@@ -877,7 +877,7 @@ static int setup_client_socket(struct daemon *daemon)
 
 	memset(&addr, 0, sizeof(addr));
 	addr.sun_family = AF_UNIX;
-	strlcpy(addr.sun_path, path, sizeof(addr.sun_path) - 1);
+	strscpy(addr.sun_path, path, sizeof(addr.sun_path) - 1);
 
 	if (connect(fd, (struct sockaddr *) &addr, sizeof(addr)) == -1) {
 		perror("failed: connect");

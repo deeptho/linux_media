@@ -148,13 +148,13 @@ static ssize_t max20730_debugfs_read(struct file *file, char __user *buf,
 			>> MAX20730_MFR_DEVSET1_TSTAT_BIT_POS;
 
 		if (val == 0)
-			len = strlcpy(tbuf, "2000\n", DEBUG_FS_DATA_MAX);
+			len = strscpy(tbuf, "2000\n", DEBUG_FS_DATA_MAX);
 		else if (val == 1)
-			len = strlcpy(tbuf, "125\n", DEBUG_FS_DATA_MAX);
+			len = strscpy(tbuf, "125\n", DEBUG_FS_DATA_MAX);
 		else if (val == 2)
-			len = strlcpy(tbuf, "62.5\n", DEBUG_FS_DATA_MAX);
+			len = strscpy(tbuf, "62.5\n", DEBUG_FS_DATA_MAX);
 		else
-			len = strlcpy(tbuf, "32\n", DEBUG_FS_DATA_MAX);
+			len = strscpy(tbuf, "32\n", DEBUG_FS_DATA_MAX);
 		break;
 	case MAX20730_DEBUGFS_INTERNAL_GAIN:
 		val = (data->mfr_devset1 & MAX20730_MFR_DEVSET1_RGAIN_MASK)
@@ -163,35 +163,35 @@ static ssize_t max20730_debugfs_read(struct file *file, char __user *buf,
 		if (data->id == max20734) {
 			/* AN6209 */
 			if (val == 0)
-				len = strlcpy(tbuf, "0.8\n", DEBUG_FS_DATA_MAX);
+				len = strscpy(tbuf, "0.8\n", DEBUG_FS_DATA_MAX);
 			else if (val == 1)
-				len = strlcpy(tbuf, "3.2\n", DEBUG_FS_DATA_MAX);
+				len = strscpy(tbuf, "3.2\n", DEBUG_FS_DATA_MAX);
 			else if (val == 2)
-				len = strlcpy(tbuf, "1.6\n", DEBUG_FS_DATA_MAX);
+				len = strscpy(tbuf, "1.6\n", DEBUG_FS_DATA_MAX);
 			else
-				len = strlcpy(tbuf, "6.4\n", DEBUG_FS_DATA_MAX);
+				len = strscpy(tbuf, "6.4\n", DEBUG_FS_DATA_MAX);
 		} else if (data->id == max20730 || data->id == max20710) {
 			/* AN6042 or AN6140 */
 			if (val == 0)
-				len = strlcpy(tbuf, "0.9\n", DEBUG_FS_DATA_MAX);
+				len = strscpy(tbuf, "0.9\n", DEBUG_FS_DATA_MAX);
 			else if (val == 1)
-				len = strlcpy(tbuf, "3.6\n", DEBUG_FS_DATA_MAX);
+				len = strscpy(tbuf, "3.6\n", DEBUG_FS_DATA_MAX);
 			else if (val == 2)
-				len = strlcpy(tbuf, "1.8\n", DEBUG_FS_DATA_MAX);
+				len = strscpy(tbuf, "1.8\n", DEBUG_FS_DATA_MAX);
 			else
-				len = strlcpy(tbuf, "7.2\n", DEBUG_FS_DATA_MAX);
+				len = strscpy(tbuf, "7.2\n", DEBUG_FS_DATA_MAX);
 		} else if (data->id == max20743) {
 			/* AN6042 */
 			if (val == 0)
-				len = strlcpy(tbuf, "0.45\n", DEBUG_FS_DATA_MAX);
+				len = strscpy(tbuf, "0.45\n", DEBUG_FS_DATA_MAX);
 			else if (val == 1)
-				len = strlcpy(tbuf, "1.8\n", DEBUG_FS_DATA_MAX);
+				len = strscpy(tbuf, "1.8\n", DEBUG_FS_DATA_MAX);
 			else if (val == 2)
-				len = strlcpy(tbuf, "0.9\n", DEBUG_FS_DATA_MAX);
+				len = strscpy(tbuf, "0.9\n", DEBUG_FS_DATA_MAX);
 			else
-				len = strlcpy(tbuf, "3.6\n", DEBUG_FS_DATA_MAX);
+				len = strscpy(tbuf, "3.6\n", DEBUG_FS_DATA_MAX);
 		} else {
-			len = strlcpy(tbuf, "Not supported\n", DEBUG_FS_DATA_MAX);
+			len = strscpy(tbuf, "Not supported\n", DEBUG_FS_DATA_MAX);
 		}
 		break;
 	case MAX20730_DEBUGFS_BOOT_VOLTAGE:
@@ -199,26 +199,26 @@ static ssize_t max20730_debugfs_read(struct file *file, char __user *buf,
 			>> MAX20730_MFR_DEVSET1_VBOOT_BIT_POS;
 
 		if (val == 0)
-			len = strlcpy(tbuf, "0.6484\n", DEBUG_FS_DATA_MAX);
+			len = strscpy(tbuf, "0.6484\n", DEBUG_FS_DATA_MAX);
 		else if (val == 1)
-			len = strlcpy(tbuf, "0.8984\n", DEBUG_FS_DATA_MAX);
+			len = strscpy(tbuf, "0.8984\n", DEBUG_FS_DATA_MAX);
 		else if (val == 2)
-			len = strlcpy(tbuf, "1.0\n", DEBUG_FS_DATA_MAX);
+			len = strscpy(tbuf, "1.0\n", DEBUG_FS_DATA_MAX);
 		else
-			len = strlcpy(tbuf, "Invalid\n", DEBUG_FS_DATA_MAX);
+			len = strscpy(tbuf, "Invalid\n", DEBUG_FS_DATA_MAX);
 		break;
 	case MAX20730_DEBUGFS_OUT_V_RAMP_RATE:
 		val = (data->mfr_devset2 & MAX20730_MFR_DEVSET2_VRATE)
 			>> MAX20730_MFR_DEVSET2_VRATE_BIT_POS;
 
 		if (val == 0)
-			len = strlcpy(tbuf, "4\n", DEBUG_FS_DATA_MAX);
+			len = strscpy(tbuf, "4\n", DEBUG_FS_DATA_MAX);
 		else if (val == 1)
-			len = strlcpy(tbuf, "2\n", DEBUG_FS_DATA_MAX);
+			len = strscpy(tbuf, "2\n", DEBUG_FS_DATA_MAX);
 		else if (val == 2)
-			len = strlcpy(tbuf, "1\n", DEBUG_FS_DATA_MAX);
+			len = strscpy(tbuf, "1\n", DEBUG_FS_DATA_MAX);
 		else
-			len = strlcpy(tbuf, "Invalid\n", DEBUG_FS_DATA_MAX);
+			len = strscpy(tbuf, "Invalid\n", DEBUG_FS_DATA_MAX);
 		break;
 	case MAX20730_DEBUGFS_OC_PROTECT_MODE:
 		ret = (data->mfr_devset2 & MAX20730_MFR_DEVSET2_OCPM_MASK)
@@ -230,13 +230,13 @@ static ssize_t max20730_debugfs_read(struct file *file, char __user *buf,
 			>> MAX20730_MFR_DEVSET2_SS_BIT_POS;
 
 		if (val == 0)
-			len = strlcpy(tbuf, "0.75\n", DEBUG_FS_DATA_MAX);
+			len = strscpy(tbuf, "0.75\n", DEBUG_FS_DATA_MAX);
 		else if (val == 1)
-			len = strlcpy(tbuf, "1.5\n", DEBUG_FS_DATA_MAX);
+			len = strscpy(tbuf, "1.5\n", DEBUG_FS_DATA_MAX);
 		else if (val == 2)
-			len = strlcpy(tbuf, "3\n", DEBUG_FS_DATA_MAX);
+			len = strscpy(tbuf, "3\n", DEBUG_FS_DATA_MAX);
 		else
-			len = strlcpy(tbuf, "6\n", DEBUG_FS_DATA_MAX);
+			len = strscpy(tbuf, "6\n", DEBUG_FS_DATA_MAX);
 		break;
 	case MAX20730_DEBUGFS_IMAX:
 		ret = (data->mfr_devset2 & MAX20730_MFR_DEVSET2_IMAX_MASK)
@@ -287,7 +287,7 @@ static ssize_t max20730_debugfs_read(struct file *file, char __user *buf,
 				"%d.%d\n", ret / 10000, ret % 10000);
 		break;
 	default:
-		len = strlcpy(tbuf, "Invalid\n", DEBUG_FS_DATA_MAX);
+		len = strscpy(tbuf, "Invalid\n", DEBUG_FS_DATA_MAX);
 	}
 
 	return simple_read_from_buffer(buf, count, ppos, tbuf, len);

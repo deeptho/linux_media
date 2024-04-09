@@ -1949,7 +1949,7 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 		adapter->fe = dvb_attach(tas2971_attach, &tbs6308_demod_cfg, i2c);
 		if (adapter->fe == NULL)
 		    goto frontend_atach_fail;
-		  
+
 		break;
 	case TBSECP3_BOARD_TBS6304:
 		adapter->fe = dvb_attach(tas2971_attach, &tbs6304_demod_cfg[adapter->nr], i2c);
@@ -2673,13 +2673,13 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 
 
 	dprintk("adapter->fe=%p dev=%p\n", adapter->fe, dev);
-	strlcpy(adapter->fe->ops.info.name, dev->info->name, sizeof(adapter->fe->ops.info.name));
+ 	strscpy(adapter->fe->ops.info.name, dev->info->name, sizeof(adapter->fe->ops.info.name));
 	dprintk("dev=%p dev->info=%p\n", dev, dev ? dev->info : NULL);
 	if(dev->info->short_name)
-		strlcpy(adapter->fe->ops.info.card_short_name, dev->info->short_name, sizeof(adapter->fe->ops.info.card_short_name));
+		strscpy(adapter->fe->ops.info.card_short_name, dev->info->short_name, sizeof(adapter->fe->ops.info.card_short_name));
 	adapter->fe->ops.info.card_mac_address = dev->card_mac_address;
 	dprintk("dev->pci_dev=%p dev->pci_dev->dev=%p\n", dev->pci_dev, dev->pci_dev ? &dev->pci_dev->dev : NULL);
-	strlcpy(adapter->fe->ops.info.card_address, dev_name(&dev->pci_dev->dev), sizeof(adapter->fe->ops.info.card_address));
+	strscpy(adapter->fe->ops.info.card_address, dev_name(&dev->pci_dev->dev), sizeof(adapter->fe->ops.info.card_address));
 	if (adapter->fe->ops.info.card_short_name[0] == 0) {
 		dprintk("copying adapter->fe->ops.info.adapter_name");
 		snprintf(adapter->fe->ops.info.adapter_name, sizeof(adapter->fe->ops.info.adapter_name),
@@ -2702,15 +2702,15 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 		}
 
 		dprintk("adapter->fe2=%p dev=%p\n", adapter->fe2, dev);
-		strlcpy(adapter->fe2->ops.info.name, dev->info->name, sizeof(adapter->fe2->ops.info.name));
+		strscpy(adapter->fe2->ops.info.name, dev->info->name, sizeof(adapter->fe2->ops.info.name));
 		dprintk("dev=%p dev->info=%p\n", dev, dev ? dev->info : NULL);
 		if(dev->info->short_name)
-			strlcpy(adapter->fe2->ops.info.card_short_name, dev->info->short_name,
+			strscpy(adapter->fe2->ops.info.card_short_name, dev->info->short_name,
 							sizeof(adapter->fe2->ops.info.card_short_name));
 		adapter->fe2->ops.info.card_mac_address = dev->card_mac_address;
 		dprintk("dev->pci_dev=%p dev->pci_dev->dev=%p\n", dev->pci_dev, dev->pci_dev ? &dev->pci_dev->dev : NULL);
-		strlcpy(adapter->fe2->ops.info.card_address, dev_name(&dev->pci_dev->dev), sizeof(adapter->fe2->ops.info.card_address));
-		strlcpy(adapter->fe2->ops.info.name, dev->info->name, sizeof(adapter->fe2->ops.info.name));
+		strscpy(adapter->fe2->ops.info.card_address, dev_name(&dev->pci_dev->dev), sizeof(adapter->fe2->ops.info.card_address));
+		strscpy(adapter->fe2->ops.info.name, dev->info->name, sizeof(adapter->fe2->ops.info.name));
 		if (adapter->fe2->ops.info.card_short_name[0] == 0) {
 			dprintk("copying adapter->fe2->ops.info.adapter_name");
 			snprintf(adapter->fe2->ops.info.adapter_name, sizeof(adapter->fe2->ops.info.adapter_name),
@@ -2747,7 +2747,7 @@ int tbsecp3_dvb_init(struct tbsecp3_adapter *adapter)
 		struct dmx_frontend *fe_hw;
 		struct dmx_frontend *fe_mem;
 		int ret;
-		strlcpy(dev->card_address, dev_name(&dev->pci_dev->dev), sizeof(dev->card_address));
+		strscpy(dev->card_address, dev_name(&dev->pci_dev->dev), sizeof(dev->card_address));
 		//dprintk("Card address=%s option index=%d\n", dev->card_address, option_idx_for_card(dev));
 		ret = dvb_register_adapter(adap, "TBSECP3 DVB Adapter",
 						THIS_MODULE,

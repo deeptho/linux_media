@@ -1240,7 +1240,7 @@ int machine__create_extra_kernel_map(struct machine *machine,
 
 	kmap = map__kmap(map);
 
-	strlcpy(kmap->name, xm->name, KMAP_NAME_LEN);
+	strscpy(kmap->name, xm->name, KMAP_NAME_LEN);
 
 	err = maps__insert(machine__kernel_maps(machine), map);
 
@@ -1331,7 +1331,7 @@ int machine__map_x86_64_entry_trampolines(struct machine *machine,
 			.pgoff = pgoff,
 		};
 
-		strlcpy(xm.name, ENTRY_TRAMPOLINE_NAME, KMAP_NAME_LEN);
+		strscpy(xm.name, ENTRY_TRAMPOLINE_NAME, KMAP_NAME_LEN);
 
 		if (machine__create_extra_kernel_map(machine, kernel, &xm) < 0)
 			return -1;
@@ -1953,7 +1953,7 @@ int machine__process_mmap2_event(struct machine *machine,
 			.pgoff = event->mmap2.pgoff,
 		};
 
-		strlcpy(xm.name, event->mmap2.filename, KMAP_NAME_LEN);
+		strscpy(xm.name, event->mmap2.filename, KMAP_NAME_LEN);
 		ret = machine__process_kernel_mmap_event(machine, &xm, bid);
 		if (ret < 0)
 			goto out_problem;
@@ -2010,7 +2010,7 @@ int machine__process_mmap_event(struct machine *machine, union perf_event *event
 			.pgoff = event->mmap.pgoff,
 		};
 
-		strlcpy(xm.name, event->mmap.filename, KMAP_NAME_LEN);
+		strscpy(xm.name, event->mmap.filename, KMAP_NAME_LEN);
 		ret = machine__process_kernel_mmap_event(machine, &xm, NULL);
 		if (ret < 0)
 			goto out_problem;

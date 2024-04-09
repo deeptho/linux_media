@@ -564,7 +564,7 @@ static struct perf_cpu_map *pmu_cpumask(int dirfd, const char *name, bool is_cor
 	struct perf_pmu pmu = {.name = pmu_name};
 	FILE *file;
 
-	strlcpy(pmu_name, name, sizeof(pmu_name));
+	strscpy(pmu_name, name, sizeof(pmu_name));
 	for (template = templates; *template; template++) {
 		file = perf_pmu__open_file_at(&pmu, dirfd, *template);
 		if (!file)
