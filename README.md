@@ -32,12 +32,12 @@ git clone https://github.com/deeptho/media_build
 ```
 
 Make sure software for kernel compilation is installed.
-For instance on fedora, with MYKERNEL the exact kernel version you are running:
+For instance on fedora:
 
 ```
 sudo dnf install -y patchutils
 sudo dnf install -y ccache
-sudo dnf install -y kernel-devel-MYKERNEL
+sudo dnf install -y kernel-devel-`uname -r`
 sudo dnf install -y perl-File-Copy #not needed?
 sudo dnf install -y perl
 sudo dnf install -y perl-Proc-ProcessTable
