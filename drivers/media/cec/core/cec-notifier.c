@@ -13,7 +13,7 @@
 #include <linux/list.h>
 #include <linux/kref.h>
 #include <linux/of_platform.h>
-
+#include <linux/platform_device.h>
 #include <media/cec.h>
 #include <media/cec-notifier.h>
 #include <drm/drm_edid.h>
