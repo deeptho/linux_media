@@ -193,7 +193,7 @@ static int tbs5931_frontend_attach(struct dvb_usb_adapter *adap)
 	u8 buf[20];
 	u8 a = 0,b = 0;
 	u16 id;
-	//read the id to deceted the chip
+	//read the id to detect the chip
 	buf[0]= 1;//lenth
 	buf[1]= 0xC0;//demod addr
 	//register
@@ -214,7 +214,7 @@ static int tbs5931_frontend_attach(struct dvb_usb_adapter *adap)
 	id = (b<<8|a);
 	if(id==0x444c){   //gx1132
 		int rf_in=0;
-		adap->fe_adap->fe = dvb_attach(tas2101_attach,&gx1132_cfg, &d->i2c_adap, adapter_nr);
+		adap->fe_adap->fe = dvb_attach(tas2101_attach,&gx1132_cfg, &d->i2c_adap, rf_in);
 		if(adap->fe_adap->fe ==NULL)
 			goto err;
 
