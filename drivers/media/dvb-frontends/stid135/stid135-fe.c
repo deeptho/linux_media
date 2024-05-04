@@ -81,8 +81,6 @@ MODULE_PARM_DESC(mis,"someone search the multi-stream signal lose packets,please
 #define vprintk(fmt, arg...)																					\
 	if(stid135_verbose) printk(KERN_DEBUG pr_fmt("%s:%d " fmt),  __func__, __LINE__, ##arg)
 
-
-
 static inline enum fe_rolloff dvb_rolloff(struct stv*state) {
 	switch (state->signal_info.roll_off) {
 	case FE_SAT_05:
@@ -156,8 +154,6 @@ static inline enum fe_modulation dvb_modulation(struct stv*state) {
 		return QPSK;
 	}
 }
-
-
 
 static inline enum fe_delivery_system dvb_fec(struct stv* state, enum fe_delivery_system delsys) {
 	if (delsys == SYS_DVBS2) {
@@ -387,9 +383,15 @@ static int stid135_probe(struct stv *state)
 		err |= fe_stid135_tuner_enable(p_params->handle_demod, AFE_TUNER3);
 		err |= fe_stid135_tuner_enable(p_params->handle_demod, AFE_TUNER4);
 		err |= fe_stid135_diseqc_init(&state->base->ip,AFE_TUNER1, FE_SAT_DISEQC_2_3_PWM);
-		err |= fe_stid135_diseqc_init(&state->base->ip,AFE_TUNER2, FE_SAT_22KHZ_Continues);
 		err |= fe_stid135_diseqc_init(&state->base->ip,AFE_TUNER3, FE_SAT_DISEQC_2_3_PWM);
-		err |= fe_stid135_diseqc_init(&state->base->ip,AFE_TUNER4, FE_SAT_22KHZ_Continues);
+		if(state->base->control_22k){ //202405 dtcheck; also needed for tbs6909x?
+			err |= fe_stid135_diseqc_init(&state->base->ip,AFE_TUNER2, FE_SAT_22KHZ_Continues);
+			err |= fe_stid135_diseqc_init(&state->base->ip,AFE_TUNER4, FE_SAT_22KHZ_Continues);
+		}
+		else{
+			err |= fe_stid135_diseqc_init(&state->base->ip,AFE_TUNER2, FE_SAT_DISEQC_2_3_PWM);
+			err |= fe_stid135_diseqc_init(&state->base->ip,AFE_TUNER4, FE_SAT_DISEQC_2_3_PWM);
+		}
 		if (state->base->set_voltage) {
 			state->base->set_voltage(state->base->i2c, SEC_VOLTAGE_13, 0);
 			state->base->voltage_is_on[0] = 1;
@@ -1442,6 +1444,9 @@ static int stid135_set_tone(struct dvb_frontend* fe, enum fe_sec_tone_mode tone)
 		return -EPERM;
 	}
 
+	if(state->base->control_22k==false)   //for 6916 demod1 ,disable the 22k function.
+		return 0;
+
 	/*
 		when multiple adapters use the same tuner, only one can change voltage, send tones, diseqc etc
 		This is the tuner_owner. tuner_owner=-1 means no owner.
@@ -2323,6 +2328,7 @@ struct dvb_frontend* stid135_attach(struct i2c_adapter *i2c,
 		base->set_TSsampling = cfg->set_TSsampling;
 		base->set_TSparam  = cfg->set_TSparam;
 		base->vglna		=	cfg->vglna;    //for stvvglna 6909x v2 6903x v2
+		base->control_22k	= cfg->control_22k;
 
 		mutex_init(&base->lock.m);
 		proc_base = base;

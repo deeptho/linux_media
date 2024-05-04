@@ -320,7 +320,7 @@ struct stv_base {
 	struct fe_stid135_internal_param ip;
 	s8 num_rf_inputs;
 	s8 rf_inputs[4];
-	s8 tuner_use_count[4];
+	s8 tuner_use_count[4]; //DTCHECK 202405 may need to be increased to 8
 	s8 tuner_owner[4]; // demod (0...7) which is allowed to change volttage/tone/diseqc on tuner
 	s8 voltage_is_on[4];
 	void (*write_properties) (struct i2c_adapter *i2c,u8 reg, u32 buf);
@@ -335,6 +335,8 @@ struct stv_base {
 	//end
 
 	int vglna;
+
+	bool control_22k; //for 6916
 };
 
 /*

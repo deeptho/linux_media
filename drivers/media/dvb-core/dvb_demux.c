@@ -462,23 +462,6 @@ static void dvb_dmx_swfilter_packet(struct dvb_demux *demux, const u8 *buf)
 						demux->cnt_storage[pid] =
 							(demux->cnt_storage[pid] + 1) & 0xf;
 					}
-#if 0
-					if (buf[3] & 0x20) {//if packet has adaption field
-						int adaption_field_length= buf[4];
-						//bool possible_duplicate = ((buf[3] & 0xf) == demux->cnt_storage[pid]);
-						if(adaption_field_length>0) {
-							if((buf[5]&0x80) /*|| possible_duplicate*/) {
-								//discontinuity indicator has been set
-								demux->cnt_storage[pid] = demux->cnt_storage[pid] & 0xf;
-#if 0
-								dprintk_tscheck("INPUT discont pid=%d CC=%d/%d  adap_len=%d buf=%0x %0x %0x %0x %0x %0x",
-																pid, old, buf[3]&0xf,  adaption_field_length, buf[0], buf[1], buf[2], buf[3], buf[4], buf[5]);
-#endif
-								goto ok__;
-							}
-						}
-					}
-#endif
 				} else if(demux->cnt_storage[pid]==0xff) {
 					demux->cnt_storage[pid] = (buf[3] & 0xf);
 					//dprintk("INIT2 CNT PID=%d cnt=%d\n", pid, demux->cnt_storage[pid]);
@@ -488,10 +471,9 @@ static void dvb_dmx_swfilter_packet(struct dvb_demux *demux, const u8 *buf)
 					list_for_each_entry(feed, &demux->feed_list, list_head) {
 						if ((feed->pid != pid) && (feed->pid != 0x2000))
 							continue;
-#if 1
 						set_buf_flags(feed,
 													DMX_BUFFER_PKT_COUNTER_MISMATCH);
-#endif
+
 					}
 					dprintk_tscheck("TS packet counter mismatch. PID=%d expected 0x%x got 0x%x\n",
 													pid, demux->cnt_storage[pid],
