@@ -3246,10 +3246,13 @@ static int dvb_frontend_handle_ioctl(struct file *file,
 		dprintk("dev->id=%d dev->parent->id=%d\n", fe->dvb->device->id, fe->dvb->device->parent ? fe->dvb->device->parent->id :-1);
 		//id = device_instance
 		//bus = Type of bus device is on.
-		{
+		if(fe->ops.info.adapter_mac_address) {
+			info->adapter_mac_address = fe->ops.info.adapter_mac_address;
+			dprintk("set MAC from info.adapter_mac_address: %16llxx num=%d\n", info->adapter_mac_address, fe->dvb->num);
+		} else {
 			uint64_t proposed_mac;
 			memcpy(&proposed_mac, fe->dvb->proposed_mac, sizeof(proposed_mac));
-			dprintk("proposed mac: %06x\n", proposed_mac);
+			dprintk("set MAC from proposed mac: %016x num=%d\n", proposed_mac, fe->dvb->num);
 			info->adapter_mac_address =  proposed_mac ? proposed_mac : (0x2L | ((((uint64_t)fe->dvb->num) << 8) <<32));
 		}
 		dprintk("MAC: 0x%llx", info->adapter_mac_address);

@@ -601,8 +601,9 @@ static inline void fake_mac_address(struct tbsecp3_adapter* adapter) {
 	dev->adapter_mac_address = mac;
 	if(dev->card_mac_address ==0)
 		dev->card_mac_address = mac; //Seelect mac of first adapter as card mac_address
+	if(dev->adapter_mac_address ==0)
+		dev->adapter_mac_address = mac; //Seelect mac of first adapter as card mac_address
 }
-
 
 static int set_mac_address(struct tbsecp3_adapter *adap)
 {
@@ -636,10 +637,28 @@ static int set_mac_address(struct tbsecp3_adapter *adap)
 						 "adap=%p dvb_adap=%p adap=%d MAC address %pM \n", adap, &adap->dvb_adapter, adap->nr,
 						 adap->dvb_adapter.proposed_mac);
 		memcpy(&dev->adapter_mac_address, adap->dvb_adapter.proposed_mac, sizeof(adap->dvb_adapter.proposed_mac));
-		if (dev->adapter_mac_address == 0xffffffffffff)
-			dev->adapter_mac_address =0 ; 			//card which has not been initialised properly
-		if(dev->card_mac_address ==0)
+		if (dev->adapter_mac_address == 0xffffffffffff) {
+			//card which has not been initialised properly
+			if(dev->card_mac_address == 0) {
+				u64 dsn = pci_get_dsn(dev->pci_dev);
+				if (dsn != 0) {
+					dprintk("adapter no=%d NO card MAC yet -> using pcie serial number for card and adapter: MAC=%16llx\n",
+									adap->nr, dsn);
+					dev->card_mac_address = dsn;
+					dev->adapter_mac_address = dsn;
+				}
+			} else {
+				dev->adapter_mac_address = dev->card_mac_address + ((u64)adap->nr <<(u64)40);
+				dprintk("adapter_no=%d NO MAC -> use card_mac_address and adapter_num %16llx\n", adap->nr,
+								dev->adapter_mac_address);
+			}
+			memcpy(adap->dvb_adapter.proposed_mac, &dev->adapter_mac_address, sizeof(adap->dvb_adapter.proposed_mac));
+		}
+		if(dev->card_mac_address ==0) {
+			dprintk("adapter_no=%d: NO card MAC -> use adapter_mac_address %16llx\n", adap->nr,
+							dev->adapter_mac_address);
 			dev->card_mac_address = dev->adapter_mac_address; //Select mac of first adapter as card mac_address
+		}
 	}
 
 	return 0;
@@ -2715,9 +2734,9 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 	}
 	if(dev->adapter_mac_address == 0) {
 		fake_mac_address(adapter);
-		dprintk("Faked mac: 0x%llx\n", dev->adapter_mac_address);
+		dprintk("Faked mac: 0x%16llx\n", dev->adapter_mac_address);
 	} else {
-		dprintk("Got mac: 0x%llx\n", dev->adapter_mac_address);
+		dprintk("Got mac: 0x%16llx\n", dev->adapter_mac_address);
 	}
 
 
@@ -2727,6 +2746,7 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 	if(dev->info->short_name)
 		strscpy(adapter->fe->ops.info.card_short_name, dev->info->short_name, sizeof(adapter->fe->ops.info.card_short_name));
 	adapter->fe->ops.info.card_mac_address = dev->card_mac_address;
+	adapter->fe->ops.info.adapter_mac_address = dev->adapter_mac_address;
 	dprintk("dev->pci_dev=%p dev->pci_dev->dev=%p\n", dev->pci_dev, dev->pci_dev ? &dev->pci_dev->dev : NULL);
 	strscpy(adapter->fe->ops.info.card_address, dev_name(&dev->pci_dev->dev), sizeof(adapter->fe->ops.info.card_address));
 	if (adapter->fe->ops.info.card_short_name[0] == 0) {
@@ -2757,6 +2777,7 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 			strscpy(adapter->fe2->ops.info.card_short_name, dev->info->short_name,
 							sizeof(adapter->fe2->ops.info.card_short_name));
 		adapter->fe2->ops.info.card_mac_address = dev->card_mac_address;
+		adapter->fe2->ops.info.adapter_mac_address = dev->adapter_mac_address;
 		dprintk("dev->pci_dev=%p dev->pci_dev->dev=%p\n", dev->pci_dev, dev->pci_dev ? &dev->pci_dev->dev : NULL);
 		strscpy(adapter->fe2->ops.info.card_address, dev_name(&dev->pci_dev->dev), sizeof(adapter->fe2->ops.info.card_address));
 		strscpy(adapter->fe2->ops.info.name, dev->info->name, sizeof(adapter->fe2->ops.info.name));

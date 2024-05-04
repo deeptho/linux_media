@@ -355,6 +355,7 @@ struct dvb_frontend_internal_info {
 	char	adapter_name[64];
 	char	card_address[64];
 	int64_t card_mac_address;
+	int64_t adapter_mac_address;
 	uid_t owner_uid;
 	bool supports_neumo; //set to true if values if this driver supports neumo
 	s8 default_rf_input;
