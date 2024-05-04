@@ -361,7 +361,7 @@ struct dvb_frontend_internal_info {
 	u8 num_rf_inputs;
 	s8 rf_inputs[16];
 #endif
-	char name[64]; //name of card
+	char name[128]; //name of card
 	u32	frequency_min_hz;
 	u32	frequency_max_hz;
 	u32	frequency_stepsize_hz;
