@@ -1147,6 +1147,7 @@ error:
 static void __exit exit_dvbdev(void)
 {
 	struct dvbdevfops_node *node, *next;
+	kobject_put(info_kobject);
 
 	class_destroy(dvb_class);
 	cdev_del(&dvb_device_cdev);
