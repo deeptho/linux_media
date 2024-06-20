@@ -191,6 +191,7 @@ static int tda10086_set_tone(struct dvb_frontend *fe,
 	case SEC_TONE_ON:
 		tda10086_write_byte(state, 0x36, 0x01 + t22k_off);
 		break;
+	default:
 	}
 
 	return 0;

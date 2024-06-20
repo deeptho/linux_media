@@ -53,6 +53,7 @@ static int tas2971_wr(struct tas2971_priv *priv, u8 addr, u8 data)
 
 }
 
+#ifdef UNUSED
 /* read multiple (continuous) registers starting at addr */
 static int tas2971_rdm(struct tas2971_priv *priv, u8 addr, u8 *buf, int len)
 {
@@ -66,7 +67,7 @@ static int tas2971_rd(struct tas2971_priv *priv, u8 addr, u8 *data)
 	return 0;
 
 }
-
+#endif
 #ifdef UNUSED
 static int tas2971_regmask(struct tas2971_priv *priv,
 	u8 reg, u8 setmask, u8 clrmask)

@@ -752,12 +752,14 @@ static void m88rs6060_sleep(struct m88rs6060_state* state)
 	msleep(10);
 }
 
+#if 0
 static int m88rs6060_sleep_(struct dvb_frontend *fe)
 {
 	struct m88rs6060_state* state = fe->demodulator_priv;
 	m88rs6060_sleep(state);
 	return 0;
 }
+#endif
 
 static void m88rs6060_soft_reset(struct m88rs6060_state* state)
 {
@@ -1563,9 +1565,9 @@ static int m88rs6060_get_channel_info(struct m88rs6060_state* state, struct dtv_
 		(info.type == MtFeType_DvbS2X) ? SYS_DVBS2 : //TODO
 		(info.type == MtFeType_DvbS) ? SYS_DVBS :
 		SYS_DVBS2;
-	p->modulation = info.mod_mode;
-	p->rolloff = info.roll_off;
-	p->fec_inner = info.code_rate;
+	p->modulation = (enum fe_modulation) info.mod_mode;
+	p->rolloff = (enum fe_rolloff) info.roll_off;
+	p->fec_inner = (enum fe_code_rate) info.code_rate;
 	p->pilot = info.is_pilot_on;
 	p->matype_valid = (m88rs6060_get_matype(state, &p->matype_val)>=0);
 	if(!p->matype_valid)
@@ -3483,13 +3485,13 @@ static int m88rs6060_tune(struct dvb_frontend *fe, bool re_tune,
 	return 0;
 }
 
-
+#if 0
 static enum dvbfe_algo m88rs6060_get_algo(struct dvb_frontend *fe)
 {
 	//dprintk("%s()\n", __func__);
 	return DVBFE_ALGO_HW;
 }
-
+#endif
 
 static int m88rs6060_get_spectrum_scan_sweep(struct dvb_frontend* fe,
 																						 unsigned int *delay,  enum fe_status *status)
