@@ -602,7 +602,7 @@ static inline void fake_mac_address(struct tbsecp3_adapter* adapter) {
 	if(dev->card_mac_address ==0)
 		dev->card_mac_address = mac; //Seelect mac of first adapter as card mac_address
 	if(dev->adapter_mac_address ==0)
-		dev->adapter_mac_address = mac; //Seelect mac of first adapter as card mac_address
+		dev->adapter_mac_address = mac; //Select mac of first adapter as card mac_address
 }
 
 static int set_mac_address(struct tbsecp3_adapter *adap)
@@ -634,31 +634,14 @@ static int set_mac_address(struct tbsecp3_adapter *adap)
 			adap->nr);
 	} else {
 		dev_info(&dev->pci_dev->dev,
-						 "adap=%p dvb_adap=%p adap=%d MAC address %pM \n", adap, &adap->dvb_adapter, adap->nr,
-						 adap->dvb_adapter.proposed_mac);
+			"MAC address %pM\n", adap->dvb_adapter.proposed_mac);
+		dprintk("MAC XXX adap=%d read from 0x%x: proposed= %pM\n", adap->nr, eep_addr,
+						adap->dvb_adapter.proposed_mac);
 		memcpy(&dev->adapter_mac_address, adap->dvb_adapter.proposed_mac, sizeof(adap->dvb_adapter.proposed_mac));
-		if (dev->adapter_mac_address == 0xffffffffffff) {
-			//card which has not been initialised properly
-			if(dev->card_mac_address == 0) {
-				u64 dsn = pci_get_dsn(dev->pci_dev);
-				if (dsn != 0) {
-					dprintk("adapter no=%d NO card MAC yet -> using pcie serial number for card and adapter: MAC=%16llx\n",
-									adap->nr, dsn);
-					dev->card_mac_address = dsn;
-					dev->adapter_mac_address = dsn;
-				}
-			} else {
-				dev->adapter_mac_address = dev->card_mac_address + ((u64)adap->nr <<(u64)40);
-				dprintk("adapter_no=%d NO MAC -> use card_mac_address and adapter_num %16llx\n", adap->nr,
-								dev->adapter_mac_address);
-			}
-			memcpy(adap->dvb_adapter.proposed_mac, &dev->adapter_mac_address, sizeof(adap->dvb_adapter.proposed_mac));
-		}
-		if(dev->card_mac_address ==0) {
-			dprintk("adapter_no=%d: NO card MAC -> use adapter_mac_address %16llx\n", adap->nr,
-							dev->adapter_mac_address);
+		if (dev->adapter_mac_address == 0xffffffffffff)
+			dev->adapter_mac_address =0 ; 			//card which has not been initialised properly
+		if(dev->card_mac_address ==0)
 			dev->card_mac_address = dev->adapter_mac_address; //Select mac of first adapter as card mac_address
-		}
 	}
 
 	return 0;
@@ -1225,6 +1208,8 @@ static struct stid135_cfg tbs6916_stid135_cfg[] = {
 	.set_voltage	= max_set_voltage,
 	.write_properties = ecp3_spi_write,
 	.read_properties = ecp3_spi_read,
+	.write_eeprom = ecp3_eeprom_write,
+	.read_eeprom = ecp3_eeprom_read,
 	.set_TSsampling = NULL,
 	.set_TSparam = NULL,
 	.vglna   =false,
@@ -1239,6 +1224,8 @@ static struct stid135_cfg tbs6916_stid135_cfg[] = {
 	.set_voltage	= max_set_voltage,
 	.write_properties = NULL,
 	.read_properties = NULL,
+	/*	.write_eeprom = ecp3_eeprom_write,
+			.read_eeprom = ecp3_eeprom_read,*/
 	.set_TSsampling = NULL,
 	.set_TSparam = NULL,
 	.vglna   =false,
@@ -2670,13 +2657,12 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 	case TBSECP3_BOARD_TBS6916:
 
 		if(adapter->nr<8)
-			adapter->fe = dvb_attach(stid135_attach, i2c,
+			adapter->fe = dvb_attach(stid135_attach, dev, i2c,
 															 &tbs6916_stid135_cfg[0], adapter->nr, adapter->nr%4); //DTCHECK 2020405 was /2
 		else{
-
 			adapter->nr -= 8;
-			adapter->fe = dvb_attach(stid135_attach, i2c,
-					&tbs6916_stid135_cfg[1], adapter->nr, adapter->nr%4);	  //DTCHECK 2020405 was /2
+			adapter->fe = dvb_attach(stid135_attach, dev, i2c,
+															 &tbs6916_stid135_cfg[1], adapter->nr, (adapter->nr)%4);	  //DTCHECK 2020405 was /2
 		}
 
 		if (adapter->fe == NULL)
@@ -2684,10 +2670,10 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 		break;
 	case TBSECP3_BOARD_TBS6909X:
 		if(pci->subsystem_device==0x0010)
-			adapter->fe = dvb_attach(stid135_attach, i2c,
+			adapter->fe = dvb_attach(stid135_attach, dev, i2c,
 				&tbs6909x_stid135_cfg, adapter->nr, adapter->nr%4);
 		else
-			adapter->fe = dvb_attach(stid135_attach, i2c,
+			adapter->fe = dvb_attach(stid135_attach, dev, i2c,
 															 &tbs6909x_V2_stid135_cfg, adapter->nr, adapter->nr%4);
 		if (adapter->fe == NULL)
 			goto frontend_atach_fail;
@@ -2695,13 +2681,13 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 	case TBSECP3_BOARD_TBS6903X:
 	case TBSECP3_BOARD_TBS6912:
 		if(pci->subsystem_vendor==0x6912)
-			adapter->fe = dvb_attach(stid135_attach, i2c,
+			adapter->fe = dvb_attach(stid135_attach, dev, i2c,
 					&tbs6912_stid135_cfg, adapter->nr ? 2 : 0, adapter->nr ? 3 : 0);
 		else if(pci->subsystem_device==0x0021)
-			adapter->fe = dvb_attach(stid135_attach, i2c,
+			adapter->fe = dvb_attach(stid135_attach, dev, i2c,
 				&tbs6903x_V2_stid135_cfg, adapter->nr ? 2 : 0, adapter->nr ? 3 : 0);
 		else
-			adapter->fe = dvb_attach(stid135_attach, i2c,
+			adapter->fe = dvb_attach(stid135_attach, dev, i2c,
 				&tbs6903x_stid135_cfg, adapter->nr ? 2 : 0, adapter->nr ? 3 : 0);
 		if (adapter->fe == NULL)
 			goto frontend_atach_fail;

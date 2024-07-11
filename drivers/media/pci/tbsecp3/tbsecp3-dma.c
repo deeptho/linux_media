@@ -26,6 +26,22 @@ MODULE_PARM_DESC(dma_pkts, "DMA buffer size in TS packets (16-256), default 128"
 #define dprintk(fmt, arg...)																					\
 	printk(KERN_DEBUG pr_fmt("%s:%d " fmt),  __func__, __LINE__, ##arg)
 
+void pkt_hex_dump(uint8_t*data, size_t len)
+{
+    int rowsize = 16;
+    int i, l, linelen, remaining;
+    int li = 0;
+    uint8_t ch;
+
+    dprintk("PCKT: ");
+
+    remaining = len;
+    for (i = 0; i < len; ++i) {
+			ch = data[l];
+			printk(KERN_CONT "%02X ", (uint32_t) ch);
+		}
+		printk(KERN_CONT "\n");
+}
 
 static void tbsecp3_dma_tasklet(unsigned long adap)
 {
@@ -34,7 +50,7 @@ static void tbsecp3_dma_tasklet(unsigned long adap)
 	u32 read_buffer, next_buffer;
 	u8* data;
 	int i;
-	bool no_dvb;
+	bool no_dvb=false;
 
 	spin_lock(&adapter->adap_lock);
 	no_dvb = adapter->no_dvb;

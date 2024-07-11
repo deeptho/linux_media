@@ -75,7 +75,7 @@ static irqreturn_t tbsecp3_irq_handler(int irq, void *dev_id)
 	}
 
 	if (stat & 0x0000f000) {
-		/* dma 8~11*/
+		/* dma8~11 */
 		for (i = 8; i < dev->info->adapters; i++) {
 			in = dev->adapter[i].cfg->ts_in;
 			if (stat & TBSECP3_DMA_IF1(in)){
