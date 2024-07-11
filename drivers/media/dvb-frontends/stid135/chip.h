@@ -257,7 +257,7 @@ typedef enum
 		STCHIP_Register_t	*pRegMapImage;     /* Pointer to register map */
 		STCHIP_Field_t		*pFieldMapImage;   /* Pointer to field map */
 		STCHIP_Instance_t	*pInstMap;         /* Pointer to an Instances Map */
-		STCHIP_Error_t		Error;            /* Error state */
+		int                Error;            /* Error state */
 		STCHIP_Mode_t		ChipMode;         /* Access bus in demod (SubAdr) or tuner (NoSubAdr) mode */
 		u8			ChipID;           /* Chip cut ID */
 

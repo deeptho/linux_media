@@ -1,35 +1,35 @@
 /*
-* This file is part of STiD135 OXFORD LLA
+ * This file is part of STiD135 OXFORD LLA
  *
-* Copyright (c) <2014>-<2018>, STMicroelectronics - All Rights Reserved
-* Author(s): Mathias Hilaire (mathias.hilaire@st.com), Thierry Delahaye (thierry.delahaye@st.com) for STMicroelectronics.
+ * Copyright (c) <2014>-<2018>, STMicroelectronics - All Rights Reserved
+ * Author(s): Mathias Hilaire (mathias.hilaire@st.com), Thierry Delahaye (thierry.delahaye@st.com) for STMicroelectronics.
  *
-* License terms: BSD 3-clause "New" or "Revised" License.
+ * License terms: BSD 3-clause "New" or "Revised" License.
  *
-* Redistribution and use in source and binary forms, with or without
-* modification, are permitted provided that the following conditions are met:
-*
-* 1. Redistributions of source code must retain the above copyright notice, this
-* list of conditions and the following disclaimer.
-*
-* 2. Redistributions in binary form must reproduce the above copyright notice,
-* this list of conditions and the following disclaimer in the documentation
-* and/or other materials provided with the distribution.
-*
-* 3. Neither the name of the copyright holder nor the names of its contributors
-* may be used to endorse or promote products derived from this software
-* without specific prior written permission.
-*
-* THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-* AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-* IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-* DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
-* FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
-* DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-* SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
-* CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
-* OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-* OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice, this
+ * list of conditions and the following disclaimer.
+ *
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ * this list of conditions and the following disclaimer in the documentation
+ * and/or other materials provided with the distribution.
+ *
+ * 3. Neither the name of the copyright holder nor the names of its contributors
+ * may be used to endorse or promote products derived from this software
+ * without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+ * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
 
@@ -51,10 +51,23 @@
 #define dprintk(fmt, arg...)																					\
 	printk(KERN_DEBUG pr_fmt("%s:%d " fmt),  __func__, __LINE__, ##arg)
 
+#define state_dprintk(fmt, arg...)																					\
+	printk(KERN_DEBUG pr_fmt("%s:%d demod=%d.%d " fmt),  __func__, __LINE__, state->chip->chip_no, state->nr, ##arg)
+
+#define state_dprintk_(func, line, fmt, arg...)													\
+	printk(KERN_DEBUG pr_fmt("%s:%d demod=%d.%d " fmt),  func, line, state->chip->chip_no, state->nr, ##arg)
+
 /* ========================================================== */
 // Typedefs - proprietary, non generic
 
 extern bool fft_mode32;
+
+enum fe_multiswitch_mode_ {
+	FE_MULTISWITCH_MODE_QUATTRO =0,
+	FE_MULTISWITCH_MODE_DISEQC = 1,
+	FE_MULTISWITCH_MODE_UNICABLE = 2
+};
+
 enum fe_stid135_ber_status {
 	ERR_MIN_THRESHOLD_REACHED,
 	BER_THRESHOLD_REACHED,
@@ -104,6 +117,7 @@ enum fe_stid135_stfe_input {
 	FE_STFE_INPUT7 = 0x40,
 	FE_STFE_INPUT8 = 0x80
 };
+
 
 /* ----------------  generic typedefs:	--------------------- */
 
@@ -237,6 +251,7 @@ struct fe_stid135_internal_param {
 	STCHIP_Info_t* handle_anafe; /*  Handle to AFE */
 	STCHIP_Info_t* handle_fpga; /*  Handle to FPGA */
 	STCHIP_Info_t* handle_soc; /*  Handle to SOC */
+	STCHIP_Info_t* vglna_handles[4];
 	u32				quartz;/* Demod Reference frequency (Hz) */
 	u8			internal_dcdc; /* DCDC supply either internal or external */
 	u8			internal_ldo; /* LDO supply either internal or external */
@@ -295,34 +310,93 @@ struct status_bit_fields {
 
 
 struct lock_t {
-	struct mutex m;
+	struct mutex mutex;
 	ktime_t lock_time;
 	int adapter_no;
 	const char* func;
 	int line;
+	int chip_no;
+	int demod;
 };
 
+struct stv_card_t; //one per card
+struct stv_chip_t; //one per chip (i.e., 2 on tbs6916)
+struct stv;      //one per demod (i.e., 8 per chip on tbs6916)
 
-struct stv_base {
-	struct list_head     stvlist;
-	u8 card_no;
-	u8                   adr;
-	struct i2c_adapter  *i2c;
-	struct lock_t         lock;
-	int                  count;
-	u32                  extclk;
-	u8                   ts_mode;
+struct stv_reservation_t {
+	pid_t owner;
+	int32_t config_id;
+	uint32_t use_count;
+};
 
-	int (*set_voltage)(struct i2c_adapter *i2c,
-		enum fe_sec_voltage voltage, u8 rf_in);
-	u8                   mode;
-	s32 llr_in_use;
+struct stv_rf_in_t {
+	int rf_in_no;
+	struct stv_chip_t* controlling_chip; //id of chip currently controlling the rf_in: 0,1 or -1 if no chip controls
+	enum fe_sec_voltage voltage; /*Current voltage applied to rf_input
+																		SEC_VOLTAGE_OFF, SEC_VOLTAGE_13, SEC_VOLTAGE_18*/
+	enum fe_sec_tone_mode tone; /*Current tone applied to rf_input
+																	 SEC_TONE_ON, SEC_TONE_OFF*/
+	bool sec_configured; // diseqc has been sent
+	struct stv_reservation_t reservation;
+};
+
+struct stv_tuner_t {
+	int tuner_no;
+	int powered_on;
+	struct stv_rf_in_t* active_rf_in;
+	struct stv_reservation_t reservation;
+};
+
+/*
+	all the resources on one stid135 card
+ */
+struct stv_card_t {
+	struct list_head     stv_card_list;
+	struct tbsecp3_dev*  dev; //to identify this resource
+	struct lock_t        lock;
+	int card_no;
+	int num_chips;              //number of stid chips on this card (1 for tbs69093x, tbs6909x, 2 for tbs6916)
+	struct stv_chip_t*    chips[2]; //maximum 2
+	struct stv_rf_in_t rf_ins[4];
+	struct kobject* sysfs_kobject;
+	int use_count;
+};
+
+/*
+	all the resources on one stid135 card
+ */
+struct stv_chip_t {
+	struct list_head   stv_chip_list;
+	u8 global_chip_no; //index of chip in active stid135 in the full system (not just on this card)
+	u8 chip_no;        //index of chip on card
+	struct lock_t        lock;
+	u8                  adr;
+	struct i2c_adapter* i2c;
+	struct stv_card_t*    card;
+	int                 use_count; //use count of this resource; resource cannot be deleted if >=1
+	u32                 extclk;
+	u8                  ts_mode;
+
+	/*in quatro_mode each tuner caters for one specific band
+		If the driver does not call FE_SET_RF_INPUT, then we need to figure
+		out from the set voltage and tone which rf_in to connect to
+
+		in neumo_mode, rf_in is selected before voltage and tone, and we do not need
+		the settings below
+
+		In unicable/Jess mode rf_uin defaults to 3
+	*/
+	u8                  multiswitch_mode; // 0=quattro/quad 1=normal direct connection
+
+	u8                  tone_set;
+	s32                 llr_in_use;
 	struct fe_stid135_internal_param ip;
-	s8 num_rf_inputs;
-	s8 rf_inputs[4];
-	s8 tuner_use_count[4]; //DTCHECK 202405 may need to be increased to 8
-	s8 tuner_owner[4]; // demod (0...7) which is allowed to change volttage/tone/diseqc on tuner
-	s8 voltage_is_on[4];
+	s8                  num_tuners;     //number of rf_inputs on card (4 per stid135 chip)
+	struct stv_tuner_t tuners[4];
+	int vglna;
+	bool control_22k; //for 6916
+
+	int (*set_voltage)(struct i2c_adapter *i2c, enum fe_sec_voltage voltage, u8 rf_in);
 	void (*write_properties) (struct i2c_adapter *i2c,u8 reg, u32 buf);
 	void (*read_properties) (struct i2c_adapter *i2c,u8 reg, u32 *buf);
 
@@ -334,20 +408,26 @@ struct stv_base {
 	u32  (*set_TSparam)(struct i2c_adapter *i2c,int tuner,int time,bool flag);
 	//end
 
-	int vglna;
-
-	bool control_22k; //for 6916
+	struct kobject* sysfs_kobject;
+	struct kobject* sysfs_registers_kobject;
 };
 
 /*
 	state per adapter
  */
 struct stv {
-	struct stv_base     *base;
+	struct list_head     stv_demod_list;
+	struct stv_chip_t    *chip;
 	struct dvb_frontend  fe;
-	int                  nr;     //DT: number of demod device 0-7 (st internal api uses nr+1)
-	int                  rf_in;  //DT  tuner number (0-3, corresponding to a physical input connector)
-	bool                 rf_in_selected;  //true if tuner was reserved for rf_input; tuner not necessarily owned
+	int                  nr;     //number of demod device 0-7 on the chip (st internal api uses nr+1)
+	bool                 is_master;
+	bool legacy_rf_in;
+	struct stv_tuner_t* active_tuner;
+
+	u8 quattro_rf_in_mask; /* mask of known(valid) bits in quattro_rf_in when in quattro_mode*/
+	u8 quattro_rf_in; /* rf_in to connect to in quattro_mode as soon as quattro_rf_mask == 3 */
+
+
 	//unsigned long        tune_time;
 	struct fe_sat_signal_info signal_info;
 	ktime_t tune_time;
@@ -388,29 +468,46 @@ struct stv {
 	struct constellation_scan_state constellation_scan_state;
 
 	bool modcode_filter; //for set the modcode
+	struct kobject* sysfs_kobject;
 };
 
-void state_lock_(struct stv* state, const char* func, int line);
-int state_trylock_(struct stv* state, const char* func, int line);
-void state_unlock_(struct stv* state, const char* func, int line);
-void state_sleep_(struct stv* state, int timems, const char* func, int line);
+void card_lock_(struct stv* state, const char* func, int line);
+int card_trylock_(struct stv* state, const char* func, int line);
+void card_unlock_(struct stv* state, const char* func, int line);
+bool card_is_locked(struct stv* state);
+
+void chip_lock_(struct stv* state, const char* func, int line);
+int chip_trylock_(struct stv* state, const char* func, int line);
+void chip_unlock_(struct stv* state, const char* func, int line);
+bool chip_is_locked(struct stv* state);
+
+void chip_sleep_(struct stv* state, int timems, const char* func, int line);
 
 /*
 	Singleton structure, one per chip (i.e., the same for all 8 demods and all 4 tuners
 	on tbs6909x. Created in fe_stid135_init.
 */
 
-#define base_lock(state) \
-	state_lock_(state, __func__, __LINE__)
+#define card_lock(state) \
+	card_lock_(state, __func__, __LINE__)
 
-#define base_trylock(state)										\
-	state_trylock_(state, __func__, __LINE__)
+#define card_trylock(state)										\
+	card_trylock_(state, __func__, __LINE__)
 
-#define base_unlock(state) \
-	state_unlock_(state, __func__, __LINE__)
+#define card_unlock(state) \
+	card_unlock_(state, __func__, __LINE__)
 
-#define state_sleep(state, time)											\
-	state_sleep_(state, time, __func__, __LINE__)
+#define chip_lock(state) \
+	chip_lock_(state, __func__, __LINE__)
+
+#define chip_trylock(state)										\
+	chip_trylock_(state, __func__, __LINE__)
+
+#define chip_unlock(state) \
+	chip_unlock_(state, __func__, __LINE__)
+
+#define chip_sleep(state, time)											\
+	chip_sleep_(state, time, __func__, __LINE__)
 
 
 extern void print_signal_info_(struct stv* state, const char* func, int line);
@@ -758,4 +855,19 @@ void print_spectrum_scan_state_(struct spectrum_scan_state*ss,
 extern void chip_init_proc(struct stv* state, STCHIP_Info_t* hChipHandle_, const char*name);
 void chip_close_proc(struct stv* state, const char* name);
 
-#endif  /* ndef STID135_DRV_H */
+int stv_card_make_sysfs(struct stv_card_t* card);
+int stv_demod_make_sysfs(struct stv* demod);
+int stv_chip_make_sysfs(struct stv_chip_t *base);
+int stv_chip_release_sysfs(struct stv_chip_t* chip);
+
+extern struct list_head stv_chip_list;
+extern struct list_head stv_card_list;
+extern struct list_head stv_demod_list;
+
+char* tone_str(enum fe_sec_tone_mode tone);
+char* voltage_str(enum fe_sec_voltage voltage);
+
+extern int active_rf_in_no(struct stv* state);
+extern struct stv_rf_in_t* active_rf_in(struct stv* state);
+
+#endif  /* ifndef STID135_DRV_H */

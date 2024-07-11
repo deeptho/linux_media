@@ -21,7 +21,6 @@
  * 02110-1301, USA
  * Or, point your browser to http://www.gnu.org/copyleft/gpl.html
  */
-
 #include <linux/kernel.h>
 #include <linux/kthread.h>
 #include <linux/module.h>
@@ -37,7 +36,9 @@
 #include "i2c.h"
 #include "stid135_drv.h"
 #define MAX_FFT_SIZE 8192
-LIST_HEAD(stvlist);
+LIST_HEAD(stv_demod_list);
+LIST_HEAD(stv_chip_list);
+LIST_HEAD(stv_card_list);
 
 static int mode = 1;
 module_param(mode, int, 0444);
@@ -80,6 +81,70 @@ MODULE_PARM_DESC(mis,"someone search the multi-stream signal lose packets,please
 
 #define vprintk(fmt, arg...)																					\
 	if(stid135_verbose) printk(KERN_DEBUG pr_fmt("%s:%d " fmt),  __func__, __LINE__, ##arg)
+
+char* reservation_mode_str(enum fe_reservation_mode mode) {
+	switch(mode) {
+	case FE_RESERVATION_MODE_MASTER_OR_SLAVE:
+		return "MASTER/SLAVE";
+	case FE_RESERVATION_MODE_MASTER:
+		return "MASTER";
+		break;
+	case FE_RESERVATION_MODE_SLAVE:
+	default:
+		return "SLAVE";
+	}
+}
+
+char* reservation_result_str(enum fe_reservation_result result) {
+	switch(result) {
+	case FE_RESERVATION_MASTER:
+		return "MASTER";
+	case FE_RESERVATION_SLAVE:
+		return "SLAVE";
+		break;
+	case FE_RESERVATION_RETRY:
+		return "RETRY";
+		break;
+	case FE_RESERVATION_RELEASED:
+		return "RELEASED";
+		break;
+	case FE_RESERVATION_FAILED:
+	default:
+		return "FAILED";
+	}
+}
+
+char* tone_str(enum fe_sec_tone_mode tone) {
+	switch(tone) {
+	case SEC_TONE_ON:
+		return "on";
+	case SEC_TONE_OFF:
+	default:
+		return "off";
+	}
+}
+
+char* voltage_str(enum fe_sec_voltage voltage) {
+	switch(voltage) {
+	case SEC_VOLTAGE_OFF:
+	default:
+		return "off";
+	case SEC_VOLTAGE_13:
+		return "13V";
+	case SEC_VOLTAGE_18:
+		return "18V";
+	}
+}
+
+int active_rf_in_no(struct stv* state) {
+	return state && 	state->active_tuner && 	state->active_tuner->active_rf_in
+		? state->active_tuner->active_rf_in->rf_in_no : -1;
+}
+
+struct stv_rf_in_t* active_rf_in(struct stv* state) {
+	return state && 	state->active_tuner && 	state->active_tuner->active_rf_in
+		? state->active_tuner->active_rf_in : NULL;
+}
 
 static inline enum fe_rolloff dvb_rolloff(struct stv*state) {
 	switch (state->signal_info.roll_off) {
@@ -155,7 +220,7 @@ static inline enum fe_modulation dvb_modulation(struct stv*state) {
 	}
 }
 
-static inline enum fe_delivery_system dvb_fec(struct stv* state, enum fe_delivery_system delsys) {
+static inline enum fe_code_rate dvb_fec(struct stv* state, enum fe_delivery_system delsys) {
 	if (delsys == SYS_DVBS2) {
 		static enum fe_code_rate modcod2fec[0x82] = {
 			FEC_NONE, FEC_1_4, FEC_1_3, FEC_2_5,
@@ -202,25 +267,25 @@ static inline enum fe_delivery_system dvb_fec(struct stv* state, enum fe_deliver
 	} else {
 		switch (state->signal_info.puncture_rate) {
 		case FE_SAT_PR_1_2:
-			return  FEC_1_2;
+			return FEC_1_2;
 			break;
 		case FE_SAT_PR_2_3:
-			return  FEC_2_3;
+			return FEC_2_3;
 			break;
 		case FE_SAT_PR_3_4:
-			return  FEC_3_4;
+			return FEC_3_4;
 			break;
 		case FE_SAT_PR_5_6:
-			return  FEC_5_6;
+			return FEC_5_6;
 			break;
 		case FE_SAT_PR_6_7:
-			return  FEC_6_7;
+			return FEC_6_7;
 			break;
 		case FE_SAT_PR_7_8:
-			return  FEC_7_8;
+			return FEC_7_8;
 			break;
 		default:
-			return  FEC_NONE;
+			return FEC_NONE;
 		}
 	}
 }
@@ -242,7 +307,7 @@ static inline enum fe_delivery_system dvb_standard(struct stv* state) {
 
 void print_signal_info_(struct stv* state, const char* func, int line)
 {
-	#if 1
+#if 1
 	struct fe_sat_signal_info* i= &state->signal_info;
 	printk(KERN_DEBUG
 				 pr_fmt("%s:%d "
@@ -266,7 +331,7 @@ static int stid135_stop_task(struct dvb_frontend* fe);
 
 I2C_RESULT I2cReadWrite(void *pI2CHost, I2C_MODE mode, u8 ChipAddress, u8 *Data, int NbData)
 {
-	struct stv_base     *base = (struct stv_base *)pI2CHost;
+	struct stv_chip_t     *base = (struct stv_chip_t *)pI2CHost;
 	struct i2c_msg msg = {.addr = ChipAddress>>1, .flags = 0,
 						.buf = Data, .len = NbData};
 	int ret;
@@ -278,7 +343,9 @@ I2C_RESULT I2cReadWrite(void *pI2CHost, I2C_MODE mode, u8 ChipAddress, u8 *Data,
 		msg.flags = I2C_M_RD;
 
 	ret = i2c_transfer(base->i2c, &msg, 1);
-
+	if(ret<0) {
+		dprintk("BUG: i2c_transfer returned %d\n", ret);
+	}
 	return (ret == 1) ? I2C_ERR_NONE : I2C_ERR_ACK;
 }
 
@@ -294,31 +361,23 @@ static int stid135_probe(struct stv *state)
 	// for vglna
 	char *VglnaIdString = NULL;
 	STCHIP_Info_t VGLNAChip;
-	STCHIP_Info_t* vglna_handle;
-	STCHIP_Info_t* vglna_handle1;
-	STCHIP_Info_t* vglna_handle2;
-	STCHIP_Info_t* vglna_handle3;
 	SAT_VGLNA_InitParams_t pVGLNAInit;
 	SAT_VGLNA_InitParams_t pVGLNAInit1;
 	SAT_VGLNA_InitParams_t pVGLNAInit2;
 	SAT_VGLNA_InitParams_t pVGLNAInit3;
 	//end
-	dev_warn(&state->base->i2c->dev, "%s\n", FE_STiD135_GetRevision());
+	dev_warn(&state->chip->i2c->dev, "%s\n", FE_STiD135_GetRevision());
 
 	strcpy(init_params.demod_name,"STiD135");
-	init_params.pI2CHost		=	state->base;
-	init_params.demod_i2c_adr   	=	state->base->adr ? state->base->adr<<1 : 0xd0;
-	init_params.demod_ref_clk  	= 	state->base->extclk ? state->base->extclk : 27;
+	init_params.pI2CHost		=	state->chip;
+	init_params.demod_i2c_adr   	=	state->chip->adr ? state->chip->adr<<1 : 0xd0;
+	init_params.demod_ref_clk  	= 	state->chip->extclk ? state->chip->extclk : 27;
 	init_params.internal_dcdc	=	FALSE;
 	init_params.internal_ldo	=	TRUE; // LDO supply is internal on Oxford valid board
 	init_params.rf_input_type	=	0xF; // Single ended RF input on Oxford valid board rev2
 	init_params.roll_off		=  	FE_SAT_35; // NYQUIST Filter value (used for DVBS1/DSS, DVBS2 is automatic)
 	init_params.tuner_iq_inversion	=	FE_SAT_IQ_NORMAL;
-	err = fe_stid135_init(&init_params, &state->base->ip);
-#ifdef PROC_REGISTERS
-	chip_init_proc(state, state->base->ip.handle_demod, "stid135");
-	chip_init_proc(state, state->base->ip.handle_soc, "soc");
-#endif
+	err = fe_stid135_init(&init_params, &state->chip->ip);
 
 	init_params.ts_nosync		=	ts_nosync;
 	init_params.mis_fix		= mis;
@@ -328,260 +387,580 @@ static int stid135_probe(struct stv *state)
 		return -EINVAL;
 	}
 
-	p_params = &state->base->ip;
+	p_params = &state->chip->ip;
 	vprintk("here state=%p\n", state);
-	vprintk("here state->base=%p\n", state->base);
-	vprintk("here state->base=%p\n", state->base);
-	err = fe_stid135_get_cut_id(&state->base->ip, &cut_id);
+	vprintk("here state->chip=%p\n", state->chip);
+	vprintk("here state->chip=%p\n", state->chip);
+	err = fe_stid135_get_cut_id(&state->chip->ip, &cut_id);
 	switch(cut_id)
 	{
 	case STID135_CUT1_0:
-		dev_warn(&state->base->i2c->dev, "%s: cut 1.0\n", __func__);
+		dev_warn(&state->chip->i2c->dev, "%s: cut 1.0\n", __func__);
 		break;
 	case STID135_CUT1_1:
-		dev_warn(&state->base->i2c->dev, "%s: cut 1.1\n", __func__);
+		dev_warn(&state->chip->i2c->dev, "%s: cut 1.1\n", __func__);
 		break;
 	case STID135_CUT1_X:
-		dev_warn(&state->base->i2c->dev, "%s: cut 1.x\n", __func__);
+		dev_warn(&state->chip->i2c->dev, "%s: cut 1.x\n", __func__);
 		break;
 	case STID135_CUT2_0:
-		dev_warn(&state->base->i2c->dev, "%s: cut 2.0 \n", __func__);
+		dev_warn(&state->chip->i2c->dev, "%s: cut 2.0 \n", __func__);
 		break;
 	case STID135_CUT2_1:
-		dev_warn(&state->base->i2c->dev, "%s: cut 2.1 \n", __func__);
+		dev_warn(&state->chip->i2c->dev, "%s: cut 2.1 \n", __func__);
 		break;
 	case STID135_CUT2_X_UNFUSED:
-		dev_warn(&state->base->i2c->dev, "%s: cut 2.x \n", __func__);
+		dev_warn(&state->chip->i2c->dev, "%s: cut 2.x \n", __func__);
 		break;
 	default:
-		dev_warn(&state->base->i2c->dev, "%s: cut ? \n", __func__);
+		dev_warn(&state->chip->i2c->dev, "%s: cut ? \n", __func__);
 		return -EINVAL;
 	}
-	if (state->base->ts_mode == TS_STFE) { //DT: This code is called
-		dev_warn(&state->base->i2c->dev, "%s: 8xTS to STFE mode init.\n", __func__);
+	if (state->chip->ts_mode == TS_STFE) { //DT: This code is called
+		dev_warn(&state->chip->i2c->dev, "%s: 8xTS to STFE mode init.\n", __func__);
 		// note that  FE_SAT_DEMOD_1 is not used in the code in the following call for this ts_mode
-		err |= fe_stid135_set_ts_parallel_serial(&state->base->ip, FE_SAT_DEMOD_1, FE_TS_PARALLEL_ON_TSOUT_0);
-		err |= fe_stid135_enable_stfe(&state->base->ip,FE_STFE_OUTPUT0);
-		err |= fe_stid135_set_stfe(&state->base->ip, FE_STFE_TAGGING_MERGING_MODE, FE_STFE_INPUT1 |
+		err |= fe_stid135_set_ts_parallel_serial(&state->chip->ip, FE_SAT_DEMOD_1, FE_TS_PARALLEL_ON_TSOUT_0);
+		err |= fe_stid135_enable_stfe(&state->chip->ip,FE_STFE_OUTPUT0);
+		err |= fe_stid135_set_stfe(&state->chip->ip, FE_STFE_TAGGING_MERGING_MODE, FE_STFE_INPUT1 |
 						FE_STFE_INPUT2 |FE_STFE_INPUT3 |FE_STFE_INPUT4| FE_STFE_INPUT5 |
 						FE_STFE_INPUT6 |FE_STFE_INPUT7 |FE_STFE_INPUT8 ,FE_STFE_OUTPUT0, 0xDE);
-	} else if (state->base->ts_mode == TS_8SER) { //DT: This code is not called
-		dev_warn(&state->base->i2c->dev, "%s: 8xTS serial mode init.\n", __func__);
+	} else if (state->chip->ts_mode == TS_8SER) { //DT: This code is not called
+		dev_warn(&state->chip->i2c->dev, "%s: 8xTS serial mode init.\n", __func__);
 		for(i=0;i<8;i++) {
-			err |= fe_stid135_set_ts_parallel_serial(&state->base->ip, i+1, FE_TS_SERIAL_CONT_CLOCK);
+			err |= fe_stid135_set_ts_parallel_serial(&state->chip->ip, i+1, FE_TS_SERIAL_CONT_CLOCK);
 			//err |= fe_stid135_set_maxllr_rate(state, i+1, 90);
 		}
 	} else { //DT: This code is called on TBS6903X?
-		dev_warn(&state->base->i2c->dev, "%s: 2xTS parallel mode init.\n", __func__);
-		err |= fe_stid135_set_ts_parallel_serial(&state->base->ip, FE_SAT_DEMOD_3, FE_TS_PARALLEL_PUNCT_CLOCK);
-		err |= fe_stid135_set_ts_parallel_serial(&state->base->ip, FE_SAT_DEMOD_1, FE_TS_PARALLEL_PUNCT_CLOCK);
+		dev_warn(&state->chip->i2c->dev, "%s: 2xTS parallel mode init.\n", __func__);
+		err |= fe_stid135_set_ts_parallel_serial(&state->chip->ip, FE_SAT_DEMOD_3, FE_TS_PARALLEL_PUNCT_CLOCK);
+		err |= fe_stid135_set_ts_parallel_serial(&state->chip->ip, FE_SAT_DEMOD_1, FE_TS_PARALLEL_PUNCT_CLOCK);
 	}
-	if (state->base->mode == 0) {
-		dev_warn(&state->base->i2c->dev, "%s: multiswitch mode init.\n", __func__);
+
+	if (state->chip->multiswitch_mode == 0) {
+		dev_warn(&state->chip->i2c->dev, "%s: multiswitch mode init.\n", __func__);
 		err |= fe_stid135_tuner_enable(p_params->handle_demod, AFE_TUNER1);
 		err |= fe_stid135_tuner_enable(p_params->handle_demod, AFE_TUNER2);
 		err |= fe_stid135_tuner_enable(p_params->handle_demod, AFE_TUNER3);
 		err |= fe_stid135_tuner_enable(p_params->handle_demod, AFE_TUNER4);
-		err |= fe_stid135_diseqc_init(&state->base->ip,AFE_TUNER1, FE_SAT_DISEQC_2_3_PWM);
-		err |= fe_stid135_diseqc_init(&state->base->ip,AFE_TUNER3, FE_SAT_DISEQC_2_3_PWM);
-		if(state->base->control_22k){ //202405 dtcheck; also needed for tbs6909x?
-			err |= fe_stid135_diseqc_init(&state->base->ip,AFE_TUNER2, FE_SAT_22KHZ_Continues);
-			err |= fe_stid135_diseqc_init(&state->base->ip,AFE_TUNER4, FE_SAT_22KHZ_Continues);
+		err |= fe_stid135_diseqc_init(&state->chip->ip,AFE_TUNER1, FE_SAT_DISEQC_2_3_PWM);
+		err |= fe_stid135_diseqc_init(&state->chip->ip,AFE_TUNER3, FE_SAT_DISEQC_2_3_PWM);
+		if(state->chip->control_22k){ //202405 dtcheck; also needed for tbs6909x?
+			err |= fe_stid135_diseqc_init(&state->chip->ip,AFE_TUNER2, FE_SAT_22KHZ_Continues);
+			err |= fe_stid135_diseqc_init(&state->chip->ip,AFE_TUNER4, FE_SAT_22KHZ_Continues);
 		}
 		else{
-			err |= fe_stid135_diseqc_init(&state->base->ip,AFE_TUNER2, FE_SAT_DISEQC_2_3_PWM);
-			err |= fe_stid135_diseqc_init(&state->base->ip,AFE_TUNER4, FE_SAT_DISEQC_2_3_PWM);
-		}
-		if (state->base->set_voltage) {
-			state->base->set_voltage(state->base->i2c, SEC_VOLTAGE_13, 0);
-			state->base->voltage_is_on[0] = 1;
-			state->base->set_voltage(state->base->i2c, SEC_VOLTAGE_13, 1);
-			state->base->voltage_is_on[1] = 1;
-			state->base->set_voltage(state->base->i2c, SEC_VOLTAGE_18, 2);
-			state->base->voltage_is_on[2] = 1;
-			state->base->set_voltage(state->base->i2c, SEC_VOLTAGE_18, 3);
-			state->base->voltage_is_on[3] = 1;
+			err |= fe_stid135_diseqc_init(&state->chip->ip,AFE_TUNER2, FE_SAT_DISEQC_2_3_PWM);
+			err |= fe_stid135_diseqc_init(&state->chip->ip,AFE_TUNER4, FE_SAT_DISEQC_2_3_PWM);
 		}
 	} else {
-		err |= fe_stid135_diseqc_init(&state->base->ip,AFE_TUNER1, FE_SAT_DISEQC_2_3_PWM);
-		err |= fe_stid135_diseqc_init(&state->base->ip,AFE_TUNER2, FE_SAT_DISEQC_2_3_PWM);
-		err |= fe_stid135_diseqc_init(&state->base->ip,AFE_TUNER3, FE_SAT_DISEQC_2_3_PWM);
-		err |= fe_stid135_diseqc_init(&state->base->ip,AFE_TUNER4, FE_SAT_DISEQC_2_3_PWM);
-		if (state->base->set_voltage) {
-			state->base->set_voltage(state->base->i2c, SEC_VOLTAGE_OFF, 0);
-			state->base->voltage_is_on[0] = 0;
-			state->base->set_voltage(state->base->i2c, SEC_VOLTAGE_OFF, 1);
-			state->base->voltage_is_on[1] = 0;
-			state->base->set_voltage(state->base->i2c, SEC_VOLTAGE_OFF, 2);
-			state->base->voltage_is_on[2] = 0;
-			state->base->set_voltage(state->base->i2c, SEC_VOLTAGE_OFF, 3);
-			state->base->voltage_is_on[3] = 0;
-		}
-
+		err |= fe_stid135_diseqc_init(&state->chip->ip,AFE_TUNER1, FE_SAT_DISEQC_2_3_PWM);
+		err |= fe_stid135_diseqc_init(&state->chip->ip,AFE_TUNER2, FE_SAT_DISEQC_2_3_PWM);
+		err |= fe_stid135_diseqc_init(&state->chip->ip,AFE_TUNER3, FE_SAT_DISEQC_2_3_PWM);
+		err |= fe_stid135_diseqc_init(&state->chip->ip,AFE_TUNER4, FE_SAT_DISEQC_2_3_PWM);
 	}
 ///////////////////*stvvglna*////////////////////////
-	if(state->base->vglna) { //for 6909x v2 version
-		dev_warn(&state->base->i2c->dev, "%s:Init STVVGLNA \n", __func__);
+	if(state->chip->vglna) { //for 6909x v2 version
+		dev_warn(&state->chip->i2c->dev, "%s:Init STVVGLNA \n", __func__);
 	VglnaIdString = "STVVGLNA";
 	pVGLNAInit.Chip = &VGLNAChip;
 
-	pVGLNAInit.Chip->pI2CHost	  =	state->base;
+	pVGLNAInit.Chip->pI2CHost	  =	state->chip;
 	pVGLNAInit.Chip->RepeaterHost = NULL;
 	pVGLNAInit.Chip->Repeater     = FALSE;
 	pVGLNAInit.Chip->I2cAddr      = 0xc8;
 	pVGLNAInit.NbDefVal = STVVGLNA_NBREGS;
 	strcpy((char *)pVGLNAInit.Chip->Name, VglnaIdString);
-	stvvglna_init(&pVGLNAInit, &vglna_handle);
-#ifdef PROC_REGISTERS
-	chip_init_proc(state, vglna_handle, "vglna0");
-#endif
+	stvvglna_init(&pVGLNAInit, &state->chip->ip.vglna_handles[0]);
 
-	stvvglna_set_standby(vglna_handle, vglna_mode);
-	dev_warn(&state->base->i2c->dev, "Initialized STVVGLNA 0 device\n");
+	stvvglna_set_standby(state->chip->ip.vglna_handles[0], vglna_mode);
+	dev_warn(&state->chip->i2c->dev, "Initialized STVVGLNA 0 device\n");
 
 	VglnaIdString = "STVVGLNA1";
 	pVGLNAInit1.Chip = &VGLNAChip;
 
-	pVGLNAInit1.Chip->pI2CHost	  =	state->base;
+	pVGLNAInit1.Chip->pI2CHost	  =	state->chip;
 	pVGLNAInit1.Chip->RepeaterHost = NULL;
 	pVGLNAInit1.Chip->Repeater     = FALSE;
 	pVGLNAInit1.Chip->I2cAddr      = 0xce;
 	pVGLNAInit1.NbDefVal = STVVGLNA_NBREGS;
 	strcpy((char *)pVGLNAInit1.Chip->Name, VglnaIdString);
-	stvvglna_init(&pVGLNAInit1, &vglna_handle1);
-#ifdef PROC_REGISTERS
-	chip_init_proc(state, vglna_handle, "vglna1");
-#endif
-	stvvglna_set_standby(vglna_handle1, vglna_mode);
-	dev_warn(&state->base->i2c->dev, "Initialized STVVGLNA 1 device\n");
+	stvvglna_init(&pVGLNAInit1, &state->chip->ip.vglna_handles[1]);
+	stvvglna_set_standby(state->chip->ip.vglna_handles[1], vglna_mode);
+	dev_warn(&state->chip->i2c->dev, "Initialized STVVGLNA 1 device\n");
 
 	VglnaIdString = "STVVGLNA2";
 	pVGLNAInit2.Chip = &VGLNAChip;
-	pVGLNAInit2.Chip->pI2CHost	  =	state->base;
+	pVGLNAInit2.Chip->pI2CHost	  =	state->chip;
 	pVGLNAInit2.Chip->RepeaterHost = NULL;
 	pVGLNAInit2.Chip->Repeater     = FALSE;
 	pVGLNAInit2.Chip->I2cAddr      = 0xcc;
 	pVGLNAInit2.NbDefVal = STVVGLNA_NBREGS;
 	strcpy((char *)pVGLNAInit2.Chip->Name, VglnaIdString);
-	stvvglna_init(&pVGLNAInit2, &vglna_handle2);
-#ifdef PROC_REGISTERS
-	chip_init_proc(state, vglna_handle, "vglna2");
-#endif
-
-	stvvglna_set_standby(vglna_handle2, vglna_mode);
-	dev_warn(&state->base->i2c->dev, "Initialized STVVGLNA 2 device\n");
+	stvvglna_init(&pVGLNAInit2, &state->chip->ip.vglna_handles[2]);
+	stvvglna_set_standby(state->chip->ip.vglna_handles[2], vglna_mode);
+	dev_warn(&state->chip->i2c->dev, "Initialized STVVGLNA 2 device\n");
 
 	VglnaIdString = "STVVGLNA3";
 	pVGLNAInit3.Chip = &VGLNAChip;
-	pVGLNAInit3.Chip->pI2CHost	  =	state->base;
+	pVGLNAInit3.Chip->pI2CHost	  =	state->chip;
 	pVGLNAInit3.Chip->RepeaterHost = NULL;
 	pVGLNAInit3.Chip->Repeater     = FALSE;
 	pVGLNAInit3.Chip->I2cAddr      = 0xca;
 	pVGLNAInit3.NbDefVal = STVVGLNA_NBREGS;
 	strcpy((char *)pVGLNAInit3.Chip->Name, VglnaIdString);
-	stvvglna_init(&pVGLNAInit3, &vglna_handle3);
-#ifdef PROC_REGISTERS
-	chip_init_proc(state, vglna_handle, "vglna3");
-#endif
+	stvvglna_init(&pVGLNAInit3, &state->chip->ip.vglna_handles[3]);
 
-	stvvglna_set_standby(vglna_handle3, vglna_mode);
-	dev_warn(&state->base->i2c->dev, "Initialized STVVGLNA 3 device\n");
+	stvvglna_set_standby(state->chip->ip.vglna_handles[3], vglna_mode);
+	dev_warn(&state->chip->i2c->dev, "Initialized STVVGLNA 3 device\n");
 	}
 	if (err != FE_LLA_NO_ERROR)
-		dev_err(&state->base->i2c->dev, "%s: setup error %d !\n", __func__, err);
+		dev_err(&state->chip->i2c->dev, "%s: setup error %d !\n", __func__, err);
 	return err != FE_LLA_NO_ERROR ? -1 : 0;
 }
+/*
+	Try to reserve a specific rf_in and tuner_combination, while releasing
+	or updating existing reserved resources
 
+	possible state at input for this frontend
+	-nothing reserved yet
+	-keep tuner and rf_in but change voltage/tone/diseqc
+	-keep tuner but switch to different rf_in
+	-change both tuner and rf_in
+ */
 
-static int stid135_select_rf_in_(struct stv* state, int rf_in)
-{
-	fe_lla_error_t err = FE_LLA_NO_ERROR;
-	dprintk("demod=%d rf_in=%d old=%d rf_in_selected=%d; use counts: %d old=%d\n", state->nr, rf_in, state->rf_in,
-					state->rf_in_selected, state->base->tuner_use_count[rf_in], state->base->tuner_use_count[state->rf_in]);
-	BUG_ON((state->rf_in < 0 || state->rf_in >= 4));
-	BUG_ON(rf_in < 0);
-	if(rf_in >= 4) {
-		dprintk("rf_in=%d out of range\n", rf_in);
-		return -EINVAL;
+/*
+	Reserves rf_in and tuner and release any existing rf_in and tuner reservation
+	by this particular demod. The result is one of
+	-reservation succeeded and this demod is now a master and should power on tuner and configure lnb
+	-reservation succeeded and this demod is now using the tuner and rf_in in slave mode, and both are ready for use
+	-reservation failed temporarily because some other demod is still configuring the tuner/rf_in, but
+	 the configuration in progress is otherwise correct; the caller should retry the reservation later
+	-reservation failed because of resource conflicts; retrying is useless
+
+	Returns -1 in case of error
+	bool will_be_master = true;
+	bool fatal_error=false;
+	bool temporary_error =false;
+
+	In case ic=NULL, this call is used to unreserve a resource
+
+ */
+static enum fe_reservation_result reserve_tuner_and_rf_in_(struct stv* state, struct fe_rf_input_control* ic) {
+	struct stv_chip_t* chip = state->chip;
+	struct stv_card_t* card = chip->card;
+	int chip_no = chip->chip_no;
+	int tuner_no = ic ? ic->rf_in : -1;
+	int rf_in = ic ? ic->rf_in : -1;
+	BUG_ON(ic && (tuner_no <0 || tuner_no >= sizeof(chip->tuners)/sizeof(chip->tuners[0])));
+	if(!card_is_locked(state)) {
+		state_dprintk("BUG: called without locking\n");
 	}
-	if(rf_in == state->rf_in && state->rf_in_selected) {
-		return 0;  //already active
+	//rf_in to reserve (could be on other chip)
+
+	struct stv_tuner_t* new_tuner = ic? &chip->tuners[tuner_no] : NULL;
+	struct stv_tuner_t* old_tuner = state->active_tuner;
+
+	struct stv_rf_in_t* new_rf_in = (rf_in >=0 && rf_in < 4) ? &card->rf_ins[rf_in] : NULL;
+	struct stv_rf_in_t* old_rf_in = (old_tuner && old_tuner->active_rf_in) ? old_tuner->active_rf_in: NULL;
+
+	//output decisions
+	bool must_be_master = ic && (ic->mode == FE_RESERVATION_MODE_MASTER);
+	bool will_be_master = ic && (ic->mode == FE_RESERVATION_MODE_MASTER ||
+															 ic->mode == FE_RESERVATION_MODE_MASTER_OR_SLAVE);
+	bool same_tuner = new_tuner == old_tuner;
+	bool same_rf_in = new_rf_in == old_rf_in;
+	//Check for bugs
+	if(old_tuner && ic && (old_tuner->reservation.owner != ic->owner)) {
+		state_dprintk("BUG: we should own old_tuner: %d !=%d\n", old_tuner->reservation.owner, ic->owner);
+		goto fatal_;
 	}
-	if(rf_in != state->rf_in && state->rf_in_selected) {
-		//change in rf_in
-		BUG_ON(state->base->tuner_use_count[state->rf_in] < 0 || state->base->tuner_use_count[state->rf_in] > 8 );
-		BUG_ON(state->base->tuner_use_count[rf_in] < 0 || state->base->tuner_use_count[rf_in] > 7 );
 
-		state->base->tuner_use_count[state->rf_in]--; //decrease use count for old tuner
+	if(old_rf_in && ic && (old_rf_in->reservation.owner != ic->owner)) {
+		state_dprintk("BUG: we should own old_tuner: %d !=%d\n", old_tuner->reservation.owner, ic->owner);
+		goto fatal_;
+	}
 
-		if(state->base->tuner_owner[state->rf_in] == state->nr) {
-			state->base->tuner_owner[state->rf_in] = -1; //release ownership of old tuner if we had it
-			dprintk("demod=%d: released tuner ownership of rf_in=%d; use_count=%d\n", state->nr, state->rf_in,
-							state->base->tuner_use_count[state->rf_in]);
-		}
+	//Check that no other application is using the resources that we need
+	if(new_tuner && new_tuner->reservation.use_count>0 && ic && new_tuner->reservation.owner != ic->owner) {
+		state_dprintk("tuner in use by other owner=%d use_count=%d\n", new_tuner->reservation.owner,
+									new_tuner->reservation.use_count);
+		goto fatal_;
+	}
 
-		//if no demod uses the old tuner anymore, put it to sleep
-		if(state->base->tuner_use_count[state->rf_in] == 0) {
+	if(new_rf_in && new_rf_in->reservation.use_count>0 && ic && new_rf_in->reservation.owner != ic->owner) {
+		state_dprintk("rf_in in use by other owner %d\n", new_tuner->reservation.owner);
+		goto fatal_;
+	}
 
-			dprintk("demod=%d: rf_in=%d disabling tone state->base=%p\n", state->nr, state->rf_in, state->base);
-			err = fe_stid135_set_22khz_cont(&state->base->ip, state->rf_in + 1, false);
-			dprintk("demod=%d: rf_in=%d disabling tone done state->base=%p\n", state->nr, state->rf_in, state->base);
-			if(state->base->set_voltage) {
-				dprintk("demod=%d: rf_in=%d disabling voltage state->base=%p\n", state->nr, state->rf_in, state->base);
-				state->base->set_voltage(state->base->i2c, SEC_VOLTAGE_OFF, state->rf_in);
-				state->base->voltage_is_on[state->rf_in] = 0;
-				dprintk("demod=%d: rf_in=%d disabling voltage done state->base=%p\n", state->nr, state->rf_in, state->base);
+	if(new_tuner) {
+		//check if the tuner that we need can be modified to what we need
+		if(new_tuner->reservation.use_count == 1 && same_tuner) {
+			//We have already reserved the tuner
+		} else  if(new_tuner->reservation.use_count > 0) {
+			//Our application owns the tuner; we can use it, but not control it
+			will_be_master = false;
+			if(must_be_master) {
+				if(ic->config_id > new_tuner->reservation.config_id) {
+					state_dprintk("can not yet become master because of other users: config_id=%d -> %d; use_count=%d\n",
+												new_tuner->reservation.config_id, ic->config_id,
+												new_tuner->reservation.use_count);
+					goto tempfail_;
+				} else {
+					state_dprintk("can NEVER become master because of other users: config_id=%d -> %d; use_count=%d\n",
+												new_tuner->reservation.config_id, ic->config_id,
+												new_tuner->reservation.use_count);
+				}
+				goto fatal_;
+			} else {
+				if(ic->config_id >  new_tuner->reservation.config_id) {
+					state_dprintk("cannot yet become slave: waiting for master config_id=%d -> %d; use_count=%d\n",
+												new_tuner->reservation.config_id, ic->config_id,
+												new_tuner->reservation.use_count);
+					goto tempfail_;
+				} else if(ic->config_id <  new_tuner->reservation.config_id)  {
+					state_dprintk("can NEVER become slave because of other users: config_id=%d -> %d; use_count=%d\n",
+												new_tuner->reservation.config_id, ic->config_id,
+												new_tuner->reservation.use_count);
+					goto fatal_;
+				}
 			}
-			dprintk("demod=%d: rf_in=%d Calling TunerStandby 0 state->base=%p\n", state->nr, state->rf_in, state->base);
-			err |= FE_STiD135_TunerStandby(state->base->ip.handle_demod, state->rf_in + 1, 0);
-			dprintk("demod=%d: rf_in=%d Calling TunerStandby done state->base=%p\n", state->nr, state->rf_in, state->base);
 		}
 	}
 
-	//increase use count of new tuner; do not take ownership until the next operation (voltage/tone/diseqc)
-	if(state->base->tuner_use_count[rf_in]++ == 0) {
-		dprintk("Enabling tuner demod=%d rf_in=%d\n", state->nr, rf_in);
-		err |= fe_stid135_tuner_enable(state->base->ip.handle_demod, rf_in + 1);
-		err |= fe_stid135_diseqc_init(&state->base->ip, rf_in + 1, FE_SAT_DISEQC_2_3_PWM);
+	if(new_rf_in) {
+		//check if the rf_in that we need can be modified to what we need
+		if(new_rf_in->reservation.use_count == 1 && same_rf_in) {
+			//We have already reserved the rf_in
+		} else  if(new_tuner->reservation.use_count > 0) {
+			//Our application owns the tuner; we can use it, but not control it
+			will_be_master = false;
+			if(must_be_master) {
+				state_dprintk("cannot become master because of other users config_id=%d -> %d; use_count=%d\n",
+											new_rf_in->reservation.config_id, ic->config_id,
+										new_rf_in->reservation.use_count);
+				goto fatal_;
+			} else {
+				if(ic->config_id >  new_tuner->reservation.config_id) {
+					state_dprintk("cannot yet become slave: waiting for master config_id=%d -> %d; use_count=%d\n",
+												new_rf_in->reservation.config_id, ic->config_id,
+												new_rf_in->reservation.use_count);
+					goto tempfail_;
+				} else if(ic->config_id <  new_rf_in->reservation.config_id) {
+					if(!state->legacy_rf_in) {
+						state_dprintk("can NEVER become slave because of other users: config_id=%d -> %d; use_count=%d\n",
+													new_rf_in->reservation.config_id, ic->config_id,
+													new_rf_in->reservation.use_count);
+						goto fatal_;
+					}
+				}
+			}
+			if(new_rf_in->reservation.config_id != ic->config_id) {
+				state_dprintk("slave rf_in is not yet ready %d!=%d\n", new_rf_in->reservation.config_id, ic->config_id);
+				goto tempfail_;
+			}
+		}
 	}
 
-	dprintk("Setting rf_mux_path demod=%d rf_in=%d\n", state->nr, rf_in);
-	err |= fe_stid135_set_rfmux_path(state, rf_in + 1);
-	state->rf_in = rf_in;
-	state->rf_in_selected = true;
-	return err;
+	if(new_tuner && !will_be_master && !state->legacy_rf_in && !new_rf_in->sec_configured) {
+		state_dprintk("cannot yet become slave because secondary equipment is not yet configured "
+									"config_id=%d -> %d; rf_in_use_count=%d\n",
+									new_rf_in->reservation.config_id, ic->config_id,
+									new_rf_in->reservation.use_count);
+		goto tempfail_;
+
+	}
+	//we can make the reservation, but need to release old resources
+
+	if(old_rf_in) {
+		if (!same_rf_in) {
+			state_dprintk("decrementing rf_in[%d].use_count=%d\n", old_rf_in->rf_in_no, old_rf_in->reservation.use_count);
+			--old_rf_in->reservation.use_count;
+		}
+		if(old_rf_in->reservation.use_count == 0) {
+			state_dprintk("releasing rf_in %d\n", old_rf_in->rf_in_no);
+			old_rf_in->reservation.owner = -1;
+			old_rf_in->reservation.config_id = -1;
+		}
+		if (old_rf_in->reservation.use_count <0) {
+			state_dprintk("BUG rf_in[%d].use_count=%d < 0\n", old_rf_in->rf_in_no, old_rf_in->reservation.use_count);
+		}
+	}
+
+	if(old_tuner) {
+		if(!same_tuner) {
+			state_dprintk("decrementing tuner[%d].use_count=%d\n", old_tuner->tuner_no, old_tuner->reservation.use_count);
+			--old_tuner->reservation.use_count;
+		}
+		if(old_tuner->reservation.use_count == 0) {
+			state_dprintk("releasing tuner[%d]\n", old_tuner->tuner_no);
+			old_tuner->reservation.owner = -1;
+			old_tuner->reservation.config_id = -1;
+		}
+		if (old_tuner->reservation.use_count <0) {
+			state_dprintk("BUG use_count=%d < 0\n", old_tuner->reservation.use_count);
+		}
+	}
+	if(!new_rf_in)
+		return FE_RESERVATION_RELEASED;
+
+	//make new rf_in reservation
+	if(new_rf_in && new_rf_in->reservation.owner>=0 && new_rf_in->reservation.owner != ic->owner) {
+		state_dprintk("BUG: unexpected owner %d %d\n", new_rf_in->reservation.owner, ic->owner);
+	}
+	if(will_be_master) {
+		new_rf_in->sec_configured = false; //prepare for configuration
+		if(new_rf_in->reservation.config_id >= 0 && new_rf_in->reservation.use_count > same_rf_in &&
+			 new_rf_in->reservation.config_id != ic->config_id) {
+			state_dprintk("BUG: unexpected config_id %d %d use)count=%d\n", new_rf_in->reservation.config_id, ic->config_id, new_rf_in->reservation.use_count);
+		}
+		new_rf_in->reservation.config_id = ic->config_id;
+	}
+	if(!same_rf_in)
+		new_rf_in->reservation.use_count++;
+	if (new_rf_in && new_rf_in->reservation.owner == -1) {
+		new_rf_in->reservation.owner = ic->owner;
+		new_rf_in->reservation.config_id = ic->config_id;
+	} else {
+		if (new_rf_in && new_rf_in->reservation.owner != ic->owner) {
+			state_dprintk("BUG: we are not owner\n");
+		}
+	}
+	state_dprintk("reserved rf_in=%d config_id=%d rf_in[%d].use_count=%d\n", rf_in, ic->config_id,
+								new_rf_in->rf_in_no,
+								new_rf_in->reservation.use_count);
+
+	//make tuner reservation
+	if(new_tuner->reservation.owner>=0 && new_tuner->reservation.owner != ic->owner) {
+		state_dprintk("BUG: unexpected owner %d %d\n", new_tuner->reservation.owner, ic->owner);
+	}
+	if(will_be_master) {
+		if(new_tuner->reservation.config_id>=0 && new_tuner->reservation.use_count > same_tuner &&
+			 new_tuner->reservation.config_id != ic->config_id) {
+			state_dprintk("BUG: unexpected config_id %d %d use_count=%d\n", new_tuner->reservation.config_id, ic->config_id, new_tuner->reservation.use_count);
+		}
+		new_tuner->reservation.config_id = ic->config_id;
+	}
+	if(!same_tuner)
+		new_tuner->reservation.use_count++;
+	if(new_tuner->reservation.owner <0) {
+		new_tuner->reservation.owner = ic->owner;
+		new_tuner->reservation.config_id = ic->config_id;
+	} else {
+		if(new_tuner->reservation.owner !=ic->owner) {
+			state_dprintk("BUG: we are not owner\n");
+		}
+	}
+	state_dprintk("reserved tuner=%d config_id=%d tuner[%d].use_count=%d\n", tuner_no, ic->config_id,
+								new_tuner->tuner_no, new_tuner->reservation.use_count);
+
+	if(will_be_master)
+		state_dprintk("Reservation MASTER chip_no=%d tuner_no=%d rf_in=%d\n",
+									chip_no, tuner_no, rf_in);
+	else
+		state_dprintk("Reservation SLAVE chip_no=%d tuner_no=%d rf_in=%d\n",
+									chip_no, tuner_no, rf_in);
+	return will_be_master ? FE_RESERVATION_MASTER : FE_RESERVATION_SLAVE;
+ tempfail_:
+	state_dprintk("Reservation SOFT failed chip_no=%d tuner_no=%d rf_in=%d\n",
+								chip_no, tuner_no, rf_in);
+	return FE_RESERVATION_RETRY;
+ fatal_:
+	state_dprintk("Reservation HARD failed chip_no=%d tuner_no=%d rf_in=%d\n",
+								chip_no, tuner_no, rf_in);
+	return FE_RESERVATION_FAILED;
+}
+
+static enum fe_reservation_result stid135_select_rf_in_(struct stv* state, struct fe_rf_input_control* ic)
+{
+	int err = FE_LLA_NO_ERROR;
+	struct stv_chip_t* chip = state->chip;
+	struct stv_card_t* card = chip->card;
+	struct stv_tuner_t* old_tuner = state->active_tuner;
+	struct stv_rf_in_t* old_rf_in = (old_tuner && old_tuner->active_rf_in) ? old_tuner->active_rf_in: NULL;
+	int new_rf_in_no = ic ? ic->rf_in : -1;
+	int old_rf_in_no = old_rf_in ? old_rf_in->rf_in_no : -1;
+	int old_config_id = old_tuner ? old_tuner->reservation.config_id : -1;
+	int new_tuner_no = new_rf_in_no;
+	int old_tuner_no = old_tuner ? old_tuner->tuner_no : -1;
+	struct stv_tuner_t* new_tuner = ic ? &state->chip->tuners[new_tuner_no] : NULL;
+	struct stv_rf_in_t* new_rf_in = (ic && new_rf_in_no >=0 && new_rf_in_no < 4) ? &card->rf_ins[new_rf_in_no] : NULL;
+	//for debugging
+	int new_tuner_use_count_before = new_tuner ? new_tuner->reservation.use_count : 0;
+	int new_rf_in_use_count_before = new_rf_in ? new_rf_in->reservation.use_count : 0;
+	if(new_rf_in_no == old_rf_in_no && new_tuner_no == old_tuner_no && ic && old_config_id == ic->config_id) {
+		state_dprintk("BUG: rf_in=%d AND tuner_no=%d unchanged\n", new_rf_in_no, new_tuner_no);
+		return FE_RESERVATION_UNCHANGED;
+	}
+
+	enum fe_reservation_result result = reserve_tuner_and_rf_in_(state, ic);
+	if(new_tuner) {
+		state_dprintk("owner=%d  config_id=%d old_rf_in=%d new_rf_in=%d; result=%s\n",
+									ic->owner, ic->config_id, old_rf_in_no, new_rf_in_no, reservation_result_str(result));
+
+		if(result != FE_RESERVATION_MASTER && result != FE_RESERVATION_SLAVE)
+			return result;
+	} else {
+
+		state_dprintk("old_rf_in=%d RELEASED; result=%s\n", old_rf_in_no, reservation_result_str(result));
+
+		if(result != FE_RESERVATION_RELEASED)
+			state_dprintk("BUG: result=%s\n", reservation_result_str(result));
+
+	}
+
+	if(old_rf_in && old_rf_in->reservation.use_count==0) {
+		struct stv_chip_t* chip = old_rf_in->controlling_chip;
+		state_dprintk("old rf_in no longer in use: rf_in=%d; TONE OFF\n", old_rf_in_no);
+		if(!chip || old_rf_in_no <0) {
+			state_dprintk("BUG: chip=%p old_rf_in_no=%d\n", chip, old_rf_in_no);
+		} else {
+			err = fe_stid135_set_22khz_cont(&chip->ip, old_rf_in_no + 1, false);
+			if(state->chip->set_voltage) {
+				state_dprintk("old rf_in no longer in use: rf_in=%d; VOLTAGE OFF\n", old_rf_in_no);
+				state->chip->set_voltage(chip->i2c, SEC_VOLTAGE_OFF, old_rf_in_no);
+			}
+			old_rf_in->voltage = SEC_VOLTAGE_OFF;
+			old_rf_in->tone = SEC_TONE_OFF;
+			old_rf_in->controlling_chip = NULL;
+			old_rf_in->sec_configured = false;
+		}
+	}
+	if(old_tuner && old_tuner->reservation.use_count==0) {
+		state_dprintk("old tuner no longer in use: rf_in=%d; TUNER STANDBY\n", old_tuner->tuner_no);
+		err |= FE_STiD135_TunerStandby(state->chip->ip.handle_demod, old_rf_in_no + 1, 0);
+		old_tuner->powered_on = false;
+		old_tuner->active_rf_in = false;
+		state->active_tuner = NULL;
+	}
+	if(!new_tuner) {
+		state->active_tuner = new_tuner;
+		state->is_master = false;
+		state->quattro_rf_in_mask = 0;
+		state->quattro_rf_in = 0;
+		state->legacy_rf_in = false;
+		return err;
+	}
+
+	state_dprintk("use_counts: tuner=%d/%d rf_in=%d/%d\n", new_tuner_use_count_before,
+								new_tuner->reservation.use_count,
+								new_rf_in_use_count_before, new_rf_in->reservation.use_count);
+
+	if(!new_tuner->powered_on)  {
+		if (result == FE_RESERVATION_SLAVE)
+			state_dprintk("slave reservation but tuner not yet powered on; powering on\n");
+		if(result == FE_RESERVATION_MASTER)
+			state_dprintk("master reservation but tuner not yet powered on; powering on\n");
+		state_dprintk("Enabling tuner %d\n", new_rf_in_no);
+		err |= fe_stid135_tuner_enable(state->chip->ip.handle_demod, new_rf_in_no + 1);
+#if 0
+		err |= fe_stid135_diseqc_init(&state->chip->ip, new_rf_in_no + 1, FE_SAT_DISEQC_2_3_PWM);
+#endif
+
+		new_tuner->powered_on = true;
+		if(new_tuner->tuner_no != new_rf_in_no) {
+			state_dprintk("BUG: tuner_no=%d != rf_in=%d\n", new_tuner->tuner_no, new_rf_in_no);
+		}
+		if(new_tuner->active_rf_in) {
+			state_dprintk("unexpected: already have active_rf_in=%p\n", active_rf_in);
+		} else {
+			new_tuner->active_rf_in = new_rf_in;
+			state_dprintk("set active_rf_in=%p\n", new_tuner->active_rf_in);
+		}
+	}
+
+	state->active_tuner = new_tuner;
+	if(!new_tuner->active_rf_in) {
+		if(result != FE_RESERVATION_MASTER) {
+			state_dprintk("BUG: tuner has no active_rf_in and we are not master\n");
+		}
+		new_tuner->active_rf_in = new_rf_in;
+	} else if (new_tuner->active_rf_in != new_rf_in) {
+		state_dprintk("BUG: active_rf_in=%d new_rf_in=%d\n", state->active_tuner->active_rf_in->rf_in_no, new_rf_in->rf_in_no);
+	}
+	state_dprintk("Setting rf_mux_path rf_in=%d (was %d)\n", new_rf_in_no, old_rf_in_no);
+
+	if(!new_rf_in->controlling_chip) {
+		int err1;
+		new_rf_in->controlling_chip = state->chip;
+		err |= (err1=fe_stid135_diseqc_init(&state->chip->ip, new_rf_in_no + 1, FE_SAT_DISEQC_2_3_PWM));
+		state_dprintk("Set controlling chip and initing diseqc err=%d\n", err1);
+		new_rf_in->tone = SEC_TONE_OFF;
+		new_rf_in->voltage = SEC_VOLTAGE_OFF;
+	}
+
+	err |= fe_stid135_set_rfmux_path(state, new_rf_in_no + 1);
+
+	state->is_master = (result == FE_RESERVATION_MASTER);
+	return result;
+}
+
+/*
+	select an rf_input and tuner if driver user did not call select_rf_input
+	needed to support legacy drivers that do not call stid135_select_rf_in_
+ */
+static int stid135_select_rf_in_legacy_(struct stv* state)
+{
+	int rf_in_no = state->fe.ops.info.default_rf_input;
+	enum fe_reservation_result result = FE_RESERVATION_FAILED;
+	if(!state->active_tuner || !state->active_tuner->active_rf_in) {
+		state_dprintk("starting active_tuner=%p active_rf_in=%p\n", state->active_tuner,
+									state->active_tuner ? state->active_tuner->active_rf_in : NULL);
+		state->legacy_rf_in = true;
+		if(state->chip->multiswitch_mode== FE_MULTISWITCH_MODE_QUATTRO) {
+			if(state->quattro_rf_in_mask !=3) {
+				state_dprintk("Quattro mode: no rf_in yet rf_in_no=%d rf_in_no_mask=%d\n",
+											state->quattro_rf_in,state->quattro_rf_in_mask);
+				return 0;
+			} else
+				rf_in_no = state->quattro_rf_in;
+		} else if (state->chip->multiswitch_mode== FE_MULTISWITCH_MODE_UNICABLE) {
+			rf_in_no = 3;
+		}
+		state_dprintk("rf_in_no=%d active_tuner=%p active_rf_in=%p\n", rf_in_no, state->active_tuner,
+									state->active_tuner ? state->active_tuner->active_rf_in : NULL);
+
+		struct fe_rf_input_control ic;
+		ic.owner = (pid_t)0xffffffff;
+		ic.config_id = 1;
+		ic.rf_in = rf_in_no;
+		state_dprintk("selecting legacy rf_in=%d\n", rf_in_no);
+		result = stid135_select_rf_in_(state, &ic);
+		return (result !=FE_RESERVATION_FAILED) ? -1 :0; /*Legacy is not clever enough for slave/master */
+	}
+	return 0;
 }
 
 static int stid135_init(struct dvb_frontend* fe)
 {
 	struct stv *state = fe->demodulator_priv;
-	dprintk("state->rf_in_selected=%d adapter=%d state->rf_in=%d\n", state->rf_in_selected, state->nr, state->rf_in);
+	state_dprintk("init\n");
 	return 0;
 }
 
 static void stid135_release(struct dvb_frontend* fe)
 {
 	struct stv *state = fe->demodulator_priv;
-	dev_dbg(&state->base->i2c->dev, "%s: demod %d\n", __func__, state->nr);
+	dev_dbg(&state->chip->i2c->dev, "%s: demod %d\n", __func__, state->nr);
 
-	state->base->count--;
-	if (state->base->count == 0) {
-		base_lock(state);
-#ifdef PROC_REGISTERS //todo: rewrite this code
-		chip_close_proc(state, "stid135");
-		chip_close_proc(state, "soc");
-		if(state->base->vglna) { //for 6909x v2 version
-			chip_close_proc(state, "vglna0");
-			chip_close_proc(state, "vglna1");
-			chip_close_proc(state, "vglna2");
-			chip_close_proc(state, "vglna3");
+	state->chip->use_count--;
+	if (state->chip->use_count == 0) {
+		chip_lock(state);
+		card_lock(state);
+		FE_STiD135_Term (&state->chip->ip);
+		state->chip->card->use_count--;
+		if(state->chip->card->use_count ==0) {
+			kobject_put(state->chip->card->sysfs_kobject);
+			list_del(&state->chip->card->stv_card_list);
+			kfree(state->chip->card);
 		}
-#endif
-		FE_STiD135_Term (&state->base->ip);
-		base_unlock(state);
-		list_del(&state->base->stvlist);
-		kfree(state->base);
+		card_unlock(state);
+		chip_unlock(state);
+		stv_chip_release_sysfs(state->chip);
+		list_del(&state->chip->stv_chip_list);
+		kfree(state->chip);
 	}
+	kobject_put(state->sysfs_kobject);
+	list_del(&state->stv_demod_list);
 	kfree(state);
 }
 
@@ -613,7 +992,7 @@ static bool pls_search_list(struct dvb_frontend* fe)
 		//write_reg(state, RSTV0910_P2_DMDISTATE + state->regoff, 0x15);
 		//write_reg(state, RSTV0910_P2_DMDISTATE + state->regoff, 0x18);
 		msleep(timeout? timeout: 100); //0 means: use default
-		error =ChipGetField(state->base->ip.handle_demod,
+		error = (fe_lla_error_t) ChipGetField(state->chip->ip.handle_demod,
 												FLD_FC8CODEW_DVBSX_PKTDELIN_PDELSTATUS1_PKTDELIN_LOCK(state->nr+1), &pktdelin);
 		if(error)
 			dprintk("FAILED; error=%d\n", error);
@@ -696,7 +1075,7 @@ static bool pls_search_range(struct dvb_frontend* fe)
 		//write_reg(state, RSTV0910_P2_DMDISTATE + state->regoff, 0x18);
 		msleep(timeout? timeout: 25); //0 means: use default
 
-		error =ChipGetField(state->base->ip.handle_demod,
+		error = (fe_lla_error_t) ChipGetField(state->chip->ip.handle_demod,
 												FLD_FC8CODEW_DVBSX_PKTDELIN_PDELSTATUS1_PKTDELIN_LOCK(state->nr+1), &pktdelin);
 		if(error)
 			dprintk("FAILED; error=%d\n", error);
@@ -728,20 +1107,24 @@ static bool pls_search_range(struct dvb_frontend* fe)
 }
 
 
-static int stid135_set_rf_input(struct dvb_frontend* fe, s32 rf_in)
+static int stid135_set_rf_input(struct dvb_frontend* fe, struct fe_rf_input_control* ic)
 {
-	int ret;
 	struct stv *state = fe->demodulator_priv;
-	base_lock(state);
-	ret = stid135_select_rf_in_(state, rf_in);
-	base_unlock(state);
-	return ret;
+	enum fe_reservation_result result = FE_RESERVATION_FAILED;
+	chip_lock(state);
+	card_lock(state);
+	state->legacy_rf_in = ic->config_id <0;
+	result = stid135_select_rf_in_(state, ic);
+	card_unlock(state);
+	chip_unlock(state);
+	return result;
 }
 
 
 static int stid135_set_parameters(struct dvb_frontend* fe)
 {
 	struct stv *state = fe->demodulator_priv;
+	int rf_in = active_rf_in_no(state);
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
 	fe_lla_error_t err = FE_LLA_NO_ERROR;
 	fe_lla_error_t error1 = FE_LLA_NO_ERROR;
@@ -757,7 +1140,7 @@ static int stid135_set_parameters(struct dvb_frontend* fe)
 					state->nr+1,
 					p->delivery_system, p->modulation, p->frequency,
 					p->symbol_rate, p->inversion, p->stream_id);
-	dev_dbg(&state->base->i2c->dev,
+	dev_dbg(&state->chip->i2c->dev,
 			"delivery_system=%u modulation=%u frequency=%u symbol_rate=%u inversion=%u stream_id=%d\n",
 			p->delivery_system, p->modulation, p->frequency,
 					p->symbol_rate, p->inversion, p->stream_id);
@@ -849,7 +1232,7 @@ static int stid135_set_parameters(struct dvb_frontend* fe)
 	search_params.iq_inversion	= FE_SAT_IQ_AUTO;
 	search_params.tuner_index_jump	= 0; // ok with narrow band signal
 	//the following is in Mhz despite what the name suggests
-	err = FE_STiD135_GetLoFreqHz(&state->base->ip, &(search_params.lo_frequency));
+	err = FE_STiD135_GetLoFreqHz(&state->chip->ip, &(search_params.lo_frequency));
 	vprintk("[%d] lo_frequency = %d\n", state->nr+1, search_params.lo_frequency); //1 550 000kHz
 	search_params.lo_frequency *= 1000000; ///in Hz
 	if(search_params.search_algo == FE_SAT_BLIND_SEARCH ||
@@ -864,9 +1247,10 @@ static int stid135_set_parameters(struct dvb_frontend* fe)
 	if(reserve_llr_for_symbolrate(state, p->symbol_rate) == FE_LLA_OUT_OF_LLR)
 		return FE_LLA_OUT_OF_LLR;
 #endif
-	dev_dbg(&state->base->i2c->dev, "%s: demod %d + tuner %d\n", __func__, state->nr, state->rf_in);
+	dev_dbg(&state->chip->i2c->dev, "%s: demod %d + tuner %d\n", __func__, state->nr, rf_in);
 	vprintk("[%d] demod %d + tuner %d\n",
-					state->nr+1,state->nr, state->rf_in);
+					state->nr+1,state->nr, rf_in);
+#if 0
 	if(p->rf_in < 0  || !p->rf_in_valid)  {
 		p->rf_in = state->rf_in_selected ? state->rf_in : state->fe.ops.info.default_rf_input;
 		p->rf_in_valid = true;
@@ -876,11 +1260,14 @@ static int stid135_set_parameters(struct dvb_frontend* fe)
 	dprintk("demod=%d: Setting rf_in: %d\n", state->nr, p->rf_in);
 	err |= stid135_select_rf_in_(state, p->rf_in);
 	if (err != FE_LLA_NO_ERROR)
-		dev_err(&state->base->i2c->dev, "%s: fe_stid135_set_rfmux_math error %d !\n", __func__, err);
+		dev_err(&state->chip->i2c->dev, "%s: fe_stid135_set_rfmux_math error %d !\n", __func__, err);
+#else
+	err |= stid135_select_rf_in_legacy_(state);
+#endif
 	if(state->modcode_filter){
 
 		/*Deep Thought: keeping filters ensures that  a demod does not cause a storm of data when demodulation is
-			failing (e.g., ran fade) This could cause other demods to fail as well as they share resources.
+			failing (e.g., rain fade) This could cause other demods to fail as well as they share resources.
 			filter_forbidden_modcodes may be better
 
 				There could be reasons why  fe_stid135_reset_modcodes_filter is still needed, e.g., when  too strict filters
@@ -888,7 +1275,7 @@ static int stid135_set_parameters(struct dvb_frontend* fe)
 		*/
 		err |= fe_stid135_reset_modcodes_filter(state);
 		if (err != FE_LLA_NO_ERROR) {
-			dev_err(&state->base->i2c->dev, "%s: fe_stid135_reset_modcodes_filter error %d !\n", __func__, err);
+			dev_err(&state->chip->i2c->dev, "%s: fe_stid135_reset_modcodes_filter error %d !\n", __func__, err);
 			vprintk("[%d]: fe_stid135_reset_modcodes_filter error %d !\n", state->nr+1, err);
 		}
 	}
@@ -897,7 +1284,7 @@ static int stid135_set_parameters(struct dvb_frontend* fe)
 	if(error1!=0)
 		dprintk("demod=%d: fe_stid135_search returned error=%d\n", state->nr, error1);
 	if (err != FE_LLA_NO_ERROR) {
-		dev_err(&state->base->i2c->dev, "%s: fe_stid135_search error %d !\n", __func__, err);
+		dev_err(&state->chip->i2c->dev, "%s: fe_stid135_search error %d !\n", __func__, err);
 		dprintk("demod=%d: fe_stid135_search error %d !\n", state->nr, err);
 		return -1;
 	}
@@ -941,7 +1328,7 @@ static int stid135_set_parameters(struct dvb_frontend* fe)
 
 		vprintk("[%d] set_parameters: error=%d locked=%d\n", state->nr+1, err, state->signal_info.has_lock);
 
-		dev_dbg(&state->base->i2c->dev, "%s: locked !\n", __func__);
+		dev_dbg(&state->chip->i2c->dev, "%s: locked !\n", __func__);
 		//set maxllr,when the  demod locked ,allocation of resources
 		//err |= fe_stid135_set_maxllr_rate(state, 180);
 		if(get_current_llr(state, &current_llr) == FE_LLA_OUT_OF_LLR) {
@@ -956,14 +1343,14 @@ static int stid135_set_parameters(struct dvb_frontend* fe)
 		//for tbs6912
 		state->newTP = true;
 		state->loops = 15;
-		if(state->base->set_TSsampling)
-			state->base->set_TSsampling(state->base->i2c,state->nr/2,4);   //for tbs6912
+		if(state->chip->set_TSsampling)
+			state->chip->set_TSsampling(state->chip->i2c,state->nr/2,4);   //for tbs6912
 	} else {
 		//state->signal_info.has_signal = 1;
 		//state->signal_info.has_lock = 0;
 		err |= fe_stid135_get_band_power_demod_not_locked(state, &rf_power);
-		dev_dbg(&state->base->i2c->dev, "%s: not locked, band rf_power %d dBm ! demod=%d tuner=%d\n",
-						 __func__, rf_power / 1000, state->nr, state->rf_in);
+		dev_dbg(&state->chip->i2c->dev, "%s: not locked, band rf_power %d dBm ! demod=%d tuner=%d\n",
+						 __func__, rf_power / 1000, state->nr, rf_in);
 	}
 	vprintk("[%d] set_parameters: error=%d locked=%d\n", state->nr+1, err, state->signal_info.has_lock);
 
@@ -973,11 +1360,11 @@ static int stid135_set_parameters(struct dvb_frontend* fe)
         u32 j = 0;
 				u32 i;
 				struct fe_sat_dvbs2_mode_t modcode_mask[FE_SAT_MODCODE_UNKNOWN*4];
-        dev_dbg(&state->base->i2c->dev, "%s: set Modcode mask %x!\n", __func__, p->modcode);
+        dev_dbg(&state->chip->i2c->dev, "%s: set Modcode mask %x!\n", __func__, p->modcode);
         m >>= 1;
         for (i=FE_SAT_QPSK_14; i < FE_SAT_MODCODE_UNKNOWN; i ++) {
             if (m & 1) {
-                dev_dbg(&state->base->i2c->dev, "%s: Modcode %02x enabled!\n", __func__, i);
+                dev_dbg(&state->chip->i2c->dev, "%s: Modcode %02x enabled!\n", __func__, i);
                 modcode_mask[j].mod_code = i;
                 modcode_mask[j].pilots = FE_SAT_PILOTS_OFF;
                 modcode_mask[j].frame_length = FE_SAT_NORMAL_FRAME;
@@ -997,16 +1384,16 @@ static int stid135_set_parameters(struct dvb_frontend* fe)
 				state->modcode_filter = true;
         err |= fe_stid135_set_modcodes_filter(state, modcode_mask, j);
         if (err != FE_LLA_NO_ERROR)
-            dev_err(&state->base->i2c->dev, "%s: fe_stid135_set_modcodes_filter error %d !\n", __func__, err);
+            dev_err(&state->chip->i2c->dev, "%s: fe_stid135_set_modcodes_filter error %d !\n", __func__, err);
 	}
 
 	/* Set ISI after search */
 	if (p->stream_id != NO_STREAM_ID_FILTER) {
-		dev_warn(&state->base->i2c->dev, "%s: set ISI %d ! demod=%d tuner=%d\n", __func__, p->stream_id & 0xFF,
-						 state->nr, state->rf_in);
+		dev_warn(&state->chip->i2c->dev, "%s: set ISI %d ! demod=%d tuner=%d\n", __func__, p->stream_id & 0xFF,
+						 state->nr, rf_in);
 		err |= fe_stid135_set_mis_filtering(state, TRUE, p->stream_id & 0xFF, 0xFF);
 	} else {
-		dev_dbg(&state->base->i2c->dev, "%s: disable ISI filtering !\n", __func__);
+		dev_dbg(&state->chip->i2c->dev, "%s: disable ISI filtering !\n", __func__);
 		err |= fe_stid135_set_mis_filtering(state, FALSE, 0, 0xFF);
 	}
 	if(p->stream_id == NO_STREAM_ID_FILTER) {
@@ -1023,7 +1410,7 @@ static int stid135_set_parameters(struct dvb_frontend* fe)
 	if(	state->signal_info.pls_code ==0)
 			state->signal_info.pls_code = 1;
 	if (err != FE_LLA_NO_ERROR)
-		dev_err(&state->base->i2c->dev, "%s: fe_stid135_set_mis_filtering error %d !\n", __func__, err);
+		dev_err(&state->chip->i2c->dev, "%s: fe_stid135_set_mis_filtering error %d !\n", __func__, err);
 
 	return err != FE_LLA_NO_ERROR ? -1 : 0;
 }
@@ -1113,7 +1500,7 @@ static int stid135_read_status_(struct dvb_frontend* fe, enum fe_status *status)
 	}
 	//dprintk("set *status=0x%x\n", *status);
 	if (err != FE_LLA_NO_ERROR) {
-		dev_err(&state->base->i2c->dev, "fe_stid135_get_lock_status error\n");
+		dev_err(&state->chip->i2c->dev, "fe_stid135_get_lock_status error\n");
 		return -EIO;
 	}
 
@@ -1124,7 +1511,7 @@ static int stid135_read_status_(struct dvb_frontend* fe, enum fe_status *status)
 		err = fe_stid135_get_band_power_demod_not_locked(state,  &state->signal_info.power);
 		// if unlocked, set to lowest resource..
 		if (err != FE_LLA_NO_ERROR) {
-			dev_err(&state->base->i2c->dev, "fe_stid135_get_band_power_demod_not_locked error\n");
+			dev_err(&state->chip->i2c->dev, "fe_stid135_get_band_power_demod_not_locked error\n");
 			dprintk("read status=%d\n", *status);
 			return -EIO;
 		}
@@ -1148,7 +1535,7 @@ static int stid135_read_status_(struct dvb_frontend* fe, enum fe_status *status)
 
 	if (err != FE_LLA_NO_ERROR) {
 		dprintk("fe_stid135_get_signal_quality err=%d\n", err); //7 means ST_ERROR_INVALID_HANDLE FE_LLA_INVALID_HANDLE
-		dev_err(&state->base->i2c->dev, "fe_stid135_get_signal_quality error\n");
+		dev_err(&state->chip->i2c->dev, "fe_stid135_get_signal_quality error\n");
 		dprintk("read status=%d\n", *status);
 		return -EIO;
 	}
@@ -1176,7 +1563,7 @@ static int stid135_read_status_(struct dvb_frontend* fe, enum fe_status *status)
 	p->pre_bit_count.stat[0].uvalue = 1e7;
 
 	if (err != FE_LLA_NO_ERROR)
-		dev_warn(&state->base->i2c->dev, "%s: fe_stid135_filter_forbidden_modcodes error %d !\n", __func__, err);
+		dev_warn(&state->chip->i2c->dev, "%s: fe_stid135_filter_forbidden_modcodes error %d !\n", __func__, err);
 
 	//update isi list
 	if(state->mis_mode) {
@@ -1242,12 +1629,12 @@ static int stid135_read_status_(struct dvb_frontend* fe, enum fe_status *status)
 	vprintk("READ stream_id=0x%x isi=0x%x\n",p->stream_id, state->signal_info.isi);
 
 	//for the tbs6912 ts setting
-	if((state->base->set_TSparam)&&(state->newTP)) {
-		speed = state->base->set_TSparam(state->base->i2c,state->nr/2,4,0);
+	if((state->chip->set_TSparam)&&(state->newTP)) {
+		speed = state->chip->set_TSparam(state->chip->i2c,state->nr/2,4,0);
 		if(!state->bit_rate)
 			state->bit_rate = speed;
 		if((((speed-state->bit_rate)<160)&&((speed-state->bit_rate)>3))||(state->loops==0)) {
-			state->base->set_TSparam(state->base->i2c,state->nr/2,4,1);
+			state->chip->set_TSparam(state->chip->i2c,state->nr/2,4,1);
 			state->newTP = false;
 			state->bit_rate  = 0;
 		}
@@ -1265,7 +1652,7 @@ static int stid135_read_status(struct dvb_frontend* fe, enum fe_status *status)
 {
 	struct stv *state = fe->demodulator_priv;
 	int ret = 0;
-	if (!base_trylock(state)) {
+	if (!card_trylock(state)) {
 		if (state->signal_info.has_viterbi) {//XX: official driver tests for has_sync?
 			*status |= FE_HAS_SIGNAL | FE_HAS_CARRIER
 				| FE_HAS_VITERBI | FE_HAS_SYNC | FE_HAS_LOCK;
@@ -1273,10 +1660,35 @@ static int stid135_read_status(struct dvb_frontend* fe, enum fe_status *status)
 		return 0;
 	}
 	ret = stid135_read_status_(fe, status);
-	base_unlock(state);
+	card_unlock(state);
 	return ret;
 }
 
+static int stid135_set_sec_ready_(struct dvb_frontend* fe)
+{
+	struct stv *state = fe->demodulator_priv;
+	//	int err=0;
+	struct stv_rf_in_t* rf_in = active_rf_in(state);
+	if(!rf_in) {
+		state_dprintk("BUG active_rf_in==NULL\n");
+		return -1;
+	}
+	state_dprintk("Marking rf_in as configured old=%d\n", rf_in->sec_configured);
+	card_lock(state);
+	rf_in->sec_configured = true; //we assume that caller has waited long enough
+	card_unlock(state);
+	return 0;
+}
+
+static int stid135_set_sec_ready(struct dvb_frontend* fe)
+{
+	int ret=0;
+	struct stv *state = fe->demodulator_priv;
+	chip_lock(state);
+	ret = stid135_set_sec_ready_(fe);
+	chip_unlock(state);
+	return ret;
+}
 
 static int stid135_tune_(struct dvb_frontend* fe, bool re_tune,
 		unsigned int mode_flags,
@@ -1284,6 +1696,12 @@ static int stid135_tune_(struct dvb_frontend* fe, bool re_tune,
 {
 	struct stv *state = fe->demodulator_priv;
 	int r;
+	struct stv_rf_in_t* rf_in = active_rf_in(state);
+	if(!rf_in) {
+		state_dprintk("BUG active_rf_in==NULL\n");
+		return -1;
+	}
+	stid135_set_sec_ready_(fe);
 	dprintk("demod=%d re_tune=%d\n", state->nr, re_tune);
 	if (re_tune) {
 		state->signal_info.out_of_llr = false;
@@ -1340,17 +1758,24 @@ static int stid135_tune(struct dvb_frontend* fe, bool re_tune,
 {
 	struct stv *state = fe->demodulator_priv;
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
-	int r;
-	base_lock(state);
-	r = stid135_tune_(fe, re_tune, mode_flags, delay, status);
+	int err=0;
+	chip_lock(state);
+	err =stid135_select_rf_in_legacy_(state);
+	if(err !=0) {
+		state_dprintk("rf_in=NULL\n");
+		chip_unlock(state);
+		return err;
+	}
+
+	err = stid135_tune_(fe, re_tune, mode_flags, delay, status);
 	if(/*state->signal_info.has_carrier &&*/ p->constellation.num_samples>0) {
 		int max_num_samples = state->signal_info.symbol_rate /5 ; //we spend max 500 ms on this
 		if(max_num_samples > 1024)
 			max_num_samples = 1024; //also set an upper limit which should be fast enough
-		r = stid135_constellation_start_(fe, &p->constellation, max_num_samples);
+		err|= stid135_constellation_start_(fe, &p->constellation, max_num_samples);
 	}
-	base_unlock(state);
-	return r;
+	chip_unlock(state);
+	return err;
 }
 
 
@@ -1361,66 +1786,85 @@ static enum dvbfe_algo stid135_get_algo(struct dvb_frontend* fe)
 
 static int stid135_set_voltage(struct dvb_frontend* fe, enum fe_sec_voltage voltage)
 {
+
 	struct stv *state = fe->demodulator_priv;
-	dprintk("demod=%d rf=%d mode=%d voltage=%d", state->nr, state->rf_in,  state->base->mode, voltage);
-	//dump_stack();
-	if (state->base->mode == 0) { //legacy: 1 band per input @todo: fix this
-		if (voltage == SEC_VOLTAGE_18)
-			state->rf_in |= 2;
-		else
-			state->rf_in &= ~2;
-		return 0;
+	int err=0;
+	state_dprintk("mode=%d voltage=%d\n", state->chip->multiswitch_mode, voltage);
+	struct stv_rf_in_t* rf_in = active_rf_in(state);
+	struct stv_tuner_t* tuner = state->active_tuner;
+	if(state->chip->multiswitch_mode== FE_MULTISWITCH_MODE_QUATTRO) {
+		if(!(state->quattro_rf_in_mask &2)) {
+			state->quattro_rf_in_mask |= 2;
+			if (voltage == SEC_VOLTAGE_18) {
+				state->quattro_rf_in |= 2;
+			}
+			else
+				state->quattro_rf_in &= ~2;
+		}
+		state_dprintk("Quattro mode: voltage=%d mask=%d\n", voltage, state->quattro_rf_in_mask);
 	}
 
-	if(state->rf_in <0) {
-		dprintk("rf_in not set yet\n");
+	if (state->chip->set_voltage && (!tuner || ! rf_in)) {//@todo: locking maybe not needed
+		//for older applications, which do not call FE_SET_RF_INPUT
+		state_dprintk("before lock\n");
+		card_lock(state); //DeepThought: maybe not needed (as it does not use stid135 chips)
+		state_dprintk("after lock\n");
+		err |= stid135_select_rf_in_legacy_(state);
+		state_dprintk("before unlock err=%d\n", err);
+		card_unlock(state);
+		state_dprintk("after unlock\n");
+		rf_in = active_rf_in(state);
+		tuner = state->active_tuner;
+	}
+
+	if(!rf_in) {
+		state_dprintk("BUG No active_rf_in set\n");
+		return -EPERM;
+	}
+
+	if(!tuner) {
+		state_dprintk("BUG No active_tuner set\n");
 		return -EPERM;
 	}
 
 	/*
 		when multiple adapters use the same tuner, only one can change voltage, send tones, diseqc etc
 		This is the tuner_owner. tuner_owner=-1 means no owner.
-		We ignore any request to change voltage unless tuner_owner== state->nr or
-	 */
-	if(state->base->tuner_owner[state->rf_in] == -1) {
-		//take ownership
-		state->base->tuner_owner[state->rf_in] = state->nr;
-		dprintk("demod=%d: took tuner ownership of rf_in=%d; use_count=%d\n", state->nr, state->rf_in,
-						state->base->tuner_use_count[state->rf_in]);
-	}
-
-
-	if(state->base->tuner_owner[state->rf_in] != state->nr) {
-		dprintk("demod=%d rf_in=%d DISALLOW voltage=%d tuner_use_count=%d owner=%d\n",
-						state->nr, state->rf_in, voltage,
-						state->base->tuner_use_count[state->rf_in],
-						state->base->tuner_owner[state->rf_in]);
-		return -EPERM;
-	}
-	if(state->base->tuner_use_count[state->rf_in] > 1 && voltage == SEC_VOLTAGE_OFF) {
-		dprintk("demod=%d rf_in=%d IGNORE voltage=OFF tuner_use_count=%d owner=%d\n",
-						state->nr, state->rf_in,
-						state->base->tuner_use_count[state->rf_in],
-						state->base->tuner_owner[state->rf_in]);
+		We ignore any request to change voltage for all but one adapter, i.e., the master adapter
+	*/
+	if(! state->is_master) {
+		if(!rf_in) {
+			state_dprintk("Skipping set_voltage=%d; no active rf_in\n", voltage);
+			return -EPERM;
+		}
+		if(rf_in->voltage != voltage) {
+			state_dprintk("Skipping set_voltage=%d; not master and current voltage=%d\n", voltage, rf_in->voltage);
+			return voltage == SEC_VOLTAGE_OFF ? 0: -1;
+		}
+		state_dprintk("Skipping set_voltage=%d; not master, but voltage ok\n", voltage);
 		return 0;
 	}
 
-	if (state->base->set_voltage) {//official driver does not use mutex
-		int voltage_was_on = state->base->voltage_is_on[state->rf_in];
-		int voltage_is_on = (voltage != SEC_VOLTAGE_OFF);
-		base_lock(state); //DeepThought: this performs multiple i2c calls and needs to be protected
-		dprintk("demod=%d rf_in=%d calling state->base->set_voltage i2c=%p voltage=%d on=%d/%d "
-						"tune_use_count=%d owner=%d\n",
-						state->nr, state->rf_in,
-						state->base->i2c, voltage, voltage_was_on, voltage_is_on,
-						state->base->tuner_use_count[state->rf_in],
-						state->base->tuner_owner[state->rf_in]);
-		stid135_select_rf_in_(state, state->rf_in);
-		state->base->set_voltage(state->base->i2c, voltage, state->rf_in);
-		state->base->voltage_is_on[state->rf_in] = voltage_is_on;
-		base_unlock(state);
-		dprintk("demod=%d: set_voltage done: rf_in=%d; use_count=%d\n", state->nr, state->rf_in,
-						state->base->tuner_use_count[state->rf_in]);
+	if(state->chip->set_voltage) {
+		int old_voltage = rf_in->voltage;
+		bool voltage_was_on = (old_voltage != SEC_VOLTAGE_OFF);
+		bool voltage_is_on = (voltage != SEC_VOLTAGE_OFF);
+		card_lock(state); //DeepThought: maybe not needed (as it does not use stid135 chips)
+		if(rf_in->reservation.use_count >1) {
+			state_dprintk("SKIPPING set_voltage voltage=%d on=%d/%d "
+										"tuner_use_count=%d rf_in_use_count=%d owner=%d\n", voltage, voltage_was_on, voltage_is_on,
+										tuner->reservation.use_count, rf_in->reservation.use_count,
+										tuner->reservation.owner);
+		} else {
+			state_dprintk("calling set_voltage voltage=%d on=%d/%d "
+										"tuner_use_count=%d rf_in_use_count=%d owner=%d\n", voltage, voltage_was_on, voltage_is_on,
+										tuner->reservation.use_count, rf_in->reservation.use_count,
+										tuner->reservation.owner);
+			state->chip->set_voltage(state->chip->i2c, voltage, rf_in->rf_in_no);
+			rf_in->voltage = voltage;
+		}
+		card_unlock(state);
+		state_dprintk("set_voltage done: rf_in=%d\n", rf_in->rf_in_no);
 
 	}
 	return 0;
@@ -1428,115 +1872,154 @@ static int stid135_set_voltage(struct dvb_frontend* fe, enum fe_sec_voltage volt
 
 static int stid135_set_tone(struct dvb_frontend* fe, enum fe_sec_tone_mode tone)
 {
+
 	struct stv *state = fe->demodulator_priv;
-	fe_lla_error_t err = FE_LLA_NO_ERROR;
-	dprintk("demod=%d rf=%d mode=%d tone=%d", state->nr, state->rf_in,  state->base->mode, tone);
-	if(state->base->mode == 0) {
-		if (tone == SEC_TONE_ON)
-			state->rf_in |= 1;
-		else
-			state->rf_in &= ~1;
-		return 0;
+	int err=0;
+	state_dprintk("mode=%d tone=%d", state->chip->multiswitch_mode, tone);
+	struct stv_rf_in_t* rf_in = active_rf_in(state);
+	struct stv_tuner_t* tuner = state->active_tuner;
+
+	if(state->chip->multiswitch_mode== FE_MULTISWITCH_MODE_QUATTRO) {
+		if(!(state->quattro_rf_in_mask &1)) {
+			state->quattro_rf_in_mask |= 1;
+			if (tone == SEC_TONE_ON) {
+				state->quattro_rf_in |= 1;
+			}
+			else
+				state->quattro_rf_in &= ~1;
+		}
+		state_dprintk("Quattro mode: tone=%d mask=%d\n", tone, state->quattro_rf_in_mask);
 	}
 
-	if(state->rf_in <0) {
-		dprintk("dmod=d%d: rf_in not set yet\n", state->nr);
+	if ((!tuner || ! rf_in)) {//@todo: locking maybe not needed
+		//for older applications, which do not call FE_SET_RF_INPUT
+		chip_lock(state);
+		card_lock(state); //DeepThought: maybe not needed (as it does not use stid135 chips)
+		err |= stid135_select_rf_in_legacy_(state);
+		card_unlock(state);
+		chip_unlock(state);
+		rf_in = active_rf_in(state);
+		tuner = state->active_tuner;
+	}
+
+	if(!rf_in) {
+		state_dprintk("BUG No active_rf_in set\n");
 		return -EPERM;
 	}
 
-	if(state->base->control_22k==false)   //for 6916 demod1 ,disable the 22k function.
-		return 0;
+	if(!tuner) {
+		state_dprintk("BUG No active_tuner set\n");
+		return -EPERM;
+	}
 
 	/*
 		when multiple adapters use the same tuner, only one can change voltage, send tones, diseqc etc
 		This is the tuner_owner. tuner_owner=-1 means no owner.
-		We ignore any request to change voltage unless tuner_owner== state->nr
-	 */
-	if(state->base->tuner_owner[state->rf_in] == -1) {
-		//take ownership
-		state->base->tuner_owner[state->rf_in] = state->nr;
-		dprintk("demod=%d: took tuner ownership of rf_in=%d; use_count=%d\n", state->nr, state->rf_in,
-						state->base->tuner_use_count[state->rf_in]);
+		We ignore any request to change voltage for all but one adapter, i.e., the master adapter
+	*/
+	if(!state->is_master) {
+		if(!rf_in) {
+			state_dprintk("Skipping set_tone=%d; no active rf_in\n", tone);
+			return -EPERM;
+		}
+		if(rf_in->tone != tone) {
+			state_dprintk("Skipping set_tone=%d; not master and current tone=%d\n", tone, rf_in->tone);
+			return -1;
+		}
+		state_dprintk("Skipping set_tone=%d; not master, but tone ok\n", tone);
+		return 0;
 	}
 
-	if(state->base->tuner_owner[state->rf_in] != state->nr ) {
-		dprintk("demod=%d rf_in=%d DISALLOW tone=%d tuner_use_count=%d owner=%d\n",
-						state->nr, state->rf_in, tone,
-						state->base->tuner_use_count[state->rf_in],
-						state->base->tuner_owner[state->rf_in]);
-		return -EPERM;
-	} else {
-		base_lock(state);
-		err |= stid135_select_rf_in_(state, state->rf_in);
-		err = fe_stid135_set_22khz_cont(&state->base->ip, state->rf_in + 1, tone == SEC_TONE_ON);
-		base_unlock(state);
-
-		dprintk("demod=%d DISEQC[%d] tone=%d error=%d err=%d abort=%d", state->nr, state->rf_in+1,  tone, err,
-						state->base->ip.handle_demod->Error,
-						state->base->ip.handle_demod->Abort);
-
-		if (err != FE_LLA_NO_ERROR)
-			dev_err(&state->base->i2c->dev, "%s: fe_stid135_set_22khz_cont error %d !\n", __func__, err);
-
-		return err != FE_LLA_NO_ERROR ? -1 : 0;
+	chip_lock(state);
+	if(!rf_in->controlling_chip) {
+		state_dprintk("BUG: controlling_chip=NULL != chip=%p\n", state->chip);
+		return -1;
 	}
+	if(rf_in->controlling_chip != state->chip)
+		state_dprintk("info: controlling_chip=%p != chip=%p\n", rf_in->controlling_chip, state->chip);
+
+	err = fe_stid135_set_22khz_cont(&rf_in->controlling_chip->ip, rf_in->rf_in_no + 1, tone == SEC_TONE_ON);
+	rf_in->tone = tone;
+	chip_unlock(state);
+	state_dprintk("set tone=%d old_tone=%d error=%d err=%d abort=%d rf_in_use_count=%d", tone, rf_in->tone, err,
+								state->chip->ip.handle_demod->Error,
+								state->chip->ip.handle_demod->Abort, rf_in->reservation.use_count);
+	rf_in->tone = tone;
+	return err != FE_LLA_NO_ERROR ? -1 : 0;
+	return 0;
 }
 
-static int stid135_send_master_cmd(struct dvb_frontend* fe,
-				 struct dvb_diseqc_master_cmd *cmd)
+static int stid135_send_master_cmd(struct dvb_frontend* fe, struct dvb_diseqc_master_cmd *cmd)
 {
+
 	struct stv *state = fe->demodulator_priv;
-	fe_lla_error_t err = FE_LLA_NO_ERROR;
+	int err=0;
+	state_dprintk("diseqc");
+	struct stv_rf_in_t* rf_in = active_rf_in(state);
+	struct stv_tuner_t* tuner = state->active_tuner;
 
-#if 1
-	if (state->base->mode == 0)
-		return 0;
-#endif
-	dprintk("diseqc rf_in=%d\n", state->rf_in);
-
-	if(state->rf_in <0) {
-		dprintk("rf_in not set yet\n");
+	if (state->chip->multiswitch_mode == FE_MULTISWITCH_MODE_QUATTRO) {
+		state_dprintk("Cannot send diseqc in quattro mode\n");
 		return -EPERM;
 	}
 
+	if ((!tuner || ! rf_in)) {//@todo: locking maybe not needed
+		//for older applications, which do not call FE_SET_RF_INPUT
+		card_lock(state); //DeepThought: maybe not needed (as it does not use stid135 chips)
+		err |= stid135_select_rf_in_legacy_(state);
+		card_unlock(state);
+		rf_in = active_rf_in(state);
+		tuner = state->active_tuner;
+	}
+
+	if(!rf_in) {
+		state_dprintk("BUG No active_rf_in set\n");
+		return -EPERM;
+	}
+
+	if(!tuner) {
+		state_dprintk("BUG No active_tuner set\n");
+		return -EPERM;
+	}
 
 	/*
-		when multiple adapters use the same tuner, only one can chnage voltage, send tones, diseqc etc
+		when multiple adapters use the same tuner, only one can change voltage, send tones, diseqc etc
 		This is the tuner_owner. tuner_owner=-1 means no owner.
-		We ignore any request to change voltage unless tuner_owner== state->nr or
-	 */
-	if(state->base->tuner_owner[state->rf_in] == -1) {
-		//take ownership
-		state->base->tuner_owner[state->rf_in] = state->nr;
-		dprintk("demod=%d: took tuner ownership of rf_in=%d; use_count=%d\n", state->nr, state->rf_in,
-						state->base->tuner_use_count[state->rf_in]);
+		We ignore any request to change voltage for all but one adapter, i.e., the master adapter
+	*/
+	if(!state->is_master) {
+		if(!rf_in) {
+			state_dprintk("Skipping send_master_cmd; no active rf_in\n");
+			return -EPERM;
+		}
+		return 0;
 	}
-
-	/*
-		when two adapters use the same tuner, we ignore any request to change tone
-		as long as multiple frontends use the same tuner
-	 */
-
-	if(state->base->tuner_owner[state->rf_in] != state->nr ) {
-		dprintk("demod=%d rf_in=%d DISALLOW diseqc tuner_use_count=%d owner=%d\n",
-						state->nr, state->rf_in,
-						state->base->tuner_use_count[state->rf_in],
-						state->base->tuner_owner[state->rf_in]);
-		return -EPERM;
+	if(!rf_in->controlling_chip) {
+		state_dprintk("BUG: rf_in[%d]->controlling_chip=NULL; tuner[%d].use_count=%d rf_in[%d].use_count=%d\n", rf_in->rf_in_no,
+									tuner->tuner_no,
+									tuner->reservation.use_count, rf_in->rf_in_no, rf_in->reservation.use_count);
+		return -1;
+	}
+	chip_lock(state);
+	card_lock(state);
+	if(rf_in->sec_configured) {
+		state_dprintk("SKIPPING diseqc: rf_in=%d; tuner[%d].use_count=%d rf_in[%d].use_count=%d\n", rf_in->rf_in_no,
+									tuner->tuner_no,
+									tuner->reservation.use_count, rf_in->rf_in_no, rf_in->reservation.use_count);
+		card_unlock(state);
+		chip_unlock(state);
 	} else {
-		base_lock(state);
-		err |= stid135_select_rf_in_(state, state->rf_in);
-		err |= fe_stid135_diseqc_init(&state->base->ip, state->rf_in + 1, FE_SAT_DISEQC_2_3_PWM);
-		err |= fe_stid135_diseqc_send(state, state->rf_in + 1, cmd->msg, cmd->msg_len);
-		base_unlock(state);
-		dprintk("demod=%d: diseqc sent: rf_in=%d; use_count=%d\n", state->nr, state->rf_in,
-						state->base->tuner_use_count[state->rf_in]);
+		err |= fe_stid135_diseqc_init(&rf_in->controlling_chip->ip, rf_in->rf_in_no + 1, FE_SAT_DISEQC_2_3_PWM);
+		err |= fe_stid135_diseqc_send(state, rf_in->rf_in_no + 1, cmd->msg, cmd->msg_len);
+		card_unlock(state);
+		chip_unlock(state);
+		state_dprintk("diseqc sent: rf_in=%d; tuner[%d].use_count=%d rf_in[%d].use_count=%d\n", rf_in->rf_in_no,
+								tuner->tuner_no,
+									tuner->reservation.use_count, rf_in->rf_in_no, rf_in->reservation.use_count);
 
-		if (err != FE_LLA_NO_ERROR)
-			dev_err(&state->base->i2c->dev, "%s: fe_stid135_diseqc_send error %d !\n", __func__, err);
-
-		return err != FE_LLA_NO_ERROR ? -1 : 0;
+		return err != 0 ? -1 : 0;
 	}
+	return 0;
 }
 
 static int stid135_recv_slave_reply(struct dvb_frontend* fe,
@@ -1546,16 +2029,16 @@ static int stid135_recv_slave_reply(struct dvb_frontend* fe,
 	fe_lla_error_t err = FE_LLA_NO_ERROR;
 
 #if 1
-	if (state->base->mode == 0)
+	if (state->chip->multiswitch_mode == 0)
 		return 0;
 #endif
 
-	base_lock(state);
-	err = fe_stid135_diseqc_receive(&state->base->ip, reply->msg, &reply->msg_len);
-	base_unlock(state);
+	chip_lock(state);
+	err = fe_stid135_diseqc_receive(&state->chip->ip, reply->msg, &reply->msg_len);
+	chip_unlock(state);
 
 	if (err != FE_LLA_NO_ERROR)
-		dev_err(&state->base->i2c->dev, "%s: fe_stid135_diseqc_receive error %d !\n", __func__, err);
+		dev_err(&state->chip->i2c->dev, "%s: fe_stid135_diseqc_receive error %d !\n", __func__, err);
 
 	return err != FE_LLA_NO_ERROR ? -1 : 0;
 }
@@ -1563,13 +2046,52 @@ static int stid135_recv_slave_reply(struct dvb_frontend* fe,
 static int stid135_send_burst(struct dvb_frontend* fe, enum fe_sec_mini_cmd burst)
 {
 	struct stv *state = fe->demodulator_priv;
-	fe_lla_error_t err = FE_LLA_NO_ERROR;
+	int err=0;
+	state_dprintk("diseqc");
+	struct stv_rf_in_t* rf_in = active_rf_in(state);
+	struct stv_tuner_t* tuner = state->active_tuner;
 
-	if (state->base->mode == 0)
+	if (state->chip->multiswitch_mode == FE_MULTISWITCH_MODE_QUATTRO) {
+		state_dprintk("Cannot send diseqc in quattro mode\n");
+		return -EPERM;
+	}
+
+	if ((!tuner || ! rf_in)) {//@todo: locking maybe not needed
+		//for older applications, which do not call FE_SET_RF_INPUT
+		chip_lock(state); //DeepThought: maybe not needed (as it does not use stid135 chips)
+		card_lock(state); //DeepThought: maybe not needed (as it does not use stid135 chips)
+		err |= stid135_select_rf_in_legacy_(state);
+		rf_in = active_rf_in(state);
+		tuner = state->active_tuner;
+		card_unlock(state);
+		chip_unlock(state);
+	}
+
+	if(!rf_in) {
+		state_dprintk("BUG No active_rf_in set\n");
+		return -EPERM;
+	}
+
+	if(!tuner) {
+		state_dprintk("BUG No active_tuner set\n");
+		return -EPERM;
+	}
+
+	/*
+		when multiple adapters use the same tuner, only one can change voltage, send tones, diseqc etc
+		This is the tuner_owner. tuner_owner=-1 means no owner.
+		We ignore any request to change voltage for all but one adapter, i.e., the master adapter
+	*/
+	if(!state->is_master) {
+		if(!rf_in) {
+			state_dprintk("Skipping send_burst; no active rf_in\n");
+			return -EPERM;
+		}
 		return 0;
-	stid135_select_rf_in_(state, state->rf_in);
+	}
+
 	dprintk("Not implemented!\n");
-	return err != FE_LLA_NO_ERROR ? -1 : 0;
+	return err != 0 ? -1 : 0;
 }
 
 /*Called when the only user which has opened the frontend in read-write mode
@@ -1577,46 +2099,70 @@ static int stid135_send_burst(struct dvb_frontend* fe, enum fe_sec_mini_cmd burs
 static int stid135_sleep(struct dvb_frontend* fe)
 {
 	struct stv *state = fe->demodulator_priv;
-	fe_lla_error_t err = FE_LLA_NO_ERROR;
-	struct fe_stid135_internal_param *p_params = &state->base->ip;
-
-	if (state->base->mode == 0) //official driver never calls code below
-		return 0;
-
-	dev_dbg(&state->base->i2c->dev, "%s: tuner %d\n", __func__, state->rf_in);
-	dprintk("sleep called");
-	base_lock(state);
-	BUG_ON((state->rf_in<0 || state->rf_in >= 4));
-	BUG_ON(state->base->tuner_use_count[state->rf_in] < 0);
-
-	if(state->rf_in >= 0 && state->rf_in_selected) {
-		if(state->base->tuner_owner[state->rf_in] == state->nr) {
-			state->base->tuner_owner[state->rf_in] = -1; //release ownership
-			dprintk("demod=%d: released tuner ownership of rf_in=%d; use_count=%d\n", state->nr, state->rf_in,
-							state->base->tuner_use_count[state->rf_in]);
-		} else {
-			dprintk("demod=%d: decreased tuner use_count of rf_in=%d; use_count=%d\n", state->nr, state->rf_in,
-							state->base->tuner_use_count[state->rf_in]);
-		}
-
-		if(state->base->tuner_use_count[state->rf_in] > 0)
-			state->base->tuner_use_count[state->rf_in]--;
-		if(state->base->tuner_use_count[state->rf_in]==0) {
-			dprintk("Calling TunerStandby 0\n");
-			err = fe_stid135_set_22khz_cont(&state->base->ip, state->rf_in + 1, false);
-			if(state->base->set_voltage) {
-				state->base->set_voltage(state->base->i2c, SEC_VOLTAGE_OFF, state->rf_in);
-				state->base->voltage_is_on[state->rf_in] = 0;
+	int err=0;
+	struct stv_rf_in_t* rf_in = active_rf_in(state);
+	struct stv_tuner_t* tuner = state->active_tuner;
+	state_dprintk("ENTERING sleep\n");
+	enum fe_reservation_result result;
+	if(!tuner || !rf_in) {
+		state_dprintk("sleep; adapter did not use tuner; active_tuner=%p active_rf_in=%p\n",
+									tuner, rf_in);
+	} else {
+		chip_lock(state);
+		card_lock(state);
+		state_dprintk("sleep tuner[%d].use_count=%d rf_in[%d].use_count=%d\n", tuner->tuner_no,
+									tuner->reservation.use_count, rf_in->rf_in_no,
+									rf_in->reservation.use_count);
+		if(tuner->reservation.use_count<=0)
+			state_dprintk("BUG: sleep tuner_use_count=%d <=0 \n", tuner->reservation.use_count);
+		if(rf_in->reservation.use_count<=0)
+			state_dprintk("BUG: sleep rf_in_use_count=%d <=0 \n", rf_in->reservation.use_count);
+#if 1
+		result = stid135_select_rf_in_(state, NULL);
+#else
+		state_dprintk("decrementing tuner[%d].use_count=%d\n", tuner->tuner_no, tuner->reservation.use_count);
+		tuner->reservation.use_count--;
+		if(tuner->reservation.use_count == 0)
+			tuner->reservation.owner=-1;
+		state_dprintk("decrementing rf_in[%d].use_count=%d\n", rf_in->rf_in_no, rf_in->reservation.use_count);
+		rf_in->reservation.use_count--;
+		if(rf_in->reservation.use_count == 0) {
+			if(rf_in->controlling_chip) {
+				err |= (err1=fe_stid135_set_22khz_cont(&state->chip->ip, rf_in->rf_in_no + 1, false));
+				state_dprintk("turned off tone rf_in=%d err=%d\n", rf_in->rf_in_no, err1);
 			}
-			err |= FE_STiD135_TunerStandby(p_params->handle_demod, state->rf_in + 1, 0);
+			state_dprintk("released rf_in=%d\n", rf_in->rf_in_no);
+			if(state->chip->set_voltage) {
+				state_dprintk("old rf_in no longer in use: rf_in=%d; VOLTAGE OFF\n", rf_in->rf_in_no);
+				state->chip->set_voltage(state->chip->i2c, SEC_VOLTAGE_OFF, rf_in->rf_in_no);
+			}
+			rf_in->reservation.owner = -1;
+			rf_in->reservation.config_id = -1;
+			rf_in->controlling_chip = NULL;
+			rf_in->voltage = SEC_VOLTAGE_OFF;
+			rf_in->tone = SEC_TONE_OFF;
 		}
+		if(tuner->reservation.use_count == 0) {
+			err |= (err1=FE_STiD135_TunerStandby(state->chip->ip.handle_demod, rf_in->rf_in_no + 1, 0));
+			state_dprintk("TUNER STANDBY: err=%d\n", err1);
+			tuner->reservation.owner = -1;
+			tuner->reservation.config_id = -1;
+			tuner->active_rf_in = NULL;
+			tuner->powered_on = false;
+		}
+		state->active_tuner = NULL;
+#endif
+		state_dprintk("Before unlock\n");
+		card_unlock(state);
+		chip_unlock(state);
+		state_dprintk("After unlock\n");
 	}
-	state->rf_in_selected = false;
-	base_unlock(state);
-	if (err != FE_LLA_NO_ERROR)
-		dev_warn(&state->base->i2c->dev, "%s: STiD135 standby tuner %d failed!\n", __func__, state->rf_in);
-
-	return err != FE_LLA_NO_ERROR ? -1 : 0;
+#if 0
+	state->quattro_rf_in_mask = 0;
+	state->quattro_rf_in = 0;
+	state->legacy_rf_in = false;
+#endif
+	return err != 0 ? -1 : 0;
 }
 
 static int stid135_read_signal_strength(struct dvb_frontend* fe, u16 *strength)
@@ -1673,40 +2219,40 @@ static int stid135_read_ucblocks(struct dvb_frontend* fe, u32 *ucblocks)
 static void spi_read(struct dvb_frontend* fe, struct ecp3_info *ecp3inf)
 {
 	struct stv *state = fe->demodulator_priv;
-	struct i2c_adapter *adapter = state->base->i2c;
+	struct i2c_adapter *adapter = state->chip->i2c;
 
-	if (state->base->read_properties)
-		state->base->read_properties(adapter,ecp3inf->reg, &(ecp3inf->data));
+	if (state->chip->read_properties)
+		state->chip->read_properties(adapter,ecp3inf->reg, &(ecp3inf->data));
 	return ;
 }
 
 static void spi_write(struct dvb_frontend* fe,struct ecp3_info *ecp3inf)
 {
 	struct stv *state = fe->demodulator_priv;
-	struct i2c_adapter *adapter = state->base->i2c;
+	struct i2c_adapter *adapter = state->chip->i2c;
 
-	if (state->base->write_properties)
-		state->base->write_properties(adapter,ecp3inf->reg, ecp3inf->data);
+	if (state->chip->write_properties)
+		state->chip->write_properties(adapter,ecp3inf->reg, ecp3inf->data);
 	return ;
 }
 
 static void eeprom_read(struct dvb_frontend* fe, struct eeprom_info *eepinf)
 {
 	struct stv *state = fe->demodulator_priv;
-	struct i2c_adapter *adapter = state->base->i2c;
+	struct i2c_adapter *adapter = state->chip->i2c;
 
-	if (state->base->read_eeprom)
-		state->base->read_eeprom(adapter,eepinf->reg, &(eepinf->data));
+	if (state->chip->read_eeprom)
+		state->chip->read_eeprom(adapter,eepinf->reg, &(eepinf->data));
 	return ;
 }
 
 static void eeprom_write(struct dvb_frontend* fe,struct eeprom_info *eepinf)
 {
 	struct stv *state = fe->demodulator_priv;
-	struct i2c_adapter *adapter = state->base->i2c;
+	struct i2c_adapter *adapter = state->chip->i2c;
 
-	if (state->base->write_eeprom)
-		state->base->write_eeprom(adapter,eepinf->reg, eepinf->data);
+	if (state->chip->write_eeprom)
+		state->chip->write_eeprom(adapter,eepinf->reg, eepinf->data);
 	return ;
 }
 
@@ -1715,12 +2261,12 @@ static int stid135_read_temp(struct dvb_frontend* fe, s16 *temp)
 	struct stv *state = fe->demodulator_priv;
 	fe_lla_error_t err = FE_LLA_NO_ERROR;
 
-	base_lock(state);
-	err = fe_stid135_get_soc_temperature(&state->base->ip, temp);
-	base_unlock(state);
+	chip_lock(state);
+	err = fe_stid135_get_soc_temperature(&state->chip->ip, temp);
+	chip_unlock(state);
 
 	if (err != FE_LLA_NO_ERROR)
-		dev_warn(&state->base->i2c->dev, "%s: fe_stid135_get_soc_temperature error %d !\n", __func__, err);
+		dev_warn(&state->chip->i2c->dev, "%s: fe_stid135_get_soc_temperature error %d !\n", __func__, err);
 	return 0;
 }
 
@@ -1746,10 +2292,11 @@ static int stid135_get_spectrum_scan_sweep(struct dvb_frontend* fe,
 	struct stv *state = fe->demodulator_priv;
 	struct spectrum_scan_state* ss = &state->spectrum_scan_state;
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
-	struct fe_stid135_internal_param * pParams = (struct fe_stid135_internal_param *) &state->base->ip;
+	//int rf_in = active_rf_in(state);
+	struct fe_stid135_internal_param * pParams = (struct fe_stid135_internal_param *) &state->chip->ip;
 	s32 lo_frequency;
-	fe_lla_error_t error = FE_LLA_NO_ERROR;
-	fe_lla_error_t error1 = FE_LLA_NO_ERROR;
+	int error = FE_LLA_NO_ERROR;
+	int error1 = FE_LLA_NO_ERROR;
 	s32 pband_rf;
 	s32 pch_rf;
 	int i = 0;
@@ -1771,8 +2318,7 @@ static int stid135_get_spectrum_scan_sweep(struct dvb_frontend* fe,
 #ifdef TODO
 	state->tuner_bw = stv091x_bandwidth(ROLLOFF_AUTO, bandwidth);
 #endif
-	dprintk("demod: %d: tuner:%d range=[%d,%d]kHz num_freq=%d resolution=%dkHz bw=%dkHz clock=%d\n", state->nr,
-					state->rf_in,
+	state_dprintk("range=[%d,%d]kHz num_freq=%d resolution=%dkHz bw=%dkHz clock=%d\n",
 					start_frequency, end_frequency,
 					ss->spectrum_len, resolution, bandwidth/1000,
 					pParams->master_clock);
@@ -1871,7 +2417,7 @@ static int stid135_get_spectrum_scan_sweep(struct dvb_frontend* fe,
 		if(error)
 			goto __onerror;
 
-		state_sleep(state, 12);
+		chip_sleep(state, 12);
 
 	}
 
@@ -1903,15 +2449,6 @@ static int stid135_stop_task(struct dvb_frontend* fe)
 		kfree(cs->samples);
 	memset(ss, 0, sizeof(*ss));
 	memset(cs, 0, sizeof(*cs));
-
-	if(state && state->rf_in >=0 && state->rf_in_selected) {
-		if(state->base->tuner_owner[state->rf_in] == state->nr) {
-			state->base->tuner_owner[state->rf_in] = -1; //release ownership
-			dprintk("demod=%d: released tuner ownership of rf_in=%d; use_count=%d\n", state->nr, state->rf_in,
-							state->base->tuner_use_count[state->rf_in]);
-		}
-	}
-
 	//dprintk("Freed memory\n");
 	return 0;
 }
@@ -1923,24 +2460,30 @@ static int stid135_spectrum_start(struct dvb_frontend* fe,
 	struct stv *state = fe->demodulator_priv;
 	struct spectrum_scan_state* ss = &state->spectrum_scan_state;
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
+	//int rf_in_no = active_rf_in_no(state);
+	struct stv_rf_in_t* rf_in = active_rf_in(state);
+	int old_rf_in_no = rf_in ? rf_in->rf_in_no : -1;
 	int ret=0;
 	fe_lla_error_t err = FE_LLA_NO_ERROR;
+
 	stid135_stop_task(fe);
 
 
 	if(p->rf_in < 0 || !p->rf_in_valid)  {
-		p->rf_in = state->rf_in_selected ? state->rf_in : state->fe.ops.info.default_rf_input;
+		p->rf_in = rf_in>=0 ? rf_in->rf_in_no : state->fe.ops.info.default_rf_input;
 		p->rf_in_valid = true;
-		dprintk("Set rf_in to %d; rf_in_selected=%d  state->rf_in=%d default_rf_in=%d\n",
-						p->rf_in, state->rf_in_selected, state->rf_in, state->fe.ops.info.default_rf_input);
+		state_dprintk("Set rf_in to %d; rf_in=%d  default_rf_in=%d\n",
+						p->rf_in, old_rf_in_no, state->fe.ops.info.default_rf_input);
 	}
 
 	if(err) {
-		dprintk("Could not set rfpath error=%d\n", err);
+		state_dprintk("Could not set rfpath error=%d\n", err);
 	}
 	s->scale =  FE_SCALE_DECIBEL; //in units of 0.001dB
 
-	base_lock(state);
+	chip_lock(state);
+	state_dprintk("Marking rf_in as configured old=%d\n", rf_in->sec_configured);
+	rf_in->sec_configured = true; //we assume that caller has waited long enough
 
 	switch(s->spectrum_method) {
 	case SPECTRUM_METHOD_SWEEP:
@@ -1954,15 +2497,15 @@ static int stid135_spectrum_start(struct dvb_frontend* fe,
 		break;
 	}
 
-	base_unlock(state);
+	chip_unlock(state);
 	return -1;
 }
 
-int stid135_spectrum_get(struct dvb_frontend* fe, struct dtv_fe_spectrum* user)
+static int stid135_spectrum_get(struct dvb_frontend* fe, struct dtv_fe_spectrum* user)
 {
 	struct stv *state = fe->demodulator_priv;
 	int error=0;
-	base_lock(state);
+	chip_lock(state);
 	if (user->num_freq> state->spectrum_scan_state.spectrum_len)
 		user->num_freq = state->spectrum_scan_state.spectrum_len;
 	if (user->num_candidates > state->spectrum_scan_state.num_candidates)
@@ -1984,7 +2527,7 @@ int stid135_spectrum_get(struct dvb_frontend* fe, struct dtv_fe_spectrum* user)
 		}
 	} else
 		error = -EFAULT;
-	base_unlock(state);
+	chip_unlock(state);
 	//stid135_stop_task(fe);
 	return error;
 }
@@ -2002,7 +2545,8 @@ static int stid135_scan_sat(struct dvb_frontend* fe, bool init,
  	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	struct stv *state = fe->demodulator_priv;
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
-	//struct fe_stid135_internal_param * pParams = &state->base->ip;
+	int rf_in = active_rf_in_no(state);
+	//struct fe_stid135_internal_param * pParams = &state->chip->ip;
 	//int asperity;
 	//s32 carrier_frequency;
 	bool retune=true;
@@ -2018,15 +2562,15 @@ static int stid135_scan_sat(struct dvb_frontend* fe, bool init,
 		}
 
 		if(p->rf_in < 0 || !p->rf_in_valid)  {
-			p->rf_in = state->rf_in_selected ? state->rf_in : state->fe.ops.info.default_rf_input;
+			p->rf_in = rf_in>=0 ?  rf_in : state->fe.ops.info.default_rf_input;
 			p->rf_in_valid = true;
-			dprintk("Set rf_in to %d; rf_in_selected=%d  state->rf_in=%d default_rf_in=%d\n",
-							p->rf_in, state->rf_in_selected, state->rf_in, state->fe.ops.info.default_rf_input);
+			state_dprintk("Set rf_in to %d; default_rf_in=%d\n",
+										rf_in, state->fe.ops.info.default_rf_input);
 		}
 
-		base_lock(state);
+		chip_lock(state);
 		ret = stid135_spectral_scan_start(fe);
-		base_unlock(state);
+		chip_unlock(state);
 
 		if(ret<0) {
 			dprintk("Could not start spectral scan\n");
@@ -2036,9 +2580,9 @@ static int stid135_scan_sat(struct dvb_frontend* fe, bool init,
 		if(!state->spectrum_scan_state.scan_in_progress) {
 			dprintk("Error: Called with init==false, but scan was  not yet started\n");
 
-			base_lock(state);
+			chip_lock(state);
 			ret = stid135_spectral_scan_start(fe);
-			base_unlock(state);
+			chip_unlock(state);
 
 			if(ret<0) {
 				dprintk("Could not start spectral scan\n");
@@ -2057,9 +2601,9 @@ static int stid135_scan_sat(struct dvb_frontend* fe, bool init,
 		}
 
 		*status = 0;
-		base_lock(state);
+		chip_lock(state);
 		ret=stid135_spectral_scan_next(fe,  &p->frequency, &p->symbol_rate);
-		base_unlock(state);
+		chip_unlock(state);
 
 		if(ret<0) {
 			dprintk("reached end of scan range\n");
@@ -2101,17 +2645,17 @@ static int stid135_scan_sat(struct dvb_frontend* fe, bool init,
 						p->frequency, p->search_range/1000,
 						p->scan_fft_size, p->scan_resolution, p->symbol_rate/1000);
 
-		base_lock(state);
+		chip_lock(state);
 		ret = stid135_tune_(fe, retune, mode_flags, delay, status);
-		base_unlock(state);
+		chip_unlock(state);
 
 		old = *status;
 		{
-			state->base->ip.handle_demod->Error = FE_LLA_NO_ERROR;
+			state->chip->ip.handle_demod->Error = FE_LLA_NO_ERROR;
 
-			base_lock(state);
+			chip_lock(state);
 			fe_stid135_get_signal_info(state);
-			base_unlock(state);
+			chip_unlock(state);
 
 			memcpy(p->isi_bitset, state->signal_info.isi_list.isi_bitset, sizeof(p->isi_bitset));
 			memcpy(p->matypes, state->signal_info.isi_list.matypes, sizeof(p->matypes));
@@ -2142,7 +2686,7 @@ static int stid135_constellation_start_(struct dvb_frontend* fe, struct dtv_fe_c
 {
 	struct stv *state = fe->demodulator_priv;
 	struct constellation_scan_state* cs = &state->constellation_scan_state;
-	struct fe_stid135_internal_param * pParams = &state->base->ip;
+	struct fe_stid135_internal_param * pParams = &state->chip->ip;
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	int num_samples = user->num_samples;
 	if(num_samples > max_num_samples)
@@ -2189,7 +2733,11 @@ static int stid135_constellation_get(struct dvb_frontend* fe, struct dtv_fe_cons
 	struct stv *state = fe->demodulator_priv;
 	struct constellation_scan_state* cs = &state->constellation_scan_state;
 	int error = 0;
-	base_lock(state);
+	struct stv_rf_in_t* rf_in = active_rf_in(state);
+	chip_lock(state);
+	state_dprintk("Marking rf_in as configured old=%d\n", rf_in->sec_configured);
+	rf_in->sec_configured = true; //we assume that caller has waited long enough
+
 	if(user->num_samples > cs->num_samples)
 		user->num_samples = cs->num_samples;
 	if(cs->samples) {
@@ -2200,7 +2748,7 @@ static int stid135_constellation_get(struct dvb_frontend* fe, struct dtv_fe_cons
 	}
 	else
 		error = -EFAULT;
-	base_unlock(state);
+	chip_unlock(state);
 	return error;
 }
 
@@ -2231,6 +2779,7 @@ static struct dvb_frontend_ops stid135_ops = {
 	.get_frontend_algo              = stid135_get_algo,
 	//.get_frontend                   = stid135_get_frontend,
 	.tune                           = stid135_tune,
+	.set_sec_ready                  = stid135_set_sec_ready,
 	.set_rf_input			= stid135_set_rf_input,
 	.set_tone			= stid135_set_tone,
 	.set_voltage			= stid135_set_voltage,
@@ -2260,37 +2809,122 @@ static struct dvb_frontend_ops stid135_ops = {
 	.read_temp			= stid135_read_temp,
 };
 
-static struct stv_base *match_base(struct i2c_adapter  *i2c, u8 adr)
+static struct stv_chip_t* match_base(struct i2c_adapter* i2c, u8 adr)
 {
-	struct stv_base *p;
-	list_for_each_entry(p, &stvlist, stvlist)
+	struct stv_chip_t *p;
+	list_for_each_entry(p, &stv_chip_list, stv_chip_list)
 		if (p->i2c == i2c && p->adr == adr)
 			return p;
 	return NULL;
 }
 
-static inline int num_cards(void)
+static struct stv_card_t* match_card(struct tbsecp3_dev* dev)
 {
-	struct stv_base *p;
+	struct stv_card_t *p;
+	list_for_each_entry(p, &stv_card_list, stv_card_list)
+		if (p->dev == dev)
+			return p;
+	return NULL;
+}
+
+static inline int num_chips(void)
+{
+	struct stv_chip_t *p;
 	int ret=0;
-	list_for_each_entry(p, &stvlist, stvlist)
+	list_for_each_entry(p, &stv_chip_list, stv_chip_list)
 		ret++;
 	return ret;
 }
 
+static inline int num_cards(void)
+{
+	struct stv_card_t* p;
+	int ret=0;
+	list_for_each_entry(p, &stv_card_list, stv_card_list)
+		ret++;
+	return ret;
+}
+
+static void init_stv_reservation(struct stv_reservation_t* res)
+{
+	res->owner = -1;
+	res->config_id =-1;
+}
+
+static void init_rf_in(struct stv_rf_in_t* rf_in, int rf_in_no) {
+	rf_in->rf_in_no = rf_in_no;
+	rf_in->voltage = SEC_VOLTAGE_OFF;
+	rf_in->tone = SEC_TONE_OFF;
+	init_stv_reservation(&rf_in->reservation);
+}
+
+static void init_tuner(struct stv_tuner_t* tuner, int tuner_no) {
+	tuner->tuner_no = tuner_no;
+	init_stv_reservation(&tuner->reservation);
+}
+
+static void init_stv_card(struct stv_card_t* card, struct stv_chip_t* first_chip, struct tbsecp3_dev* tbsecp3_dev)
+{
+	int i;
+	card->dev = tbsecp3_dev;
+	mutex_init(&card->lock.mutex);
+	card->card_no = num_cards();
+	card->use_count = 1;
+	card->num_chips = 1;
+	card->chips[0] = first_chip;
+
+	for(i=0; i < sizeof(card->rf_ins)/sizeof(card->rf_ins[0]); ++i) {
+		init_rf_in(&card->rf_ins[i], i);
+	}
+}
+
+static void init_stv_chip(struct stv_chip_t* chip, struct stv_card_t* card, int mode,
+													struct stid135_cfg *cfg, struct i2c_adapter *i2c)
+{
+	mutex_init(&chip->lock.mutex);
+	chip->global_chip_no = num_chips();
+	chip->chip_no = card->num_chips -1;
+	chip->adr = cfg->adr;
+	chip->i2c = i2c;
+	chip->card = card;
+	chip->use_count = 1;
+	chip->extclk = cfg->clk;
+	chip->ts_mode = cfg->ts_mode;
+	if(mode==1 && !cfg->set_voltage)
+		chip->multiswitch_mode = 0;
+	else
+		chip->multiswitch_mode = mode;
+	chip->num_tuners =4;
+	chip->vglna		=	cfg->vglna;    //for stvvglna 6909x v2 6903x v2
+	chip->control_22k	= cfg->control_22k;
+	for(int i=0; i < sizeof(chip->tuners)/sizeof(chip->tuners[0]); ++i) {
+		init_tuner(&chip->tuners[i], i);
+	}
+	chip->set_voltage = cfg->set_voltage;
+	chip->write_properties = cfg->write_properties;
+	chip->read_properties = cfg->read_properties;
+	chip->write_eeprom = cfg->write_eeprom;
+	chip->read_eeprom = cfg->read_eeprom;
+	chip->set_TSsampling = cfg->set_TSsampling;
+	chip->set_TSparam  = cfg->set_TSparam;
+#ifdef NEWXXX
+		mutex_init(&chip->lock.m);
+#endif
+}
+
 /*DT: called with  nr=adapter=0...7 and rf_in = nr/2=0...3
-	state->base is created exactly once and is shared
+	state->chip is created exactly once and is shared
 	between the 8 demods; provides access to the i2c hardware and such
 */
-struct dvb_frontend* stid135_attach(struct i2c_adapter *i2c,
+struct dvb_frontend* stid135_attach(struct tbsecp3_dev* tbsecp3_dev, struct i2c_adapter *i2c,
 																		struct stid135_cfg *cfg,
 																		int nr, int rf_in)
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	int i;
 	struct stv *state;
-	struct stv_base *base=NULL;
-	extern struct stv_base *proc_base;
+	struct stv_chip_t* base=NULL;
+	struct stv_card_t* card =NULL;
 	state = kzalloc(sizeof(struct stv), GFP_KERNEL);
 
 	if (!state)
@@ -2298,51 +2932,40 @@ struct dvb_frontend* stid135_attach(struct i2c_adapter *i2c,
 
 	base = match_base(i2c, cfg->adr);
 	if (base) {
-		base->count++;
-		state->base = base;
-		dprintk("ATTACH DUP nr=%d rf_in=%d base=%p count=%d i2c_addr=0x%x i2c=%s\n", nr, rf_in, base, base->count,
-						cfg->adr,  dev_name(&i2c->dev));
+		base->use_count++;
+		state->chip = base;
+		dprintk("ATTACH DUP nr=%d rf_in=%d base=%p count=%d dev=%p i2c_addr=0x%x i2c=%s\n", nr, rf_in, base, base->use_count,
+						tbsecp3_dev, cfg->adr,  dev_name(&i2c->dev));
 	} else {
-		base = kzalloc(sizeof(struct stv_base), GFP_KERNEL);
+		base = kzalloc(sizeof(struct stv_chip_t), GFP_KERNEL);
 		if (!base)
 			goto fail;
-
-		for(i=0; i < sizeof(base->tuner_owner)/sizeof(base->tuner_owner[0]); ++i)
-			base->tuner_owner[i] = -1;
-		base->card_no = num_cards();
-		base->i2c = i2c;
-		base->adr = cfg->adr;
-		base->count = 1;
-		dprintk("ATTACH NEW nr=%d rf_in=%d base=%p count=%d i2c_addr=0x%x i2c=%s\n", nr, rf_in, base, base->count, cfg->adr,  dev_name(&i2c->dev));
-		base->extclk = cfg->clk;
-		base->ts_mode = cfg->ts_mode;
-		base->set_voltage = cfg->set_voltage;
-		if(mode==1 && !cfg->set_voltage)
-			base->mode = 0;
-		else
-			base->mode = mode;
-		base->write_properties = cfg->write_properties;
-		base->read_properties = cfg->read_properties;
-		base->write_eeprom = cfg->write_eeprom;
-		base->read_eeprom = cfg->read_eeprom;
-		base->set_TSsampling = cfg->set_TSsampling;
-		base->set_TSparam  = cfg->set_TSparam;
-		base->vglna		=	cfg->vglna;    //for stvvglna 6909x v2 6903x v2
-		base->control_22k	= cfg->control_22k;
-
-		mutex_init(&base->lock.m);
-		proc_base = base;
-		state->base = base;
+		card = match_card(tbsecp3_dev);
+		if(!card) {
+			card = kzalloc(sizeof(struct stv_card_t), GFP_KERNEL);
+			init_stv_card(card, base, tbsecp3_dev);
+			list_add(&card->stv_card_list, &stv_card_list);
+			stv_card_make_sysfs(card);
+		} else {
+			card->use_count++;
+			card->chips[card->num_chips] = base;
+			card->num_chips++;
+		}
+		init_stv_chip(base, card, mode, cfg, i2c);
+		dprintk("ATTACH NEWx nr=%d rf_in=%d base=%p count=%d dev=%p i2c_addr=0x%x i2c=%s\n", nr, rf_in,
+						base, base->use_count,
+						tbsecp3_dev, cfg->adr,  dev_name(&i2c->dev));
+		state->chip = base;
 		if (stid135_probe(state) < 0) {
 			dprintk("No demod found at adr %02X on %s\n", cfg->adr, dev_name(&i2c->dev));
 			kfree(base);
 			goto fail;
 		}
-
-		list_add(&base->stvlist, &stvlist);
+		stv_chip_make_sysfs(base);
+		list_add(&base->stv_chip_list, &stv_chip_list);
 	}
 #if 1 //official driver has none of this (it is done elsewhere)
-	//pParams = &state->base->ip;
+	//pParams = &state->chip->ip;
 	/* Init for PID filtering feature */
 
 	state->pid_flt.first_disable_all_command = TRUE;
@@ -2380,14 +3003,11 @@ struct dvb_frontend* stid135_attach(struct i2c_adapter *i2c,
 
 	if (rfsource > 0 && rfsource < 5)
 		rf_in = rfsource - 1;
-	state->rf_in = base->mode ? rf_in : 0;
-
-	if (base->mode == 2)
-		state->rf_in = 3;
 	state->fe.ops.info.default_rf_input = rf_in;
 	dev_info(&i2c->dev, "%s demod found at adr %02X on %s\n",
 					 state->fe.ops.info.name, cfg->adr, dev_name(&i2c->dev));
-
+	stv_demod_make_sysfs(state);
+	list_add(&state->stv_demod_list, &stv_demod_list);
 	return &state->fe;
 
 fail:

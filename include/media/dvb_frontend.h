@@ -497,6 +497,7 @@ struct dvb_frontend_ops {
 		    unsigned int *delay,
 		    enum fe_status *status);
 #if 1 //neumo - destroys binary compatibility with standard kernel
+	int (*set_sec_ready)(struct dvb_frontend* fe);
 	int (*stop_task)(struct dvb_frontend* fe);
 
 	int (*scan)(struct dvb_frontend* fe,
@@ -535,8 +536,7 @@ struct dvb_frontend_ops {
 	int (*set_tone)(struct dvb_frontend *fe, enum fe_sec_tone_mode tone);
 	int (*set_voltage)(struct dvb_frontend *fe,
 			   enum fe_sec_voltage voltage);
-	int (*set_rf_input)(struct dvb_frontend *fe,
-			   s32 rf_input);
+	int (*set_rf_input)(struct dvb_frontend *fe, struct fe_rf_input_control* rf_input);
 	int (*enable_high_lnb_voltage)(struct dvb_frontend* fe, long arg);
 	int (*dishnetwork_send_legacy_command)(struct dvb_frontend* fe, unsigned long cmd);
 	int (*i2c_gate_ctrl)(struct dvb_frontend* fe, int enable);

@@ -69,7 +69,7 @@ static fe_lla_error_t fe_stid135_fft_save_registers(struct stv* state, FE_OXFORD
 	u32 i=0, reg_value;
 	s32 fld_value;
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
-	struct fe_stid135_internal_param *pParams = &state->base->ip;
+	struct fe_stid135_internal_param *pParams = &state->chip->ip;
 	enum fe_stid135_demod path = state->nr+1;
 
 	dprintk("demod %d: Starting to store params path=%d tuner_nb=%d\n", state->nr, path, tuner_nb);
@@ -197,7 +197,7 @@ static fe_lla_error_t fe_stid135_fft_save_registers(struct stv* state, FE_OXFORD
 	Reg[i++] = reg_value;
 
 
-	dprintk("demod%d: Saved %d registers\n", state, i);
+	dprintk("demod%d: Saved %d registers\n", state->nr, i);
 	return error;
 }
 
@@ -213,10 +213,10 @@ static fe_lla_error_t fe_stid135_fft_save_registers(struct stv* state, FE_OXFORD
 static fe_lla_error_t fe_stid135_init_fft(struct stv*state, int fft_mode, s32 Reg[60])
 {
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
-	struct fe_stid135_internal_param *pParams = &state->base->ip;
+	struct fe_stid135_internal_param *pParams = &state->chip->ip;
 	enum fe_stid135_demod path = state->nr+1;
-
-	error |= fe_stid135_fft_save_registers(state, state->rf_in+1, Reg);
+	int rf_in = active_rf_in_no(state);
+	error |= fe_stid135_fft_save_registers(state, rf_in+1, Reg);
 	/* ADJUSTEMENT REGISTERS BEFORE FFT  */
 
 	/* Choix du mode de fonctionnement de la cellule FFT */
@@ -337,13 +337,13 @@ static fe_lla_error_t fe_stid135_init_fft(struct stv*state, int fft_mode, s32 Re
 		error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC2I1(path), 0x68);
 	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC2I0(path), 0x42);
 
-	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_AGCRF_AGCRFCFG_AGCRF_BETA(state->rf_in+1), 0);
+	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_AGCRF_AGCRFCFG_AGCRF_BETA(rf_in+1), 0);
 
 	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_AGC1CFG_AMM_FROZEN(path), 1);
 
 	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_AGC1CFG_QUAD_FROZEN(path), 1);
 
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_AGCRF_AGCRFREF(state->rf_in+1), 0x58);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_AGCRF_AGCRFREF(rf_in+1), 0x58);
 
 	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_AGC1CN_AGCIQ_BETA(path), 0);
 
@@ -403,9 +403,9 @@ static fe_lla_error_t fe_stid135_term_fft(struct stv* state, s32 Reg[60])
 	u32 i=0;
 
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
-	struct fe_stid135_internal_param *pParams = &state->base->ip;
+	struct fe_stid135_internal_param *pParams = &state->chip->ip;
 	enum fe_stid135_demod path = state->nr+1;
-
+	int rf_in = active_rf_in_no(state);
 	/* Restore params */
 	error |= ChipSetField (pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG0_FIFO2_ULTRABS(path), Reg[i++]);
 	error |= ChipSetField (pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG2_MODE_HAUTDEBIT(path), Reg[i++]);
@@ -440,11 +440,11 @@ static fe_lla_error_t fe_stid135_term_fft(struct stv* state, s32 Reg[60])
 	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC2I1(path), (u32)Reg[i++]);
 	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC2I0(path), (u32)Reg[i++]);
 
-	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_AGCRF_AGCRFCFG_AGCRF_BETA(state->rf_in+1), (u32)Reg[i++]);
+	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_AGCRF_AGCRFCFG_AGCRF_BETA(rf_in+1), (u32)Reg[i++]);
 	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_AGC1CFG_AMM_FROZEN(path), (u32)Reg[i++]);
 	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_AGC1CFG_QUAD_FROZEN(path), (u32)Reg[i++]);
 
-	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_AGCRF_AGCRFREF(state->rf_in+1), (u32)Reg[i++]);
+	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_AGCRF_AGCRFREF(rf_in+1), (u32)Reg[i++]);
 	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_AGC1CN_AGCIQ_BETA(path), (u32)Reg[i++]);
 
 	error |= ChipSetOneRegister(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC1AMM(path), (u32) Reg[i++]);
@@ -491,7 +491,7 @@ static fe_lla_error_t fe_stid135_term_fft(struct stv* state, s32 Reg[60])
 static fe_lla_error_t fe_stid135_read_psd_mem(struct stv* state, s32* rf_level,
 																			 s32 start_idx, s32 end_idx, bool mode_32bit, s32 fft_size)
 {
-	struct fe_stid135_internal_param *pParams = &state->base->ip;
+	struct fe_stid135_internal_param *pParams = &state->chip->ip;
 	enum fe_stid135_demod path = state->nr+1;
 	s32 idx, line;
 	s32 val[4]= { 0 }, val_max;
@@ -566,7 +566,7 @@ static fe_lla_error_t fe_stid135_read_psd_mem(struct stv* state, s32* rf_level,
 		error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMSTAT_MEM_STAT(path), &memstat);
 		for (timeout = 0; (!memstat) && (timeout < 20); ++timeout) {
 			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMSTAT_MEM_STAT(path), &memstat);
-			state_sleep(state, 1);
+			chip_sleep(state, 1);
 		}
 
 		if(timeout == 20)
@@ -631,7 +631,7 @@ static fe_lla_error_t fe_stid135_fft(struct stv* state, u32 mode, u32 nb_acquisi
 															u32 range, s32* rf_level, s32 buffer_size,
 															s32 start_idx, s32 end_idx)
 {
-	struct fe_stid135_internal_param *pParams = &state->base->ip;
+	struct fe_stid135_internal_param *pParams = &state->chip->ip;
 	enum fe_stid135_demod path = state->nr+1;
 	s32 f;
 	s32 contmode =0;
@@ -701,7 +701,7 @@ static fe_lla_error_t fe_stid135_fft(struct stv* state, u32 mode, u32 nb_acquisi
 	//preparing took 2514us
 	}
 #endif
-	state_sleep(state, 5);
+	chip_sleep(state, 5);
 	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_GCTRL_UFBS_RESTART(path), 0);
 
 	// wait for fft to finish if not in continuous mode
@@ -710,7 +710,7 @@ static fe_lla_error_t fe_stid135_fft(struct stv* state, u32 mode, u32 nb_acquisi
 		error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_GSTAT_PSD_DONE(path), &contmode);
 		for(timeout=0; !contmode && (timeout < 40); ++timeout){
 			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_GSTAT_PSD_DONE(path), &contmode);
-			state_sleep(state, 1);
+			chip_sleep(state, 1);
 		}
 	}
 #ifdef	DEBUG_TIME
@@ -791,7 +791,7 @@ static int stid135_get_spectrum_scan_fft_one_band(struct stv *state,
 	error = fe_stid135_fft(state, mode, nb_acquisition,
 												 center_freq*1000 - lo_frequency_hz, range*1000, rf_level, fft_size,
 												 start_idx, end_idx);
-	base_unlock(state);
+	chip_unlock(state);
 
 	pbandx1000 += mode*6020; //compensate for FFT number of bins: 20*log10(2)
 	delta = 10*(3000 + STLog10(range) - STLog10(fft_size)); //this is a power spectral density range*1000/fft_size is the bin width in Hz
@@ -812,7 +812,7 @@ static int stid135_get_spectrum_scan_fft_one_band(struct stv *state,
 	for(i=-a+1; i<a; ++i)
 		rf_level[fft_size/2+i] = (rf_level[fft_size/2-a] + rf_level[fft_size/2+a])/2;
 
-	base_lock(state);
+	chip_lock(state);
 
 	return error;
 }
@@ -823,7 +823,7 @@ static int get_spectrum_scan_fft(struct dvb_frontend *fe)
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
 	struct stv *state = fe->demodulator_priv;
 	struct spectrum_scan_state* ss = &state->spectrum_scan_state;
-
+	int rf_in = active_rf_in_no(state);
 	u32 table_size = 8192;
 	s32 max_range= 60000;//96800;
 
@@ -859,7 +859,7 @@ static int get_spectrum_scan_fft(struct dvb_frontend *fe)
 		return -1; //fully done
 	}
 
-	base_unlock(state);
+	chip_unlock(state);
 
 	ss->start_frequency = start_frequency;
 	ss->end_frequency = end_frequency;
@@ -883,16 +883,16 @@ static int get_spectrum_scan_fft(struct dvb_frontend *fe)
 	}
 	ss->fft_size = table_size;
 
-	base_lock(state);
+	chip_lock(state);
 
-	error = FE_STiD135_GetLoFreqHz(&state->base->ip, &ss->lo_frequency_hz);
+	error = FE_STiD135_GetLoFreqHz(&state->chip->ip, &ss->lo_frequency_hz);
 
 	if(error) {
 		dprintk("demod=%d: FE_STiD135_GetLoFreqHz FAILED: error=%d\n", state->nr, error);
 		return error;
 	}
 
-	base_unlock(state);
+	chip_unlock(state);
 
 	ss->lo_frequency_hz *=  1000000; //now in Hz
 
@@ -910,8 +910,8 @@ static int get_spectrum_scan_fft(struct dvb_frontend *fe)
 	useable_samples2 = ((ss->fft_size*6)/10+1)/2;
 	lost_samples2 = ss->fft_size/2 - useable_samples2;
 
-	dprintk("demod=%d: tuner:%d range=[%d,%d]kHz resolution=%dkHz fft_size=%d num_freq=%d range=%dkHz "
-					"lost=%d useable=%d\n", state->nr, state->rf_in,
+	state_dprintk("range=[%d,%d]kHz resolution=%dkHz fft_size=%d num_freq=%d range=%dkHz "
+					"lost=%d useable=%d\n",
 					start_frequency, end_frequency, ss->frequency_step, ss->fft_size,
 					ss->spectrum_len, ss->range, lost_samples2*2, useable_samples2*2);
 
@@ -931,7 +931,7 @@ static int get_spectrum_scan_fft(struct dvb_frontend *fe)
 	start_time = ktime_get();
 #endif
 
-	base_lock(state);
+	chip_lock(state);
 
 	error = fe_stid135_init_fft(state, mode, Reg);
 
@@ -945,14 +945,14 @@ static int get_spectrum_scan_fft(struct dvb_frontend *fe)
 	}
 #endif
 
-	error |= estimate_band_power_demod_for_fft(state, state->rf_in+1, &pbandx1000);
+	error |= estimate_band_power_demod_for_fft(state, rf_in+1, &pbandx1000);
 
 	if(error) {
 		dprintk("demod=%d: fe_stid135_init_fft FAILED: error=%d\n", state->nr, error);
 		return error;
 	}
 
-	base_unlock(state);
+	chip_unlock(state);
 
 	min_correction[0] = 0x7fffffff;
 	min_correction[1] = 0x7fffffff;
@@ -973,13 +973,13 @@ static int get_spectrum_scan_fft(struct dvb_frontend *fe)
 		start_idx = lost_samples2 -5;
 		end_idx = ss->fft_size-lost_samples2 +5;
 
-		base_lock(state);
+		chip_lock(state);
 
 		error = stid135_get_spectrum_scan_fft_one_band(state, center_freq, ss->range,
 																									 ss->lo_frequency_hz,
 																									 ss->fft_size, mode, pbandx1000,
 																									 start_idx, end_idx, temp_freq, temp_rf_level);
-		base_unlock(state);
+		chip_unlock(state);
 
 		if(error) {
 			dprintk("demod=%d: Error=%d\n", state->nr, error);
@@ -1054,7 +1054,7 @@ static int get_spectrum_scan_fft(struct dvb_frontend *fe)
 		kfree(temp_rf_level);
 	dprintk("demod=%d: Freed temp variables\n", state->nr);
 
-	base_lock(state);
+	chip_lock(state);
 
 	error |= (error1=fe_stid135_term_fft(state, Reg));
 

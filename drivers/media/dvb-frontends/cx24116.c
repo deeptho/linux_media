@@ -890,6 +890,8 @@ static int cx24116_set_tone(struct dvb_frontend *fe,
 		dprintk("%s: setting tone on\n", __func__);
 		cmd.args[0x03] = 0x01;
 		break;
+	case SEC_TONE_NOTSET:
+		//should not happen
 	case SEC_TONE_OFF:
 		dprintk("%s: setting tone off\n", __func__);
 		cmd.args[0x03] = 0x00;

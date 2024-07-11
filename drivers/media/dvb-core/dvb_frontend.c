@@ -178,7 +178,8 @@ static void dvb_frontend_put(struct dvb_frontend *fe)
 	 * kref was not initialized yet.
 	 */
 	if (fe->frontend_priv) {
-		dprintk("refcount %p=%d fe=%p\n", &fe->refcount, fe->refcount, fe);
+		int cnt = kref_read(&fe->refcount);
+		dprintk("refcount %p=%d fe=%p\n", (void*)&fe->refcount, cnt, fe);
 		kref_put(&fe->refcount, dvb_frontend_free);
 	}
 	else {
@@ -726,7 +727,7 @@ static void dvb_frontend_wakeup(struct dvb_frontend *fe)
 		for a long time.
 	 -when the frontend device is closed by all users, the work cycle is similarly interrupted and the thread
 	  is then terminated
-	 -the controlling user space connection (the only one having opened the frongtend device read-write)
+	 -the controlling user space connection (the only one having opened the frontend device read-write)
 	  can also call DTV_STOP to explictly ask the frontend loop to go into IDLE mode.
 
 		It is important that the frontend loop is in IDLE mode while setting new tuning parameters prior to a tune.
@@ -909,8 +910,8 @@ restart:
 	dprintk("Exiting frontend thread\n");
 	if (dvb_powerdown_on_sleep) {
 		if (fe->ops.set_voltage) {
-			fe->ops.set_voltage(fe, SEC_VOLTAGE_OFF);
 			dprintk("calling set_voltage OFF: old voltage=%d\n", fepriv->voltage);
+			fe->ops.set_voltage(fe, SEC_VOLTAGE_OFF);
 		}
 		if (fe->ops.tuner_ops.sleep) {
 			if (fe->ops.i2c_gate_ctrl)
@@ -921,7 +922,7 @@ restart:
 				fe->ops.i2c_gate_ctrl(fe, 0);
 		}
 		if (fe->ops.sleep) {
-			dprintk("Calling sleep\n");
+			dprintk("Calling sleep adapter=%d\n", fe->dvb->num);
 			fe->ops.sleep(fe);
 		}
 	}
@@ -1860,6 +1861,7 @@ static int dtv_property_process_get(struct dvb_frontend *fe,
 }
 
 static int dtv_set_frontend(struct dvb_frontend *fe);
+static int dtv_set_sec_configured(struct dvb_frontend *fe);
 
 static bool is_dvbv3_delsys(u32 delsys)
 {
@@ -2331,9 +2333,19 @@ static int dtv_property_process_set(struct dvb_frontend *fe,
 		dev_dbg(fe->dvb->device,
 			"%s: Setting the frontend from property cache\n",
 			__func__);
-
 		r = dtv_set_frontend(fe);
-		dprintk("cmd=DTV_TUNE r=%d", r);
+		dprintk("cmd=DTV_TUNE r=%d adapter=%d", r, fe->dvb->num);
+		break;
+	case DTV_SET_SEC_CONFIGURED:
+		/*
+		 * inform driver that frontend has configiured lnb or other secondary equipment
+		 */
+		dev_dbg(fe->dvb->device,
+			"%s: Setting the frontend from property cache\n",
+			__func__);
+
+		r = dtv_set_sec_configured(fe);
+		dprintk("cmd=DTV_TUNE r=%d adapter=%d", r, fe->dvb->num);
 		break;
 	case DTV_SCAN:
 		/*
@@ -2828,6 +2840,21 @@ static int dtv_set_frontend(struct dvb_frontend *fe)
 	return 0;
 }
 
+static int dtv_set_sec_configured(struct dvb_frontend *fe)
+{
+	struct dvb_frontend_private *fepriv = fe->frontend_priv;
+	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
+	struct dvb_frontend_tune_settings fetunesettings;
+	u32 rolloff = 0;
+	if (fe->ops.set_sec_ready) {
+		dprintk("calling set_sec_ready: num=%d\n", fe->dvb->num);
+		return fe->ops.set_sec_ready(fe);
+	} else {
+		dprintk("not calling set_sec_ready: num=%d\n", fe->dvb->num);
+	}
+	return 0;
+}
+
 static int dtv_set_sat_scan(struct dvb_frontend *fe, bool scan_continue)
 {
 	struct dvb_frontend_private *fepriv = fe->frontend_priv;
@@ -3223,7 +3250,8 @@ static int dvb_frontend_handle_ioctl(struct file *file,
 	case FE_GET_EXTENDED_INFO: {
 		struct dvb_frontend_extended_info *info = parg;
 		memset(info, 0, sizeof(*info));
-		dprintk("default_rf_input=%d %d => %d\n", info->default_rf_input, fe->ops.info.default_rf_input,
+		dprintk("FE_GET_EXTENDED_INFO: default_rf_input=%d %d => %d\n", info->default_rf_input,
+						fe->ops.info.default_rf_input,
 						(fe->ops.info.supports_neumo && fe->ops.info.default_rf_input >=0) ?
 						fe->ops.info.default_rf_input : fe->dvb->num);
 		info->supports_neumo = fe->ops.info.supports_neumo;
@@ -3252,7 +3280,7 @@ static int dvb_frontend_handle_ioctl(struct file *file,
 		} else {
 			uint64_t proposed_mac;
 			memcpy(&proposed_mac, fe->dvb->proposed_mac, sizeof(proposed_mac));
-			dprintk("set MAC from proposed mac: %016x num=%d\n", proposed_mac, fe->dvb->num);
+			dprintk("set MAC from proposed mac: %016llx num=%d\n", proposed_mac, fe->dvb->num);
 			info->adapter_mac_address =  proposed_mac ? proposed_mac : (0x2L | ((((uint64_t)fe->dvb->num) << 8) <<32));
 		}
 		dprintk("MAC: 0x%llx", info->adapter_mac_address);
@@ -3304,11 +3332,29 @@ static int dvb_frontend_handle_ioctl(struct file *file,
 		break;
 	}
 
-	case FE_SET_RF_INPUT:
-		dprintk("FE_SET_RF_INPUT %d\n",  (s32)parg);
+	case FE_SET_RF_INPUT_LEGACY: {
+		s32 rf_in_legacy = (intptr_t)parg & 0xffffffff;
+		dprintk("Old style FE_SET_RF_INPUT: rf_in=%d\n", rf_in_legacy);
+		struct fe_rf_input_control rf_input;
+		rf_input.owner =0xffffffff;
+		rf_input.config_id = -1;
+		rf_input.rf_in =rf_in_legacy;
+		rf_input.mode = FE_RESERVATION_MODE_MASTER_OR_SLAVE;
 		if (fe->ops.set_rf_input)
-			fe->ops.set_rf_input(fe, (s32)parg);
+			fe->ops.set_rf_input(fe, &rf_input);
 		err = 0;
+	}
+		break;
+
+	case FE_SET_RF_INPUT: {
+		struct fe_rf_input_control* rf_input = (struct fe_rf_input_control* )parg;
+		dprintk("FE_SET_RF_INPUT owner=%d config_id=%d rf_in=%d adapter=%d\n",  rf_input->owner,  rf_input->config_id, rf_input->rf_in,
+						fe->dvb->num);
+		if (fe->ops.set_rf_input)
+			err = fe->ops.set_rf_input(fe, rf_input);
+		else
+			err = FE_RESERVATION_FAILED;
+	}
 		break;
 
 	case FE_DISEQC_RESET_OVERLOAD:
@@ -3720,7 +3766,7 @@ int dvb_frontend_suspend(struct dvb_frontend *fe)
 		ret = fe->ops.tuner_ops.sleep(fe);
 	}
 	if (fe->ops.sleep) {
-		dprintk("Calling sleep\n");
+		dprintk("Calling sleep adapter=%d\n", fe->dvb->num);
 		ret = fe->ops.sleep(fe);
 	}
 	return ret;

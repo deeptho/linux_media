@@ -583,8 +583,11 @@ STCHIP_Error_t ChipSetOneRegister(STCHIP_Info_t* hChip,u16 RegAddr,u32 Data)
 			if((regIndex >= 0) && (regIndex  < hChip->NbRegs)) {
 				hChip->pRegMapImage[regIndex].Value=Data;
 				ChipSetRegisters(hChip,RegAddr,1);
-			} else
+			} else {
+				dprintk("BUG REG_ID\n");
+				dump_stack();
 				hChip->Error = CHIPERR_INVALID_REG_ID;
+			}
 		}
 	} else
 		return CHIPERR_INVALID_HANDLE;
@@ -625,13 +628,18 @@ STCHIP_Error_t ChipGetOneRegister(STCHIP_Info_t* hChip, u16 RegAddr, u32* data_p
 						*data_p = (u32)hChip->pRegMapImage[regIndex].Value;
 				}
 			}
-			else
+			else {
+				dprintk("BUG REG_ID\n");
+				dump_stack();
 				hChip->Error = CHIPERR_INVALID_REG_ID;
+			}
 		}
 	}
-	else
+	else {
+		dprintk("BUG HANDLE\n");
+		dump_stack();
 		hChip->Error = CHIPERR_INVALID_HANDLE;
-
+	}
 	return hChip->Error;
 }
 
@@ -703,8 +711,11 @@ STCHIP_Error_t  ChipSetRegisters(STCHIP_Info_t* hChip, u16 FirstReg, s32 NbRegs)
 					if(hChip->Repeater && hChip->RepeaterHost && hChip->RepeaterFn)
 						hChip->RepeaterFn(hChip->RepeaterHost,TRUE);	/* Set repeater ON */
 
-					if(I2cReadWrite(hChip->pI2CHost,I2C_WRITE,hChip->I2cAddr,data,nbdata) != I2C_ERR_NONE)	/* write data buffer */
+					if(I2cReadWrite(hChip->pI2CHost,I2C_WRITE,hChip->I2cAddr,data,nbdata) != I2C_ERR_NONE) {	/* write data buffer */
+						dprintk("BUG: NO_ACK");
+						dump_stack();
 						hChip->Error = CHIPERR_I2C_NO_ACK;
+					}
 
 					if(hChip->Repeater && hChip->RepeaterHost && hChip->RepeaterFn)
 						hChip->RepeaterFn(hChip->RepeaterHost,FALSE);	/* Set repeater OFF */
@@ -712,8 +723,11 @@ STCHIP_Error_t  ChipSetRegisters(STCHIP_Info_t* hChip, u16 FirstReg, s32 NbRegs)
 
 				#endif
 			}
-			else
+			else {
+				dprintk("BUG REG_ID\n");
+				dump_stack();
 				hChip->Error = CHIPERR_INVALID_REG_ID;
+			}
 		}
 		else
 			return hChip->Error;
@@ -779,9 +793,11 @@ STCHIP_Error_t ChipGetRegisters(STCHIP_Info_t* hChip, u16 FirstReg, s32 NbRegs)
 								if(hChip->Repeater && hChip->RepeaterHost && hChip->RepeaterFn)
 									hChip->RepeaterFn(hChip->RepeaterHost,TRUE);				/* Set repeater ON */
 
-								if(I2cReadWrite(hChip->pI2CHost,I2C_WRITE,hChip->I2cAddr,data,nbdata) != I2C_ERR_NONE)	/* Write sub address */
+								if(I2cReadWrite(hChip->pI2CHost,I2C_WRITE,hChip->I2cAddr,data,nbdata) != I2C_ERR_NONE)	{/* Write sub address */
+									dprintk("BUG: NO_ACK");
+									dump_stack();
 									hChip->Error = CHIPERR_I2C_NO_ACK;
-
+								}
 
 								if(hChip->Repeater && hChip->RepeaterHost && hChip->RepeaterFn)
 									hChip->RepeaterFn(hChip->RepeaterHost,FALSE);	/* Set repeater OFF */
@@ -796,8 +812,11 @@ STCHIP_Error_t ChipGetRegisters(STCHIP_Info_t* hChip, u16 FirstReg, s32 NbRegs)
 									if(hChip->Repeater && hChip->RepeaterHost && hChip->RepeaterFn)
 										hChip->RepeaterFn(hChip->RepeaterHost,TRUE);	/* Set repeater ON */
 
-									if(I2cReadWrite(hChip->pI2CHost,I2C_READ,hChip->I2cAddr,data,nbdata) != I2C_ERR_NONE)	/* Read data buffer */
-											hChip->Error = CHIPERR_I2C_NO_ACK;
+									if(I2cReadWrite(hChip->pI2CHost,I2C_READ,hChip->I2cAddr,data,nbdata) != I2C_ERR_NONE)	{/* Read data buffer */
+										dprintk("BUG: NO_ACK");
+										dump_stack();
+										hChip->Error = CHIPERR_I2C_NO_ACK;
+									}
 
 									if(hChip->Repeater && hChip->RepeaterHost && hChip->RepeaterFn)
 										hChip->RepeaterFn(hChip->RepeaterHost,FALSE);	/* Set repeater OFF */
@@ -835,13 +854,19 @@ STCHIP_Error_t ChipGetRegisters(STCHIP_Info_t* hChip, u16 FirstReg, s32 NbRegs)
 
 					#endif
 				}
-				else
+				else {
+					dprintk("BUG REG_ID\n");
+					dump_stack();
 					hChip->Error = CHIPERR_INVALID_REG_ID;
+				}
 
 			}
-			else
+			else {
+				dprintk("BUG BURST\n");
+				dump_stack();
 				hChip->Error = CHIPERR_I2C_BURST;
 			}
+		}
 		}
 	}
 	else
@@ -1048,8 +1073,12 @@ STCHIP_Error_t ChipSetFieldImage(STCHIP_Info_t* hChip,u32 FieldId, s32 Value)
 				Value = mask & (Value << pos);	/*	Shift and mask value	*/
 				hChip->pRegMapImage[regIndex].Value = (u32)((hChip->pRegMapImage[regIndex].Value & (u32)(~mask)) + (u32)Value);	/*	Concat register value and fieldval	*/
 			}
-			else
+			else {
+				dprintk("BUG: field_id=%d\n", FieldId);
+				dump_stack();
+
 				hChip->Error = CHIPERR_INVALID_FIELD_ID;
+			}
 		}
 	}
 	}
@@ -1102,8 +1131,11 @@ STCHIP_Error_t ChipSetField(STCHIP_Info_t* hChip,u32 FieldId,s32 Value)
 			}
 
 		}
-		else
+		else {
+			dprintk("BUG FIELD_ID last_err=%d\n", hChip->Error);
+			dump_stack();
 			hChip->Error = CHIPERR_INVALID_FIELD_ID;
+		}
 	}
 	else
 		return CHIPERR_INVALID_HANDLE;
@@ -1149,8 +1181,11 @@ s32 ChipGetFieldImage(STCHIP_Info_t* hChip,u32 FieldId)
 			if((sign == CHIP_SIGNED)&&(value & (1<<(bits-1))))
 				value = value - (1<<bits);			/*	Compute signed value	*/
 		}
-		else
+		else {
+			dprintk("BUG FIELD_ID\n");
+			dump_stack();
 			hChip->Error = CHIPERR_INVALID_FIELD_ID;
+		}
 		}
 	}
 
@@ -1232,8 +1267,11 @@ int ChipCheckAck(STCHIP_Info_t* hChip)
 			status = I2C_ERR_NONE;
 		#endif
 
-		if(status != I2C_ERR_NONE)
-			hChip->Error = CHIPERR_I2C_NO_ACK;
+			if(status != I2C_ERR_NONE) {
+				dprintk("BUG: NO_ACK");
+				dump_stack();
+				hChip->Error = CHIPERR_I2C_NO_ACK;
+			}
 	}
 	return status;
 }

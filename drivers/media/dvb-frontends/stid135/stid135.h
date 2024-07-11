@@ -55,12 +55,13 @@ struct stid135_cfg {
 	bool control_22k;
 };
 
+struct tbsecp3_dev;
 #if IS_REACHABLE(CONFIG_DVB_STID135)
-extern struct dvb_frontend *stid135_attach(struct i2c_adapter *i2c,
+extern struct dvb_frontend* stid135_attach(struct tbsecp3_dev* tbsecp3_dev, struct i2c_adapter *i2c,
 					   struct stid135_cfg *cfg,
 					   int nr, int tuner_nr);
 #else
-static inline struct dvb_frontend *stid135_attach(struct i2c_adapter *i2c,
+static inline struct dvb_frontend *stid135_attach(struct tbsecp3_dev* tbsecp3_dev, struct i2c_adapter *i2c,
 						  struct stid135_cfg *cfg,
 						  int nr, int tuner_nr)
 {

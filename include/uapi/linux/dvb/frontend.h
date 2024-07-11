@@ -263,7 +263,8 @@ enum fe_sec_voltage {
  */
 enum fe_sec_tone_mode {
 	SEC_TONE_ON,
-	SEC_TONE_OFF
+	SEC_TONE_OFF,
+	SEC_TONE_NOTSET
 };
 
 /**
@@ -397,10 +398,14 @@ enum fe_code_rate {
 	FEC_29_45,
 	FEC_31_45,
 	FEC_32_45,
+	FEC_77_90,
+	FEC_R_58,
+	FEC_R_60,
+	FEC_R_62,
+	FEC_R_5E,
 	FEC_4_15,
 	FEC_5_9,
 	FEC_7_15,
-	FEC_77_90,
 	FEC_7_9,
 	FEC_8_15,
 	FEC_9_20
@@ -691,7 +696,8 @@ enum fe_interleaving {
 #define DTV_LOCKTIME 89
 #define DTV_MATYPE_LIST		90 //retrieve list of present matypesand stream_ids
 #define DTV_RF_INPUT 91
-#define DTV_MAX_COMMAND	 DTV_RF_INPUT
+#define DTV_SET_SEC_CONFIGURED 92
+#define DTV_MAX_COMMAND	 DTV_SET_SEC_CONFIGURED
 
 //commands for controlling long running algorithms via FE_ALGO_CTRL ioctl
 #define DTV_STOP 1
@@ -735,7 +741,7 @@ enum fe_rolloff {
 	ROLLOFF_15,
 	ROLLOFF_10,
 	ROLLOFF_5,
-	ROLLOFF_LOW
+	ROLLOFF_LOW, //unknown but lower than 20
 };
 
 /**
@@ -1166,6 +1172,31 @@ struct dtv_algo_ctrl {
 	} u;
 };
 
+enum fe_reservation_result {
+	FE_RESERVATION_MASTER = 0,
+	FE_RESERVATION_SLAVE = 1,
+	FE_RESERVATION_RETRY = 2,
+	FE_RESERVATION_UNCHANGED = 3,
+	FE_RESERVATION_RELEASED = 4,
+	FE_RESERVATION_FAILED = -1,
+};
+
+enum fe_reservation_mode {
+	FE_RESERVATION_MODE_MASTER_OR_SLAVE = 0,
+	FE_RESERVATION_MODE_MASTER = 1,
+	FE_RESERVATION_MODE_SLAVE = 2,
+};
+
+
+struct fe_rf_input_control {
+	pid_t owner;
+	s32 config_id;
+	s32 rf_in;
+	enum fe_reservation_mode mode;
+};
+
+
+
 /*
  * When set, this flag will disable any zigzagging or other "normal" tuning
  * behavior. Additionally, there will be no automatic monitoring of the lock
@@ -1202,7 +1233,8 @@ struct dtv_algo_ctrl {
 #define FE_SET_PROPERTY		   _IOW('o', 82, struct dtv_properties)
 #define FE_GET_PROPERTY		   _IOR('o', 83, struct dtv_properties)
 #define FE_ALGO_CTRL		     _IOW('o', 84, struct dtv_algo_ctrl)
-#define FE_SET_RF_INPUT		   _IO('o', 85)
+#define FE_SET_RF_INPUT_LEGACY _IO('o', 85)
+#define FE_SET_RF_INPUT		   _IOW('o', 85, struct fe_rf_input_control)
 
 
 #define FE_GET_EXTENDED_INFO		_IOR('o', 86, struct dvb_frontend_extended_info)
