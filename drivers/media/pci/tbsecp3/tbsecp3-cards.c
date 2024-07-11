@@ -23,13 +23,13 @@ struct tbsecp3_board tbsecp3_boards[] = {
 		.name		= "TurboSight TBS 6916 (Hexa DVB-S/S2/S2X)",
 		.short_name = "TBS 6916",
 		.adapters	= 16,
-#if 1
+#if 0
 		.i2c_speed	= 39, //TBS provided value
 #else
 		.i2c_speed = 4, //default=9 value from TBS6909X
 #endif
-		.eeprom_i2c	= 1, //DTTEST was 1
-		.eeprom_addr	= 0x10, //0x00 or 0x10 DTTEST was 0x00
+		.eeprom_i2c	= 1,
+		.eeprom_addr	= 0x02,
 		.adap_config	= {
 			{
 				.ts_in = 0,
@@ -527,7 +527,7 @@ struct tbsecp3_board tbsecp3_boards[] = {
 		.name		= "TurboSight TBS 6904se DVB-S/S2/S2x ",
 		.short_name		= "TBS 6904se",
 		.adapters	= 4,
-		.i2c_speed	= 3,
+		.i2c_speed	= 3, //39 in official driver
 		.eeprom_i2c	= 3,
 		.adap_config	= {
 			{
