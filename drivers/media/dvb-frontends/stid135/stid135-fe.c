@@ -839,7 +839,7 @@ static enum fe_reservation_result stid135_select_rf_in_(struct stv* state, struc
 		state->quattro_rf_in_mask = 0;
 		state->quattro_rf_in = 0;
 		state->legacy_rf_in = false;
-		return err;
+		return FE_RESERVATION_FAILED;
 	}
 
 	state_dprintk("use_counts: tuner=%d/%d rf_in=%d/%d\n", new_tuner_use_count_before,
@@ -878,7 +878,7 @@ static enum fe_reservation_result stid135_select_rf_in_(struct stv* state, struc
 	} else if (new_tuner->active_rf_in != new_rf_in) {
 		state_dprintk("BUG: active_rf_in=%d new_rf_in=%d\n", state->active_tuner->active_rf_in->rf_in_no, new_rf_in->rf_in_no);
 	}
-	state_dprintk("Setting rf_mux_path rf_in=%d (was %d)\n", new_rf_in_no, old_rf_in_no);
+	state_dprintk("Setting rf_mux_path rf_in=%d (was %d) result=%d err=%d\n", new_rf_in_no, old_rf_in_no, result, err);
 
 	if(!new_rf_in->controlling_chip) {
 		int err1;
@@ -926,9 +926,9 @@ static int stid135_select_rf_in_legacy_(struct stv* state)
 		ic.owner = (pid_t)0xffffffff;
 		ic.config_id = 1;
 		ic.rf_in = rf_in_no;
-		state_dprintk("selecting legacy rf_in=%d\n", rf_in_no);
 		result = stid135_select_rf_in_(state, &ic);
-		return (result !=FE_RESERVATION_FAILED) ? -1 :0; /*Legacy is not clever enough for slave/master */
+		state_dprintk("selected legacy rf_in=%d result=%d\n", rf_in_no, result);
+		return (result ==FE_RESERVATION_FAILED) ? -1 :0; /*Legacy is not clever enough for slave/master */
 	}
 	return 0;
 }
@@ -1655,7 +1655,7 @@ static int stid135_read_status(struct dvb_frontend* fe, enum fe_status *status)
 {
 	struct stv *state = fe->demodulator_priv;
 	int ret = 0;
-	if (!card_trylock(state)) {
+	if (!chip_trylock(state)) {
 		if (state->signal_info.has_viterbi) {//XX: official driver tests for has_sync?
 			*status |= FE_HAS_SIGNAL | FE_HAS_CARRIER
 				| FE_HAS_VITERBI | FE_HAS_SYNC | FE_HAS_LOCK;
@@ -1663,7 +1663,7 @@ static int stid135_read_status(struct dvb_frontend* fe, enum fe_status *status)
 		return 0;
 	}
 	ret = stid135_read_status_(fe, status);
-	card_unlock(state);
+	chip_unlock(state);
 	return ret;
 }
 
@@ -1762,12 +1762,18 @@ static int stid135_tune(struct dvb_frontend* fe, bool re_tune,
 	struct stv *state = fe->demodulator_priv;
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
 	int err=0;
+	enum fe_reservation_result result;
 	chip_lock(state);
-	err =stid135_select_rf_in_legacy_(state);
-	if(err !=0) {
-		state_dprintk("rf_in=NULL\n");
+	if(!state->active_tuner || !state->active_tuner->active_rf_in) {
+		card_lock(state);
+		result = stid135_select_rf_in_legacy_(state);
+		card_unlock(state);
+	}
+	if(result <0) {
+		state_dprintk("rf_in=NULL result=%d active_tuner=%d active_rf_in=%d\n", result, state->active_tuner,
+									state->active_tuner->active_rf_in);
 		chip_unlock(state);
-		return err;
+		return -1;
 	}
 
 	err = stid135_tune_(fe, re_tune, mode_flags, delay, status);
@@ -1778,7 +1784,7 @@ static int stid135_tune(struct dvb_frontend* fe, bool re_tune,
 		err|= stid135_constellation_start_(fe, &p->constellation, max_num_samples);
 	}
 	chip_unlock(state);
-	return err;
+	return err ?  -1 :0;
 }
 
 
@@ -1854,15 +1860,16 @@ static int stid135_set_voltage(struct dvb_frontend* fe, enum fe_sec_voltage volt
 		bool voltage_was_on = (old_voltage != SEC_VOLTAGE_OFF);
 		bool voltage_is_on = (voltage != SEC_VOLTAGE_OFF);
 		card_lock(state); //DeepThought: maybe not needed (as it does not use stid135 chips)
-		if(rf_in->reservation.use_count >1) {
-			state_dprintk("SKIPPING set_voltage voltage=%d on=%d/%d "
-										"tuner_use_count=%d rf_in_use_count=%d owner=%d\n", voltage, voltage_was_on, voltage_is_on,
+		if(rf_in->reservation.use_count >1 && ! state->legacy_rf_in) {
+			state_dprintk("SKIPPING set_voltage voltage=%s on=%d/%d "
+										"tuner_use_count=%d rf_in_use_count=%d owner=%d\n", voltage_str(voltage),
+										voltage_was_on, voltage_is_on,
 										tuner->reservation.use_count, rf_in->reservation.use_count,
 										tuner->reservation.owner);
 		} else {
-			state_dprintk("calling set_voltage voltage=%d on=%d/%d "
-										"tuner_use_count=%d rf_in_use_count=%d owner=%d\n", voltage, voltage_was_on, voltage_is_on,
-										tuner->reservation.use_count, rf_in->reservation.use_count,
+			state_dprintk("calling set_voltage voltage=%s on=%d/%d "
+										"tuner_use_count=%d rf_in_use_count=%d owner=%d\n", voltage_str(voltage),
+										voltage_was_on, voltage_is_on, tuner->reservation.use_count, rf_in->reservation.use_count,
 										tuner->reservation.owner);
 			state->chip->set_voltage(state->chip->i2c, voltage, rf_in->rf_in_no);
 			rf_in->voltage = voltage;
@@ -2006,10 +2013,11 @@ static int stid135_send_master_cmd(struct dvb_frontend* fe, struct dvb_diseqc_ma
 	}
 	chip_lock(state);
 	card_lock(state);
-	if(rf_in->sec_configured) {
-		state_dprintk("SKIPPING diseqc: rf_in=%d; tuner[%d].use_count=%d rf_in[%d].use_count=%d\n", rf_in->rf_in_no,
+	if(rf_in->sec_configured && ! state->legacy_rf_in) {
+		state_dprintk("SKIPPING diseqc: rf_in=%d; tuner[%d].use_count=%d rf_in[%d].use_count=%d legacy=%d\n",
+									rf_in->rf_in_no,
 									tuner->tuner_no,
-									tuner->reservation.use_count, rf_in->rf_in_no, rf_in->reservation.use_count);
+									tuner->reservation.use_count, rf_in->rf_in_no, rf_in->reservation.use_count, state->legacy_rf_in);
 		card_unlock(state);
 		chip_unlock(state);
 	} else {
