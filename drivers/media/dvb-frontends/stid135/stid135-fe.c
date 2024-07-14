@@ -1253,20 +1253,8 @@ static int stid135_set_parameters(struct dvb_frontend* fe)
 	dev_dbg(&state->chip->i2c->dev, "%s: demod %d + tuner %d\n", __func__, state->nr, rf_in);
 	vprintk("[%d] demod %d + tuner %d\n",
 					state->nr+1,state->nr, rf_in);
-#if 0
-	if(p->rf_in < 0  || !p->rf_in_valid)  {
-		p->rf_in = state->rf_in_selected ? state->rf_in : state->fe.ops.info.default_rf_input;
-		p->rf_in_valid = true;
-		dprintk("demod=%d: Set rf_in to %d; rf_in_selected=%d  state->rf_in=%d default_rf_in=%d\n",
-						state->nr, p->rf_in, state->rf_in_selected, state->rf_in, state->fe.ops.info.default_rf_input);
-	}
-	dprintk("demod=%d: Setting rf_in: %d\n", state->nr, p->rf_in);
-	err |= stid135_select_rf_in_(state, p->rf_in);
-	if (err != FE_LLA_NO_ERROR)
-		dev_err(&state->chip->i2c->dev, "%s: fe_stid135_set_rfmux_math error %d !\n", __func__, err);
-#else
 	err |= stid135_select_rf_in_legacy_(state);
-#endif
+
 	if(state->modcode_filter){
 
 		/*Deep Thought: keeping filters ensures that  a demod does not cause a storm of data when demodulation is
@@ -1770,7 +1758,7 @@ static int stid135_tune(struct dvb_frontend* fe, bool re_tune,
 		card_unlock(state);
 	}
 	if(result <0) {
-		state_dprintk("rf_in=NULL result=%d active_tuner=%d active_rf_in=%d\n", result, state->active_tuner,
+		state_dprintk("rf_in=NULL result=%d active_tuner=%p active_rf_in=%p\n", result, state->active_tuner,
 									state->active_tuner->active_rf_in);
 		chip_unlock(state);
 		return -1;

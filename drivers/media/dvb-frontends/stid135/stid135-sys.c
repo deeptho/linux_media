@@ -199,6 +199,7 @@ static ssize_t store_none(struct kobject* kobj, struct kobj_attribute *attr,
 int stv_card_make_sysfs(struct stv_card_t* card)
 {
 	int error = 0;
+	int error1 = 0;
 	char name[128];
 	sprintf(name, "card%d", card->card_no);
 	struct kobject* mod_kobj = &(((struct module*)(THIS_MODULE))->mkobj).kobj;
@@ -206,8 +207,8 @@ int stv_card_make_sysfs(struct stv_card_t* card)
 	if(!card->sysfs_kobject)
 		return -ENOMEM;
 
-	error = sysfs_create_file(card->sysfs_kobject, &stv_card_sysfs_attribute.attr);
-	if (error) {
+	error |= (error1 = sysfs_create_file(card->sysfs_kobject, &stv_card_sysfs_attribute.attr));
+	if (error1) {
 		dprintk("failed to create the stv_card sysfs file\n");
 	}
 

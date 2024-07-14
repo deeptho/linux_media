@@ -645,7 +645,7 @@ static int set_mac_address(struct tbsecp3_adapter *adap)
 	}
 
 	return 0;
-};
+}
 
 static int start_feed(struct dvb_demux_feed *dvbdmxfeed)
 {
