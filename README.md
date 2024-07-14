@@ -87,9 +87,21 @@ to 9.
 
 If you have this problem then report it. Also report if the solution works,
 
-# Changes in release-1.1.2
-* Bug: isi scan not working on stv091x
-* Bug: tuning loop run without tuning parameters set (after sending diseqc)
+# Changes in release-1.2
+* Added sysfs entries in /sys/modules/stid135/
+* Allow setting the default rf input for each demod, for use with tvheadend. This allows more than one slave
+  tuner to use the same rf input connector on the card.
+* Incorporated changes from the official tbs drivers up to July 11 2024.
+* Improved determination of card mac addresses and generating fake mac addresses should the card not have one set.
+* Support for the tbs6916 card.
+* Bug: stid135 based cards sends out 21kHz tone and diseqc base frequency instead of 22kHz and this causes some
+  diseqc switcches to sometimes ignore commands.
+* Provide additional ioctls to support "syncrhonized" calls, where one adapter can wait on another adapter
+  to finish setting voltages, tones and sending diseqc commands
+* Protection against drivers which blindly assume name to be of size 128.
+* Bug: fe_read_status should not return -1 on timeout.
+* stv091x: fix isi scan.
+* Bug: tuning loop runs to early when diseqc is sent but no tuning info is present yet.
 
 # Changes in release-1.1.1
 
