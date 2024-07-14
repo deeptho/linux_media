@@ -55,11 +55,18 @@ static ssize_t store_none(struct kobject* kobj, struct kobj_attribute *attr, con
 static ssize_t stv_card_show(struct kobject *kobj, struct kobj_attribute *attr, char *buf);
 static ssize_t stv_chip_show(struct kobject *kobj, struct kobj_attribute *attr, char *buf);
 static ssize_t stv_demod_show(struct kobject *kobj, struct kobj_attribute *attr, char *buf);
+static ssize_t stv_demod_show_default_rf_input(struct kobject *kobj, struct kobj_attribute *attr,
+																							 char *buf);
+static ssize_t stv_demod_set_default_rf_input(struct kobject* kobj, struct kobj_attribute *attr,
+																							const char *buf, size_t count);
+
 static ssize_t stv_temperature_show(struct kobject *kobj, struct kobj_attribute *attr, char *buf);
 
 static struct kobj_attribute stv_card_sysfs_attribute =__ATTR(state, 0444, stv_card_show, store_none);
 static struct kobj_attribute stv_chip_sysfs_attribute =__ATTR(state, 0444, stv_chip_show, store_none);
 static struct kobj_attribute stv_demod_sysfs_attribute =__ATTR(state, 0444, stv_demod_show, store_none);
+static struct kobj_attribute stv_demod_sysfs_default_rf_input_attribute =
+	__ATTR(default_rf_in, 0774, stv_demod_show_default_rf_input, stv_demod_set_default_rf_input);
 static struct kobj_attribute stv_temperature_sysfs_attribute =__ATTR(temperature, 0444,
 																																		 stv_temperature_show, store_none);
 
@@ -428,8 +435,8 @@ static ssize_t stv_demod_show(struct kobject *kobj, struct kobj_attribute *attr,
 		adapter_no= state->fe.dvb->num;
 	}
 	ret += sprintf(buf+ret,
-								 "nr=%d adapter_no=%d rf_in=%d rf_in_selected=%d\n",
-								 state->nr, adapter_no, rf_in, rf_in);
+								 "nr=%d adapter_no=%d default_rf_in=%d selected_rf_in=%d\n",
+								 state->nr, adapter_no, state->fe.ops.info.default_rf_input, rf_in);
 	ret += sprintf(buf+ret,
 										"llr_in_use=%d\nfreq=%d\n",
 								 state->llr_in_use, state->tuner_frequency);
@@ -450,6 +457,30 @@ static ssize_t stv_demod_show(struct kobject *kobj, struct kobj_attribute *attr,
 	return ret;
 }
 
+static ssize_t stv_demod_show_default_rf_input(struct kobject *kobj, struct kobj_attribute *attr,
+																							 char *buf)
+{
+	/*
+		show() must not use snprintf() when formatting the value to be
+		returned to user space. If you can guarantee that an overflow
+		will never happen you can use sprintf() otherwise you must use
+		scnprintf().*/
+	struct stv* state = find_demod(kobj);
+	int default_rf_input = state->fe.ops.info.default_rf_input;
+	int ret=0;
+	ret += sprintf(buf+ret, "%d\n", default_rf_input);
+	return ret;
+}
+
+static ssize_t stv_demod_set_default_rf_input(struct kobject* kobj, struct kobj_attribute *attr,
+																							const char *buf, size_t count) {
+	int default_rf_input = 0;
+	sscanf(buf,"%d",&default_rf_input);
+	struct stv* state = find_demod(kobj);
+	state->fe.ops.info.default_rf_input = default_rf_input;
+	state_dprintk("Set default_rf_input=%d\n", default_rf_input);
+	return count;
+}
 
 int stv_demod_make_sysfs(struct stv* state)
 {
@@ -461,9 +492,12 @@ int stv_demod_make_sysfs(struct stv* state)
 		return -ENOMEM;
 
 	error = sysfs_create_file(state->sysfs_kobject, &stv_demod_sysfs_attribute.attr);
+
 	if (error) {
 		dprintk("failed to create the stv_demod sysfs file\n");
 	}
+
+	error = sysfs_create_file(state->sysfs_kobject, &stv_demod_sysfs_default_rf_input_attribute.attr);
 
 	return error;
 }
