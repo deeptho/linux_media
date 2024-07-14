@@ -6264,9 +6264,12 @@ fe_lla_error_t fe_stid135_set_rfmux_path_(STCHIP_Info_t* hChip, 	enum fe_stid135
 		break;
 	}
 
-	if (hChip->Error) /*Check the error at the end of the function*/
+	if (hChip->Error) { /*Check the error at the end of the function*/
+		dprintk("ERROR=%d %d\n", error, hChip->Error);
 		error = FE_LLA_I2C_ERROR;
-
+	} else if (error) {
+		dprintk("ERROR=%d\n", error);
+	}
 	return(error);
 }
 
@@ -12651,7 +12654,9 @@ void card_lock_(struct stv* state, const char*func, int line) {
 	lock->func = func;
 	lock->line = line;
 	lock->lock_time =  ktime_get_boottime();
+#ifdef DEBUG_LOCK
 	state_dprintk_(func, line, "card  locked\n");
+#endif
 }
 
 int card_trylock_(struct stv* state, const char*func, int line) {
@@ -12684,7 +12689,9 @@ void card_unlock_(struct stv* state, const char* func, int line) {
 	lock->demod = -1;
 	lock->chip_no = -1;
 	mutex_unlock(&lock->mutex);
+#ifdef DEBUG_LOCK
 	state_dprintk_(func, line, "card unlocked\n");
+#endif
 }
 //only for debugging, when caller knows it should have lock
 bool card_is_locked(struct stv* state) {
@@ -12700,15 +12707,19 @@ void chip_lock_(struct stv* state, const char*func, int line) {
 			fn="??";
 		state_dprintk_(func, line, "Waiting for chip mutex created at %s:%d by demod=%d.%d\n", fn, lock->line, lock->chip_no, lock->demod);
 		mutex_lock(&lock->mutex);
+#ifdef DEBUG_LOCK
 		state_dprintk_(func, line, "card mutex locked now\n");
+#endif
 	}
 
 	lock->func = func;
 	lock->line = line;
 	lock->demod = state->nr;
 	lock->chip_no = state->chip->chip_no;
-	lock->lock_time =  ktime_get_boottime();
+	lock->lock_time = ktime_get_boottime();
+#ifdef DEBUG_LOCK
 	state_dprintk_(func, line, "chip mutex locked\n");
+#endif
 }
 
 int chip_trylock_(struct stv* state, const char*func, int line) {
@@ -12742,7 +12753,9 @@ void chip_unlock_(struct stv* state, const char* func, int line) {
 	lock->demod= -1;
 	lock->chip_no= -1;
 	mutex_unlock(&lock->mutex);
+#ifdef DEBUG_LOCK
 	state_dprintk_(func, line, "chip mutex unlocked\n");
+#endif
 }
 
 bool chip_is_locked(struct stv* state) {

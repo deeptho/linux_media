@@ -398,14 +398,23 @@ STCHIP_Error_t ChipAddField(STCHIP_Info_t* hChip,u16 RegId, u32 FieldId,char * N
 				pField->Type = Type;
 				if(NbBits)
 					pField->Mask = CreateMask(NbBits,Pos);
-				else
+				else {
+					dprintk("BUG FIELD_SIZE\n");
+					dump_stack();
 					hChip->Error = CHIPERR_INVALID_FIELD_SIZE;
+				}
 			}
-			else
+			else {
+				dprintk("BUG: field_id=%d\n", FieldId);
+				dump_stack();
 				hChip->Error = CHIPERR_INVALID_FIELD_ID;
+			}
 		}
-		else
+		else {
+			dprintk("BUG REG_ID\n");
+			dump_stack();
 			hChip->Error = CHIPERR_INVALID_REG_ID;
+		}
 	}
 	else
 		return CHIPERR_INVALID_HANDLE;

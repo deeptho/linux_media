@@ -553,7 +553,8 @@ static enum fe_reservation_result reserve_tuner_and_rf_in_(struct stv* state, st
 	int rf_in = ic ? ic->rf_in : -1;
 	BUG_ON(ic && (tuner_no <0 || tuner_no >= sizeof(chip->tuners)/sizeof(chip->tuners[0])));
 	if(!card_is_locked(state)) {
-		state_dprintk("BUG: called without locking\n");
+		state_dprintk("BUG: called without locking card\n");
+		dump_stack();
 	}
 	//rf_in to reserve (could be on other chip)
 
@@ -887,9 +888,11 @@ static enum fe_reservation_result stid135_select_rf_in_(struct stv* state, struc
 		new_rf_in->tone = SEC_TONE_OFF;
 		new_rf_in->voltage = SEC_VOLTAGE_OFF;
 	}
-
 	err |= fe_stid135_set_rfmux_path(state, new_rf_in_no + 1);
-
+	if (err) {
+		state_dprintk("Returning failed: err=%d\n", err);
+		return FE_RESERVATION_FAILED;
+	}
 	state->is_master = (result == FE_RESERVATION_MASTER);
 	return result;
 }
@@ -1789,7 +1792,7 @@ static int stid135_set_voltage(struct dvb_frontend* fe, enum fe_sec_voltage volt
 
 	struct stv *state = fe->demodulator_priv;
 	int err=0;
-	state_dprintk("mode=%d voltage=%d\n", state->chip->multiswitch_mode, voltage);
+	state_dprintk("mode=%d voltage=%s\n", state->chip->multiswitch_mode, voltage_str(voltage));
 	struct stv_rf_in_t* rf_in = active_rf_in(state);
 	struct stv_tuner_t* tuner = state->active_tuner;
 	if(state->chip->multiswitch_mode== FE_MULTISWITCH_MODE_QUATTRO) {
@@ -1801,7 +1804,7 @@ static int stid135_set_voltage(struct dvb_frontend* fe, enum fe_sec_voltage volt
 			else
 				state->quattro_rf_in &= ~2;
 		}
-		state_dprintk("Quattro mode: voltage=%d mask=%d\n", voltage, state->quattro_rf_in_mask);
+		state_dprintk("Quattro mode: voltage=%s mask=%d\n", voltage_str(voltage), state->quattro_rf_in_mask);
 	}
 
 	if (state->chip->set_voltage && (!tuner || ! rf_in)) {//@todo: locking maybe not needed
@@ -1834,14 +1837,15 @@ static int stid135_set_voltage(struct dvb_frontend* fe, enum fe_sec_voltage volt
 	*/
 	if(! state->is_master) {
 		if(!rf_in) {
-			state_dprintk("Skipping set_voltage=%d; no active rf_in\n", voltage);
+			state_dprintk("Skipping set_voltage=%s; no active rf_in\n", voltage_str(voltage));
 			return -EPERM;
 		}
 		if(rf_in->voltage != voltage) {
-			state_dprintk("Skipping set_voltage=%d; not master and current voltage=%d\n", voltage, rf_in->voltage);
+			state_dprintk("Skipping set_voltage=%s; not master and current voltage=%s\n", voltage_str(voltage),
+										voltage_str(rf_in->voltage));
 			return voltage == SEC_VOLTAGE_OFF ? 0: -1;
 		}
-		state_dprintk("Skipping set_voltage=%d; not master, but voltage ok\n", voltage);
+		state_dprintk("Skipping set_voltage=%s; not master, but voltage ok\n", voltage_str(voltage));
 		return 0;
 	}
 
@@ -1888,7 +1892,7 @@ static int stid135_set_tone(struct dvb_frontend* fe, enum fe_sec_tone_mode tone)
 			else
 				state->quattro_rf_in &= ~1;
 		}
-		state_dprintk("Quattro mode: tone=%d mask=%d\n", tone, state->quattro_rf_in_mask);
+		state_dprintk("Quattro mode: tone=%s mask=%d\n", tone_str(tone), state->quattro_rf_in_mask);
 	}
 
 	if ((!tuner || ! rf_in)) {//@todo: locking maybe not needed
