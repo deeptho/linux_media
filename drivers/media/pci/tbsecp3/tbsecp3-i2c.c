@@ -77,11 +77,6 @@ static int i2c_xfer(struct i2c_adapter *adapter, struct i2c_msg *msg, int num)
 			bus->done = 0;
 			tbs_write(bus->base, TBSECP3_I2C_CTRL, i2c_ctrl.raw.ctrl);
 			retval = wait_event_timeout(bus->wq, bus->done == 1, HZ);
-			if(retval ==0) {
-				bus->done = 0;
-				retval = wait_event_timeout(bus->wq, bus->done == 1, 10*HZ);
-				printk("After retry ret=%d\n", retval);
-			}
 			if (retval == 0) {
 				tbs_read(bus->base, TBSECP3_I2C_STAT); // restore iic to its original state
 				dev_err(&dev->pci_dev->dev, "i2c xfer timeout\n");

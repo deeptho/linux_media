@@ -1,4 +1,3 @@
-#define DEBUG_LOCK
 #define  ENABLE_BBFRAME_FOR_GSE
 /*
  * This file is part of STiD135 OXFORD LLA

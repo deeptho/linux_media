@@ -866,8 +866,7 @@ extern struct list_head stv_demod_list;
 
 char* tone_str(enum fe_sec_tone_mode tone);
 char* voltage_str(enum fe_sec_voltage voltage);
-char* reservation_mode_str(enum fe_reservation_mode mode);
-char* reservation_result_str(enum fe_reservation_result result);
+
 extern int active_rf_in_no(struct stv* state);
 extern struct stv_rf_in_t* active_rf_in(struct stv* state);
 
