@@ -28,7 +28,7 @@ git clone --depth=1  https://github.com/deeptho/linux_media.git ./media
 Then  check out a copy of DeepThought's media_build (try tbs media_build if it does not work)
 
 ```
-git clone https://github.com/deeptho/media_build
+git clone https://github.com/deeptho/neumo_media_build
 ```
 
 Make sure software for kernel compilation is installed.
