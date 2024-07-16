@@ -2117,51 +2117,12 @@ static int stid135_sleep(struct dvb_frontend* fe)
 			state_dprintk("BUG: sleep tuner_use_count=%d <=0 \n", tuner->reservation.use_count);
 		if(rf_in->reservation.use_count<=0)
 			state_dprintk("BUG: sleep rf_in_use_count=%d <=0 \n", rf_in->reservation.use_count);
-#if 1
 		result = stid135_select_rf_in_(state, NULL);
-#else
-		state_dprintk("decrementing tuner[%d].use_count=%d\n", tuner->tuner_no, tuner->reservation.use_count);
-		tuner->reservation.use_count--;
-		if(tuner->reservation.use_count == 0)
-			tuner->reservation.owner=-1;
-		state_dprintk("decrementing rf_in[%d].use_count=%d\n", rf_in->rf_in_no, rf_in->reservation.use_count);
-		rf_in->reservation.use_count--;
-		if(rf_in->reservation.use_count == 0) {
-			if(rf_in->controlling_chip) {
-				err |= (err1=fe_stid135_set_22khz_cont(&state->chip->ip, rf_in->rf_in_no + 1, false));
-				state_dprintk("turned off tone rf_in=%d err=%d\n", rf_in->rf_in_no, err1);
-			}
-			state_dprintk("released rf_in=%d\n", rf_in->rf_in_no);
-			if(state->chip->set_voltage) {
-				state_dprintk("old rf_in no longer in use: rf_in=%d; VOLTAGE OFF\n", rf_in->rf_in_no);
-				state->chip->set_voltage(state->chip->i2c, SEC_VOLTAGE_OFF, rf_in->rf_in_no);
-			}
-			rf_in->reservation.owner = -1;
-			rf_in->reservation.config_id = -1;
-			rf_in->controlling_chip = NULL;
-			rf_in->voltage = SEC_VOLTAGE_OFF;
-			rf_in->tone = SEC_TONE_OFF;
-		}
-		if(tuner->reservation.use_count == 0) {
-			err |= (err1=FE_STiD135_TunerStandby(state->chip->ip.handle_demod, rf_in->rf_in_no + 1, 0));
-			state_dprintk("TUNER STANDBY: err=%d\n", err1);
-			tuner->reservation.owner = -1;
-			tuner->reservation.config_id = -1;
-			tuner->active_rf_in = NULL;
-			tuner->powered_on = false;
-		}
-		state->active_tuner = NULL;
-#endif
 		state_dprintk("Before unlock\n");
 		card_unlock(state);
 		chip_unlock(state);
 		state_dprintk("After unlock\n");
 	}
-#if 0
-	state->quattro_rf_in_mask = 0;
-	state->quattro_rf_in = 0;
-	state->legacy_rf_in = false;
-#endif
 	return err != 0 ? -1 : 0;
 }
 
