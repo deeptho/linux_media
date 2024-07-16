@@ -1849,22 +1849,22 @@ static int stid135_set_voltage(struct dvb_frontend* fe, enum fe_sec_voltage volt
 		bool voltage_is_on = (voltage != SEC_VOLTAGE_OFF);
 		card_lock(state); //DeepThought: maybe not needed (as it does not use stid135 chips)
 		if(rf_in->reservation.use_count >1 && ! state->legacy_rf_in) {
+			card_unlock(state);
 			state_dprintk("SKIPPING set_voltage voltage=%s on=%d/%d "
 										"tuner_use_count=%d rf_in_use_count=%d owner=%d\n", voltage_str(voltage),
 										voltage_was_on, voltage_is_on,
 										tuner->reservation.use_count, rf_in->reservation.use_count,
 										tuner->reservation.owner);
 		} else {
+			rf_in->voltage = voltage;
+			card_unlock(state);
 			state_dprintk("calling set_voltage voltage=%s on=%d/%d "
 										"tuner_use_count=%d rf_in_use_count=%d owner=%d\n", voltage_str(voltage),
 										voltage_was_on, voltage_is_on, tuner->reservation.use_count, rf_in->reservation.use_count,
 										tuner->reservation.owner);
 			state->chip->set_voltage(state->chip->i2c, voltage, rf_in->rf_in_no);
-			rf_in->voltage = voltage;
 		}
-		card_unlock(state);
 		state_dprintk("set_voltage done: rf_in=%d\n", rf_in->rf_in_no);
-
 	}
 	return 0;
 }
@@ -2002,16 +2002,16 @@ static int stid135_send_master_cmd(struct dvb_frontend* fe, struct dvb_diseqc_ma
 	chip_lock(state);
 	card_lock(state);
 	if(rf_in->sec_configured && ! state->legacy_rf_in) {
+		card_unlock(state);
 		state_dprintk("SKIPPING diseqc: rf_in=%d; tuner[%d].use_count=%d rf_in[%d].use_count=%d legacy=%d\n",
 									rf_in->rf_in_no,
 									tuner->tuner_no,
 									tuner->reservation.use_count, rf_in->rf_in_no, rf_in->reservation.use_count, state->legacy_rf_in);
-		card_unlock(state);
 		chip_unlock(state);
 	} else {
+		card_unlock(state); //we do not need lock anymore, and it prevents chip_sleep
 		err |= fe_stid135_diseqc_init(&rf_in->controlling_chip->ip, rf_in->rf_in_no + 1, FE_SAT_DISEQC_2_3_PWM);
 		err |= fe_stid135_diseqc_send(state, rf_in->rf_in_no + 1, cmd->msg, cmd->msg_len);
-		card_unlock(state);
 		chip_unlock(state);
 		state_dprintk("diseqc sent: rf_in=%d; tuner[%d].use_count=%d rf_in[%d].use_count=%d\n", rf_in->rf_in_no,
 								tuner->tuner_no,
