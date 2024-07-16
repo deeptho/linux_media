@@ -12765,9 +12765,16 @@ bool chip_is_locked(struct stv* state) {
 }
 
 void chip_sleep_(struct stv* state, int timems, const char* func, int line) {
-	chip_unlock_(state, func, line);
+	bool may_unlock = !card_is_locked(state);
+	if (may_unlock)
+		chip_unlock_(state, func, line);
+	else {
+		state_dprintk("Sleeping without unlock because card is locked\n");
+		dump_stack();
+	}
 	ChipWaitOrAbort(state->chip->ip.handle_demod, timems);
-	chip_lock_(state, func, line);
+	if(may_unlock)
+		chip_lock_(state, func, line);
 }
 
 fe_lla_error_t reserve_llr(struct stv* state, s32 required_llr)
