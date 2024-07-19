@@ -87,6 +87,158 @@ to 9.
 
 If you have this problem then report it. Also report if the solution works,
 
+# Usage
+These drivers were designed for use with neumoDVB to support advanced features provided by
+some cards:
+* Spectrum acquisition.
+* Constellation plots.
+* Blind scanning.
+* Supporting cards with RF mixes, which allow multiple demods to connect to the same tuner
+* Stable identification of cards even when they are inserted in different orders (USB device)
+  or placed in different slots.
+* Providing advanced information for the stid135 based cards through sysfs and allowing
+  certain parameters to be set through sysfs for those cards.
+
+To make use or optimal use of these features, application programs should adhere to a new
+extended ``neumo-DVB'' interface, but the drivers were designed to be also backward compatable
+
+## Using with neumoDVB
+
+neumoDVB detects the presence of these drivers and then will exploit the advanced features;
+if the drivers are not loaded if falls back to the DVB-apiV5 interface
+
+## Using with existing programs developed for DVB-apiV5
+
+In principle no changes are needed, and even without changes for stid135 based cards,
+through the sysfs interface it is possible to obtain more information about
+the cards and what they are doing. Also it is possible to slightly enhance using existing
+programs, such as tvheadend.
+
+* Through /sys/module/stid135/... it is possible to figure out which adapter belongs to which
+  card.
+* Each card has one *temperature* property per stid135 chip, which contains the current temperature
+  in Celcius.
+* Each card has a *blindscan_always* property.
+  By setting '/sys/module/stid135/card0/blindscan_always' to 1, the stid135 driver will blindscan
+  muxes on that card (card0). For instance if TvHeadend thinks that a mux is QPSK and has a symbolrate
+  of 20kS/s, but in reality it has PSK8 modulation and a symbolrate of 30kS/s, tuning will fail without this
+  setting, but will succeed with it. The downside is that the web interface of TvHeadend will
+  still show the erroneous parameters. The upside is that scanning becomes easier.
+
+  Note that the proper way to set a sysfs parameter is (as an example)
+
+  ``` echo 1 | sudo tee /sys/module/stid135/card0/blindscan_always```
+
+* Each adapter (or rather: demodulator) has a *default_rf_in* property. The value of this
+  is a number indicating the physical input to which the adapter will be connected by default,
+  if applications do not use the neumo-DVB api. For example, on tbs6909X,
+  the default value for /sys/module/stid135/card0/chip0/demodX/default_rf_in
+  will be X modulo 8, which means that two demodulators are connected to each of the four
+  RF inputs.
+
+  In case you only have one cable connected to RF input 0, you can set all of the
+  default_rf_in values to 0 and then configure TvHeadend to treat adapters 1...7 as slave adapters
+  connected to master adapter 0. This then will allow simulatenous viewing or recording of
+  channels spread over 8 different muxes in the same satellite band (e.g., horizontal Ku-low).
+
+  Note that TvHeadend will probably have difficulties coping with that much data, so it is best
+  to stick with a smaller number of slave tuners.
+
+## The neumoDVB kernel api
+
+This API has been kept mostly compatible with the existing DVB-V5 api, both internally in
+the kernel and externally towards user applications. However, the kernel-side
+API is not binary compatile (yet) with DVB-apiV5 and requires recompilation of **all** DVB modules that
+the user wants to use, even those not supporting neumoDVB.
+
+User space applications should proceed as follows
+
+* First check for the presence of */sys/module/dvb_core/info/version*. If this entry exists,
+  it means that the neumoDVB drivers have been loaded, otherwise the application should fall back to
+  DVB-apiV5. The version number in that sysfs file can also be used to distinghuish between different
+  versions of the drivers. Note that the neumoDVB api is not yet frozen.
+
+* Using the *FE_GET_EXTENDED_INFO* ioctl, get information about the installed cards and adapters,
+  specificaly their names (for use in GUI and in log files) and their *MAC address*. The latter
+  is a unique id, which can be used to associate configuration information. For instance, the adapter
+  number of a specific adapter may differ from one boot to the next when a card has been removed,
+  or a new one has been inserted. However, the MAC address will always remain the same.
+
+* When tuning to a specific mux, first call the *FE_SET_RF_INPUT* ioctl. This is used to connect
+  a demodulator to a specific RF_INPUT, but also to synchronize secondary device (LNBs and switches)
+  configuration when multiple demodulators connect to the same tuner and thus to the same LNB and switches.
+
+  Being able to select a specific RF_INPUTs means that card operation becomes much more flexible.
+  For instance, it is possible to connect more than 2 demodulators to the same input cable temporarily
+  and as needed. In case each input is connected to a different LNB for a different satellite,
+  it is possible to receive up to 8 different muxes on TBS6909V2 or up to 16 muxes on TBS6916 on the same satellite.
+  With the standard DVB-v5 api drivers only 2 would be possible, because of the choice to pair 2 tuners
+  to each RF_INPUT in a fixed manner.
+
+  Another problem not handled by the standard drivers is that a slave adapter should wait with tuning
+  until it is certain that secondary equipment has been configured. For instance many programs are multi
+  threaded. If the thread for the master tuner is delayed for some reason, it may happen that the master
+  tuner has not yet finished sending DiSeqC commands when the slave tuner starts tuning and then slave tuning
+  will fail. Of course it is possible to prevent this at the application level, but neumoDVB handles it in the
+  drivers. This allows multiple applications to synchronize such access.
+
+  Concretely, when calling FE_SET_RF_INPUT, the application can specificy whether the demodulator will
+  become master or slave. Typically an application will specify 'master' for the first tune, and 'slave'
+  for subsequent tune's using the same RF_INPUT. An application can also specify 'master or slave'. In this
+  case the drivers will make the adapter that makes the first ioctl the master and the other ones slaves.
+  In all cases, when the drivers receive the ioctl, they will enforce proper execution of master requests
+  before related slave requests can start.
+
+  The ioctl FE_SET_RF_INPUT caller should specifify
+
+    ** rf_input: the desired tuner and cable to connect to
+
+    ** mode: whether the tuner wants to become master (and agrees to configure LNB and switches), slave
+     (agrees to not configure LNB and switches), or both.
+
+    ** owner: a unique identifier for the calling application. Applications can only use resources (tuners,
+     demodulators) if they are not in use by another application. Typically this should be the process id.
+
+    ** config_id: a number which is incremented each time the application will reconfigure an RF_INPUT,
+     which means: select a different LNB, or a different satellite band.
+
+     Whenever the driver notices an update in config_id, it will wait for all demodulators to release
+     resources reserved with an older config_id value before allowing FE_SET_RF_INPUT ioctl's (including
+     the one using the new config_id for the first time) to succeed. This loosens the synchronisation
+     requirements on the application. For instance the application can call FE_SET_RF_INPUT for a master
+     and slave demodulator in parallel on two threads. If for some reason the master ioctl call is delayed
+     until after the slave ioctl call, the driver will do the right thing: fail one or both of the calls
+     and inform the calling threads (through the ioctl return value) that this failure is only temporary
+     and that they should retry the call after waiting for a brief period.
+
+  The ioctl's return value indicates
+
+  ** a result: master or slave. If the result is 'master', the adapter should proceed with setting
+     voltages, tones, sending diseqc commands, and then finally perform a tune. If the result is
+     'slave', then the caller can be certain that secondary equipment is now ready and the caller
+     can start tuning its adapter.
+
+  ** or permanent failure (e.g., requesting a non-existing RF_INPUT)
+
+  ** or temporary failure: it is not yet possible to select the RF_INPUT, either because a master demodulator
+     has not yet finished configuring secondary equipment (which the drivers can tell, see below),
+     or because some other demodulators still need to release the tuner but have not done so. The calling
+     thread can simply retry after sleeping e.g., 10 milliseconds, or the application can provide a
+     locking mechanism to prevent this from happening (warning: this tends
+     to be slower)
+
+  If the calling thread receives a 'slave' result, it should proceed directly with tuning. If it
+  receives a 'master result', it should make FE_SET_VOLTAGE, FE_SET_TONE and FE_DISEQC_SEND_MASTER_CMD
+  commands as needed, and also respect any delays needed by the secondary equipment to
+  correctly power up. At this stage the calling thread should tune the adapter, using FE_SET_PROPERTY,
+  and include a DTV_SET_SEC_CONFIGURED property. This informs the drivers that the secondary  equipment
+  is ready for use. From this stage on FE_SET_RF_INPUT ioctls for the same RF_INPUT will succeed, provided
+  they use the current config_id value.
+
+* Ther remainder of the tuning process is similar as with the standard DVB-v5 api, except that additional
+  tuning properties have been added to indicate blind scanning and that additional properties are returned
+  to indicate discovered modulation parameters.
+
 # Changes in release-1.2
 * Added sysfs entries in /sys/modules/stid135/
 * Allow setting the default rf input for each demod, for use with tvheadend. This allows more than one slave
