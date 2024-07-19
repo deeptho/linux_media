@@ -60,9 +60,15 @@ static ssize_t stv_demod_show_default_rf_input(struct kobject *kobj, struct kobj
 static ssize_t stv_demod_set_default_rf_input(struct kobject* kobj, struct kobj_attribute *attr,
 																							const char *buf, size_t count);
 
+static ssize_t stv_blindscan_always_show(struct kobject *kobj, struct kobj_attribute *attr, char *buf);
+static ssize_t stv_blindscan_always_store(struct kobject* kobj, struct kobj_attribute *attr,
+																					const char *buf, size_t count);
+
 static ssize_t stv_temperature_show(struct kobject *kobj, struct kobj_attribute *attr, char *buf);
 
 static struct kobj_attribute stv_card_sysfs_attribute =__ATTR(state, 0444, stv_card_show, store_none);
+static struct kobj_attribute stv_blindscan_always_sysfs_attribute =__ATTR(blindscan_always, 0774,
+																																					stv_blindscan_always_show, stv_blindscan_always_store);
 static struct kobj_attribute stv_chip_sysfs_attribute =__ATTR(state, 0444, stv_chip_show, store_none);
 static struct kobj_attribute stv_demod_sysfs_attribute =__ATTR(state, 0444, stv_demod_show, store_none);
 static struct kobj_attribute stv_demod_sysfs_default_rf_input_attribute =
@@ -203,6 +209,26 @@ static ssize_t store_none(struct kobject* kobj, struct kobj_attribute *attr,
 	return 0;
 }
 
+static ssize_t stv_blindscan_always_show(struct kobject *kobj, struct kobj_attribute *attr,
+																							 char *buf)
+{
+	struct stv_card_t* card = find_card(kobj);
+	int blindscan_always = card->blindscan_always;
+	int ret=0;
+	ret += sprintf(buf+ret, "%d\n", blindscan_always);
+	return ret;
+}
+
+static ssize_t stv_blindscan_always_store(struct kobject* kobj, struct kobj_attribute *attr,
+																							const char *buf, size_t count) {
+	int blindscan_always = 0;
+	sscanf(buf,"%d",&blindscan_always);
+	struct stv_card_t* card = find_card(kobj);
+	card->blindscan_always = blindscan_always;
+	dprintk("Set blindscan_always=%d\n", blindscan_always);
+	return count;
+}
+
 int stv_card_make_sysfs(struct stv_card_t* card)
 {
 	int error = 0;
@@ -216,7 +242,12 @@ int stv_card_make_sysfs(struct stv_card_t* card)
 
 	error |= (error1 = sysfs_create_file(card->sysfs_kobject, &stv_card_sysfs_attribute.attr));
 	if (error1) {
-		dprintk("failed to create the stv_card sysfs file\n");
+		dprintk("failed to create the stv_card sysfs state file\n");
+	}
+
+	error |= (error1 = sysfs_create_file(card->sysfs_kobject, &stv_blindscan_always_sysfs_attribute.attr));
+	if (error1) {
+		dprintk("failed to create the stv_card sysfs property \n");
 	}
 
 	return error;

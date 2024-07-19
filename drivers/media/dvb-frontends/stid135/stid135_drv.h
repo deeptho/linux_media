@@ -359,6 +359,7 @@ struct stv_card_t {
 	struct stv_chip_t*    chips[2]; //maximum 2
 	struct stv_rf_in_t rf_ins[4];
 	struct kobject* sysfs_kobject;
+	bool blindscan_always;
 	int use_count;
 };
 

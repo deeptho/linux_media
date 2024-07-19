@@ -1149,7 +1149,7 @@ static int stid135_set_parameters(struct dvb_frontend* fe)
 					p->symbol_rate, p->inversion, p->stream_id);
 	dprintk("demod=%d: user set stream_id=0x%x", state->nr, p->stream_id);
 
-	if(blindscan_always) {
+	if(state->chip->card->blindscan_always) {
 		p->algorithm = ALGORITHM_WARM;
 		p->delivery_system = SYS_AUTO;
 		p->symbol_rate = p->symbol_rate ==0 ? 22000000 : p->symbol_rate;
@@ -2837,6 +2837,7 @@ static void init_stv_card(struct stv_card_t* card, struct stv_chip_t* first_chip
 	for(i=0; i < sizeof(card->rf_ins)/sizeof(card->rf_ins[0]); ++i) {
 		init_rf_in(&card->rf_ins[i], i);
 	}
+	card->blindscan_always = blindscan_always;
 }
 
 static void init_stv_chip(struct stv_chip_t* chip, struct stv_card_t* card, int mode,
