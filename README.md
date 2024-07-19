@@ -42,7 +42,7 @@ sudo dnf install -y perl-File-Copy #not needed?
 sudo dnf install -y perl
 sudo dnf install -y perl-Proc-ProcessTable
 
-cd media_build
+cd neumo_media_build
 git checkout deepthought
 git reset --hard
 make dir DIR=../media
