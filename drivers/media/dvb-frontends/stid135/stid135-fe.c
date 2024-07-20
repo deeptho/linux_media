@@ -926,6 +926,10 @@ static int stid135_select_rf_in_legacy_(struct stv* state)
 		ic.owner = (pid_t)0xffffffff;
 		ic.config_id = 1;
 		ic.rf_in = rf_in_no;
+		if(!chip_is_locked(state)) {
+			state_dprintk("Attempting select_rf_in_ without chp lock");
+			dump_stack();
+		}
 		result = stid135_select_rf_in_(state, &ic);
 		state_dprintk("selected legacy rf_in=%d result=%d\n", rf_in_no, result);
 		return (result ==FE_RESERVATION_FAILED) ? -1 :0; /*Legacy is not clever enough for slave/master */
@@ -1804,11 +1808,13 @@ static int stid135_set_voltage(struct dvb_frontend* fe, enum fe_sec_voltage volt
 	if (state->chip->set_voltage && (!tuner || ! rf_in)) {//@todo: locking maybe not needed
 		//for older applications, which do not call FE_SET_RF_INPUT
 		state_dprintk("before lock\n");
-		card_lock(state); //DeepThought: maybe not needed (as it does not use stid135 chips)
+		chip_lock(state); //DeepThought: needed as this may call select_rf_in_ which needs chip access
+		card_lock(state);
 		state_dprintk("after lock\n");
 		err |= stid135_select_rf_in_legacy_(state);
 		state_dprintk("before unlock err=%d\n", err);
 		card_unlock(state);
+		chip_unlock(state);
 		state_dprintk("after unlock\n");
 		rf_in = active_rf_in(state);
 		tuner = state->active_tuner;
@@ -1893,7 +1899,7 @@ static int stid135_set_tone(struct dvb_frontend* fe, enum fe_sec_tone_mode tone)
 	if ((!tuner || ! rf_in)) {//@todo: locking maybe not needed
 		//for older applications, which do not call FE_SET_RF_INPUT
 		chip_lock(state);
-		card_lock(state); //DeepThought: maybe not needed (as it does not use stid135 chips)
+		card_lock(state);
 		err |= stid135_select_rf_in_legacy_(state);
 		card_unlock(state);
 		chip_unlock(state);
