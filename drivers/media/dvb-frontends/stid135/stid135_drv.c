@@ -2504,6 +2504,7 @@ static fe_lla_error_t FE_STiD135_GetDemodLock (struct stv* state, u32 TimeOutUNU
 	int32_t run_time = 0;
 	//struct fe_stid135_internal_param *pParams = &state->chip->ip;
 	state_dprintk("At start\n");
+	print_signal_info(state);
 	while (timeout == 0 || (run_time < timeout && error == FE_LLA_NO_ERROR  && (!state->signal_info.has_lock))) {
 
 		if (kthread_should_stop() || dvb_frontend_task_should_stop(&state->fe)) {

@@ -2892,11 +2892,13 @@ static int m88rs6060_read_status(struct dvb_frontend* fe, enum fe_status* status
 	switch (p->delivery_system) {
 	case SYS_DVBS:
 		ret = regmap_read(state->demod_regmap, 0x0d, &reg0d);  //get lock bits; bits 4..6 are reserved
+		dprintk("ret=%d\n", ret);
 		if (ret)
 			goto done;
 		ret = regmap_read(state->demod_regmap, 0xd1, &regd1);  //get lock bits; bits 4..6 are reserved
 		if (ret)
 			goto done;
+		dprintk("ret=%d\n", ret);
 		state->has_timedout = (regd1>>7)&1; //viterbi failed
 		state->has_signal =  (regd1>>3)&1; //digital agc lock
 		state->has_signal = (reg0d & 0x1);  //analog agc locked
