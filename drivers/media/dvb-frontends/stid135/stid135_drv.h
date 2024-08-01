@@ -475,12 +475,12 @@ struct stv {
 void card_lock_(struct stv* state, const char* func, int line);
 int card_trylock_(struct stv* state, const char* func, int line);
 void card_unlock_(struct stv* state, const char* func, int line);
-bool card_is_locked(struct stv* state);
+bool card_is_locked_by_state(struct stv* state);
 
 void chip_lock_(struct stv* state, const char* func, int line);
 int chip_trylock_(struct stv* state, const char* func, int line);
 void chip_unlock_(struct stv* state, const char* func, int line);
-bool chip_is_locked(struct stv* state);
+bool chip_is_locked_by_state(struct stv* state);
 
 void chip_sleep_(struct stv* state, int timems, const char* func, int line);
 

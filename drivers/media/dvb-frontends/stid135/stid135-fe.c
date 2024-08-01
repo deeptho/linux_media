@@ -552,7 +552,7 @@ static enum fe_reservation_result reserve_tuner_and_rf_in_(struct stv* state, st
 	int tuner_no = ic ? ic->rf_in : -1;
 	int rf_in = ic ? ic->rf_in : -1;
 	BUG_ON(ic && (tuner_no <0 || tuner_no >= sizeof(chip->tuners)/sizeof(chip->tuners[0])));
-	if(!card_is_locked(state)) {
+	if(!card_is_locked_by_state(state)) {
 		state_dprintk("BUG: called without locking card\n");
 		dump_stack();
 	}
@@ -926,7 +926,7 @@ static int stid135_select_rf_in_legacy_(struct stv* state)
 		ic.owner = (pid_t)0xffffffff;
 		ic.config_id = 1;
 		ic.rf_in = rf_in_no;
-		if(!chip_is_locked(state)) {
+		if(!chip_is_locked_by_state(state)) {
 			state_dprintk("Attempting select_rf_in_ without chp lock");
 			dump_stack();
 		}
@@ -2007,7 +2007,7 @@ static int stid135_send_master_cmd(struct dvb_frontend* fe, struct dvb_diseqc_ma
 	}
 	chip_lock(state);
 	card_lock(state);
-	if(rf_in->sec_configured && ! state->legacy_rf_in) {
+	if(rf_in->sec_configured && ! state->legacy_rf_in && ! state->is_master) {
 		card_unlock(state);
 		state_dprintk("SKIPPING diseqc: rf_in=%d; tuner[%d].use_count=%d rf_in[%d].use_count=%d legacy=%d\n",
 									rf_in->rf_in_no,

@@ -2503,6 +2503,7 @@ static fe_lla_error_t FE_STiD135_GetDemodLock (struct stv* state, u32 TimeOutUNU
 	u32 srate;
 	int32_t run_time = 0;
 	//struct fe_stid135_internal_param *pParams = &state->chip->ip;
+	state_dprintk("At start\n");
 	while (timeout == 0 || (run_time < timeout && error == FE_LLA_NO_ERROR  && (!state->signal_info.has_lock))) {
 
 		if (kthread_should_stop() || dvb_frontend_task_should_stop(&state->fe)) {
@@ -12676,7 +12677,7 @@ int card_trylock_(struct stv* state, const char*func, int line) {
 void card_unlock_(struct stv* state, const char* func, int line) {
 	struct lock_t* lock = &state->chip->card->lock;
 	int64_t delta=ktime_ms_delta(ktime_get_boottime(), lock->lock_time);
-	if(!card_is_locked(state)) {
+	if(!card_is_locked_by_state(state)) {
 		state_dprintk_(func, line, "BUG: card not locked\n");
 		dump_stack();
 		return;
@@ -12695,9 +12696,13 @@ void card_unlock_(struct stv* state, const char* func, int line) {
 #endif
 }
 //only for debugging, when caller knows it should have lock
-bool card_is_locked(struct stv* state) {
+bool card_is_locked_by_state(struct stv* state) {
 	struct lock_t* lock = &state->chip->card->lock;
-	return mutex_is_locked(&lock->mutex);
+	if(mutex_is_locked(&lock->mutex)) {
+		return (lock->demod == state->nr);
+	} else {
+		return false;
+	}
 }
 
 void chip_lock_(struct stv* state, const char*func, int line) {
@@ -12739,7 +12744,7 @@ int chip_trylock_(struct stv* state, const char*func, int line) {
 void chip_unlock_(struct stv* state, const char* func, int line) {
 	struct lock_t* lock = &state->chip->lock;
 	int64_t delta=ktime_ms_delta(ktime_get_boottime(), lock->lock_time);
-	if(!chip_is_locked(state)) {
+	if(!chip_is_locked_by_state(state)) {
 		state_dprintk_(func, line, "BUG: chip mutex not locked\n");
 		dump_stack();
 		return;
@@ -12759,17 +12764,21 @@ void chip_unlock_(struct stv* state, const char* func, int line) {
 #endif
 }
 
-bool chip_is_locked(struct stv* state) {
+bool chip_is_locked_by_state(struct stv* state) {
 	struct lock_t* lock = &state->chip->lock;
-	return lock->func != NULL;
+	if(mutex_is_locked(&lock->mutex)) {
+		return (lock->demod == state->nr);
+	} else {
+		return false;
+	}
 }
 
 void chip_sleep_(struct stv* state, int timems, const char* func, int line) {
-	bool may_unlock = !card_is_locked(state);
+	bool may_unlock = !card_is_locked_by_state(state);
 	if (may_unlock)
 		chip_unlock_(state, func, line);
 	else {
-		state_dprintk("Sleeping without unlock because card is locked\n");
+		state_dprintk_(func, line, "Sleeping without unlock because card is locked\n");
 		dump_stack();
 	}
 	ChipWaitOrAbort(state->chip->ip.handle_demod, timems);
