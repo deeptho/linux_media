@@ -3353,7 +3353,7 @@ static int dvb_frontend_handle_ioctl(struct file *file,
 		if (fe->ops.set_rf_input)
 			err = fe->ops.set_rf_input(fe, rf_input);
 		else
-			err = FE_RESERVATION_FAILED;
+			err = FE_RESERVATION_NOT_SUPPORTED;
 	}
 		break;
 
