@@ -3487,13 +3487,11 @@ static int m88rs6060_tune(struct dvb_frontend *fe, bool re_tune,
 	return 0;
 }
 
-#if 0
 static enum dvbfe_algo m88rs6060_get_algo(struct dvb_frontend *fe)
 {
 	//dprintk("%s()\n", __func__);
 	return DVBFE_ALGO_HW;
 }
-#endif
 
 static int m88rs6060_get_spectrum_scan_sweep(struct dvb_frontend* fe,
 																						 unsigned int *delay,  enum fe_status *status)
@@ -3771,12 +3769,6 @@ static const struct dvb_frontend_ops m88rs6060_ops = {
 	},
 
 	.init = m88rs6060_init,
-#ifdef HWTUNE
-		.get_frontend_algo = m88rs6060_get_algo,
-	.tune = m88rs6060_tune,
-#else
-	//set_frontend = m88rs6060_set_frontend,
-#endif
 #if 0
 	.sleep  = m88rs6060_sleep_,
 #endif
@@ -3790,7 +3782,7 @@ static const struct dvb_frontend_ops m88rs6060_ops = {
 	.set_tone = m88rs6060_set_tone,
 	.diseqc_send_burst = m88rs6060_diseqc_send_burst,
 	.diseqc_send_master_cmd = m88rs6060_diseqc_send_master_cmd,
-
+	.get_frontend_algo	= m88rs6060_get_algo,
 	.spi_read = m88rs6060_spi_read,
 	.spi_write = m88rs6060_spi_write,
 	.stop_task =  m88rs6060_stop_task,
