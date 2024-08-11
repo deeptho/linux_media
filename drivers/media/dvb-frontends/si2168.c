@@ -268,7 +268,7 @@ static int si2168_read_ber(struct dvb_frontend *fe, u32 *ber)
 	struct si2168_dev *dev = i2c_get_clientdata(client);
 	struct si2168_cmd cmd;
 	int ret;
-	
+
 	if (dev->fe_status & FE_HAS_LOCK) {
 		memcpy(cmd.args, "\x82\x00", 2);
 		cmd.wlen = 2;
@@ -293,7 +293,7 @@ static int si2168_read_ucblocks(struct dvb_frontend *fe, u32 *ucblocks)
 	struct si2168_dev *dev = i2c_get_clientdata(client);
 	struct si2168_cmd cmd;
 	int ret;
-	
+
 	if (dev->stat_resp & 0x10) {
 		memcpy(cmd.args, "\x84\x00", 2);
 		cmd.wlen = 2;
@@ -339,7 +339,7 @@ static int si2168_set_frontend(struct dvb_frontend *fe)
 		if( c->modulation==QAM_256)
 			 c->symbol_rate=5361000;
 		if( c->modulation==QAM_64)
-			 c->symbol_rate=5057000;	
+			 c->symbol_rate=5057000;
 		break;
 	case SYS_DVBT:
 		delivery_system = 0x20;
@@ -525,9 +525,9 @@ static int si2168_init(struct dvb_frontend *fe)
 	struct si2168_cmd cmd;
 
 	dev_dbg(&client->dev, "\n");
-	
+
 	if (dev->active)
-		return 0;	
+		return 0;
 
 	/* initialize */
 	cmd_init(&cmd, "\xc0\x12\x00\x0c\x00\x0d\x16\x00\x00\x00\x00\x00\x00",
@@ -627,7 +627,7 @@ static int si2168_init(struct dvb_frontend *fe)
 	cmd.rlen = 12;
 	cmd.args[1] = (dev->fef_inv & 1) << 3 | (dev->fef_pin & 7);
 	dev_dbg(&client->dev, "args=%*ph\n", cmd.wlen, cmd.args);
-	
+
 	ret = si2168_cmd_execute(client, &cmd);
 	if (ret) {
 		dev_err(&client->dev, "err set fef pip\n");
@@ -653,7 +653,7 @@ static int si2168_init(struct dvb_frontend *fe)
 		break;
 	}
 	dev_dbg(&client->dev, "args=%*ph\n", cmd.wlen, cmd.args);
-	
+
 	ret = si2168_cmd_execute(client, &cmd);
 	if (ret) {
 		dev_err(&client->dev, "err set mp defaults\n");
@@ -911,7 +911,7 @@ static int si2168_probe(struct i2c_client *client)
 		goto err_kfree;
 	}
 	dev->muxc->priv = client;
-	ret = i2c_mux_add_adapter(dev->muxc, 0, 0, 0);
+	ret = i2c_mux_add_adapter(dev->muxc, 0, 0);
 	if (ret)
 		goto err_kfree;
 

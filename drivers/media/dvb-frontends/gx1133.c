@@ -810,10 +810,10 @@ struct dvb_frontend *gx1133_attach(const struct gx1133_config *cfg,
 		goto err1;
 	}
 	priv->muxc->priv = priv;
-	ret = i2c_mux_add_adapter(priv->muxc, 0, 0, 0);
+	ret = i2c_mux_add_adapter(priv->muxc, 0, 0);
 	if (ret)
 		goto err1;
-	ret = i2c_mux_add_adapter(priv->muxc, 0, 1, 0);
+	ret = i2c_mux_add_adapter(priv->muxc, 0, 1);
 	if (ret)
 		goto err1;
 	priv->i2c_demod = priv->muxc->adapter[0];
@@ -910,10 +910,11 @@ static int gx1133_initfe(struct dvb_frontend *fe)
 	if(!priv->cfg->ts_mode){ //parallel_port
 		gx1133_rd(priv,Demod_TOP,cfg_TS_s_sel,&temp);
 		gx1133_wr(priv,Demod_TOP,cfg_TS_s_sel,temp&0xf7);
-	} else{
+		}
+	else{
 		gx1133_rd(priv,Demod_TOP,cfg_TS_s_sel,&temp);
 		gx1133_wr(priv,Demod_TOP,cfg_TS_s_sel,(temp&0xf7)|0x08);
-	}
+		}
 	gx1133_wr(priv,Demod_TOP,0xc8,(priv->cfg->ts_cfg.TS_1<<4)+priv->cfg->ts_cfg.TS_0);
 	gx1133_wr(priv,Demod_TOP,0xc9,(priv->cfg->ts_cfg.TS_3<<4)+priv->cfg->ts_cfg.TS_2);
 	gx1133_wr(priv,Demod_TOP,0xca,(priv->cfg->ts_cfg.TS_5<<4)+priv->cfg->ts_cfg.TS_4);
@@ -1404,7 +1405,7 @@ static int gx1133_set_pls_n(struct gx1133_priv *priv, u32 n)
 
 	nx = n+shift;
 	ny = shift;
-	
+
 	gx1133_rd(priv,DVB_S2,GX1133_SCRAM_1X1Y0X_H,&tmp);
 	gx1133_wr(priv,DVB_S2,GX1133_SCRAM_1X1Y0X_H,tmp & 0xbf);
 
@@ -1421,7 +1422,7 @@ static int gx1133_set_pls_n(struct gx1133_priv *priv, u32 n)
 		scram_1x = (scram_1x & 0x7ff7f) | xx_18 | xx_7;
 	}
 	scram_1y = 0xff60;
-	
+
 	gx1133_wr(priv,DVB_S2,GX1133_SCRAM_0X_L,scram_0x&0xff);
 	gx1133_wr(priv,DVB_S2,GX1133_SCRAM_0X_M,(scram_0x>>8)&0xff);
 
@@ -1504,7 +1505,7 @@ static int gx1133_set_frontend(struct dvb_frontend *fe)
 	gx1133_rd(priv,DVB_S2,GX1133_LDPC_PLS_CTRL,&temp);
 	temp&=0xfe;
 	gx1133_wr(priv,DVB_S2,GX1133_LDPC_PLS_CTRL,temp);
-	
+
 	gx1133_rd(priv,DVB_S2,GX1133_AUTO_RST,&temp);
 	temp|=0x01;
 	gx1133_wr(priv,DVB_S2,GX1133_AUTO_RST,temp);
