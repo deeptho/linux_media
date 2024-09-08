@@ -950,7 +950,7 @@ static int set_stream_index(struct stv *state, int mis)
 	return 0;
 }
 
-void stv091x_compute_timeouts(s32* demod_timeout, s32* fec_timeout, s32 symbol_rate, enum fe_algorithm algo)
+static void stv091x_compute_timeouts(s32* demod_timeout, s32* fec_timeout, s32 symbol_rate, enum fe_algorithm algo)
 {
 	switch (algo) {
 	case ALGORITHM_BLIND:
@@ -1059,7 +1059,7 @@ static u32 stv091x_bandwidth(u32 rolloff, uint32_t symbol_rate)
 	return MulDiv32(symbol_rate, rolloff, 200);
 }
 
-int stv091x_set_frequency_symbol_rate_bandwidth(struct stv* state)
+static int stv091x_set_frequency_symbol_rate_bandwidth(struct stv* state)
 {
 	struct dtv_frontend_properties *p = &state->fe.dtv_property_cache;
 	state-> tuner_frequency = p->frequency;
@@ -1820,12 +1820,14 @@ static s32 stv091x_iq_power(struct stv *state)
 	//todo: Py_AGC, AGC2_INTEGRATOR
 }
 
+#if 0
 //unit 0.001dB
 static s32 stv091x_iq_power_dbm(struct stv *state)
 {
 	s32 iq_power = stv091x_iq_power(state);
 	return 10*(s32)(TableLookup(PADC_Lookup, ARRAY_SIZE(PADC_Lookup), iq_power) + 352);
 }
+#endif
 
 /*
 	signal power in the stv6120 tuner bandwidth (not representative for narrow band signals)

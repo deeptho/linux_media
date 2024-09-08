@@ -1610,7 +1610,7 @@ static int tas2101_stop_task(struct dvb_frontend *fe)
 	return 0;
 }
 
-int tas2101_spectrum_get(struct dvb_frontend *fe, struct dtv_fe_spectrum* user)
+static int tas2101_spectrum_get(struct dvb_frontend *fe, struct dtv_fe_spectrum* user)
 {
 	struct tas2101_priv *state = fe->demodulator_priv;
 	int error=0;

@@ -345,7 +345,7 @@ static int CfgDemodAbortTune(struct mxl *state)
 	MXL_HYDRA_DEMOD_ABORT_TUNE_T abortTuneCmd;
 	u8 cmdSize = sizeof(abortTuneCmd);
 	u8 cmdBuff[MXL_HYDRA_OEM_MAX_CMD_BUFF_LEN];
-	
+
 	abortTuneCmd.demodId = state->demod;
 	BUILD_HYDRA_CMD(MXL_HYDRA_ABORT_TUNE_CMD, MXL_CMD_WRITE, cmdSize, &abortTuneCmd, cmdBuff);
 	return send_command(state, cmdSize + MXL_HYDRA_CMD_HEADER_SIZE, &cmdBuff[0]);
@@ -414,14 +414,14 @@ static int set_parameters(struct dvb_frontend *fe)
 		{XPT_INP_MODE_DSS4}, {XPT_INP_MODE_DSS5},
 		{XPT_INP_MODE_DSS6}, {XPT_INP_MODE_DSS7} };
 #endif
-	
+
 	if (p->frequency < 950000 || p->frequency > 2150000)
 		return -EINVAL;
 	if (p->symbol_rate < 1000000 || p->symbol_rate > 45000000)
 		return -EINVAL;
 
 	//CfgDemodAbortTune(state);
-	
+
 	switch (p->delivery_system) {
 	case SYS_DSS:
 		demodChanCfg.standard = MXL_HYDRA_DSS;
@@ -463,7 +463,7 @@ static int set_parameters(struct dvb_frontend *fe)
 				   xpt_enable_dss_input[demodId].numOfBits,
 				   MXL_FALSE);
 #endif
-	
+
 	BUILD_HYDRA_CMD(MXL_HYDRA_DEMOD_SET_PARAM_CMD, MXL_CMD_WRITE,
 			cmdSize, &demodChanCfg, cmdBuff);
 
@@ -553,7 +553,7 @@ static int read_status(struct dvb_frontend *fe, enum fe_status *status)
 		p->pre_bit_count.len = 1;
 		p->pre_bit_count.stat[0].scale = FE_SCALE_COUNTER;
 		p->pre_bit_count.stat[0].uvalue = reg[3];
-		dev_dbg(&state->base->i2c->dev,"pre_bit_error=%u pre_bit_count=%u\n", p->pre_bit_error.stat[0].uvalue, p->pre_bit_count.stat[0].uvalue);
+		dev_dbg(&state->base->i2c->dev,"pre_bit_error=%ld pre_bit_count=%u\n", p->pre_bit_error.stat[0].uvalue, p->pre_bit_count.stat[0].uvalue);
 		break;
 	default:
 		break;
@@ -627,7 +627,7 @@ static int read_ber(struct dvb_frontend *fe, u32 *ber)
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
 
 	if ( p->post_bit_error.stat[0].scale == FE_SCALE_COUNTER &&
-		p->post_bit_count.stat[0].scale == FE_SCALE_COUNTER )	  
+		p->post_bit_count.stat[0].scale == FE_SCALE_COUNTER )
 	      *ber = (u32)p->post_bit_count.stat[0].uvalue ? (u32)p->post_bit_error.stat[0].uvalue / (u32)p->post_bit_count.stat[0].uvalue : 0;
 
 	return 0;
@@ -675,7 +675,7 @@ static enum fe_code_rate conv_fec(MXL_HYDRA_FEC_E fec)
 		FEC_3_4, FEC_4_5, FEC_5_6, FEC_6_7,
 		FEC_7_8, FEC_8_9, FEC_9_10
 	};
-	
+
 	if (fec > MXL_HYDRA_FEC_9_10)
 		return FEC_NONE;
 	return fec2fec[fec];
@@ -786,7 +786,7 @@ static int set_voltage(struct dvb_frontend *fe, enum fe_sec_voltage voltage)
 			state->rf_in |= 2;
 	}
 
-	return 0;  
+	return 0;
 }
 
 
@@ -1071,16 +1071,16 @@ static int firmware_download(struct mxl *state, u32 mbinBufferSize,
 	status = do_firmware_download(state, mbinBufferSize, mbinBufferPtr);
 	if (status)
 		return status;
-	
+
 	if (state->base->type == MXL_HYDRA_DEVICE_568) {
 		msleep(10);
-		
+
 		// bring XCPU out of reset
 		status = write_register(state, 0x90720000, 1);
 		if (status)
 			return status;
 		msleep(500);
-		
+
 		// Enable XCPU UART message processing in MCPU
 		status = write_register(state, 0x9076B510, 1);
 		if (status)
@@ -1099,7 +1099,7 @@ static int firmware_download(struct mxl *state, u32 mbinBufferSize,
 	status = write_register(state, XPT_DMD0_BASEADDR, 0x76543210);
 	if (status)
 		return status;
-	
+
 	if (!firmware_is_alive(state))
 		return -1;
 
@@ -1418,12 +1418,12 @@ static int load_fw(struct mxl *state)
 		return stat;
 
 	stat = firmware_download(state, fw->size, fw->data);
-	
+
 	release_firmware(fw);
 
 	if (stat)
 		dev_err(&state->base->i2c->dev,"error loading firmware\n");
-	
+
 	return stat;
 }
 
@@ -1542,7 +1542,7 @@ struct dvb_frontend *mxl58x_attach(struct i2c_adapter *i2c,
 	state->demod = demod;
 	state->rf_in = 0;
 	if(mode)
-	{ 
+	{
 		if((demod==0)||(demod==1))
 			state->rf_in = 3;
 		if((demod==2)||(demod==3))
@@ -1554,7 +1554,7 @@ struct dvb_frontend *mxl58x_attach(struct i2c_adapter *i2c,
 
 		if (rfsource > 0 && rfsource < 5)
 			state->rf_in = 4 - rfsource;
-		
+
 		if (mode==2)
 			state->rf_in = 0;
 	}
@@ -1586,7 +1586,7 @@ struct dvb_frontend *mxl58x_attach(struct i2c_adapter *i2c,
 			kfree(base);
 			goto fail;
 		}
-		
+
 		init_multisw(state);
 
 		list_add(&base->mxllist, &mxllist);

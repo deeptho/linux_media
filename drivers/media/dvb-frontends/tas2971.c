@@ -38,20 +38,23 @@
 
 LIST_HEAD(stvlist);
 
+#if 0 //not used
 /* write multiple (continuous) registers */
 /* the first value is the starting address */
 static int tas2971_wrm(struct tas2971_priv *priv, u8 *buf, int len)
 {
 	return 0;
-
 }
+#endif
 
+#if 0 //not used
 /* write one register */
 static int tas2971_wr(struct tas2971_priv *priv, u8 addr, u8 data)
 {
 	return 0;
 
 }
+#endif
 
 #ifdef UNUSED
 /* read multiple (continuous) registers starting at addr */

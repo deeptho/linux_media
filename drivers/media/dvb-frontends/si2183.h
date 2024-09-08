@@ -198,13 +198,6 @@ int blind_tune(struct dvb_frontend *fe);
 int si2183_set_sat_agc(struct i2c_client *client);
 
 
-extern inline void si2183_cmd_str(struct si2183_cmd* cmd, const char* str, int wlen, int rlen)
-{
-	memcpy(cmd->args, str, wlen);
-	cmd->wlen = wlen;
-	cmd->rlen = rlen;
-}
-
-
+extern void si2183_cmd_str(struct si2183_cmd* cmd, const char* str, int wlen, int rlen);
 
 #endif

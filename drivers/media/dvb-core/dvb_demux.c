@@ -483,7 +483,7 @@ static void dvb_dmx_swfilter_packet(struct dvb_demux *demux, const u8 *buf)
 			}
 			/* end check */
 		}
- ok__:
+	// ok__:
 	list_for_each_entry(feed, &demux->feed_list, list_head) {
 		if ((feed->pid != pid) && (feed->pid != 0x2000))
 			continue;

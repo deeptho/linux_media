@@ -245,6 +245,7 @@ static struct tas2101_regtable tas2100_initfe1[] = {
 	{REG_06, 0x00, 0x1f, 0},
 };
 
+#if 0 //not used
 static struct tas2101_regtable tas2101_setfe[] = {
 	{REG_04, 0x08, 0x00, 0},  //TS_OUT enable
 	{0x36, 0x01, 0x00, 0},  //AUTO_RST - lock_TP (1)
@@ -253,6 +254,7 @@ static struct tas2101_regtable tas2101_setfe[] = {
 	{0x36, 0x40, 0x00, 0},  //(AUTO_RST - Enable Blindscan (5) -> anomaly
 	{0x58, 0x60, 0xe0, 0},  //BCS_OUT_ADDR   lock_TP_BS (2)
 };
+#endif
 
 struct tas2101_snrtable_pair {
 	u16 snr;
@@ -298,6 +300,7 @@ struct tas2101_dbmtable_pair {
 	u16 raw;
 };
 
+#if 0 //not used
 static struct tas2101_dbmtable_pair tas2101_dbmtable[] =  {
 	{ -1000, 0xfff},
 	{ -900, 0x778},
@@ -310,6 +313,7 @@ static struct tas2101_dbmtable_pair tas2101_dbmtable[] =  {
 	{ -200, 0x1a1},
 	{ 0, 0},
 };
+#endif
 
 /* modfec (modulation and FEC) lookup table */
 struct tas2101_modfec {

@@ -61,6 +61,13 @@ static inline int fff(int freq) {
 }
 #endif
 
+void si2183_cmd_str(struct si2183_cmd* cmd, const char* str, int wlen, int rlen)
+{
+	memcpy(cmd->args, str, wlen);
+	cmd->wlen = wlen;
+	cmd->rlen = rlen;
+}
+
 static inline bool is_blind(struct dtv_frontend_properties* p)
 {
 	switch(p->algorithm) {
@@ -222,7 +229,7 @@ static int si2183_get_prop(struct i2c_client *client, u16 prop, u16 *val)
 #endif
 
 
-int si2183_read_delsys(struct dvb_frontend *fe)
+static int si2183_read_delsys(struct dvb_frontend *fe)
 {
 	struct i2c_client* client = fe->demodulator_priv;
 	int ret;
@@ -1407,6 +1414,7 @@ static enum dvbfe_algo si2183_get_algo(struct dvb_frontend *fe)
 	return DVBFE_ALGO_HW;
 }
 
+#if 0
 static int si2183_set_dvb_propertyOFF(struct dvb_frontend *fe, u32 cmd, u32 data)
 {
 	int ret = 0;
@@ -1447,6 +1455,7 @@ static int si2183_set_dvb_propertyOFF(struct dvb_frontend *fe, u32 cmd, u32 data
 
 	return ret;
 }
+#endif
 
 
 static int send_diseqc_cmd(struct dvb_frontend *fe,

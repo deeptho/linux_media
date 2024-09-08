@@ -113,6 +113,7 @@ struct tas2971_regtable {
 	int sleep;
 };
 
+#if 0 //unused
 static struct tas2971_regtable tas2971_initfe0[] = {
 	{REG_30, 0x02, 0x00, 0},
 	{0x56, 0x00, 0x02, 0},
@@ -133,7 +134,9 @@ static struct tas2971_regtable tas2971_initfe0[] = {
 	{0x0d, 0x00, 0xc0, 40},
 	{0x0d, 0xc0, 0x00, 0},
 };
+#endif
 
+#if 0 //unused
 static struct tas2971_regtable tas2100_initfe0[] = {
 	{REG_30, 0x02, 0x00, 0},
 	{0x08, 0x00, 0x80, 60},
@@ -147,7 +150,9 @@ static struct tas2971_regtable tas2100_initfe0[] = {
 	{0x0d, 0x00, 0xc0, 40},
 	{0x0d, 0xc0, 0x00, 0},
 };
+#endif
 
+#if 0 //unused
 static struct tas2971_regtable tas2971_initfe1[] = {
 /*	{0xe0, 0x33, 0xff, 0},	depends on tsmode ( 0xb1 tsmode=1 ) */
 	{0x56, 0x81, 0x00, 0},
@@ -181,13 +186,16 @@ static struct tas2971_regtable tas2971_initfe1[] = {
 	{0x46, 0x18, 0x1f, 0},
 	{0x40, 0x04, 0x07, 0},
 };
+#endif
 
-
+#if 0 //unused
 static struct tas2971_regtable tas2971_initfe2[] = {
 	{0xfa, 0x01, 0x03, 0},
 	{0xfb, 0x02, 0xff, 0},
 };
+#endif
 
+#if 0 //unused
 static struct tas2971_regtable tas2100_initfe1[] = {
 	{0x56, 0x81, 0x00, 0},
 	{0x05, 0x00, 0x08, 0},
@@ -216,7 +224,9 @@ static struct tas2971_regtable tas2100_initfe1[] = {
 	{0x9e, 0x20, 0x3f, 0},
 	{REG_06, 0x00, 0x1f, 0},
 };
+#endif
 
+#if 0 //not used
 static struct tas2971_regtable tas2971_setfe[] = {
 	{REG_04, 0x08, 0x00, 0},
 	{0x36, 0x01, 0x00, 0},
@@ -225,12 +235,14 @@ static struct tas2971_regtable tas2971_setfe[] = {
 	{0x36, 0x40, 0x00, 0},
 	{0x58, 0x60, 0xe0, 0},
 };
+#endif
 
 struct tas2971_snrtable_pair {
 	u16 snr;
 	u16 raw;
 };
 
+#if 0 //not used
 static struct tas2971_snrtable_pair tas2971_snrtable[] =  {
 	{10, 0x65a}, /* 1.0 dB */
 	{20, 0x50c},
@@ -264,12 +276,14 @@ static struct tas2971_snrtable_pair tas2971_snrtable[] =  {
 	{330, 0x1}, /* 33.0 dB */
 	{0, 0}
 };
+#endif
 
 struct tas2971_dbmtable_pair {
 	u16 dbm;
 	u16 raw;
 };
 
+#if 0 //not used
 static struct tas2971_dbmtable_pair tas2971_dbmtable[] =  {
 	{ 0x3333, 0xfff}, /* 20% */
 	{ 0x4CCC, 0x778},
@@ -282,6 +296,7 @@ static struct tas2971_dbmtable_pair tas2971_dbmtable[] =  {
 	{ 0xFFFF, 0x1a1}, /* 100% */
 	{0, 0}
 };
+#endif
 
 /* modfec (modulation and FEC) lookup table */
 struct tas2971_modfec {
@@ -290,6 +305,7 @@ struct tas2971_modfec {
 	enum fe_code_rate fec;
 };
 
+#if 0 //not used
 static struct tas2971_modfec tas2971_modfec_modes[] = {
 	{ SYS_DVBS, QPSK, FEC_AUTO },
 	{ SYS_DVBS, QPSK, FEC_1_2 },
@@ -330,5 +346,6 @@ static struct tas2971_modfec tas2971_modfec_modes[] = {
 	{ SYS_DVBS2, APSK_32, FEC_8_9 },
 	{ SYS_DVBS2, APSK_32, FEC_9_10 },
 };
+#endif
 
 #endif /* TAS2971_PRIV_H */
