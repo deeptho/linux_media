@@ -2971,7 +2971,7 @@ static int stv091x_stop_task(struct dvb_frontend *fe)
 	return 0;
 }
 
-int stv091x_spectrum_get(struct dvb_frontend *fe, struct dtv_fe_spectrum* user)
+static int stv091x_spectrum_get(struct dvb_frontend *fe, struct dtv_fe_spectrum* user)
 {
 	struct stv *state = fe->demodulator_priv;
 	int error=0;

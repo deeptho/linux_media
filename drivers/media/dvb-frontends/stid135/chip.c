@@ -861,10 +861,10 @@ STCHIP_Error_t ChipGetRegisters(STCHIP_Info_t* hChip, u16 FirstReg, s32 NbRegs)
 						}
 						atomic_add_return(-1, &hChip->num_parallel);
 
-					#endif
+#endif
 				}
 				else {
-					dprintk("BUG REG_ID\n");
+					dprintk("BUG REG_ID no register with ID=%d\n", FirstReg);
 					dump_stack();
 					hChip->Error = CHIPERR_INVALID_REG_ID;
 				}

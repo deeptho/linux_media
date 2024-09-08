@@ -2842,10 +2842,6 @@ static int dtv_set_frontend(struct dvb_frontend *fe)
 
 static int dtv_set_sec_configured(struct dvb_frontend *fe)
 {
-	struct dvb_frontend_private *fepriv = fe->frontend_priv;
-	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
-	struct dvb_frontend_tune_settings fetunesettings;
-	u32 rolloff = 0;
 	if (fe->ops.set_sec_ready) {
 		dprintk("calling set_sec_ready: num=%d\n", fe->dvb->num);
 		return fe->ops.set_sec_ready(fe);
