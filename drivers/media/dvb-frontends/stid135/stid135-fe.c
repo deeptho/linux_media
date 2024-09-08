@@ -95,7 +95,7 @@ char* reservation_mode_str(enum fe_reservation_mode mode) {
 	}
 }
 
-char* reservation_result_str(enum fe_reservation_result result) {
+char* reservation_result_str(enum fe_ioctl_result result) {
 	switch(result) {
 	case FE_RESERVATION_MASTER:
 		return "MASTER";
@@ -545,7 +545,7 @@ static int stid135_probe(struct stv *state)
 	In case ic=NULL, this call is used to unreserve a resource
 
  */
-static enum fe_reservation_result reserve_tuner_and_rf_in_(struct stv* state, struct fe_rf_input_control* ic) {
+static enum fe_ioctl_result reserve_tuner_and_rf_in_(struct stv* state, struct fe_rf_input_control* ic) {
 	struct stv_chip_t* chip = state->chip;
 	struct stv_card_t* card = chip->card;
 	int chip_no = chip->chip_no;
@@ -565,6 +565,7 @@ static enum fe_reservation_result reserve_tuner_and_rf_in_(struct stv* state, st
 	struct stv_rf_in_t* old_rf_in = (old_tuner && old_tuner->active_rf_in) ? old_tuner->active_rf_in: NULL;
 
 	//output decisions
+	bool unicable_mode = ic && ic->unicable_mode;
 	bool must_be_master = ic && (ic->mode == FE_RESERVATION_MODE_MASTER);
 	bool will_be_master = ic && (ic->mode == FE_RESERVATION_MODE_MASTER ||
 															 ic->mode == FE_RESERVATION_MODE_MASTER_OR_SLAVE);
@@ -664,12 +665,22 @@ static enum fe_reservation_result reserve_tuner_and_rf_in_(struct stv* state, st
 
 	if(new_tuner && !will_be_master && !state->legacy_rf_in && !new_rf_in->sec_configured) {
 		state_dprintk("cannot yet become slave because secondary equipment is not yet configured "
-									"config_id=%d -> %d; rf_in_use_count=%d\n",
+									"rf_in=%p config_id=%d -> %d; rf_in_use_count=%d\n",
+									new_rf_in,
 									new_rf_in->reservation.config_id, ic->config_id,
 									new_rf_in->reservation.use_count);
 		goto tempfail_;
 
 	}
+
+	if(new_tuner && !will_be_master && unicable_mode && !new_rf_in->unicable_mode) {
+		state_dprintk("slave wants unicable but master disallows "
+									"config_id=%d -> %d; rf_in_use_count=%d\n",
+									new_rf_in->reservation.config_id, ic->config_id,
+									new_rf_in->reservation.use_count);
+		goto fatal_;
+	}
+
 	//we can make the reservation, but need to release old resources
 
 	if(old_rf_in) {
@@ -710,6 +721,7 @@ static enum fe_reservation_result reserve_tuner_and_rf_in_(struct stv* state, st
 	}
 	if(will_be_master) {
 		new_rf_in->sec_configured = false; //prepare for configuration
+		state_dprintk("reset sec_configured rf_in=%p", new_rf_in);
 		if(new_rf_in->reservation.config_id >= 0 && new_rf_in->reservation.use_count > same_rf_in &&
 			 new_rf_in->reservation.config_id != ic->config_id) {
 			state_dprintk("BUG: unexpected config_id %d %d use)count=%d\n", new_rf_in->reservation.config_id, ic->config_id, new_rf_in->reservation.use_count);
@@ -771,7 +783,7 @@ static enum fe_reservation_result reserve_tuner_and_rf_in_(struct stv* state, st
 	return FE_RESERVATION_FAILED;
 }
 
-static enum fe_reservation_result stid135_select_rf_in_(struct stv* state, struct fe_rf_input_control* ic)
+static enum fe_ioctl_result stid135_select_rf_in_(struct stv* state, struct fe_rf_input_control* ic)
 {
 	int err = FE_LLA_NO_ERROR;
 	struct stv_chip_t* chip = state->chip;
@@ -793,7 +805,7 @@ static enum fe_reservation_result stid135_select_rf_in_(struct stv* state, struc
 		return FE_RESERVATION_UNCHANGED;
 	}
 
-	enum fe_reservation_result result = reserve_tuner_and_rf_in_(state, ic);
+	enum fe_ioctl_result result = reserve_tuner_and_rf_in_(state, ic);
 	if(new_tuner) {
 		state_dprintk("owner=%d  config_id=%d old_rf_in=%d new_rf_in=%d; result=%s\n",
 									ic->owner, ic->config_id, old_rf_in_no, new_rf_in_no, reservation_result_str(result));
@@ -824,6 +836,7 @@ static enum fe_reservation_result stid135_select_rf_in_(struct stv* state, struc
 			old_rf_in->tone = SEC_TONE_OFF;
 			old_rf_in->controlling_chip = NULL;
 			old_rf_in->sec_configured = false;
+			state_dprintk("reset sec_configured rf_in=%p", old_rf_in);
 		}
 	}
 	if(old_tuner && old_tuner->reservation.use_count==0) {
@@ -894,6 +907,8 @@ static enum fe_reservation_result stid135_select_rf_in_(struct stv* state, struc
 		return FE_RESERVATION_FAILED;
 	}
 	state->is_master = (result == FE_RESERVATION_MASTER);
+	if(state->is_master)
+		new_rf_in->unicable_mode = ic->unicable_mode;
 	return result;
 }
 
@@ -904,7 +919,7 @@ static enum fe_reservation_result stid135_select_rf_in_(struct stv* state, struc
 static int stid135_select_rf_in_legacy_(struct stv* state)
 {
 	int rf_in_no = state->fe.ops.info.default_rf_input;
-	enum fe_reservation_result result = FE_RESERVATION_FAILED;
+	enum fe_ioctl_result result = FE_RESERVATION_FAILED;
 	if(!state->active_tuner || !state->active_tuner->active_rf_in) {
 		state_dprintk("starting active_tuner=%p active_rf_in=%p\n", state->active_tuner,
 									state->active_tuner ? state->active_tuner->active_rf_in : NULL);
@@ -926,6 +941,7 @@ static int stid135_select_rf_in_legacy_(struct stv* state)
 		ic.owner = (pid_t)0xffffffff;
 		ic.config_id = 1;
 		ic.rf_in = rf_in_no;
+		ic.unicable_mode = true;
 		if(!chip_is_locked_by_state(state)) {
 			state_dprintk("Attempting select_rf_in_ without chp lock");
 			dump_stack();
@@ -1117,7 +1133,7 @@ static bool pls_search_range(struct dvb_frontend* fe)
 static int stid135_set_rf_input(struct dvb_frontend* fe, struct fe_rf_input_control* ic)
 {
 	struct stv *state = fe->demodulator_priv;
-	enum fe_reservation_result result = FE_RESERVATION_FAILED;
+	enum fe_ioctl_result result = FE_RESERVATION_FAILED;
 	chip_lock(state);
 	card_lock(state);
 	state->legacy_rf_in = ic->config_id <0;
@@ -1668,7 +1684,7 @@ static int stid135_set_sec_ready_(struct dvb_frontend* fe)
 		state_dprintk("BUG active_rf_in==NULL\n");
 		return -1;
 	}
-	state_dprintk("Marking rf_in as configured old=%d\n", rf_in->sec_configured);
+	state_dprintk("Marking rf_in as configured active_rf_in=%p old=%d\n", rf_in, rf_in->sec_configured);
 	card_lock(state);
 	rf_in->sec_configured = true; //we assume that caller has waited long enough
 	card_unlock(state);
@@ -1754,7 +1770,7 @@ static int stid135_tune(struct dvb_frontend* fe, bool re_tune,
 	struct stv *state = fe->demodulator_priv;
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
 	int err=0;
-	enum fe_reservation_result result;
+	enum fe_ioctl_result result;
 	chip_lock(state);
 	if(!state->active_tuner || !state->active_tuner->active_rf_in) {
 		card_lock(state);
@@ -1793,6 +1809,8 @@ static int stid135_set_voltage(struct dvb_frontend* fe, enum fe_sec_voltage volt
 	state_dprintk("mode=%d voltage=%s\n", state->chip->multiswitch_mode, voltage_str(voltage));
 	struct stv_rf_in_t* rf_in = active_rf_in(state);
 	struct stv_tuner_t* tuner = state->active_tuner;
+	bool last_rf_in_user=false;
+
 	if(state->chip->multiswitch_mode== FE_MULTISWITCH_MODE_QUATTRO) {
 		if(!(state->quattro_rf_in_mask &2)) {
 			state->quattro_rf_in_mask |= 2;
@@ -1829,13 +1847,18 @@ static int stid135_set_voltage(struct dvb_frontend* fe, enum fe_sec_voltage volt
 		state_dprintk("BUG No active_tuner set\n");
 		return -EPERM;
 	}
-
+	last_rf_in_user = rf_in->reservation.use_count == 1;
 	/*
 		when multiple adapters use the same tuner, only one can change voltage, send tones, diseqc etc
 		This is the tuner_owner. tuner_owner=-1 means no owner.
 		We ignore any request to change voltage for all but one adapter, i.e., the master adapter
+		Exceptions:
+		 - we allow a slave to power down the LNB if the slave is the last user
+		 - we also allow slaves to change voltages for unicable signalling
+
 	*/
-	if(! state->is_master) {
+	if(!state->is_master && ! ( last_rf_in_user && voltage!= SEC_VOLTAGE_OFF) &&
+		 ! (rf_in->unicable_mode && voltage !=  SEC_VOLTAGE_OFF)) {
 		if(!rf_in) {
 			state_dprintk("Skipping set_voltage=%s; no active rf_in\n", voltage_str(voltage));
 			return -EPERM;
@@ -1849,10 +1872,20 @@ static int stid135_set_voltage(struct dvb_frontend* fe, enum fe_sec_voltage volt
 		return 0;
 	}
 
+	if(!state->is_master && ( last_rf_in_user && voltage== SEC_VOLTAGE_OFF))
+		 state_dprintk("Allowing last slave to power down LNB");
+
+	if(!state->is_master && (rf_in->unicable_mode && voltage !=  SEC_VOLTAGE_OFF))
+		 state_dprintk("Allowing sklave to change voltage for unicable signalling");
 	if(state->chip->set_voltage) {
 		int old_voltage = rf_in->voltage;
 		bool voltage_was_on = (old_voltage != SEC_VOLTAGE_OFF);
 		bool voltage_is_on = (voltage != SEC_VOLTAGE_OFF);
+
+		if(rf_in->unicable_mode && old_voltage == SEC_VOLTAGE_18 && voltage == SEC_VOLTAGE_18) {
+			state_dprintk("Unicable command in progress; retry later");
+			return FE_UNICABLE_DISEQC_RETRY;
+		}
 		card_lock(state); //DeepThought: maybe not needed (as it does not use stid135 chips)
 		if(rf_in->reservation.use_count >1 && ! state->legacy_rf_in) {
 			card_unlock(state);
@@ -1992,13 +2025,15 @@ static int stid135_send_long_master_cmd(struct dvb_frontend* fe,
 		when multiple adapters use the same tuner, only one can change voltage, send tones, diseqc etc
 		This is the tuner_owner. tuner_owner=-1 means no owner.
 		We ignore any request to change voltage for all but one adapter, i.e., the master adapter
+		Exceptions: allow unicable signalling
 	*/
 	if(!state->is_master) {
 		if(!rf_in) {
 			state_dprintk("Skipping send_master_cmd; no active rf_in\n");
 			return -EPERM;
 		}
-		return 0;
+		if(!rf_in->unicable_mode) //unicable slaves are allowed to send diseqc messages
+			return 0;
 	}
 	if(!rf_in->controlling_chip) {
 		state_dprintk("BUG: rf_in[%d]->controlling_chip=NULL; tuner[%d].use_count=%d rf_in[%d].use_count=%d\n", rf_in->rf_in_no,
@@ -2008,7 +2043,7 @@ static int stid135_send_long_master_cmd(struct dvb_frontend* fe,
 	}
 	chip_lock(state);
 	card_lock(state);
-	if(rf_in->sec_configured && ! state->legacy_rf_in && ! state->is_master) {
+	if(rf_in->sec_configured && ! state->legacy_rf_in && ! state->is_master && ! rf_in->unicable_mode) {
 		card_unlock(state);
 		state_dprintk("SKIPPING diseqc: rf_in=%d; tuner[%d].use_count=%d rf_in[%d].use_count=%d legacy=%d\n",
 									rf_in->rf_in_no,
@@ -2035,14 +2070,52 @@ static int stid135_recv_slave_reply(struct dvb_frontend* fe,
 	struct stv *state = fe->demodulator_priv;
 	fe_lla_error_t err = FE_LLA_NO_ERROR;
 
+	state_dprintk("diseqc_recv_slave_reply");
+	struct stv_rf_in_t* rf_in = active_rf_in(state);
+	struct stv_tuner_t* tuner = state->active_tuner;
 #if 1
 	if (state->chip->multiswitch_mode == 0)
 		return 0;
 #endif
+	if ((!tuner || ! rf_in)) {//@todo: locking maybe not needed
+		//for older applications, which do not call FE_SET_RF_INPUT
+		card_lock(state); //DeepThought: maybe not needed (as it does not use stid135 chips)
+		err |= stid135_select_rf_in_legacy_(state);
+		card_unlock(state);
+		rf_in = active_rf_in(state);
+		tuner = state->active_tuner;
+	}
+
+	if(!rf_in) {
+		state_dprintk("BUG No active_rf_in set\n");
+		return -EPERM;
+	}
+
+	if(!tuner) {
+		state_dprintk("BUG No active_tuner set\n");
+		return -EPERM;
+	}
 
 	chip_lock(state);
-	err = fe_stid135_diseqc_receive(&state->chip->ip, reply->msg, &reply->msg_len);
-	chip_unlock(state);
+	card_lock(state);
+	if(rf_in->sec_configured && ! state->legacy_rf_in) {
+		card_unlock(state);
+		state_dprintk("SKIPPING diseqc: rf_in=%d; tuner[%d].use_count=%d rf_in[%d].use_count=%d legacy=%d\n",
+									rf_in->rf_in_no,
+									tuner->tuner_no,
+									tuner->reservation.use_count, rf_in->rf_in_no, rf_in->reservation.use_count, state->legacy_rf_in);
+		chip_unlock(state);
+	} else {
+		card_unlock(state); //we do not need lock anymore, and it prevents chip_sleep
+		err = fe_stid135_diseqc_receive(&state->chip->ip, reply->msg, &reply->msg_len);
+		state_dprintk("received %d bytes:", reply->msg_len);
+		chip_unlock(state);
+		state_dprintk("diseqc read reply: rf_in=%d; tuner[%d].use_count=%d rf_in[%d].use_count=%d\n", rf_in->rf_in_no,
+								tuner->tuner_no,
+									tuner->reservation.use_count, rf_in->rf_in_no, rf_in->reservation.use_count);
+
+		return err != 0 ? -1 : 0;
+	}
 
 	if (err != FE_LLA_NO_ERROR)
 		dev_err(&state->chip->i2c->dev, "%s: fe_stid135_diseqc_receive error %d !\n", __func__, err);
@@ -2110,7 +2183,7 @@ static int stid135_sleep(struct dvb_frontend* fe)
 	struct stv_rf_in_t* rf_in = active_rf_in(state);
 	struct stv_tuner_t* tuner = state->active_tuner;
 	state_dprintk("ENTERING sleep\n");
-	enum fe_reservation_result result;
+	enum fe_ioctl_result result;
 	if(!tuner || !rf_in) {
 		state_dprintk("sleep; adapter did not use tuner; active_tuner=%p active_rf_in=%p\n",
 									tuner, rf_in);
@@ -2703,9 +2776,11 @@ static int stid135_constellation_get(struct dvb_frontend* fe, struct dtv_fe_cons
 	int error = 0;
 	struct stv_rf_in_t* rf_in = active_rf_in(state);
 	chip_lock(state);
-	state_dprintk("Marking rf_in as configured old=%d\n", rf_in->sec_configured);
-	rf_in->sec_configured = true; //we assume that caller has waited long enough
+	if(!rf_in->sec_configured) {
+		state_dprintk("Marking rf_in as configured rf_in=%p old=%d\n", rf_in, rf_in->sec_configured);
+		rf_in->sec_configured = true; //we assume that caller has waited long enough
 
+	}
 	if(user->num_samples > cs->num_samples)
 		user->num_samples = cs->num_samples;
 	if(cs->samples) {

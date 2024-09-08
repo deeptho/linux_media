@@ -1177,14 +1177,15 @@ struct dtv_algo_ctrl {
 	} u;
 };
 
-enum fe_reservation_result {
+enum fe_ioctl_result {
 	FE_RESERVATION_MASTER = 0,
 	FE_RESERVATION_SLAVE = 1,
 	FE_RESERVATION_RETRY = 2,
 	FE_RESERVATION_UNCHANGED = 3,
 	FE_RESERVATION_RELEASED = 4,
 	FE_RESERVATION_NOT_SUPPORTED = 5,
-	FE_RESERVATION_FAILED = -1,
+	FE_UNICABLE_DISEQC_RETRY = 10, //another frontend has started a unicable command. Retry later
+	FE_RESERVATION_FAILED = -1
 };
 
 enum fe_reservation_mode {
@@ -1197,7 +1198,8 @@ enum fe_reservation_mode {
 struct fe_rf_input_control {
 	pid_t owner;
 	s32 config_id;
-	s32 rf_in;
+	s8 unicable_mode; //allow slave reservations to perform unicable related voltage changes and diseqc commands
+	s16 rf_in;
 	enum fe_reservation_mode mode;
 };
 
