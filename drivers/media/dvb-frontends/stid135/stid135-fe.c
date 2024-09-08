@@ -1954,7 +1954,8 @@ static int stid135_set_tone(struct dvb_frontend* fe, enum fe_sec_tone_mode tone)
 	return 0;
 }
 
-static int stid135_send_master_cmd(struct dvb_frontend* fe, struct dvb_diseqc_master_cmd *cmd)
+static int stid135_send_long_master_cmd(struct dvb_frontend* fe,
+																				 struct dvb_diseqc_long_master_cmd *cmd)
 {
 
 	struct stv *state = fe->demodulator_priv;
@@ -2751,7 +2752,8 @@ static struct dvb_frontend_ops stid135_ops = {
 	.set_tone			= stid135_set_tone,
 	.set_voltage			= stid135_set_voltage,
 
-	.diseqc_send_master_cmd		= stid135_send_master_cmd,
+	.diseqc_send_master_cmd		= NULL,
+	.diseqc_send_long_master_cmd		= stid135_send_long_master_cmd,
 	.diseqc_send_burst		= stid135_send_burst,
 	.diseqc_recv_slave_reply	= stid135_recv_slave_reply,
 

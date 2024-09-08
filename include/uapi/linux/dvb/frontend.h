@@ -219,6 +219,11 @@ struct dvb_diseqc_master_cmd {
 	u8 msg_len;
 };
 
+struct dvb_diseqc_long_master_cmd {
+	__u8 msg[16];
+	__u8 msg_len;
+};
+
 /**
  * struct dvb_diseqc_slave_reply - DiSEqC received data
  *
@@ -1239,7 +1244,7 @@ struct fe_rf_input_control {
 
 
 #define FE_GET_EXTENDED_INFO		_IOR('o', 86, struct dvb_frontend_extended_info)
-
+#define FE_DISEQC_SEND_LONG_MASTER_CMD  _IOW('o', 87, struct dvb_diseqc_long_master_cmd)
 #if defined(__DVB_CORE__) || !defined(__KERNEL__)
 
 /*

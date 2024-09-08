@@ -3366,15 +3366,40 @@ static int dvb_frontend_handle_ioctl(struct file *file,
 		}
 		break;
 
-	case FE_DISEQC_SEND_MASTER_CMD:
-		if (fe->ops.diseqc_send_master_cmd) {
-			struct dvb_diseqc_master_cmd *cmd = parg;
+	case FE_DISEQC_SEND_MASTER_CMD: {
+		struct dvb_diseqc_master_cmd *cmd = parg;
+		if (cmd->msg_len > sizeof(cmd->msg)) {
+			err = -EINVAL;
+			break;
+		}
+		if (fe->ops.diseqc_send_long_master_cmd) {
+			struct dvb_diseqc_long_master_cmd long_cmd;
+			long_cmd.msg_len = cmd->msg_len;
+			memcpy(&long_cmd.msg[0], &cmd->msg[0], sizeof(cmd->msg[0])*cmd->msg_len);
+			err = fe->ops.diseqc_send_long_master_cmd(fe, &long_cmd);
+			dprintk("sending master_cmd done err=%d\n", err);
+			if(fepriv->state == FESTATE_IDLE)
+				fepriv->state = FESTATE_DISEQC;
+			fepriv->status = 0;
+		} else if (fe->ops.diseqc_send_master_cmd) {
+			err = fe->ops.diseqc_send_master_cmd(fe, cmd);
+			dprintk("sending long master_cmd done err=%d\n", err);
+			if(fepriv->state == FESTATE_IDLE)
+				fepriv->state = FESTATE_DISEQC;
+			fepriv->status = 0;
+		}
+	}
+		break;
+
+	case FE_DISEQC_SEND_LONG_MASTER_CMD:
+		if (fe->ops.diseqc_send_long_master_cmd) {
+			struct dvb_diseqc_long_master_cmd *cmd = parg;
 
 			if (cmd->msg_len > sizeof(cmd->msg)) {
 				err = -EINVAL;
 				break;
 			}
-			err = fe->ops.diseqc_send_master_cmd(fe, cmd);
+			err = fe->ops.diseqc_send_long_master_cmd(fe, cmd);
 			dprintk("sending master_cmd done err=%d\n", err);
 			if(fepriv->state == FESTATE_IDLE)
 				fepriv->state = FESTATE_DISEQC;

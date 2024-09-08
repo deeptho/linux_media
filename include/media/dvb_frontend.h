@@ -530,6 +530,7 @@ struct dvb_frontend_ops {
 
 	int (*diseqc_reset_overload)(struct dvb_frontend* fe);
 	int (*diseqc_send_master_cmd)(struct dvb_frontend* fe, struct dvb_diseqc_master_cmd* cmd);
+	int (*diseqc_send_long_master_cmd)(struct dvb_frontend* fe, struct dvb_diseqc_long_master_cmd* cmd);
 	int (*diseqc_recv_slave_reply)(struct dvb_frontend* fe, struct dvb_diseqc_slave_reply* reply);
 	int (*diseqc_send_burst)(struct dvb_frontend *fe,
 				 enum fe_sec_mini_cmd minicmd);
