@@ -113,23 +113,81 @@ static struct bin_attribute stv_chip_sysfs_registers_vglna_attributes[] = {
 	}
 };
 
-static ssize_t registers_read(STCHIP_Info_t* hChipHandle, char*buf, loff_t offset, size_t len)
+static ssize_t registers_read_(STCHIP_Info_t* hChipHandle, char*buf, loff_t offset, size_t len)
 {
-    ssize_t ret;
+    ssize_t ret=0;
 		int first = offset/sizeof(STCHIP_Register_t);
+		int last;
 		int num_regs= len/sizeof(STCHIP_Register_t);
+		int num_bytes;
+		int idx;
 		if(num_regs + first > hChipHandle->NbRegs)
 			num_regs = hChipHandle->NbRegs - first;
-		dprintk("ZZZ read: handle=%p first=%d num_regs=%d/%d s=%ld\n", hChipHandle, first, num_regs,  hChipHandle->NbRegs,
+		last = first + num_regs;
+		dprintk("read: handle=%p offset=%lld first=%d num_regs=%d/%d s=%ld\n", hChipHandle, offset, first, num_regs,  hChipHandle->NbRegs,
 						sizeof(STCHIP_Register_t));
 		if (num_regs<=0)
 			return 0;
 
-		ChipGetRegisters(hChipHandle, first, num_regs);
-		ret = sizeof(STCHIP_Register_t)*num_regs;
-		memcpy(buf, hChipHandle->pRegMapImage +first, ret);
-		dprintk("READ returns -EFAULT: first=%d %p\n", first,  hChipHandle->pRegMapImage +first);
+		for(idx=first; idx < last; ) {
+			int firstRegId= hChipHandle->pRegMapImage[first].Addr;
+			//int LastRegId= hChipHandle->pRegMapImage[first].Addr;
+
+			//Set n to the number of consecutive registers, with a maximum of 69
+			int n=0;
+			for(; idx < last && hChipHandle->pRegMapImage[idx].Addr -firstRegId == n && n<70 ; ++idx, ++n)
+				{}
+			dprintk("Register range: first=%d last=%d first_id=0x%x last_id=0x%x num=%d", first, last, firstRegId, firstRegId+n, n);
+			ChipGetRegisters(hChipHandle, firstRegId, n);
+			num_bytes = sizeof(STCHIP_Register_t)*n;
+			memcpy(buf + ret, hChipHandle->pRegMapImage +first, num_bytes);
+			dprintk("copied %d bytes from %p to %p", num_bytes,  hChipHandle->pRegMapImage +first, buf + ret);
+			ret += num_bytes;
+			first = idx;
+		}
+		dprintk("READ %ld bytes: first=%d %p\n", ret, first,  hChipHandle->pRegMapImage +first);
     return ret;
+}
+
+static ssize_t registers_read(STCHIP_Info_t* hChipHandle, char*buf, loff_t offset, size_t len)
+{
+    ssize_t ret=0;
+		//ssize_t ret1=0;
+		int x = offset % sizeof(STCHIP_Register_t);
+		int len1 = sizeof(STCHIP_Register_t) -x;
+		int ret1=0;
+		char temp[sizeof(STCHIP_Register_t)];
+		if(x >0) {
+			//partial read at start
+			ret1 = registers_read_(hChipHandle, temp, offset-x, sizeof(STCHIP_Register_t));
+			if(ret1 > len)
+				ret1 = len;
+			memcpy(buf, temp + x, ret1);
+			offset += ret1;
+			len -= ret1;
+			ret += ret1;
+			buf += ret1;
+			if(len ==0 || ret1 < len1 )
+				return ret;
+		}
+		x = len % sizeof(STCHIP_Register_t);
+		len1 = len  -x;
+		if (len1>0) {
+			ret1 = registers_read_(hChipHandle, buf, offset, len1);
+			offset += ret1;
+			len -= ret1;
+			ret += ret1;
+			buf += ret1;
+			if(len ==0 || ret1 < len1)
+				return ret;
+		}
+		//partial read at end
+		ret1 = registers_read_(hChipHandle, temp, offset, sizeof(STCHIP_Register_t));
+		if (ret1 <  sizeof(STCHIP_Register_t))
+			return ret;
+		memcpy(buf, temp, x);
+		ret += ret1;
+		return ret;
 }
 
 static ssize_t registers_write(STCHIP_Info_t* hChipHandle, const char __user *buf, size_t len) {
