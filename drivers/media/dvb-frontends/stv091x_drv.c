@@ -2658,6 +2658,7 @@ static int send_master_cmd(struct dvb_frontend *fe,
 	}
 	write_reg(state, RSTV0910_P1_DISTXCFG + offs, 0x02);
 	wait_dis(state, 0x20, 0x20);
+	write_reg(state, RSTV0910_P1_DISRXCFG + offs, 0x01);
 	mutex_unlock(&state->base->status_lock);
 	dprintk("Sent a diseqc command of len %d\n", cmd->msg_len);
 	return 0;
@@ -2666,6 +2667,21 @@ static int send_master_cmd(struct dvb_frontend *fe,
 static int recv_slave_reply(struct dvb_frontend *fe,
 			 struct dvb_diseqc_slave_reply *reply)
 {
+	struct stv *state = fe->demodulator_priv;
+	u16 offs = state->adapterno ? 0x40 : 0;
+	u32 i = 0, rx_end = 0;
+
+	while ((rx_end != 1) && (i < 10)) {
+		msleep(10);
+		i++;
+		rx_end = read_reg_field(state, FSTV0910_P2_RXEND);
+	}
+	if (rx_end) {
+		reply->msg_len = read_reg(state,  RSTV0910_P1_DISRXBYTES + offs);
+		for (i = 0; i < reply->msg_len; i++)
+			reply->msg[i] = read_reg(state,  RSTV0910_P2_DISRXFIFO + offs);
+	}
+	dprintk("Reply %d bytes", reply->msg_len);
 	return 0;
 }
 
