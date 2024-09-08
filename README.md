@@ -115,7 +115,8 @@ the cards and what they are doing. Also it is possible to slightly enhance using
 programs, such as tvheadend.
 
 * Through /sys/module/stid135/... it is possible to figure out which adapter belongs to which
-  card.
+  card. There is no guarantee that the directory layout and content will have this specific
+  format in future. So do not rely on it.
 * Each card has one *temperature* property per stid135 chip, which contains the current temperature
   in Celcius.
 * Each card has a *blindscan_always* property.
@@ -155,14 +156,19 @@ User space applications should proceed as follows
 
 * First check for the presence of */sys/module/dvb_core/info/version*. If this entry exists,
   it means that the neumoDVB drivers have been loaded, otherwise the application should fall back to
-  DVB-apiV5. The version number in that sysfs file can also be used to distinghuish between different
-  versions of the drivers. Note that the neumoDVB api is not yet frozen.
+  DVB-apiV5, i.e., not use any additional features provided by nuemoDVB. The version number in that
+  sysfs file can also be used to distinghuish between different versions of the drivers. Note that the
+  neumoDVB api is not yet finalized.
 
 * Using the *FE_GET_EXTENDED_INFO* ioctl, get information about the installed cards and adapters,
   specificaly their names (for use in GUI and in log files) and their *MAC address*. The latter
   is a unique id, which can be used to associate configuration information. For instance, the adapter
   number of a specific adapter may differ from one boot to the next when a card has been removed,
-  or a new one has been inserted. However, the MAC address will always remain the same.
+  or a new one has been inserted. However, the MAC address will always remain the same. In case
+  the card specific drivers do not provide a MAC address, neumoDVB will attemp to construct one
+  that is unique based on in which PCIe slot it is inserted. If the card is later in an other slot
+  the MAC address will change. For USB devices there are even fewer guarantees, and the card may appear
+  at a new MAC address after removing and re-attaching it.
 
 * When tuning to a specific mux, first call the *FE_SET_RF_INPUT* ioctl. This is used to connect
   a demodulator to a specific RF_INPUT, but also to synchronize secondary device (LNBs and switches)
@@ -170,17 +176,26 @@ User space applications should proceed as follows
 
   Being able to select a specific RF_INPUTs means that card operation becomes much more flexible.
   For instance, it is possible to connect more than 2 demodulators to the same input cable temporarily
-  and as needed. In case each input is connected to a different LNB for a different satellite,
+  if the card has an internal switch. In case each input is connected to a different LNB for a different satellite,
   it is possible to receive up to 8 different muxes on TBS6909V2 or up to 16 muxes on TBS6916 on the same satellite.
   With the standard DVB-v5 api drivers only 2 would be possible, because of the choice to pair 2 tuners
   to each RF_INPUT in a fixed manner.
 
   Another problem not handled by the standard drivers is that a slave adapter should wait with tuning
-  until it is certain that secondary equipment has been configured. For instance many programs are multi
-  threaded. If the thread for the master tuner is delayed for some reason, it may happen that the master
-  tuner has not yet finished sending DiSeqC commands when the slave tuner starts tuning and then slave tuning
-  will fail. Of course it is possible to prevent this at the application level, but neumoDVB handles it in the
-  drivers. This allows multiple applications to synchronize such access.
+  until it is certain that secondary equipment has been configured: switches need some time to power up,
+  some types of LNBs (e.g, unicable) also need some time after power up before they respond to commands,
+  and positioners need some time to rotate the dish. The neumo API leaves it to applications to work
+  out the details, as this often needs configuration constants, or perhaps even custom software. Instead
+  it expectes that exactly one of the connecting threads will performa all needed actions (sending diseqc
+  commands, waiting appropriate amounts of time...) and will then inform the drivers when all of this is
+  done. Until then, all other frontends trying to connect to the same rf_in through *FE_SET_RF_INPUT* ioctls
+  will see these ioctls fail with a return value of *FE_RESERVATION_RETRY*. Those threads should wait a while
+  and then retry the ioctl.
+
+  The reason why this is needed is that many programs are multi hreaded. If the thread for the master tuner
+  is delayed for some reason, it may happen that the master tuner has not yet finished sending DiSeqC commands
+  when the slave tuner starts tuning and then slave tuning will fail. Of course it would be possible to prevent
+  this at the application level, but neumoDVB handles it in the drivers.
 
   Concretely, when calling FE_SET_RF_INPUT, the application can specificy whether the demodulator will
   become master or slave. Typically an application will specify 'master' for the first tune, and 'slave'
@@ -189,12 +204,34 @@ User space applications should proceed as follows
   In all cases, when the drivers receive the ioctl, they will enforce proper execution of master requests
   before related slave requests can start.
 
-  The ioctl FE_SET_RF_INPUT caller should specifify
+  The ioctl FE_SET_RF_INPUT caller should specify
 
     ** rf_input: the desired tuner and cable to connect to
 
     ** mode: whether the tuner wants to become master (and agrees to configure LNB and switches), slave
      (agrees to not configure LNB and switches), or both.
+
+    **unicable_mode: whether or not the secondary system attached to the LNB operates in unicable mode.
+    In uncable mode, DiSeqC commands need to be sent even by slave tuners, to select specific user bands.
+    This creates new opportunities for races between multiple frontends trying to program user bands
+    in parallel.
+
+    Also, the output voltage needs to be temporarily raised to 18 volt when unicable commands are sent,
+    and must be 12 volt in all other cases. User programs activate new user bands in three steps:
+    1) raising voltage to 18 volt; 2) sending unicable DiSeqC unicable command; 3) lowering voltage
+    to 12 volt. This three step process is inherited from dvbapiV5, but creates additional opportunities
+    for racing. For instance, internal locking prevents step 2 from overlapping with step 2 calls made
+    by other frontends, but not prevent other threads from executing step 3 after the current thread
+    has executed step 1. This wll then cause user band selection to fail
+
+    Setting unicable_mode = 1 allows slave threads to raise voltages and send unicable DiSeqC commands,
+    which it would otherwise prohibit. When unicable_mode active, also setting voltage to 18 VOLT
+    will soft-fail with the return value FE_UNICABLE_DISEQC_RETRY when the voltage is already 18 volt,
+    which implies that some other frontend is currently sending unicable DiSeqC commands.
+
+    When the FE_SET_VOLTAGE ioctl returns  FE_UNICABLE_DISEQC_RETRY, the thread should retry the ioctl.
+    When it succeeds instead, then the thread calling the ioctl will be the only one allowed to
+    send unicable commands.
 
     ** owner: a unique identifier for the calling application. Applications can only use resources (tuners,
      demodulators) if they are not in use by another application. Typically this should be the process id.
