@@ -1560,7 +1560,14 @@ static int m88rs6060_get_matype(struct m88rs6060_state* state, u16* matype)
 static int m88rs6060_get_channel_info(struct m88rs6060_state* state, struct dtv_frontend_properties* p)
 {
 	struct MT_FE_CHAN_INFO_DVBS2 info;
-	bool ret = m88rs6060_get_channel_info_(state, &info);
+	int count;
+	bool ret;
+	for(count==0; count <5; ++count) {
+		ret = m88rs6060_get_channel_info_(state, &info);
+		if(!info.is_dummy_frame)
+			break;
+		msleep(5);
+	}
 	p->delivery_system = (info.type == MtFeType_DvbS2) ? SYS_DVBS2 :
 		(info.type == MtFeType_DvbS2X) ? SYS_DVBS2 : //TODO
 		(info.type == MtFeType_DvbS) ? SYS_DVBS :
