@@ -3825,6 +3825,7 @@ fe_lla_error_t fe_stid135_get_signal_info(struct stv* state)
 	s32 fld_value[3];
 	//u32 reg_value = 0;
 	s32 symbolRateOffset = 0, carrier_frequency = 0;
+	int count;
 
 	pParams = &state->chip->ip;
 	//	dprintk("signal_info: start\n");
@@ -3893,13 +3894,17 @@ fe_lla_error_t fe_stid135_get_signal_info(struct stv* state)
 				state->chip->ip.handle_demod, Demod, &(pInfo->standard));
 
 			 error |= FE_STiD135_GetViterbiPunctureRate(state, &(pInfo->puncture_rate));
-
-			error |= fe_stid135_get_mode_code(state,
-						&pInfo->modcode,
-						&pInfo->frame_length,
-						&pInfo->pilots);
-			vprintk("demod=%d: GOT MODCODE %d\n", state->nr, pInfo->modcode);
-			error |= ChipGetField(state->chip->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_TMGOBS_ROLLOFF_STATUS(Demod), &(fld_value[0]));
+			for(count=0; count<5;++count) {
+				error |= fe_stid135_get_mode_code(state,
+																					&pInfo->modcode,
+																					&pInfo->frame_length,
+																					&pInfo->pilots);
+				vprintk("demod=%d: GOT MODCODE %d count=%d\n", state->nr, pInfo->modcode, count);
+				error |= ChipGetField(state->chip->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_TMGOBS_ROLLOFF_STATUS(Demod), &(fld_value[0]));
+				if(pInfo->modcode != FE_SAT_DUMMY_PLF)
+					break;
+				chip_sleep(state,5);
+			}
 			pInfo->roll_off = (enum fe_sat_rolloff)(fld_value[0]);
 
 
@@ -9332,6 +9337,7 @@ static fe_lla_error_t fe_stid135_get_mode_code(struct stv* state,
 	if(state->chip->ip.handle_demod == NULL)
 		error |= FE_LLA_INVALID_HANDLE;
 	else {
+
 		error |= (error1=
 							ChipGetOneRegister(state->chip->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_DMDMODCOD(demod),
 																 &mcode));
