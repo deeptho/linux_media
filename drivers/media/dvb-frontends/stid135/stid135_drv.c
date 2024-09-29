@@ -10663,6 +10663,7 @@ fe_lla_error_t fe_stid135_select_isi(struct stv* state, u8 isi_wanted)
 			/*Set the MIS filter*/
 			error |= ChipSetOneRegister(state->chip->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_PKTDELIN_ISIBITENA(demod), 0xFF);
 			error |= ChipSetOneRegister(state->chip->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_PKTDELIN_ISIENTRY(demod), isi_wanted);
+			//error |= ChipSetField(state->chip->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_BBHCTRL2_FORCE_MATYPEMSB(demod), 1); //xxx
 			dprintk("select isi 0x%x error=%d\n", isi_wanted, error);
 		}
 	return error;

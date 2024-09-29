@@ -2524,7 +2524,7 @@ static int stid135_spectrum_start(struct dvb_frontend* fe,
 
 
 	if(p->rf_in < 0 || !p->rf_in_valid)  {
-		p->rf_in = rf_in>=0 ? rf_in->rf_in_no : state->fe.ops.info.default_rf_input;
+		p->rf_in = rf_in ? rf_in->rf_in_no : state->fe.ops.info.default_rf_input;
 		p->rf_in_valid = true;
 		state_dprintk("Set rf_in to %d; rf_in=%d  default_rf_in=%d\n",
 						p->rf_in, old_rf_in_no, state->fe.ops.info.default_rf_input);

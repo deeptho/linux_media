@@ -372,13 +372,13 @@ static ssize_t stv_chip_registers_show(struct file* filp, struct kobject *kobj, 
 	struct lock_t* lock = &chip->lock;
 	mutex_lock(&lock->mutex);
 	if (bin_attr == &stv_chip_sysfs_registers_stid135_attribute) {
-		dprintk("READ %lu bytes at offset %llu\n", size, pos);
+		dprintk("READ %lu bytes at offset %llu stid135\n", size, pos);
 		ret=registers_read(chip->ip.handle_demod, buffer, pos, size);
 		dprintk("READ returns %ld\n", ret);
 	}
 	else if (bin_attr == &stv_chip_sysfs_registers_soc_attribute) {
 		p = "soc";
-		dprintk("READ %lu bytes at offset %llu\n", size, pos);
+		dprintk("READ %lu bytes at offset %llu soc\n", size, pos);
 		ret=registers_read(chip->ip.handle_soc, buffer, pos, size);
 		dprintk("READ returns %ld\n", ret);
 		//state->chip->ip.handle_demod
