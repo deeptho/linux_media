@@ -272,9 +272,29 @@ User space applications should proceed as follows
   is ready for use. From this stage on FE_SET_RF_INPUT ioctls for the same RF_INPUT will succeed, provided
   they use the current config_id value.
 
-* Ther remainder of the tuning process is similar as with the standard DVB-v5 api, except that additional
+* The remainder of the tuning process is similar as with the standard DVB-v5 api, except that additional
   tuning properties have been added to indicate blind scanning and that additional properties are returned
   to indicate discovered modulation parameters.
+
+# Changes in release-1.3
+* Document neumo api
+* Updated installation instructions
+* Better handling of cards that do not support FE_SET_RF_INPUT
+* Add FE_DISEQC_SEND_LONG_MASTER_CMD to support unicable programming
+* Integrated changes from tbsdtv
+* Changes for kernel 6.10
+* Fix compilation warnings
+* stid135: Experimental workaround for 12606V@5.0W to make stream 4 work
+* stid135: Skip dummy frames when detecting modulation, so that correct modulation is reported
+* stid135: Added blindscan_alwasy configuration via sysfs
+* stid135: Fix register reading.
+* stid135: Implemented unicable mode
+* stid135: Erroneous mutex lock detection
+* stid135: Bug: stdi35_select_rf_in_ called without locking
+* stud135: Detect deadlock condition and work around it.
+* m88rs6060: skip dummy frames when detecting modulation, so that correct modulation is reported
+* stv091x: implemented recv_slave_reply (untested)
+* ms88rs6060: fix driver no longer working.
 
 # Changes in release-1.2
 * Added sysfs entries in /sys/modules/stid135/
