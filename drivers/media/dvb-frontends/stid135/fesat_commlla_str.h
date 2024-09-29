@@ -324,6 +324,7 @@ struct fe_sat_isi_struct_t
 	u32 isi_bitset[8]; //bitset; 1 bit indicates corresponding ISI is in use
 	u32 num_matypes;
 	u16 matypes[256];
+	bool        has_mixed_issyi; /*does this mux have streams with issyi  on AND others with OFF?*/
 };
 typedef  struct fe_sat_isi_struct_t  fe_sat_isi_struct;
 
@@ -341,8 +342,8 @@ struct fe_sat_signal_info {
 	bool        has_sync;     /*dvbs packets detected*/
 	bool        has_timedout;
 	bool        has_timing_lock; /*timing loop locked*/
-	bool        has_lock;       /* fully locked*/
-	bool        out_of_llr;       /* no llr budget available*/
+	bool        has_lock;        /* fully locked*/
+	bool        out_of_llr;      /* no llr budget available*/
 	u32 				frequency;	/* Transponder frequency (in KHz)			*/
 	u32 				symbol_rate;	/* Transponder symbol rate  (in Mbds)			*/
 

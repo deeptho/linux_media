@@ -1744,6 +1744,7 @@ fe_lla_error_t fe_stid135_get_lock_status(struct stv* state, bool*carrier_lock, 
 	enum fe_sat_search_state demodState;
 	enum fe_sat_search_state demodState1;
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
+	fe_lla_error_t error2 = FE_LLA_NO_ERROR;
 	s32 fld_value[5];
 	int error1 = FE_LLA_NO_ERROR;
 	if(carrier_lock)
@@ -3826,7 +3827,6 @@ fe_lla_error_t fe_stid135_get_signal_info(struct stv* state)
 	//u32 reg_value = 0;
 	s32 symbolRateOffset = 0, carrier_frequency = 0;
 	int count;
-
 	pParams = &state->chip->ip;
 	//	dprintk("signal_info: start\n");
 	if ( state->chip->ip.handle_demod->Error ) {
@@ -3989,9 +3989,7 @@ fe_lla_error_t fe_stid135_get_signal_info(struct stv* state)
 				error |= ChipSetOneRegister(state->chip->ip.handle_demod,
 																		(u16)REG_RC8CODEW_DVBSX_HWARE_ERRCTRL1(Demod), 0x67);
 				vprintk("demod=%d: MIS: mis_mode=%d\n", state->nr, state->mis_mode);
-				if(state->mis_mode /* &&
-					 (pParams->demod_search_algo[Demod-1] == FE_SAT_BLIND_SEARCH ||
-					 pParams->demod_search_algo[Demod-1] == FE_SAT_NEXT)*/) {
+				if(state->mis_mode) {
 					int error1 = FE_LLA_NO_ERROR;
 					//memset(&state->signal_info.isi_list, 0, sizeof(state->signal_info.isi_list));
 					dprintk("demod=%d: Calling isi_scan\n", state->nr);
@@ -4001,7 +3999,6 @@ fe_lla_error_t fe_stid135_get_signal_info(struct stv* state)
 					u8 isi_read;
 					fe_stid135_read_hw_matype(state, &pInfo->matype, &isi_read);
 				}
-
 			} else { /*DVBS1/DSS*/
 				vprintk("demod=%d: DVBS1\n", state->nr);
 				error |= ChipGetField(state->chip->ip.handle_demod, FLD_FC8CODEW_DVBSX_VITERBI_FECM_IQINV(Demod), &(fld_value[0]));
@@ -5756,7 +5753,7 @@ fe_lla_error_t fe_stid135_manage_matype_info(struct stv* state)
 			if(((genuine_matype>>6) & 0x3) == 0x3) { //TS
 				/* "TS FIFO Minimum latency mode */
 #ifdef TS_NOSYNC //def LASTCHANGE
-				if(!state->mis)
+				//if(!state->mis_mode)
 					error |= ChipSetField(state->chip->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSSTATE1_TSOUT_NOSYNC(Demod),
 																pParams->ts_nosync ? 1 : 0);
 #endif
@@ -10558,6 +10555,8 @@ fe_lla_error_t fe_stid135_isi_scan(struct stv* state, struct fe_sat_isi_struct_t
 	u8 CurrentISI,matype;
 	u8 i;
 	u32 j=0;
+	int num_with_issyi=0;
+	int num_without_issyi=0;
 	//struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
 
 		if (state->chip->ip.handle_demod->Error)
@@ -10581,6 +10580,8 @@ fe_lla_error_t fe_stid135_isi_scan(struct stv* state, struct fe_sat_isi_struct_t
 					if(p_isi_struct->num_matypes < sizeof(p_isi_struct->matypes)/sizeof(p_isi_struct->matypes[0]))
 						p_isi_struct->matypes[p_isi_struct->num_matypes++] = (matype<<(int)8)|CurrentISI;
 				}
+				num_without_issyi += !(matype&0x8);
+				num_with_issyi += !!(matype&0x8);
 				p_isi_struct->isi_bitset[j] |= mask;
 #if 1
 				if(CurrentISI == state->signal_info.isi) {
@@ -10589,6 +10590,12 @@ fe_lla_error_t fe_stid135_isi_scan(struct stv* state, struct fe_sat_isi_struct_t
 #endif
 				chip_sleep(state, 10);
 			}
+			if(num_with_issyi >0 && num_without_issyi>0) {
+				if(!p_isi_struct->has_mixed_issyi)
+					dprintk("MIXED ISSYI detected: %d %d", num_with_issyi, num_without_issyi);
+				p_isi_struct->has_mixed_issyi = true;
+			} else
+				p_isi_struct->has_mixed_issyi = true;
 			// Go back to previous value of test mode
 			error |= ChipSetField(state->chip->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_TPKTDELIN_TESTBUS_SELECT(demod), 0);
 		}
