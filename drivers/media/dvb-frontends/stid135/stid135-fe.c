@@ -551,7 +551,10 @@ static enum fe_ioctl_result reserve_tuner_and_rf_in_(struct stv* state, struct f
 	int chip_no = chip->chip_no;
 	int tuner_no = ic ? ic->rf_in : -1;
 	int rf_in = ic ? ic->rf_in : -1;
-	BUG_ON(ic && (tuner_no <0 || tuner_no >= sizeof(chip->tuners)/sizeof(chip->tuners[0])));
+	if(ic && (tuner_no <0 || tuner_no >= sizeof(chip->tuners)/sizeof(chip->tuners[0]))) {
+		state_dprintk("BUG: invalid call: tune_no=%d\n", tuner_no);
+		return FE_RESERVATION_FAILED;
+	}
 	if(!card_is_locked_by_state(state)) {
 		state_dprintk("BUG: called without locking card\n");
 		dump_stack();
@@ -1792,7 +1795,7 @@ static int stid135_tune(struct dvb_frontend* fe, bool re_tune,
 	}
 	if(result <0) {
 		state_dprintk("rf_in=NULL result=%d active_tuner=%p active_rf_in=%p\n", result, state->active_tuner,
-									state->active_tuner->active_rf_in);
+									state->active_tuner? state->active_tuner->active_rf_in : NULL);
 		chip_unlock(state);
 		return -1;
 	}
