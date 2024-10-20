@@ -825,15 +825,20 @@ static enum fe_ioctl_result stid135_select_rf_in_(struct stv* state, struct fe_r
 	}
 
 	if(old_rf_in && old_rf_in->reservation.use_count==0) {
-		struct stv_chip_t* chip = old_rf_in->controlling_chip;
+		struct stv_chip_t* old_chip = old_rf_in->controlling_chip;
 		state_dprintk("old rf_in no longer in use: rf_in=%d; TONE OFF\n", old_rf_in_no);
-		if(!chip || old_rf_in_no <0) {
-			state_dprintk("BUG: chip=%p old_rf_in_no=%d\n", chip, old_rf_in_no);
+		if(!old_chip || old_rf_in_no <0) {
+			state_dprintk("BUG: chip=%p old_chip=%p old_rf_in_no=%d\n", state->chip, old_chip, old_rf_in_no);
 		} else {
-			err = fe_stid135_set_22khz_cont(&chip->ip, old_rf_in_no + 1, false);
-			if(state->chip->set_voltage) {
+			bool must_lock = old_chip != state->chip;
+			if(must_lock)
+				chip_chip_lock(old_chip);
+			err = fe_stid135_set_22khz_cont(&old_chip->ip, old_rf_in_no + 1, false);
+			if(must_lock)
+				chip_chip_unlock(old_chip);
+			if(old_chip->set_voltage) {
 				state_dprintk("old rf_in no longer in use: rf_in=%d; VOLTAGE OFF\n", old_rf_in_no);
-				state->chip->set_voltage(chip->i2c, SEC_VOLTAGE_OFF, old_rf_in_no);
+				old_chip->set_voltage(old_chip->i2c, SEC_VOLTAGE_OFF, old_rf_in_no);
 			}
 			old_rf_in->voltage = SEC_VOLTAGE_OFF;
 			old_rf_in->tone = SEC_TONE_OFF;
@@ -846,7 +851,7 @@ static enum fe_ioctl_result stid135_select_rf_in_(struct stv* state, struct fe_r
 		state_dprintk("old tuner no longer in use: rf_in=%d; TUNER STANDBY\n", old_tuner->tuner_no);
 		err |= FE_STiD135_TunerStandby(state->chip->ip.handle_demod, old_rf_in_no + 1, 0);
 		old_tuner->powered_on = false;
-		old_tuner->active_rf_in = false;
+		old_tuner->active_rf_in = NULL;
 		state->active_tuner = NULL;
 	}
 	if(!new_tuner) {
@@ -945,7 +950,7 @@ static int stid135_select_rf_in_legacy_(struct stv* state)
 		ic.config_id = 1;
 		ic.rf_in = rf_in_no;
 		ic.unicable_mode = true;
-		if(!chip_is_locked_by_state(state)) {
+		if(!state_chip_is_locked_by_state(state)) {
 			state_dprintk("Attempting select_rf_in_ without chp lock");
 			dump_stack();
 		}
@@ -970,7 +975,7 @@ static void stid135_release(struct dvb_frontend* fe)
 
 	state->chip->use_count--;
 	if (state->chip->use_count == 0) {
-		chip_lock(state);
+		state_chip_lock(state);
 		card_lock(state);
 		FE_STiD135_Term (&state->chip->ip);
 		state->chip->card->use_count--;
@@ -980,7 +985,7 @@ static void stid135_release(struct dvb_frontend* fe)
 			kfree(state->chip->card);
 		}
 		card_unlock(state);
-		chip_unlock(state);
+		state_chip_unlock(state);
 		stv_chip_release_sysfs(state->chip);
 		list_del(&state->chip->stv_chip_list);
 		kfree(state->chip);
@@ -1137,12 +1142,12 @@ static int stid135_set_rf_input(struct dvb_frontend* fe, struct fe_rf_input_cont
 {
 	struct stv *state = fe->demodulator_priv;
 	enum fe_ioctl_result result = FE_RESERVATION_FAILED;
-	chip_lock(state);
+	state_chip_lock(state);
 	card_lock(state);
 	state->legacy_rf_in = ic->config_id <0;
 	result = stid135_select_rf_in_(state, ic);
 	card_unlock(state);
-	chip_unlock(state);
+	state_chip_unlock(state);
 	return result;
 }
 
@@ -1666,7 +1671,7 @@ static int stid135_read_status(struct dvb_frontend* fe, enum fe_status *status)
 {
 	struct stv *state = fe->demodulator_priv;
 	int ret = 0;
-	if (!chip_trylock(state)) {
+	if (!state_chip_trylock(state)) {
 		if (state->signal_info.has_viterbi) {//XX: official driver tests for has_sync?
 			*status |= FE_HAS_SIGNAL | FE_HAS_CARRIER
 				| FE_HAS_VITERBI | FE_HAS_SYNC | FE_HAS_LOCK;
@@ -1674,7 +1679,7 @@ static int stid135_read_status(struct dvb_frontend* fe, enum fe_status *status)
 		return 0;
 	}
 	ret = stid135_read_status_(fe, status);
-	chip_unlock(state);
+	state_chip_unlock(state);
 	return ret;
 }
 
@@ -1698,9 +1703,9 @@ static int stid135_set_sec_ready(struct dvb_frontend* fe)
 {
 	int ret=0;
 	struct stv *state = fe->demodulator_priv;
-	chip_lock(state);
+	state_chip_lock(state);
 	ret = stid135_set_sec_ready_(fe);
-	chip_unlock(state);
+	state_chip_unlock(state);
 	return ret;
 }
 
@@ -1715,9 +1720,9 @@ static int stid135_tune_(struct dvb_frontend* fe, bool re_tune,
 		state_dprintk("BUG active_rf_in==NULL\n");
 		return -1;
 	}
-	stid135_set_sec_ready_(fe);
 	dprintk("demod=%d re_tune=%d\n", state->nr, re_tune);
 	if (re_tune) {
+		stid135_set_sec_ready_(fe);
 		state->signal_info.out_of_llr = false;
 		r = stid135_set_parameters(fe);
 		if (r) {
@@ -1774,7 +1779,7 @@ static int stid135_tune(struct dvb_frontend* fe, bool re_tune,
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
 	int err=0;
 	enum fe_ioctl_result result;
-	chip_lock(state);
+	state_chip_lock(state);
 	if(!state->active_tuner || !state->active_tuner->active_rf_in) {
 		card_lock(state);
 		result = stid135_select_rf_in_legacy_(state);
@@ -1783,7 +1788,7 @@ static int stid135_tune(struct dvb_frontend* fe, bool re_tune,
 	if(result <0) {
 		state_dprintk("rf_in=NULL result=%d active_tuner=%p active_rf_in=%p\n", result, state->active_tuner,
 									state->active_tuner? state->active_tuner->active_rf_in : NULL);
-		chip_unlock(state);
+		state_chip_unlock(state);
 		return -1;
 	}
 
@@ -1794,7 +1799,7 @@ static int stid135_tune(struct dvb_frontend* fe, bool re_tune,
 			max_num_samples = 1024; //also set an upper limit which should be fast enough
 		err|= stid135_constellation_start_(fe, &p->constellation, max_num_samples);
 	}
-	chip_unlock(state);
+	state_chip_unlock(state);
 	return err ?  -1 :0;
 }
 
@@ -1829,13 +1834,13 @@ static int stid135_set_voltage(struct dvb_frontend* fe, enum fe_sec_voltage volt
 	if (state->chip->set_voltage && (!tuner || ! rf_in)) {//@todo: locking maybe not needed
 		//for older applications, which do not call FE_SET_RF_INPUT
 		state_dprintk("before lock\n");
-		chip_lock(state); //DeepThought: needed as this may call select_rf_in_ which needs chip access
+		state_chip_lock(state); //DeepThought: needed as this may call select_rf_in_ which needs chip access
 		card_lock(state);
 		state_dprintk("after lock\n");
 		err |= stid135_select_rf_in_legacy_(state);
 		state_dprintk("before unlock err=%d\n", err);
 		card_unlock(state);
-		chip_unlock(state);
+		state_chip_unlock(state);
 		state_dprintk("after unlock\n");
 		rf_in = active_rf_in(state);
 		tuner = state->active_tuner;
@@ -1934,11 +1939,11 @@ static int stid135_set_tone(struct dvb_frontend* fe, enum fe_sec_tone_mode tone)
 
 	if ((!tuner || ! rf_in)) {//@todo: locking maybe not needed
 		//for older applications, which do not call FE_SET_RF_INPUT
-		chip_lock(state);
+		state_chip_lock(state);
 		card_lock(state);
 		err |= stid135_select_rf_in_legacy_(state);
 		card_unlock(state);
-		chip_unlock(state);
+		state_chip_unlock(state);
 		rf_in = active_rf_in(state);
 		tuner = state->active_tuner;
 	}
@@ -1971,7 +1976,7 @@ static int stid135_set_tone(struct dvb_frontend* fe, enum fe_sec_tone_mode tone)
 		return 0;
 	}
 
-	chip_lock(state);
+	state_chip_lock(state);
 	if(!rf_in->controlling_chip) {
 		state_dprintk("BUG: controlling_chip=NULL != chip=%p\n", state->chip);
 		return -1;
@@ -1981,7 +1986,7 @@ static int stid135_set_tone(struct dvb_frontend* fe, enum fe_sec_tone_mode tone)
 
 	err = fe_stid135_set_22khz_cont(&rf_in->controlling_chip->ip, rf_in->rf_in_no + 1, tone == SEC_TONE_ON);
 	rf_in->tone = tone;
-	chip_unlock(state);
+	state_chip_unlock(state);
 	state_dprintk("set tone=%d old_tone=%d error=%d err=%d abort=%d rf_in_use_count=%d", tone, rf_in->tone, err,
 								state->chip->ip.handle_demod->Error,
 								state->chip->ip.handle_demod->Abort, rf_in->reservation.use_count);
@@ -2044,7 +2049,7 @@ static int stid135_send_long_master_cmd(struct dvb_frontend* fe,
 									tuner->reservation.use_count, rf_in->rf_in_no, rf_in->reservation.use_count);
 		return -1;
 	}
-	chip_lock(state);
+	state_chip_lock(state);
 	card_lock(state);
 	if(rf_in->sec_configured && ! state->legacy_rf_in && ! state->is_master && ! rf_in->unicable_mode) {
 		card_unlock(state);
@@ -2052,12 +2057,12 @@ static int stid135_send_long_master_cmd(struct dvb_frontend* fe,
 									rf_in->rf_in_no,
 									tuner->tuner_no,
 									tuner->reservation.use_count, rf_in->rf_in_no, rf_in->reservation.use_count, state->legacy_rf_in);
-		chip_unlock(state);
+		state_chip_unlock(state);
 	} else {
 		card_unlock(state); //we do not need lock anymore, and it prevents chip_sleep
 		err |= fe_stid135_diseqc_init(&rf_in->controlling_chip->ip, rf_in->rf_in_no + 1, FE_SAT_DISEQC_2_3_PWM);
 		err |= fe_stid135_diseqc_send(state, rf_in->rf_in_no + 1, cmd->msg, cmd->msg_len);
-		chip_unlock(state);
+		state_chip_unlock(state);
 		state_dprintk("diseqc sent: rf_in=%d; tuner[%d].use_count=%d rf_in[%d].use_count=%d\n", rf_in->rf_in_no,
 								tuner->tuner_no,
 									tuner->reservation.use_count, rf_in->rf_in_no, rf_in->reservation.use_count);
@@ -2099,7 +2104,7 @@ static int stid135_recv_slave_reply(struct dvb_frontend* fe,
 		return -EPERM;
 	}
 
-	chip_lock(state);
+	state_chip_lock(state);
 	card_lock(state);
 	if(rf_in->sec_configured && ! state->legacy_rf_in) {
 		card_unlock(state);
@@ -2107,12 +2112,12 @@ static int stid135_recv_slave_reply(struct dvb_frontend* fe,
 									rf_in->rf_in_no,
 									tuner->tuner_no,
 									tuner->reservation.use_count, rf_in->rf_in_no, rf_in->reservation.use_count, state->legacy_rf_in);
-		chip_unlock(state);
+		state_chip_unlock(state);
 	} else {
 		card_unlock(state); //we do not need lock anymore, and it prevents chip_sleep
 		err = fe_stid135_diseqc_receive(&state->chip->ip, reply->msg, &reply->msg_len);
 		state_dprintk("received %d bytes:", reply->msg_len);
-		chip_unlock(state);
+		state_chip_unlock(state);
 		state_dprintk("diseqc read reply: rf_in=%d; tuner[%d].use_count=%d rf_in[%d].use_count=%d\n", rf_in->rf_in_no,
 								tuner->tuner_no,
 									tuner->reservation.use_count, rf_in->rf_in_no, rf_in->reservation.use_count);
@@ -2141,13 +2146,13 @@ static int stid135_send_burst(struct dvb_frontend* fe, enum fe_sec_mini_cmd burs
 
 	if ((!tuner || ! rf_in)) {//@todo: locking maybe not needed
 		//for older applications, which do not call FE_SET_RF_INPUT
-		chip_lock(state); //DeepThought: maybe not needed (as it does not use stid135 chips)
+		state_chip_lock(state); //DeepThought: maybe not needed (as it does not use stid135 chips)
 		card_lock(state); //DeepThought: maybe not needed (as it does not use stid135 chips)
 		err |= stid135_select_rf_in_legacy_(state);
 		rf_in = active_rf_in(state);
 		tuner = state->active_tuner;
 		card_unlock(state);
-		chip_unlock(state);
+		state_chip_unlock(state);
 	}
 
 	if(!rf_in) {
@@ -2191,7 +2196,7 @@ static int stid135_sleep(struct dvb_frontend* fe)
 		state_dprintk("sleep; adapter did not use tuner; active_tuner=%p active_rf_in=%p\n",
 									tuner, rf_in);
 	} else {
-		chip_lock(state);
+		state_chip_lock(state);
 		card_lock(state);
 		state_dprintk("sleep tuner[%d].use_count=%d rf_in[%d].use_count=%d\n", tuner->tuner_no,
 									tuner->reservation.use_count, rf_in->rf_in_no,
@@ -2203,7 +2208,7 @@ static int stid135_sleep(struct dvb_frontend* fe)
 		result = stid135_select_rf_in_(state, NULL);
 		state_dprintk("Before unlock\n");
 		card_unlock(state);
-		chip_unlock(state);
+		state_chip_unlock(state);
 		state_dprintk("After unlock\n");
 	}
 	return err != 0 ? -1 : 0;
@@ -2305,9 +2310,9 @@ static int stid135_read_temp(struct dvb_frontend* fe, s16 *temp)
 	struct stv *state = fe->demodulator_priv;
 	fe_lla_error_t err = FE_LLA_NO_ERROR;
 
-	chip_lock(state);
+	state_chip_lock(state);
 	err = fe_stid135_get_soc_temperature(&state->chip->ip, temp);
-	chip_unlock(state);
+	state_chip_unlock(state);
 
 	if (err != FE_LLA_NO_ERROR)
 		dev_warn(&state->chip->i2c->dev, "%s: fe_stid135_get_soc_temperature error %d !\n", __func__, err);
@@ -2461,7 +2466,7 @@ static int stid135_get_spectrum_scan_sweep(struct dvb_frontend* fe,
 		if(error)
 			goto __onerror;
 
-		chip_sleep(state, 12);
+		state_chip_sleep(state, 12);
 
 	}
 
@@ -2525,7 +2530,7 @@ static int stid135_spectrum_start(struct dvb_frontend* fe,
 	}
 	s->scale =  FE_SCALE_DECIBEL; //in units of 0.001dB
 
-	chip_lock(state);
+	state_chip_lock(state);
 	state_dprintk("Marking rf_in as configured old=%d\n", rf_in->sec_configured);
 	rf_in->sec_configured = true; //we assume that caller has waited long enough
 
@@ -2541,7 +2546,7 @@ static int stid135_spectrum_start(struct dvb_frontend* fe,
 		break;
 	}
 
-	chip_unlock(state);
+	state_chip_unlock(state);
 	return -1;
 }
 
@@ -2549,7 +2554,7 @@ static int stid135_spectrum_get(struct dvb_frontend* fe, struct dtv_fe_spectrum*
 {
 	struct stv *state = fe->demodulator_priv;
 	int error=0;
-	chip_lock(state);
+	state_chip_lock(state);
 	if (user->num_freq> state->spectrum_scan_state.spectrum_len)
 		user->num_freq = state->spectrum_scan_state.spectrum_len;
 	if (user->num_candidates > state->spectrum_scan_state.num_candidates)
@@ -2571,7 +2576,7 @@ static int stid135_spectrum_get(struct dvb_frontend* fe, struct dtv_fe_spectrum*
 		}
 	} else
 		error = -EFAULT;
-	chip_unlock(state);
+	state_chip_unlock(state);
 	//stid135_stop_task(fe);
 	return error;
 }
@@ -2612,9 +2617,9 @@ static int stid135_scan_sat(struct dvb_frontend* fe, bool init,
 										rf_in, state->fe.ops.info.default_rf_input);
 		}
 
-		chip_lock(state);
+		state_chip_lock(state);
 		ret = stid135_spectral_scan_start(fe);
-		chip_unlock(state);
+		state_chip_unlock(state);
 
 		if(ret<0) {
 			dprintk("Could not start spectral scan\n");
@@ -2624,9 +2629,9 @@ static int stid135_scan_sat(struct dvb_frontend* fe, bool init,
 		if(!state->spectrum_scan_state.scan_in_progress) {
 			dprintk("Error: Called with init==false, but scan was  not yet started\n");
 
-			chip_lock(state);
+			state_chip_lock(state);
 			ret = stid135_spectral_scan_start(fe);
-			chip_unlock(state);
+			state_chip_unlock(state);
 
 			if(ret<0) {
 				dprintk("Could not start spectral scan\n");
@@ -2645,9 +2650,9 @@ static int stid135_scan_sat(struct dvb_frontend* fe, bool init,
 		}
 
 		*status = 0;
-		chip_lock(state);
+		state_chip_lock(state);
 		ret=stid135_spectral_scan_next(fe,  &p->frequency, &p->symbol_rate);
-		chip_unlock(state);
+		state_chip_unlock(state);
 
 		if(ret<0) {
 			dprintk("reached end of scan range\n");
@@ -2689,17 +2694,17 @@ static int stid135_scan_sat(struct dvb_frontend* fe, bool init,
 						p->frequency, p->search_range/1000,
 						p->scan_fft_size, p->scan_resolution, p->symbol_rate/1000);
 
-		chip_lock(state);
+		state_chip_lock(state);
 		ret = stid135_tune_(fe, retune, mode_flags, delay, status);
-		chip_unlock(state);
+		state_chip_unlock(state);
 
 		old = *status;
 		{
 			state->chip->ip.handle_demod->Error = FE_LLA_NO_ERROR;
 
-			chip_lock(state);
+			state_chip_lock(state);
 			fe_stid135_get_signal_info(state);
-			chip_unlock(state);
+			state_chip_unlock(state);
 
 			memcpy(p->isi_bitset, state->signal_info.isi_list.isi_bitset, sizeof(p->isi_bitset));
 			memcpy(p->matypes, state->signal_info.isi_list.matypes, sizeof(p->matypes));
@@ -2778,7 +2783,7 @@ static int stid135_constellation_get(struct dvb_frontend* fe, struct dtv_fe_cons
 	struct constellation_scan_state* cs = &state->constellation_scan_state;
 	int error = 0;
 	struct stv_rf_in_t* rf_in = active_rf_in(state);
-	chip_lock(state);
+	state_chip_lock(state);
 	if(!rf_in->sec_configured) {
 		state_dprintk("Marking rf_in as configured rf_in=%p old=%d\n", rf_in, rf_in->sec_configured);
 		rf_in->sec_configured = true; //we assume that caller has waited long enough
@@ -2794,7 +2799,7 @@ static int stid135_constellation_get(struct dvb_frontend* fe, struct dtv_fe_cons
 	}
 	else
 		error = -EFAULT;
-	chip_unlock(state);
+	state_chip_unlock(state);
 	return error;
 }
 

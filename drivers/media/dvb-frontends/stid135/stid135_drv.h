@@ -51,6 +51,12 @@
 #define dprintk(fmt, arg...)																					\
 	printk(KERN_DEBUG pr_fmt("%s:%d " fmt),  __func__, __LINE__, ##arg)
 
+#define chip_dprintk(fmt, arg...)																					\
+	printk(KERN_DEBUG pr_fmt("%s:%d demod=%d.? " fmt),  __func__, __LINE__, chip->chip_no, ##arg)
+
+#define chip_dprintk_(func, line, fmt, arg...)													\
+	printk(KERN_DEBUG pr_fmt("%s:%d demod=%d.? " fmt),  func, line, chip->chip_no, ##arg)
+
 #define state_dprintk(fmt, arg...)																					\
 	printk(KERN_DEBUG pr_fmt("%s:%d demod=%d.%d " fmt),  __func__, __LINE__, state->chip->chip_no, state->nr, ##arg)
 
@@ -479,12 +485,15 @@ int card_trylock_(struct stv* state, const char* func, int line);
 void card_unlock_(struct stv* state, const char* func, int line);
 bool card_is_locked_by_state(struct stv* state);
 
-void chip_lock_(struct stv* state, const char* func, int line);
-int chip_trylock_(struct stv* state, const char* func, int line);
-void chip_unlock_(struct stv* state, const char* func, int line);
-bool chip_is_locked_by_state(struct stv* state);
+void state_chip_lock_(struct stv* state, const char* func, int line);
+void chip_chip_lock_(struct stv_chip_t* chip, const char* func, int line);
+int state_chip_trylock_(struct stv* state, const char* func, int line);
+void state_chip_unlock_(struct stv* state, const char* func, int line);
+void chip_chip_unlock_(struct stv_chip_t* chip, const char* func, int line);
 
-void chip_sleep_(struct stv* state, int timems, const char* func, int line);
+bool state_chip_is_locked_by_state(struct stv* state);
+
+void state_chip_sleep_(struct stv* state, int timems, const char* func, int line);
 
 /*
 	Singleton structure, one per chip (i.e., the same for all 8 demods and all 4 tuners
@@ -500,17 +509,23 @@ void chip_sleep_(struct stv* state, int timems, const char* func, int line);
 #define card_unlock(state) \
 	card_unlock_(state, __func__, __LINE__)
 
-#define chip_lock(state) \
-	chip_lock_(state, __func__, __LINE__)
+#define state_chip_lock(state) \
+	state_chip_lock_(state, __func__, __LINE__)
 
-#define chip_trylock(state)										\
-	chip_trylock_(state, __func__, __LINE__)
+#define chip_chip_lock(state) \
+	chip_chip_lock_(chip, __func__, __LINE__)
 
-#define chip_unlock(state) \
-	chip_unlock_(state, __func__, __LINE__)
+#define state_chip_trylock(state)										\
+	state_chip_trylock_(state, __func__, __LINE__)
 
-#define chip_sleep(state, time)											\
-	chip_sleep_(state, time, __func__, __LINE__)
+#define state_chip_unlock(state) \
+	state_chip_unlock_(state, __func__, __LINE__)
+
+#define chip_chip_unlock(state) \
+	chip_chip_unlock_(chip, __func__, __LINE__)
+
+#define state_chip_sleep(state, time)											\
+	state_chip_sleep_(state, time, __func__, __LINE__)
 
 
 extern void print_signal_info_(struct stv* state, const char* func, int line);

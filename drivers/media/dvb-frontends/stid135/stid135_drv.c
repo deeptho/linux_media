@@ -1493,7 +1493,7 @@ static fe_lla_error_t FE_STiD135_GetBer(struct stv* state, u32* ber_p)
 		*ber_p=0;
 		/* Average 5 ber values */
 		for (i = 0; i < 5; i++) {
-			chip_sleep(state, 5);
+			state_chip_sleep(state, 5);
 			error |= FE_STiD135_GetErrorCount(hChip,
 					FE_STiD_COUNTER1, Demod, &ber);
 			*ber_p += ber;
@@ -1516,7 +1516,7 @@ static fe_lla_error_t FE_STiD135_GetBer(struct stv* state, u32* ber_p)
 		*ber_p = 0;
 		/* Average 5 ber values */
 		for(i = 0; i < 5; i++) {
-			chip_sleep(state, 5);
+			state_chip_sleep(state, 5);
 			error |= FE_STiD135_GetErrorCount(hChip,
 					FE_STiD_COUNTER1, Demod, &ber);
 			*ber_p += ber;
@@ -2555,7 +2555,7 @@ static fe_lla_error_t FE_STiD135_GetDemodLock (struct stv* state, u32 TimeOutUNU
 		}
 
 	if( !state->signal_info.has_lock) {
-			chip_sleep(state, 10);	/* wait 10ms */
+			state_chip_sleep(state, 10);	/* wait 10ms */
 	}
 	run_time = ktime_to_ns(ktime_sub(ktime_get_coarse(), start_time))/1000000;
 #if 0
@@ -2585,7 +2585,7 @@ static fe_lla_error_t FE_STiD135_GetDemodLock (struct stv* state, u32 TimeOutUNU
 			error |= ChipGetField(state->chip->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_SLICEMIN_DEMODFLT_SLICEMIN(state->nr+1), &slc_min);
 			error |= ChipGetField(state->chip->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_SLICEMAX_DEMODFLT_SLICEMAX(state->nr+1), &slc_max);
 			while((slc_min == 255) && (slc_max == 0) && (timeout < 40)) { // 255 is not valid value for slicemin, 0 is not valid for slicemax
-				chip_sleep(state, 5);
+				state_chip_sleep(state, 5);
 				timeout = (u8)(timeout + 5);
 				error |= ChipGetField(state->chip->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_SLICEMIN_DEMODFLT_SLICEMIN(state->nr+1), &slc_min);
 				error |= ChipGetField(state->chip->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_SLICEMAX_DEMODFLT_SLICEMAX(state->nr+1), &slc_max);
@@ -2670,7 +2670,7 @@ fe_lla_error_t FE_STiD135_GetFECLock(struct stv* state,
 		state->signal_info.fec_locked =lock;
 		if (lock == 0)
 		{
-			chip_sleep(state, 10);
+			state_chip_sleep(state, 10);
 			timer += 10;
 		}
 	}
@@ -3903,7 +3903,7 @@ fe_lla_error_t fe_stid135_get_signal_info(struct stv* state)
 				error |= ChipGetField(state->chip->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_TMGOBS_ROLLOFF_STATUS(Demod), &(fld_value[0]));
 				if(pInfo->modcode != FE_SAT_DUMMY_PLF)
 					break;
-				chip_sleep(state,5);
+				state_chip_sleep(state,5);
 			}
 			pInfo->roll_off = (enum fe_sat_rolloff)(fld_value[0]);
 
@@ -4261,7 +4261,7 @@ fe_lla_error_t FE_STiD135_Algo(struct stv* state, BOOL satellite_scan, enum fe_s
 	if(error1)
 		dprintk("demod=%d: ERROR=%d\n", state->nr, error1);
 
-	chip_sleep(state, 10);
+	state_chip_sleep(state, 10);
 
 	error |= (error1=ChipGetRegisters(state->chip->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_AGCRF_AGCRFIN1(AgcrfPath), 2));
 	if(error1)
@@ -4414,7 +4414,7 @@ fe_lla_error_t FE_STiD135_Algo(struct stv* state, BOOL satellite_scan, enum fe_s
 				vprintk("demod=%d: here first_lock=%d\n", state->nr, fld_value);
 
 				while ((fld_value != TRUE) && (pdel_status_timeout < 220)) {
-					chip_sleep(state, 5);
+					state_chip_sleep(state, 5);
 					pdel_status_timeout = (u8)(pdel_status_timeout + 5);
 					//stv09x1 checks bit 1 (PKTDELIN_LOCK)  whereas this code checks bit 0 ( FIRST_LOCK)
 					error |= (error1=ChipGetField(state->chip->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELSTATUS1_FIRST_LOCK(Demod), &fld_value));
@@ -4463,7 +4463,7 @@ fe_lla_error_t FE_STiD135_Algo(struct stv* state, BOOL satellite_scan, enum fe_s
 			error |= (error1=ChipSetField(state->chip->ip.handle_demod, streamMergerField, 0));
 			if(error1)
 				dprintk("demod=%d: ERROR=%d\n", state->nr, error1);
-			chip_sleep(state, 3);
+			state_chip_sleep(state, 3);
 			/* Stream merger reset */
 			error |= (error1=ChipSetField(state->chip->ip.handle_demod, streamMergerField, 1));
 			if(error1)
@@ -4862,7 +4862,7 @@ static  fe_lla_error_t FE_STiD135_GetSignalParams(
 
 	*range_p=FE_SAT_OUTOFRANGE;
 
-	chip_sleep(state, 5);
+	state_chip_sleep(state, 5);
 
 	if(state->demod_search_algo == FE_SAT_BLIND_SEARCH ||
 		 state->demod_search_algo == FE_SAT_NEXT) {
@@ -4878,7 +4878,7 @@ static  fe_lla_error_t FE_STiD135_GetSignalParams(
 			error |= ChipGetOneRegister(state->chip->ip.handle_demod,
 				(u16)REG_RC8CODEW_DVBSX_DEMOD_TMGREG2(Demod), &reg_value);
 			timing =  (u8)reg_value;
-			chip_sleep(state, 5);
+			state_chip_sleep(state, 5);
 			i += 5;
 		}
 	}
@@ -6510,7 +6510,7 @@ fe_lla_error_t fe_stid135_diseqc_send(struct stv* state,
 			//vprintk("[%d] lfd[%d]=%x",  tuner_nb, i, fld_value);
 			while((fld_value != 1) && (i < 10)) {
 				/*wait until the end of diseqc send operation */
-				chip_sleep(state, 10);
+				state_chip_sleep(state, 10);
 				i++;
 				error |= ChipGetField(handle_demod, FLD_FC8CODEW_DVBSX_DISEQC_DISTXSTATUS_TX_IDLE(tuner_nb), &fld_value);
 				//vprintk("[%d] lfd[%d]=%x",  tuner_nb, i, fld_value);
@@ -9925,7 +9925,7 @@ fe_lla_error_t fe_stid135_modcodes_inventory(struct stv* state,
 			error |= ChipSetField(state->chip->ip.handle_demod, modcodlst1, 0);		/* disable automatic filter vs. SR */
 			error |= ChipSetField(state->chip->ip.handle_demod, nresetmodcod, 0);		/* Set all values to 0 */
 			error |= ChipSetField(state->chip->ip.handle_demod, modcodlstf, 0);		/* Set inventory mode */
-			chip_sleep(state, Duration);			/* Wait for modecode occurence */
+			state_chip_sleep(state, Duration);			/* Wait for modecode occurence */
 			// QPSK
 			error |= ChipGetField(state->chip->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MODCODLSTF_DIS_QPSK_1_4(demod), &fld_value);
 			Index = check_modcodes_mask_4bits(MODES_Inventory, fld_value, 0x4, Index);
@@ -10492,7 +10492,7 @@ static fe_lla_error_t fe_stid135_select_min_isi(struct stv* state)
 			error |= ChipSetField(state->chip->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL0_ISIOBS_MODE(demod), 1);
 
 			/* Get Min ISI */
-			chip_sleep(state, 30);
+			state_chip_sleep(state, 30);
 
 			error |= (error1=fe_stid135_read_hw_matype(state, &matype, &min_isi));
 			if(error1)
@@ -10568,7 +10568,7 @@ fe_lla_error_t fe_stid135_isi_scan(struct stv* state, struct fe_sat_isi_struct_t
 			error |= ChipSetField(state->chip->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_TPKTDELIN_TESTBUS_SELECT(demod), 8);
 			/* Setup HW to store Current ISI */
 			error |= ChipSetField(state->chip->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL0_ISIOBS_MODE(demod), 0);
-			chip_sleep(state, 100);
+			state_chip_sleep(state, 100);
 			/* Get Current ISI and store in struct */
 			for (i=0; i < 40; i++) {
 				uint32_t mask;
@@ -10587,7 +10587,7 @@ fe_lla_error_t fe_stid135_isi_scan(struct stv* state, struct fe_sat_isi_struct_t
 				state->signal_info.matype = matype;
 				}
 #endif
-				chip_sleep(state, 10);
+				state_chip_sleep(state, 10);
 			}
 			// Go back to previous value of test mode
 			error |= ChipSetField(state->chip->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_TPKTDELIN_TESTBUS_SELECT(demod), 0);
@@ -12712,9 +12712,40 @@ bool card_is_locked_by_state(struct stv* state) {
 	}
 }
 
-void chip_lock_(struct stv* state, const char*func, int line) {
+void chip_chip_lock_(struct stv_chip_t* chip, const char*func, int line) {
+	struct lock_t* lock = &chip->lock;
+	mutex_lock(&lock->mutex);
+	lock->func = func;
+	lock->line = line;
+	lock->demod = -1;
+	lock->chip_no = chip->chip_no;
+	lock->lock_time = ktime_get_boottime();
+#ifdef DEBUG_LOCK
+	chip_dprintk_(func, line, "chip mutex locked\n");
+#endif
+}
+
+void chip_chip_unlock_(struct stv_chip_t* chip, const char* func, int line) {
+	struct lock_t* lock = &chip->lock;
+	int64_t delta=ktime_ms_delta(ktime_get_boottime(), lock->lock_time);
+
+	if(delta > 500) {
+		chip_dprintk_(func, line, "Long locktime: %d ms; mutex locked at %s:%d\n", (int)delta, lock->func,
+									lock->line);
+	}
+	lock->func = NULL;
+	lock->line = -1;
+	lock->demod= -1;
+	lock->chip_no= -1;
+	mutex_unlock(&lock->mutex);
+#ifdef DEBUG_LOCK
+	chip_dprintk_(func, line, "chip mutex unlocked\n");
+#endif
+}
+
+void state_chip_lock_(struct stv* state, const char*func, int line) {
 	struct lock_t* lock = &state->chip->lock;
-	if(!chip_trylock_(state, func, line)) {
+	if(!state_chip_trylock_(state, func, line)) {
 		const char *fn = lock->func;
 		if(!fn)
 			fn="??";
@@ -12735,7 +12766,7 @@ void chip_lock_(struct stv* state, const char*func, int line) {
 #endif
 }
 
-int chip_trylock_(struct stv* state, const char*func, int line) {
+int state_chip_trylock_(struct stv* state, const char*func, int line) {
 	struct lock_t* lock = &state->chip->lock;
 	int ret = mutex_trylock(&lock->mutex);
 	if(ret) {
@@ -12748,10 +12779,10 @@ int chip_trylock_(struct stv* state, const char*func, int line) {
 	return ret;
 }
 
-void chip_unlock_(struct stv* state, const char* func, int line) {
+void state_chip_unlock_(struct stv* state, const char* func, int line) {
 	struct lock_t* lock = &state->chip->lock;
 	int64_t delta=ktime_ms_delta(ktime_get_boottime(), lock->lock_time);
-	if(!chip_is_locked_by_state(state)) {
+	if(!state_chip_is_locked_by_state(state)) {
 		state_dprintk_(func, line, "BUG: chip mutex not locked\n");
 		dump_stack();
 		return;
@@ -12771,7 +12802,7 @@ void chip_unlock_(struct stv* state, const char* func, int line) {
 #endif
 }
 
-bool chip_is_locked_by_state(struct stv* state) {
+bool state_chip_is_locked_by_state(struct stv* state) {
 	struct lock_t* lock = &state->chip->lock;
 	if(mutex_is_locked(&lock->mutex)) {
 		return (lock->demod == state->nr);
@@ -12780,17 +12811,17 @@ bool chip_is_locked_by_state(struct stv* state) {
 	}
 }
 
-void chip_sleep_(struct stv* state, int timems, const char* func, int line) {
+void state_chip_sleep_(struct stv* state, int timems, const char* func, int line) {
 	bool may_unlock = !card_is_locked_by_state(state);
 	if (may_unlock)
-		chip_unlock_(state, func, line);
+		state_chip_unlock_(state, func, line);
 	else {
 		state_dprintk_(func, line, "Sleeping without unlock because card is locked\n");
 		dump_stack();
 	}
 	ChipWaitOrAbort(state->chip->ip.handle_demod, timems);
 	if(may_unlock)
-		chip_lock_(state, func, line);
+		state_chip_lock_(state, func, line);
 }
 
 fe_lla_error_t reserve_llr(struct stv* state, s32 required_llr)
