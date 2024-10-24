@@ -1732,7 +1732,6 @@ static int stid135_tune_(struct dvb_frontend* fe, bool re_tune,
 	}
 
 	if(re_tune) {
-		struct dtv_frontend_properties *p = &fe->dtv_property_cache;
 		vprintk("[%d] RETUNE: GET SIGNAL\n", state->nr+1);
 		/*
 			 retrieve information about modulation, frequency, symbol_rate
@@ -1740,18 +1739,6 @@ static int stid135_tune_(struct dvb_frontend* fe, bool re_tune,
 		*/
 		memset(&state->signal_info.isi_list, 0, sizeof(state->signal_info.isi_list));
 		fe_stid135_get_signal_info(state);
-		if(state->signal_info.isi_list.has_mixed_issyi && p->stream_id != NO_STREAM_ID_FILTER) {
-			u32 matype = state->signal_info.matype;
-			matype &= ~0x08;
-			int error = FE_LLA_NO_ERROR;
-			enum fe_stid135_demod demod = state->nr+1;
-			error = ChipSetOneRegister(state->chip->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_PKTDELIN_MATCST1(demod),
-																 matype);
-			error |= ChipSetField(state->chip->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_BBHCTRL2_FORCE_MATYPEMSB(demod),
-														1);
-			dprintk("HACK: Disabling ISSYI and hoping for the best: matype=0x%2x => 0x%2x error=%d",
-							state->signal_info.matype, matype, error);
-		}
 	}
 	/*
 		get lock status
