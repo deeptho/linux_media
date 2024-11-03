@@ -651,7 +651,7 @@ static int start_feed(struct dvb_demux_feed *dvbdmxfeed)
 {
 	struct dvb_demux *dvbdmx = dvbdmxfeed->demux;
 	struct tbsecp3_adapter *adapter = dvbdmx->priv;
-	adapter->no_dvb= (dvbdmxfeed->filter->type == DMX_TYPE_DATA);
+	adapter->no_dvb= (dvbdmxfeed->section_filter->type == DMX_TYPE_DATA);
 	BUG_ON(adapter->no_dvb);
 	if (!adapter->feeds)
 		tbsecp3_dma_enable(adapter);
@@ -1997,7 +1997,7 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 		adapter->fe = dvb_attach(tas2971_attach, &tbs6308_demod_cfg, i2c);
 		if (adapter->fe == NULL)
 		    goto frontend_atach_fail;
-		  
+
 		break;
 	case TBSECP3_BOARD_TBS6304:
 		adapter->fe = dvb_attach(tas2971_attach, &tbs6304_demod_cfg[adapter->nr], i2c);

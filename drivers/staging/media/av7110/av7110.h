@@ -201,7 +201,7 @@ struct av7110 {
 #define TRICK_FREEZE 3
 	struct audio_status	audiostate;
 
-	struct dvb_demux_filter *handle2filter[32];
+	struct dvb_demux_section_filter *handle2filter[32];
 	struct av7110_p2t	 p2t_filter[MAXFILT];
 	struct dvb_filter_pes2ts p2t[2];
 	struct ipack		 ipack[2];

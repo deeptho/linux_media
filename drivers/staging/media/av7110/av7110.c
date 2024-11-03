@@ -280,7 +280,7 @@ static int arm_thread(void *data)
 
 static int DvbDmxFilterCallback(u8 *buffer1, size_t buffer1_len,
 				u8 *buffer2, size_t buffer2_len,
-				struct dvb_demux_filter *dvbdmxfilter,
+				struct dvb_demux_section_filter *dvbdmxfilter,
 				struct av7110 *av7110)
 {
 	if (!dvbdmxfilter->feed->demux->dmx.frontend)
@@ -768,7 +768,7 @@ int ChangePIDs(struct av7110 *av7110, u16 vpid, u16 apid, u16 ttpid,
  * hardware filter functions
  ******************************************************************************/
 
-static int StartHWFilter(struct dvb_demux_filter *dvbdmxfilter)
+static int StartHWFilter(struct dvb_demux_section_filter *dvbdmxfilter)
 {
 	struct dvb_demux_feed *dvbdmxfeed = dvbdmxfilter->feed;
 	struct av7110 *av7110 = dvbdmxfeed->demux->priv;
@@ -820,7 +820,7 @@ static int StartHWFilter(struct dvb_demux_filter *dvbdmxfilter)
 	return ret;
 }
 
-static int StopHWFilter(struct dvb_demux_filter *dvbdmxfilter)
+static int StopHWFilter(struct dvb_demux_section_filter *dvbdmxfilter)
 {
 	struct av7110 *av7110 = dvbdmxfilter->feed->demux->priv;
 	u16 buf[3];
@@ -874,7 +874,7 @@ static int dvb_feed_start_pid(struct dvb_demux_feed *dvbdmxfeed)
 		npids[i] = 0;
 		ret = ChangePIDs(av7110, npids[1], npids[0], npids[2], npids[3], npids[4]);
 		if (!ret)
-			ret = StartHWFilter(dvbdmxfeed->filter);
+			ret = StartHWFilter(dvbdmxfeed->section_filter);
 		return ret;
 	}
 	if (dvbdmxfeed->pes_type <= 2 || dvbdmxfeed->pes_type == 4) {
@@ -925,7 +925,7 @@ static int dvb_feed_stop_pid(struct dvb_demux_feed *dvbdmxfeed)
 	switch (i) {
 	case 2: //teletext
 		if (dvbdmxfeed->ts_type & TS_PACKET)
-			ret = StopHWFilter(dvbdmxfeed->filter);
+			ret = StopHWFilter(dvbdmxfeed->section_filter);
 		npids[2] = 0;
 		break;
 	case 0:
@@ -977,7 +977,7 @@ static int av7110_start_feed(struct dvb_demux_feed *feed)
 			}
 		} else if ((feed->ts_type & TS_PACKET) &&
 			   (demux->dmx.frontend->source != DMX_MEMORY_FE)) {
-			ret = StartHWFilter(feed->filter);
+			ret = StartHWFilter(feed->section_filter);
 		}
 	}
 
@@ -990,15 +990,15 @@ static int av7110_start_feed(struct dvb_demux_feed *feed)
 		int i;
 
 		for (i = 0; i < demux->filternum; i++) {
-			if (demux->filter[i].state != DMX_STATE_READY)
+			if (demux->section_filter[i].state != DMX_STATE_READY)
 				continue;
-			if (demux->filter[i].type != DMX_TYPE_SEC)
+			if (demux->section_filter[i].type != DMX_TYPE_SEC)
 				continue;
-			if (demux->filter[i].filter.parent != &feed->feed.sec)
+			if (demux->section_filter[i].filter.parent != &feed->feed.sec)
 				continue;
-			demux->filter[i].state = DMX_STATE_GO;
+			demux->section_filter[i].state = DMX_STATE_GO;
 			if (demux->dmx.frontend->source != DMX_MEMORY_FE) {
-				ret = StartHWFilter(&demux->filter[i]);
+				ret = StartHWFilter(&demux->section_filter[i]);
 				if (ret)
 					break;
 			}
@@ -1030,7 +1030,7 @@ static int av7110_stop_feed(struct dvb_demux_feed *feed)
 		} else
 			if ((feed->ts_type & TS_PACKET) &&
 			    (demux->dmx.frontend->source != DMX_MEMORY_FE))
-				ret = StopHWFilter(feed->filter);
+				ret = StopHWFilter(feed->section_filter);
 	}
 
 	if (av7110->full_ts) {
@@ -1040,11 +1040,11 @@ static int av7110_stop_feed(struct dvb_demux_feed *feed)
 
 	if (feed->type == DMX_TYPE_SEC) {
 		for (i = 0; i<demux->filternum; i++) {
-			if (demux->filter[i].state == DMX_STATE_GO &&
-			    demux->filter[i].filter.parent == &feed->feed.sec) {
-				demux->filter[i].state = DMX_STATE_READY;
+			if (demux->section_filter[i].state == DMX_STATE_GO &&
+			    demux->section_filter[i].filter.parent == &feed->feed.sec) {
+				demux->section_filter[i].state = DMX_STATE_READY;
 				if (demux->dmx.frontend->source != DMX_MEMORY_FE) {
-					rc = StopHWFilter(&demux->filter[i]);
+					rc = StopHWFilter(&demux->section_filter[i]);
 					if (!ret)
 						ret = rc;
 					/* keep going, stop as many filters as possible */
@@ -1078,12 +1078,12 @@ static void restart_feeds(struct av7110 *av7110)
 		if (feed->state == DMX_STATE_GO) {
 			if (feed->type == DMX_TYPE_SEC) {
 				for (j = 0; j < dvbdmx->filternum; j++) {
-					if (dvbdmx->filter[j].type != DMX_TYPE_SEC)
+					if (dvbdmx->section_filter[j].type != DMX_TYPE_SEC)
 						continue;
-					if (dvbdmx->filter[j].filter.parent != &feed->feed.sec)
+					if (dvbdmx->section_filter[j].filter.parent != &feed->feed.sec)
 						continue;
-					if (dvbdmx->filter[j].state == DMX_STATE_GO)
-						dvbdmx->filter[j].state = DMX_STATE_READY;
+					if (dvbdmx->section_filter[j].state == DMX_STATE_GO)
+						dvbdmx->section_filter[j].state = DMX_STATE_READY;
 				}
 			}
 			av7110_start_feed(feed);

@@ -62,7 +62,7 @@ enum dvb_dmx_state {
 #define SPEED_PKTS_INTERVAL 50000
 
 /**
- * struct dvb_demux_filter - Describes a DVB demux section filter.
+ * struct dvb_demux_section_filter - Describes a DVB demux section filter.
  *
  * @filter:		Section filter as defined by &struct dmx_section_filter.
  * @maskandmode:	logical ``and`` bit mask.
@@ -76,13 +76,13 @@ enum dvb_dmx_state {
  *			by &enum dvb_dmx_filter_type.
  */
 
-struct dvb_demux_filter {
+struct dvb_demux_section_filter {
 	struct dmx_section_filter filter;
 	u8 maskandmode[DMX_MAX_FILTER_SIZE];
 	u8 maskandnotmode[DMX_MAX_FILTER_SIZE];
 	bool doneq;
 
-	struct dvb_demux_filter *next;
+	struct dvb_demux_section_filter *next;
 	struct dvb_demux_feed *feed;
 	int index;
 	enum dvb_dmx_state state;
@@ -115,7 +115,7 @@ struct dvb_demux_filter {
  * @state:	state of the filter as defined by &enum dvb_dmx_state.
  * @pid:	PID to be filtered.
  * @timeout:	feed timeout.
- * @filter:	pointer to &struct dvb_demux_filter.
+ * @filter:	pointer to &struct dvb_demux_section_filter.
  * @buffer_flags: Buffer flags used to report discontinuity users via DVB
  *		  memory mapped API, as defined by &enum dmx_buffer_flags.
  * @ts_type:	type of TS, as defined by &enum ts_filter_type.
@@ -146,7 +146,7 @@ struct dvb_demux_feed {
 	u16 pid;
 
 	ktime_t timeout;
-	struct dvb_demux_filter *filter;
+	struct dvb_demux_section_filter *section_filter;
 
 	u32 buffer_flags;
 
@@ -184,7 +184,7 @@ struct dvb_demux_feed {
  *			If not initialized, dvb_demux will default to memcpy().
  * @users:		counter for the number of demux opened file descriptors.
  *			Currently, it is limited to 10 users.
- * @filter:		pointer to &struct dvb_demux_filter.
+ * @filter:		pointer to &struct dvb_demux_section_filter.
  * @feed:		pointer to &struct dvb_demux_feed.
  * @frontend_list:	&struct list_head with frontends used by the demux.
  * @pesfilter:		array of &struct dvb_demux_feed with the PES types
@@ -216,7 +216,7 @@ struct dvb_demux {
 
 	int users;
 #define MAX_DVB_DEMUX_USERS 10
-	struct dvb_demux_filter *filter;
+	struct dvb_demux_section_filter *section_filter;
 	struct dvb_demux_feed *feed;
 
 	struct list_head frontend_list;

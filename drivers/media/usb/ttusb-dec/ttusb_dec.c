@@ -142,8 +142,8 @@ struct ttusb_dec {
 	struct tasklet_struct	urb_tasklet;
 	spinlock_t		urb_frame_list_lock;
 
-	struct dvb_demux_filter	*audio_filter;
-	struct dvb_demux_filter	*video_filter;
+	struct dvb_demux_section_filter	*audio_filter;
+	struct dvb_demux_section_filter	*video_filter;
 	struct list_head	filter_info_list;
 	spinlock_t		filter_info_list_lock;
 
@@ -161,7 +161,7 @@ struct urb_frame {
 
 struct filter_info {
 	u8			stream_id;
-	struct dvb_demux_filter	*filter;
+	struct dvb_demux_section_filter	*filter;
 	struct list_head	filter_info_list;
 };
 
@@ -559,7 +559,7 @@ static void ttusb_dec_process_filter(struct ttusb_dec *dec, u8 *packet,
 {
 	struct list_head *item;
 	struct filter_info *finfo;
-	struct dvb_demux_filter *filter = NULL;
+	struct dvb_demux_section_filter *filter = NULL;
 	unsigned long flags;
 	u8 sid;
 
@@ -989,14 +989,14 @@ static int ttusb_dec_start_ts_feed(struct dvb_demux_feed *dvbdmxfeed)
 		dprintk("  pes_type: DMX_PES_VIDEO\n");
 		dec->pid[DMX_PES_PCR] = dvbdmxfeed->pid;
 		dec->pid[DMX_PES_VIDEO] = dvbdmxfeed->pid;
-		dec->video_filter = dvbdmxfeed->filter;
+		dec->video_filter = dvbdmxfeed->section_filter;
 		ttusb_dec_set_pids(dec);
 		break;
 
 	case DMX_PES_AUDIO:
 		dprintk("  pes_type: DMX_PES_AUDIO\n");
 		dec->pid[DMX_PES_AUDIO] = dvbdmxfeed->pid;
-		dec->audio_filter = dvbdmxfeed->filter;
+		dec->audio_filter = dvbdmxfeed->section_filter;
 		ttusb_dec_set_pids(dec);
 		break;
 
@@ -1053,7 +1053,7 @@ static int ttusb_dec_start_sec_feed(struct dvb_demux_feed *dvbdmxfeed)
 	pid = htons(dvbdmxfeed->pid);
 	memcpy(&b0[0], &pid, 2);
 	memcpy(&b0[4], &x, 1);
-	memcpy(&b0[5], &dvbdmxfeed->filter->filter.filter_value[0], 1);
+	memcpy(&b0[5], &dvbdmxfeed->section_filter->filter.filter_value[0], 1);
 
 	result = ttusb_dec_send_command(dec, 0x60, sizeof(b0), b0,
 					&c_length, c);
@@ -1065,7 +1065,7 @@ static int ttusb_dec_start_sec_feed(struct dvb_demux_feed *dvbdmxfeed)
 				return -ENOMEM;
 
 			finfo->stream_id = c[1];
-			finfo->filter = dvbdmxfeed->filter;
+			finfo->filter = dvbdmxfeed->section_filter;
 
 			spin_lock_irqsave(&dec->filter_info_list_lock, flags);
 			list_add_tail(&finfo->filter_info_list,
