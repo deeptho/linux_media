@@ -3118,10 +3118,7 @@ static irqreturn_t tbsmod_irq(int irq, void *dev_id)
 
 	stat = TBS_PCIE_READ(Int_adapter, 0); // clear total interrupts.
 	//stat16 = TBS_PCIE_READ(Int_adapter, 0x0c);
-	if(dev->cardid == 0x6032)
-		stat16 = TBS_PCIE_READ(Int_adapter, 0x18);
-	else
-		stat16 = 0;
+	stat16 = TBS_PCIE_READ(Int_adapter, 0x18);
 	TBS_PCIE_WRITE(Int_adapter, 0x04, 0x00000001);
 
 
@@ -3437,7 +3434,7 @@ static int tbsmod_probe(struct pci_dev *pdev,
 	break;
 	case 0x6032:
 		dev->cardid = 0x6032;
-		if(pdev->subsystem_device == 0x008)
+		if(pdev->subsystem_device == 0x0008)
 			dev->mods_num = 8;
 		else if(pdev->subsystem_device == 0x0016)
 			dev->mods_num = 16;
@@ -3511,10 +3508,6 @@ static int tbsmod_probe(struct pci_dev *pdev,
 	case 0x690b:
 		mutex_lock(&dev->chip_lock);
 		printk("tbsmod%d:tbs690b asi card\n", dev->mod_index);
-		
-		mpbuf[0] = 0;//close IIC mask
-		TBS_PCIE_WRITE( Int_adapter, 0x08, *(u32 *)&mpbuf[0]);
-
 		for(i=0;i<4;i++){
 		mpbuf[0] = i; //0--3 :select value
 		TBS_PCIE_WRITE( MOD_ASI_BASEADDRESS, MOD_ASI_DEVICE, *(u32 *)&mpbuf[0]);
