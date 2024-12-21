@@ -964,27 +964,7 @@ static int dvb_dmxdev_pes_filter_set(struct dmxdev *dmxdev,
 	return 0;
 }
 
-static int dvb_dmxdev_data_filter_set(struct dmxdev *dmxdev,
-				     struct dmxdev_filter *dmxdevfilter)
-{
-	int ret;
 
-	dvb_dmxdev_filter_stop(dmxdevfilter);
-	dvb_dmxdev_filter_reset(dmxdevfilter);
-
-	dmxdevfilter->type = DMXDEV_TYPE_DATA;
-
-	INIT_LIST_HEAD(&dmxdevfilter->feed.ts);
-
-	dvb_dmxdev_filter_state_set(dmxdevfilter, DMXDEV_STATE_SET);
-
-	ret = dvb_dmxdev_add_pid(dmxdev, dmxdevfilter,
-				 dmxdevfilter->params.pes.pid);
-	if (ret < 0)
-		return ret;
-
-	return 0;
-}
 
 static ssize_t dvb_dmxdev_read_sec(struct dmxdev_filter *dfil,
 				   struct file *file, char __user *buf,
@@ -1096,16 +1076,6 @@ static int dvb_demux_do_ioctl(struct file *file,
 			return -ERESTARTSYS;
 		}
 		ret = dvb_dmxdev_pes_filter_set(dmxdev, dmxdevfilter, parg);
-		mutex_unlock(&dmxdevfilter->mutex);
-		break;
-
-	case DMX_SET_DATA_FILTER:
-		if (mutex_lock_interruptible(&dmxdevfilter->mutex)) {
-			mutex_unlock(&dmxdev->mutex);
-			return -ERESTARTSYS;
-		}
-		BUG_ON(1);
-		ret = dvb_dmxdev_data_filter_set(dmxdev, dmxdevfilter);
 		mutex_unlock(&dmxdevfilter->mutex);
 		break;
 

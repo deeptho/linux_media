@@ -42,13 +42,11 @@
  * @DMXDEV_TYPE_NONE:	no filter set.
  * @DMXDEV_TYPE_SEC:	section filter.
  * @DMXDEV_TYPE_PES:	Program Elementary Stream (PES) filter.
- * @DMXDEV_TYPE_DATA:	Raw data (do not check for 0x47 TS codes)
  */
 enum dmxdev_type {
 	DMXDEV_TYPE_NONE,
 	DMXDEV_TYPE_SEC,
 	DMXDEV_TYPE_PES,
-	DMXDEV_TYPE_DATA,
 };
 
 /**
@@ -122,6 +120,7 @@ struct dmxdev_feed {
  *		Only for section filter.
  * @secheader:	buffer cache to parse the section header.
  *		Only for section filter.
+ * @current_dmx the demux structure to which the next ioctl commands will apply
  */
 struct dmxdev_filter {
 	union {
@@ -151,10 +150,14 @@ struct dmxdev_filter {
 	struct timer_list timer;
 	int todo;
 	u8 secheader[3];
+#ifndef TEST
+	int filter_id;
+#endif
 };
 
 /**
- * struct dmxdev - Describes a digital TV demux device.
+ * struct dmxdev - Describes a digital TV demux device,
+ *                 Contains all datastructures for accessing the card
  *
  * @dvbdev:		pointer to &struct dvb_device associated with
  *			the demux device node.
