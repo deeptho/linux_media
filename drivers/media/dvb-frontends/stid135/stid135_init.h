@@ -40,7 +40,7 @@
 
 	#define DEMOD_NBINSTANCES 76
 
-	#define DEMOD_NBREGS		7953
+	#define DEMOD_NBREGS		7953 +8
 	#define AFE_NBREGS			88	/* AFE registers */
 	#define STiD135_NBREGS		(DEMOD_NBREGS + AFE_NBREGS)	/* Nb of DEMOD+AFE registers */
 	#define STiD135_NBSOCREGS	757	/* SOC registers, excluding AFE registers */
