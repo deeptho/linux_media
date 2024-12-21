@@ -55,8 +55,8 @@ static irqreturn_t tbsecp3_irq_handler(int irq, void *dev_id)
 	u32 stat = tbs_read(TBSECP3_INT_BASE, TBSECP3_INT_STAT);
 	tbs_write(TBSECP3_INT_BASE, TBSECP3_INT_STAT, stat);
 
-	if (stat & 0x000000f0) {
-		/* dma0~3 */
+	if (stat & 0x000ffff0) {
+		/* dma0~15 */
 		for (i = 0; i < dev->info->adapters; i++) {
 			in = dev->adapter[i].cfg->ts_in;
 			if (stat & TBSECP3_DMA_IF(in))
