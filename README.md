@@ -276,6 +276,11 @@ User space applications should proceed as follows
   tuning properties have been added to indicate blind scanning and that additional properties are returned
   to indicate discovered modulation parameters.
 
+# Changes in release-1.4
+* Revert "Experimental workaround for 12606V@5.0W to make stream 4 work" as it caused problems on some multistreams
+* Bug: tbs6916: not locking one of the chips when releasing rf_in
+* Incorporated latest changes from TBS
+
 # Changes in release-1.3
 * Document neumo api
 * Updated installation instructions
