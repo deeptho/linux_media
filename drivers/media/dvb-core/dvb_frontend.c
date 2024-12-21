@@ -303,6 +303,7 @@ static int dvb_frontend_test_event(struct dvb_frontend_private *fepriv,
 }
 
 
+#if 0 //not used
 static int dvb_frontend_algo_test_progress(struct dtv_progress* oldval, struct dtv_fe_algo_state* state)
 {
 	int ret;
@@ -316,6 +317,7 @@ static int dvb_frontend_algo_test_progress(struct dtv_progress* oldval, struct d
 	}
 	return ret;
 }
+#endif
 
 static int dvb_frontend_get_event(struct dvb_frontend *fe,
 					struct dvb_frontend_event *event, int flags)
@@ -1268,6 +1270,7 @@ static struct dtv_cmds_h dtv_cmds[DTV_MAX_COMMAND + 1] = {
 	_DTV_CMD(DTV_HEARTBEAT, 1, 0),
 	_DTV_CMD(DTV_CLEAR, 1, 0),
 	/* Set */
+	_DTV_CMD(DTV_OUTPUT_BBFRAMES, 1, 0),
 	_DTV_CMD(DTV_FREQUENCY, 1, 0),
 	_DTV_CMD(DTV_SCAN_START_FREQUENCY, 1, 0),
 	_DTV_CMD(DTV_SCAN_END_FREQUENCY, 1, 0),
@@ -1571,6 +1574,9 @@ static int dtv_property_process_get(struct dvb_frontend *fe,
 		break;
 	case DTV_RF_INPUT:
 		tvp->u.data = c->rf_in_valid ? c->rf_in : fe->dvb->num;
+		break;
+	case DTV_OUTPUT_BBFRAMES:
+		tvp->u.data = c->output_bbframes;
 		break;
 	case DTV_FREQUENCY:
 		tvp->u.data = c->frequency;
@@ -2084,6 +2090,16 @@ static int dvbv3_set_delivery_system(struct dvb_frontend *fe)
 	return emulate_delivery_system(fe, delsys);
 }
 
+#if 0
+static void set_bbframes(struct dvb_frontend *fe, int isi)
+{
+	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
+	if(c->output_bbframes) {
+
+		c->stream_id;
+	}
+}
+#endif
 
 static int dtv_property_process_set_int(struct dvb_frontend *fe,
 						struct file *file,
@@ -2103,6 +2119,9 @@ static int dtv_property_process_set_int(struct dvb_frontend *fe,
 	switch(cmd) {
 	case DTV_ALGORITHM:
 		c->algorithm = data;
+		break;
+	case DTV_OUTPUT_BBFRAMES:
+		c->output_bbframes = data;
 		break;
 	case DTV_FREQUENCY:
 		c->frequency = data;
@@ -2338,14 +2357,14 @@ static int dtv_property_process_set(struct dvb_frontend *fe,
 		break;
 	case DTV_SET_SEC_CONFIGURED:
 		/*
-		 * inform driver that frontend has configiured lnb or other secondary equipment
+		 * inform driver that frontend has configured lnb or other secondary equipment
 		 */
 		dev_dbg(fe->dvb->device,
 			"%s: Setting the frontend from property cache\n",
 			__func__);
 
 		r = dtv_set_sec_configured(fe);
-		dprintk("cmd=DTV_TUNE r=%d adapter=%d", r, fe->dvb->num);
+		dprintk("cmd=DTV_SET_SEC_CONFIGURED r=%d adapter=%d", r, fe->dvb->num);
 		break;
 	case DTV_SCAN:
 		/*
@@ -2459,7 +2478,7 @@ static int dvb_frontend_handle_algo_ctrl_ioctl(struct file *file,
 		up(&fepriv->sem);
 		return 0;
 		break;
-
+#if 0
 	case DTV_ALGO_GET_PROGRESS: {
 		struct dtv_algo_ctrl* p  = parg;
 		p->u.progress.cur_index = atomic_read(&fe->algo_state.cur_index);
@@ -2479,6 +2498,7 @@ static int dvb_frontend_handle_algo_ctrl_ioctl(struct file *file,
 		return ret;
 	}
 		break;
+#endif
 
 	default:
 		return -ENOTSUPP;
@@ -2848,7 +2868,7 @@ static int dtv_set_sec_configured(struct dvb_frontend *fe)
 	} else {
 		dprintk("not calling set_sec_ready: num=%d\n", fe->dvb->num);
 	}
-	return 0;
+	return 0; //deliberately do not output error when not supported
 }
 
 static int dtv_set_sat_scan(struct dvb_frontend *fe, bool scan_continue)
@@ -3251,6 +3271,7 @@ static int dvb_frontend_handle_ioctl(struct file *file,
 						(fe->ops.info.supports_neumo && fe->ops.info.default_rf_input >=0) ?
 						fe->ops.info.default_rf_input : fe->dvb->num);
 		info->supports_neumo = fe->ops.info.supports_neumo;
+		info->supports_bbframes = fe->ops.info.supports_neumo;
 		info->default_rf_input = (fe->ops.info.supports_neumo && fe->ops.info.default_rf_input >=0) ?
 			fe->ops.info.default_rf_input : 0;
 		if (fe->ops.info.num_rf_inputs > 0 ) {

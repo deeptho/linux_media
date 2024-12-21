@@ -32,10 +32,12 @@
 #include <linux/version.h>
 #include <asm/div64.h>
 #include <media/dvb_frontend.h>
+#include <media/dvb_demux.h>
 #include "stid135.h"
 #include "i2c.h"
 #include "stid135_drv.h"
 #define MAX_FFT_SIZE 8192
+
 LIST_HEAD(stv_demod_list);
 LIST_HEAD(stv_chip_list);
 LIST_HEAD(stv_card_list);
@@ -70,6 +72,10 @@ MODULE_PARM_DESC(mc_auto, "Enable auto modcode filtering depend from current C/N
 static int blindscan_always=0; //always use blindscan
 module_param(blindscan_always, int, 0644);
 MODULE_PARM_DESC(blidscan_always, "Always tune using blindscan (default:0 - disabled)");
+
+static int bbframes_auto=0; //switch to bbframes on multistreams
+module_param(bbframes_auto, int, 0644);
+MODULE_PARM_DESC(bbframes_auto, "Always tune using blindscan (default:0 - disabled)");
 
 static unsigned int ts_nosync;
 module_param(ts_nosync, int, 0644);
@@ -1047,7 +1053,7 @@ static bool pls_search_list(struct dvb_frontend* fe)
 				p->stream_id = 	(state->mis_mode? (isi&0xff):0xff) | (pls_code & ~0xff);
 				dprintk("mis_mode=%d isi=0x%x pls_code=0x%x stream_id=0x%x",
 								state->mis_mode, isi, pls_code, p->stream_id);
-				dprintk("SET stream_id=0x%x isi=0x%x\n",p->stream_id, isi);
+				dprintk("SET stream_id=0x%x isi=%d\n",p->stream_id, isi);
 				break;
 			}
 
@@ -1709,6 +1715,29 @@ static int stid135_set_sec_ready(struct dvb_frontend* fe)
 	return ret;
 }
 
+static int stid135_set_demux_default_stream_id(struct dvb_frontend* fe) {
+	struct stv *state = fe->demodulator_priv;
+	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
+	struct dvb_demux * demux = state->demux;
+	bool output_bbframes = false;
+	int ret=0;
+	int stream_id = p->stream_id & 0xff;
+	if(stream_id==0xff)
+		stream_id = -1;
+	dprintk("before: p->output_bbframes=%d p->stream_id=%d bbframes_auto=%d\n",
+					p->output_bbframes, stream_id, bbframes_auto);
+	output_bbframes = (p->output_bbframes || bbframes_auto) && (stream_id!=-1);
+	p->output_bbframes = output_bbframes;
+	if(demux) {
+		ret=dvb_demux_set_bbframes_state(demux, p->output_bbframes, 0x10e /*embeddding pid*/ , stream_id);
+		state_dprintk("set stream_id=%d bbframes_mode=%d\n", stream_id, p->output_bbframes);
+	} else {
+		state_dprintk("Implementation error. NO DEMUX set stream_id=%d bbframes_mode=%d\n", stream_id,
+									p->output_bbframes);
+	}
+	return ret;
+}
+
 static int stid135_tune_(struct dvb_frontend* fe, bool re_tune,
 		unsigned int mode_flags,
 		unsigned int *delay, enum fe_status *status)
@@ -1724,6 +1753,9 @@ static int stid135_tune_(struct dvb_frontend* fe, bool re_tune,
 	if (re_tune) {
 		stid135_set_sec_ready_(fe);
 		state->signal_info.out_of_llr = false;
+
+		stid135_set_demux_default_stream_id(fe);
+
 		r = stid135_set_parameters(fe);
 		if (r) {
 			state->signal_info.has_error = true;
@@ -1737,6 +1769,7 @@ static int stid135_tune_(struct dvb_frontend* fe, bool re_tune,
 	}
 
 	if(re_tune) {
+		struct dtv_frontend_properties *p = &fe->dtv_property_cache;
 		vprintk("[%d] RETUNE: GET SIGNAL\n", state->nr+1);
 		/*
 			 retrieve information about modulation, frequency, symbol_rate
@@ -1744,6 +1777,10 @@ static int stid135_tune_(struct dvb_frontend* fe, bool re_tune,
 		*/
 		memset(&state->signal_info.isi_list, 0, sizeof(state->signal_info.isi_list));
 		fe_stid135_get_signal_info(state);
+		if(p->output_bbframes) {
+			dprintk("Calling stid135_set_bbframe_output\n");
+		  stid135_set_bbframe_output(state);
+		}
 	}
 	/*
 		get lock status
@@ -2190,8 +2227,10 @@ static int stid135_sleep(struct dvb_frontend* fe)
 	int err=0;
 	struct stv_rf_in_t* rf_in = active_rf_in(state);
 	struct stv_tuner_t* tuner = state->active_tuner;
-	state_dprintk("ENTERING sleep\n");
+	struct dvb_demux * demux = state->demux;
 	enum fe_ioctl_result result;
+	state_dprintk("ENTERING sleep\n");
+	dvb_demux_set_bbframes_state(demux, false /*output_bbrames*/, 0x10e /*embeddding pid*/, -1 /*stream_id*/);
 	if(!tuner || !rf_in) {
 		state_dprintk("sleep; adapter did not use tuner; active_tuner=%p active_rf_in=%p\n",
 									tuner, rf_in);
@@ -2820,6 +2859,7 @@ static struct dvb_frontend_ops stid135_ops = {
 		.extended_caps          = FE_CAN_SPECTRUM_SWEEP	|FE_CAN_SPECTRUM_FFT |
 		FE_CAN_IQ | FE_CAN_BLINDSEARCH,
 		.supports_neumo = true,
+		.supports_bbframes = true,
 		.default_rf_input = -1, //means: use adapter_no
 		.num_rf_inputs = 0,
 		.rf_inputs = { 0}
@@ -2969,7 +3009,8 @@ static void init_stv_chip(struct stv_chip_t* chip, struct stv_card_t* card, int 
 	state->chip is created exactly once and is shared
 	between the 8 demods; provides access to the i2c hardware and such
 */
-struct dvb_frontend* stid135_attach(struct tbsecp3_dev* tbsecp3_dev, struct i2c_adapter *i2c,
+struct dvb_frontend* stid135_attach(struct tbsecp3_dev* tbsecp3_dev, struct dvb_demux* demux,
+																		struct i2c_adapter *i2c,
 																		struct stid135_cfg *cfg,
 																		int nr, int rf_in)
 {
@@ -2982,6 +3023,7 @@ struct dvb_frontend* stid135_attach(struct tbsecp3_dev* tbsecp3_dev, struct i2c_
 
 	if (!state)
 		return NULL;
+	state->demux = demux;
 
 	base = match_base(i2c, cfg->adr);
 	if (base) {

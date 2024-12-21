@@ -428,6 +428,7 @@ struct stv {
 	struct list_head     stv_demod_list;
 	struct stv_chip_t    *chip;
 	struct dvb_frontend  fe;
+	struct dvb_demux* demux;
 	int                  nr;     //number of demod device 0-7 on the chip (st internal api uses nr+1)
 	bool                 is_master;
 	bool legacy_rf_in;
@@ -889,5 +890,8 @@ char* reservation_result_str(enum fe_ioctl_result result);
 
 extern int active_rf_in_no(struct stv* state);
 extern struct stv_rf_in_t* active_rf_in(struct stv* state);
+
+fe_lla_error_t stid135_set_bbframe_output(struct stv* state);
+fe_lla_error_t stid135_disable_issyi(struct stv* state);
 
 #endif  /* ifndef STID135_DRV_H */

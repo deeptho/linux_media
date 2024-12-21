@@ -57,13 +57,14 @@ struct stid135_cfg {
 
 struct tbsecp3_dev;
 #if IS_REACHABLE(CONFIG_DVB_STID135)
-extern struct dvb_frontend* stid135_attach(struct tbsecp3_dev* tbsecp3_dev, struct i2c_adapter *i2c,
-					   struct stid135_cfg *cfg,
-					   int nr, int tuner_nr);
+extern struct dvb_frontend* stid135_attach(struct tbsecp3_dev* tbsecp3_dev, struct dvb_demux* demux,
+																					 struct i2c_adapter *i2c, struct stid135_cfg *cfg,
+																					 int nr, int tuner_nr);
 #else
-static inline struct dvb_frontend *stid135_attach(struct tbsecp3_dev* tbsecp3_dev, struct i2c_adapter *i2c,
-						  struct stid135_cfg *cfg,
-						  int nr, int tuner_nr)
+static inline
+struct dvb_frontend *stid135_attach(struct tbsecp3_dev* tbsecp3_dev, struct dvb_demux* demux,
+																		struct i2c_adapter *i2c, struct stid135_cfg *cfg,
+																		int nr, int tuner_nr)
 {
 	pr_warn("%s: driver disabled by Kconfig\n", __func__);
 	return NULL;

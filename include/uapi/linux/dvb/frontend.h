@@ -182,7 +182,7 @@ struct dvb_frontend_extended_info {
 													 */
 	u8       num_rf_inputs;
 	s8       default_rf_input;
-	u8       reserved3;
+	u8       supports_bbframes;
 	s32      reserved4;
 	s64      card_mac_address;      //unique identifier for card
 	s64      adapter_mac_address;   //unique identifier for adapter
@@ -220,8 +220,8 @@ struct dvb_diseqc_master_cmd {
 };
 
 struct dvb_diseqc_long_master_cmd {
-	__u8 msg[16];
-	__u8 msg_len;
+	u8 msg[16];
+	u8 msg_len;
 };
 
 /**
@@ -702,13 +702,12 @@ enum fe_interleaving {
 #define DTV_MATYPE_LIST		90 //retrieve list of present matypesand stream_ids
 #define DTV_RF_INPUT 91
 #define DTV_SET_SEC_CONFIGURED 92
-#define DTV_MAX_COMMAND	 DTV_SET_SEC_CONFIGURED
+#define DTV_OUTPUT_BBFRAMES 93
+#define DTV_MAX_COMMAND	 DTV_OUTPUT_BBFRAMES
 
 //commands for controlling long running algorithms via FE_ALGO_CTRL ioctl
 #define DTV_STOP 1
-#define DTV_ALGO_GET_PROGRESS 2
-#define DTV_ALGO_WAIT_FOR_PROGRESS 3
-#define DTV_ALGO_MAX_COMMAND DTV_ALGO_WAIT_FOR_PROGRESS
+#define DTV_ALGO_MAX_COMMAND DTV_ALGO_STOP
 
 /**
  * enum fe_pilot - Type of pilot tone
@@ -1199,6 +1198,7 @@ struct fe_rf_input_control {
 	pid_t owner;
 	s32 config_id;
 	s8 unicable_mode; //allow slave reservations to perform unicable related voltage changes and diseqc commands
+	s8 reserved;
 	s16 rf_in;
 	enum fe_reservation_mode mode;
 };

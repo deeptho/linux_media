@@ -166,6 +166,18 @@ struct dmx_sct_filter_params {
 };
 
 /**
+ * struct dmx_bbframes_stream_params - Specifies BBFrames embedded in dvb ts stream
+ *	filter parameters.
+ *
+ * @embedding_pid:	PID in which bbframes are embedded
+ * @isi:	stream to be extracted from the bbframes or -1
+ */
+struct dmx_bbframes_stream_params {
+	__u16           embedding_pid; //PID of pes stream containing the bbframes
+	__s16           isi; //id of the stream to extract
+};
+
+/**
  * struct dmx_pes_filter_params - Specifies Packetized Elementary Stream (PES)
  *	filter parameters.
  *
@@ -176,11 +188,11 @@ struct dmx_sct_filter_params {
  * @flags:	Demux PES flags.
  */
 struct dmx_pes_filter_params {
-	__u16           pid;
+	__u16           pid; //only used to pass in an initial pid
 	enum dmx_input  input;
 	enum dmx_output output;
 	enum dmx_ts_pes pes_type;
-	__u32           flags;
+	__u32           flags; //used to check for DMX_IMMEDIATE_START
 };
 
 /**
@@ -286,11 +298,11 @@ struct dmx_exportbuffer {
 	__s32		fd;
 };
 
-#define DMX_SET_DATA_FILTER      _IO('o', 40)
 #define DMX_START                _IO('o', 41)
 #define DMX_STOP                 _IO('o', 42)
 #define DMX_SET_FILTER           _IOW('o', 43, struct dmx_sct_filter_params)
 #define DMX_SET_PES_FILTER       _IOW('o', 44, struct dmx_pes_filter_params)
+#define DMX_SET_BBFRAMES_STREAM  _IOW('o', 53, struct dmx_bbframes_stream_params)
 #define DMX_SET_BUFFER_SIZE      _IO('o', 45)
 #define DMX_GET_PES_PIDS         _IOR('o', 47, __u16[5])
 #define DMX_GET_STC              _IOWR('o', 50, struct dmx_stc)

@@ -651,8 +651,6 @@ static int start_feed(struct dvb_demux_feed *dvbdmxfeed)
 {
 	struct dvb_demux *dvbdmx = dvbdmxfeed->demux;
 	struct tbsecp3_adapter *adapter = dvbdmx->priv;
-	adapter->no_dvb= (dvbdmxfeed->section_filter->type == DMX_TYPE_DATA);
-	BUG_ON(adapter->no_dvb);
 	if (!adapter->feeds)
 		tbsecp3_dma_enable(adapter);
 
@@ -1571,6 +1569,9 @@ static void tbs6590se_reset_demod(struct tbsecp3_adapter *adapter) //for the cxd
 static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 {
 	struct tbsecp3_dev *dev = adapter->dev;
+	//struct dvb_adapter *adap = &adapter->dvb_adapter;
+	struct dvb_demux *dvbdemux = &adapter->demux;
+
 	struct pci_dev *pci = dev->pci_dev;
 
 	struct si2168_config si2168_config;
@@ -2667,11 +2668,11 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 	case TBSECP3_BOARD_TBS6916:
 
 		if(adapter->nr<8)
-			adapter->fe = dvb_attach(stid135_attach, dev, i2c,
+			adapter->fe = dvb_attach(stid135_attach, dev, dvbdemux, i2c,
 															 &tbs6916_stid135_cfg[0], adapter->nr, adapter->nr%4); //DTCHECK 2020405 was /2
 		else{
 			adapter->nr -= 8;
-			adapter->fe = dvb_attach(stid135_attach, dev, i2c,
+			adapter->fe = dvb_attach(stid135_attach, dev, dvbdemux, i2c,
 															 &tbs6916_stid135_cfg[1], adapter->nr, (adapter->nr)%4);	  //DTCHECK 2020405 was /2
 		}
 
@@ -2680,10 +2681,10 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 		break;
 	case TBSECP3_BOARD_TBS6909X:
 		if(pci->subsystem_device==0x0010)
-			adapter->fe = dvb_attach(stid135_attach, dev, i2c,
+			adapter->fe = dvb_attach(stid135_attach, dev, dvbdemux, i2c,
 				&tbs6909x_stid135_cfg, adapter->nr, adapter->nr%4);
 		else
-			adapter->fe = dvb_attach(stid135_attach, dev, i2c,
+			adapter->fe = dvb_attach(stid135_attach, dev, dvbdemux, i2c,
 															 &tbs6909x_V2_stid135_cfg, adapter->nr, adapter->nr%4);
 		if (adapter->fe == NULL)
 			goto frontend_atach_fail;
@@ -2691,13 +2692,13 @@ static int tbsecp3_frontend_attach(struct tbsecp3_adapter *adapter)
 	case TBSECP3_BOARD_TBS6903X:
 	case TBSECP3_BOARD_TBS6912:
 		if(pci->subsystem_vendor==0x6912)
-			adapter->fe = dvb_attach(stid135_attach, dev, i2c,
+			adapter->fe = dvb_attach(stid135_attach, dev, dvbdemux, i2c,
 					&tbs6912_stid135_cfg, adapter->nr ? 2 : 0, adapter->nr ? 3 : 0);
 		else if(pci->subsystem_device==0x0021)
-			adapter->fe = dvb_attach(stid135_attach, dev, i2c,
+			adapter->fe = dvb_attach(stid135_attach, dev, dvbdemux, i2c,
 				&tbs6903x_V2_stid135_cfg, adapter->nr ? 2 : 0, adapter->nr ? 3 : 0);
 		else
-			adapter->fe = dvb_attach(stid135_attach, dev, i2c,
+			adapter->fe = dvb_attach(stid135_attach, dev, dvbdemux, i2c,
 				&tbs6903x_stid135_cfg, adapter->nr ? 2 : 0, adapter->nr ? 3 : 0);
 		if (adapter->fe == NULL)
 			goto frontend_atach_fail;

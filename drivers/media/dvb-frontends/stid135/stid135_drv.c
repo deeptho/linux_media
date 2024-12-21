@@ -12890,3 +12890,36 @@ fe_lla_error_t release_llr(struct stv* state)
 void dump_llr(struct stv* state) {
 	dprintk("demod=%d llr_in_use=%d total=%d\n", state->nr, state->llr_in_use, state->chip->llr_in_use);
 }
+
+
+fe_lla_error_t stid135_set_bbframe_output(struct stv* state)
+{
+	enum fe_stid135_demod demod = state->nr+1;
+	int error = FE_LLA_NO_ERROR;
+	u32 reg_value=0;
+	u16 reg_field = 0;
+	STCHIP_Info_t* handle = state->chip->ip.handle_demod;
+	error = ChipGetOneRegister(handle, REG_RC8CODEW_DVBSX_PKTDELIN_PDELCTRL2(demod), &reg_value);
+	error |= ChipSetFieldImage(handle, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL2_FORCE_CONTINUOUS(demod),1);
+	error |= ChipSetFieldImage(handle, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL2_FRAME_MODE(demod),1);
+	error |= ChipSetRegisters(handle, REG_RC8CODEW_DVBSX_PKTDELIN_PDELCTRL2(demod), 1);
+	error |= ChipSetField(handle, FLD_FC8CODEW_DVBSX_HWARE_TSCFG0_TSFIFO_EMBINDVB(demod), 1);
+	error |= ChipSetField(handle, FLD_FC8CODEW_DVBSX_PKTDELIN_BBHCTRL2_FORCE_MATYPEMSB(demod), 1);
+	state_dprintk("set BBFRAME mode: error=%d", error);
+	return error;
+}
+
+fe_lla_error_t stid135_disable_issyi(struct stv* state)
+{
+	u32 matype = state->signal_info.matype;
+	matype &= ~0x08;
+	int error = FE_LLA_NO_ERROR;
+	enum fe_stid135_demod demod = state->nr+1;
+	error = ChipSetOneRegister(state->chip->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_PKTDELIN_MATCST1(demod),
+														 matype);
+	error |= ChipSetField(state->chip->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_BBHCTRL2_FORCE_MATYPEMSB(demod),
+												1);
+	state_dprintk("HACK: Disabling ISSYI and hoping for the best: matype=0x%2x => 0x%2x error=%d",
+								state->signal_info.matype, matype, error);
+	return error;
+}

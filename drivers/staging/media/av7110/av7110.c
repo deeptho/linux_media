@@ -994,7 +994,7 @@ static int av7110_start_feed(struct dvb_demux_feed *feed)
 				continue;
 			if (demux->section_filter[i].type != DMX_TYPE_SEC)
 				continue;
-			if (demux->section_filter[i].filter.parent != &feed->feed.sec)
+			if (demux->section_filter[i].filter.parent_dmx_section_feed != &feed->feed.sec)
 				continue;
 			demux->section_filter[i].state = DMX_STATE_GO;
 			if (demux->dmx.frontend->source != DMX_MEMORY_FE) {
@@ -1041,7 +1041,7 @@ static int av7110_stop_feed(struct dvb_demux_feed *feed)
 	if (feed->type == DMX_TYPE_SEC) {
 		for (i = 0; i<demux->filternum; i++) {
 			if (demux->section_filter[i].state == DMX_STATE_GO &&
-			    demux->section_filter[i].filter.parent == &feed->feed.sec) {
+			    demux->section_filter[i].filter.parent_dmx_section_feed == &feed->feed.sec) {
 				demux->section_filter[i].state = DMX_STATE_READY;
 				if (demux->dmx.frontend->source != DMX_MEMORY_FE) {
 					rc = StopHWFilter(&demux->section_filter[i]);
@@ -1074,13 +1074,13 @@ static void restart_feeds(struct av7110 *av7110)
 	feeding = av7110->feeding1; /* full_ts mod */
 
 	for (i = 0; i < dvbdmx->feednum; i++) {
-		feed = &dvbdmx->feed[i];
+		feed = &dvbdmx->feedarray[i];
 		if (feed->state == DMX_STATE_GO) {
 			if (feed->type == DMX_TYPE_SEC) {
 				for (j = 0; j < dvbdmx->filternum; j++) {
 					if (dvbdmx->section_filter[j].type != DMX_TYPE_SEC)
 						continue;
-					if (dvbdmx->section_filter[j].filter.parent != &feed->feed.sec)
+					if (dvbdmx->section_filter[j].filter.parent_dmx_section_feed != &feed->feed.sec)
 						continue;
 					if (dvbdmx->section_filter[j].state == DMX_STATE_GO)
 						dvbdmx->section_filter[j].state = DMX_STATE_READY;

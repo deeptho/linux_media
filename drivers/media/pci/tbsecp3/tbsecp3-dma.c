@@ -26,11 +26,10 @@ MODULE_PARM_DESC(dma_pkts, "DMA buffer size in TS packets (16-256), default 128"
 #define dprintk(fmt, arg...)																					\
 	printk(KERN_DEBUG pr_fmt("%s:%d " fmt),  __func__, __LINE__, ##arg)
 
-void pkt_hex_dump(uint8_t*data, size_t len)
+#if 0
+static void pkt_hex_dump(uint8_t*data, size_t len)
 {
-    int rowsize = 16;
-    int i, l, linelen, remaining;
-    int li = 0;
+    int i, l, remaining;
     uint8_t ch;
 
     dprintk("PCKT: ");
@@ -42,6 +41,7 @@ void pkt_hex_dump(uint8_t*data, size_t len)
 		}
 		printk(KERN_CONT "\n");
 }
+#endif
 
 static void tbsecp3_dma_tasklet(unsigned long adap)
 {
@@ -50,13 +50,8 @@ static void tbsecp3_dma_tasklet(unsigned long adap)
 	u32 read_buffer, next_buffer;
 	u8* data;
 	int i;
-	bool no_dvb=false;
 
 	spin_lock(&adapter->adap_lock);
-	no_dvb = adapter->no_dvb;
-	BUG_ON(adapter->no_dvb);
-	if(no_dvb)
-		adapter->dma.offset =0;
 
 	if (adapter->dma.cnt < TBSECP3_DMA_PRE_BUFFERS)
 	{
@@ -71,9 +66,7 @@ static void tbsecp3_dma_tasklet(unsigned long adap)
 		while (read_buffer != next_buffer)
 		{
 			data = adapter->dma.buf[read_buffer];
-			if(adapter->no_dvb) {
-			}
-			if (!no_dvb && data[adapter->dma.offset] != 0x47) {
+			if (data[adapter->dma.offset] != 0x47) {
 			/* Find sync byte offset with crude force (this might fail!) */
 				for (i = 0; i < TS_PACKET_SIZE; i++)
 					if ((data[i] == 0x47) &&
@@ -93,15 +86,10 @@ static void tbsecp3_dma_tasklet(unsigned long adap)
 						adapter->dma.buf[0], adapter->dma.offset);
 				}
 			}
-			//BUG_ON(adapter->no_dvb);
-			if(no_dvb) {
-				dvb_dmx_copy_data(&adapter->demux, data, adapter->dma.buffer_pkts);
-			} else {
-				dvb_dmx_swfilter_packets(&adapter->demux, data, adapter->dma.buffer_pkts);
-			}
+			dvb_dmx_swfilter_packets(&adapter->demux, data, adapter->dma.buffer_pkts);
 			read_buffer = (read_buffer + 1) & (TBSECP3_DMA_BUFFERS - 1);
 		}
-	}
+		}
 
 	adapter->dma.next_buffer = (u8)next_buffer;
 

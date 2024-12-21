@@ -66,7 +66,8 @@ enum dmxdev_type {
 enum dmxdev_state {
 	DMXDEV_STATE_FREE,
 	DMXDEV_STATE_ALLOCATED,
-	DMXDEV_STATE_SET,
+	DMXDEV_STATE_SET_BBFRAMES,
+	DMXDEV_STATE_SET_PES,
 	DMXDEV_STATE_GO,
 	DMXDEV_STATE_DONE,
 	DMXDEV_STATE_TIMEDOUT
@@ -79,8 +80,11 @@ enum dmxdev_state {
  * @ts:		pointer to &struct dmx_ts_feed
  * @next:	&struct list_head pointing to the next feed.
  */
-
 struct dmxdev_feed {
+	/*The parameters below define how the struct dmx_ts_feed feed should be constructed
+		Construction only occurs when the filter is started, at which time the parameters are
+		copies into struct dmx_ts_feed
+	*/
 	u16 pid;
 	struct dmx_ts_feed *ts;
 	struct list_head next;
@@ -120,7 +124,8 @@ struct dmxdev_feed {
  *		Only for section filter.
  * @secheader:	buffer cache to parse the section header.
  *		Only for section filter.
- * @current_dmx the demux structure to which the next ioctl commands will apply
+ * @current_feeds:  describes the &struct dvb_demux_feeds container of the sub demux in in which PES, TS and section feeds
+ *    will be allocated.
  */
 struct dmxdev_filter {
 	union {
@@ -129,15 +134,19 @@ struct dmxdev_filter {
 
 	union {
 		/* list of TS and PES feeds (struct dmxdev_feed) */
-		struct list_head ts;
+		struct list_head dmxdev_feed_list;
 		struct dmx_section_feed *sec;
 	} feed;
+
+	/* list of all sub_demuxes activated by filter, in order of activation
+		 points to entries of type struct dmxdev_bbframes_stream
+	 */
+	struct list_head dmxdev_bbframes_stream_list;
 
 	union {
 		struct dmx_sct_filter_params sec;
 		struct dmx_pes_filter_params pes;
 	} params;
-
 	enum dmxdev_type type;
 	enum dmxdev_state state;
 	struct dmxdev *dev;
@@ -148,11 +157,10 @@ struct dmxdev_filter {
 
 	/* only for sections */
 	struct timer_list timer;
+	struct dvb_demux_feeds* current_feeds;
+
 	int todo;
 	u8 secheader[3];
-#ifndef TEST
-	int filter_id;
-#endif
 };
 
 /**
@@ -174,12 +182,13 @@ struct dmxdev_filter {
  * @dvr_vb2_ctx:	control struct for VB2 handler
  * @mutex:		protects the usage of this structure.
  * @lock:		protects access to &dmxdev->filter->data.
+ * @sysfs_kobject: data for populating the sysfs filesystem.
  */
 struct dmxdev {
 	struct dvb_device *dvbdev;
 	struct dvb_device *dvr_dvbdev;
 
-	struct dmxdev_filter *filter;
+	struct dmxdev_filter* filter;
 	struct dmx_demux *demux;
 
 	int filternum;
@@ -197,6 +206,7 @@ struct dmxdev {
 
 	struct mutex mutex;
 	spinlock_t lock;
+	struct kobject* sysfs_kobject;
 };
 
 /**

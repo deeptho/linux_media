@@ -78,12 +78,27 @@ enum ts_filter_type {
 };
 
 /**
+ * struct dmx_bbframes_stream - parameters of a specific bbframes stream
+ *
+ * @embedding_pid: The pid of the TS in which the bbframes stream is embedded.
+ * @isi:	The Input Stream Identifier of the stream.
+ * @feeds:	The &struct dmx_demux_feeds container listing the feeds subscribed in the stream
+ * @stream:	 The intenal &struct bbframes_stream state of trhe stream
+ * @next:	 The &struct list_head used to stored thje dmx_bbframes_stream in a list
+ */
+struct dmx_bbframes_stream {
+	int embedding_pid;
+	int isi;
+	struct dvb_demux_feeds* feeds;
+	struct bbframes_stream* stream;
+	struct list_head next;
+};
+
+/**
  * struct dmx_ts_feed - Structure that contains a TS feed filter
  *
  * @is_filtering:	Set to non-zero when filtering in progress
- * @parent:		pointer to struct dmx_demux
  * @priv:		pointer to private data of the API client
- * @set:		sets the TS filter
  * @start_filtering:	starts TS filtering
  * @stop_filtering:	stops TS filtering
  *
@@ -93,13 +108,7 @@ enum ts_filter_type {
  */
 struct dmx_ts_feed {
 	int is_filtering;
-	struct dmx_demux *parent;
 	void *priv;
-	int (*set)(struct dmx_ts_feed *feed,
-		   u16 pid,
-		   int type,
-		   enum dmx_ts_pes pes_type,
-		   ktime_t timeout);
 	int (*start_filtering)(struct dmx_ts_feed *feed);
 	int (*stop_filtering)(struct dmx_ts_feed *feed);
 };
@@ -117,7 +126,7 @@ struct dmx_ts_feed {
  *		  specified by @filter_value that will be used on the filter
  *		  match logic.
  * @filter_mode:  Contains a 16 bytes (128 bits) filter mode.
- * @parent:	  Back-pointer to struct dmx_section_feed.
+ * @parent_dmx_section_feed:	  Back-pointer to struct dmx_section_feed.
  * @priv:	  Pointer to private data of the API client.
  *
  *
@@ -130,7 +139,7 @@ struct dmx_section_filter {
 	u8 filter_value[DMX_MAX_FILTER_SIZE];
 	u8 filter_mask[DMX_MAX_FILTER_SIZE];
 	u8 filter_mode[DMX_MAX_FILTER_SIZE];
-	struct dmx_section_feed *parent;
+	struct dmx_section_feed *parent_dmx_section_feed;
 
 	void *priv;
 };
@@ -162,7 +171,7 @@ struct dmx_section_filter {
  */
 struct dmx_section_feed {
 	int is_filtering;
-	struct dmx_demux *parent;
+	struct dmx_demux *parent_dmx_demux;
 	void *priv;
 
 	int check_crc;
@@ -175,15 +184,12 @@ struct dmx_section_feed {
 	u16 secbufp, seclen, tsfeedp;
 
 	/* public: */
-	int (*set)(struct dmx_section_feed *feed,
-		   u16 pid,
-		   int check_crc);
-	int (*allocate_filter)(struct dmx_section_feed *feed,
-			       struct dmx_section_filter **filter);
-	int (*release_filter)(struct dmx_section_feed *feed,
+	int (*allocate_section_filter)(struct dmx_section_feed *feed,
+																 struct dmx_section_filter **filter);
+	int (*release_section_filter)(struct dmx_section_feed *feed,
 			      struct dmx_section_filter *filter);
-	int (*start_filtering)(struct dmx_section_feed *feed);
-	int (*stop_filtering)(struct dmx_section_feed *feed);
+	int (*start_section_filtering)(struct dmx_section_feed *feed);
+	int (*stop_section_filtering)(struct dmx_section_feed *feed);
 };
 
 /**
@@ -565,14 +571,23 @@ struct dmx_demux {
 	int (*close)(struct dmx_demux *demux);
 	int (*write)(struct dmx_demux *demux, const char __user *buf,
 		     size_t count);
+	int (*allocate_bbframes_stream)(struct dmx_demux *demux,
+																	struct dmx_bbframes_stream* dmx_stream_ret,
+																	int embedding_pid, int embedded_isi,
+																	struct dvb_demux_feeds* parent_feeds);
+	int (*release_bbframes_stream)(struct dmx_demux *demux, struct dmx_bbframes_stream *stream);
+
 	int (*allocate_ts_feed)(struct dmx_demux *demux,
-				struct dmx_ts_feed **feed,
-				dmx_ts_cb callback);
-	int (*release_ts_feed)(struct dmx_demux *demux,
-			       struct dmx_ts_feed *feed);
+													struct dmx_ts_feed **feed,
+													dmx_ts_cb callback,
+													u16 pid, int ts_type,
+													enum dmx_ts_pes pes_type, ktime_t timeout,
+													struct dvb_demux_feeds* parent_feeds);
+	int (*release_ts_feed)(struct dmx_demux *demux, struct dmx_ts_feed *feed);
 	int (*allocate_section_feed)(struct dmx_demux *demux,
-				     struct dmx_section_feed **feed,
-				     dmx_section_cb callback);
+															 struct dmx_section_feed **feed,
+															 dmx_section_cb callback, u16 pid, bool check_crc,
+															 struct dvb_demux_feeds* parent_feeds);
 	int (*release_section_feed)(struct dmx_demux *demux,
 				    struct dmx_section_feed *feed);
 	int (*add_frontend)(struct dmx_demux *demux,

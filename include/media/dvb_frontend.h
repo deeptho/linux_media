@@ -373,6 +373,7 @@ struct dvb_frontend_internal_info {
 	enum fe_caps caps;
 #if 1 //neumo
 	enum fe_extended_caps extended_caps;
+	bool supports_bbframes;
 #endif
 };
 
@@ -511,6 +512,7 @@ struct dvb_frontend_ops {
 											struct dtv_fe_spectrum* user);
 	int (*constellation_get)(struct dvb_frontend *fe,
 											struct dtv_fe_constellation* user);
+	bool supports_bbframe_embedding;
 #endif
 	/* get frontend tuning algorithm from the module */
 	enum dvbfe_algo (*get_frontend_algo)(struct dvb_frontend *fe);
@@ -754,6 +756,7 @@ struct dtv_frontend_properties {
 	u8    pls_search_codes_len;
 	u32   bit_rate;
 	u32   locktime; //in ms
+	bool output_bbframes;
 #endif
 
 	/* statistics data */

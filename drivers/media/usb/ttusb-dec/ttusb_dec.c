@@ -1155,8 +1155,8 @@ static int ttusb_dec_stop_feed(struct dvb_demux_feed *dvbdmxfeed)
 
 	case DMX_TYPE_SEC:
 		return ttusb_dec_stop_sec_feed(dvbdmxfeed);
+	default:
 	}
-
 	return 0;
 }
 

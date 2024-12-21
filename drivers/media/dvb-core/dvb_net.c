@@ -1014,7 +1014,7 @@ static int dvb_net_filter_sec_set(struct net_device *dev,
 	int ret;
 
 	*secfilter=NULL;
-	ret = priv->secfeed->allocate_filter(priv->secfeed, secfilter);
+	ret = priv->secfeed->allocate_section_filter(priv->secfeed, secfilter);
 	if (ret<0) {
 		pr_err("%s: could not get filter\n", dev->name);
 		return ret;
@@ -1053,7 +1053,7 @@ static int dvb_net_feed_start(struct net_device *dev)
 	struct dvb_net_priv *priv = netdev_priv(dev);
 	struct dmx_demux *demux = priv->demux;
 	const unsigned char *mac = (const unsigned char *) dev->dev_addr;
-
+	struct dvb_demux* dvb_demux =  container_of(demux, struct dvb_demux, dmx);
 	netdev_dbg(dev, "rx_mode %i\n", priv->rx_mode);
 	mutex_lock(&priv->mutex);
 	if (priv->tsfeed || priv->secfeed || priv->secfilter || priv->multi_secfilter[0])
@@ -1066,19 +1066,13 @@ static int dvb_net_feed_start(struct net_device *dev)
 	if (priv->feedtype == DVB_NET_FEEDTYPE_MPE) {
 		netdev_dbg(dev, "alloc secfeed\n");
 		ret=demux->allocate_section_feed(demux, &priv->secfeed,
-					 dvb_net_sec_callback);
+																		 dvb_net_sec_callback,
+																		 priv->pid, 1 /*check_crc*/,
+																		 dvb_demux->default_feeds //TODO: allow this to be part of bbframes feed
+																		 );
 		if (ret<0) {
 			pr_err("%s: could not allocate section feed\n",
 			       dev->name);
-			goto error;
-		}
-
-		ret = priv->secfeed->set(priv->secfeed, priv->pid, 1);
-
-		if (ret<0) {
-			pr_err("%s: could not set section feed\n", dev->name);
-			priv->demux->release_section_feed(priv->demux, priv->secfeed);
-			priv->secfeed=NULL;
 			goto error;
 		}
 
@@ -1109,34 +1103,22 @@ static int dvb_net_feed_start(struct net_device *dev)
 		}
 
 		netdev_dbg(dev, "start filtering\n");
-		priv->secfeed->start_filtering(priv->secfeed);
+		priv->secfeed->start_section_filtering(priv->secfeed);
 	} else if (priv->feedtype == DVB_NET_FEEDTYPE_ULE) {
 		ktime_t timeout = ns_to_ktime(10 * NSEC_PER_MSEC);
-
 		/* we have payloads encapsulated in TS */
 		netdev_dbg(dev, "alloc tsfeed\n");
-		ret = demux->allocate_ts_feed(demux, &priv->tsfeed, dvb_net_ts_callback);
+		ret = demux->allocate_ts_feed(demux, &priv->tsfeed, dvb_net_ts_callback,
+																	priv->pid, /* pid */
+																	TS_PACKET, /* type */
+																	DMX_PES_OTHER, /* pes type */
+																	timeout,    /* timeout */
+																	dvb_demux->default_feeds);
 		if (ret < 0) {
 			pr_err("%s: could not allocate ts feed\n", dev->name);
-			goto error;
-		}
-
-		/* Set netdevice pointer for ts decaps callback. */
-		priv->tsfeed->priv = (void *)dev;
-		ret = priv->tsfeed->set(priv->tsfeed,
-					priv->pid, /* pid */
-					TS_PACKET, /* type */
-					DMX_PES_OTHER, /* pes type */
-					timeout    /* timeout */
-					);
-
-		if (ret < 0) {
-			pr_err("%s: could not set ts feed\n", dev->name);
-			priv->demux->release_ts_feed(priv->demux, priv->tsfeed);
 			priv->tsfeed = NULL;
 			goto error;
 		}
-
 		netdev_dbg(dev, "start filtering\n");
 		priv->tsfeed->start_filtering(priv->tsfeed);
 	} else
@@ -1157,12 +1139,12 @@ static int dvb_net_feed_stop(struct net_device *dev)
 		if (priv->secfeed) {
 			if (priv->secfeed->is_filtering) {
 				netdev_dbg(dev, "stop secfeed\n");
-				priv->secfeed->stop_filtering(priv->secfeed);
+				priv->secfeed->stop_section_filtering(priv->secfeed);
 			}
 
 			if (priv->secfilter) {
 				netdev_dbg(dev, "release secfilter\n");
-				priv->secfeed->release_filter(priv->secfeed,
+				priv->secfeed->release_section_filter(priv->secfeed,
 							      priv->secfilter);
 				priv->secfilter=NULL;
 			}
@@ -1171,7 +1153,7 @@ static int dvb_net_feed_stop(struct net_device *dev)
 				if (priv->multi_secfilter[i]) {
 					netdev_dbg(dev, "release multi_filter[%d]\n",
 						   i);
-					priv->secfeed->release_filter(priv->secfeed,
+					priv->secfeed->release_section_filter(priv->secfeed,
 								      priv->multi_secfilter[i]);
 					priv->multi_secfilter[i] = NULL;
 				}

@@ -117,13 +117,11 @@ static void flexcop_pci_irq_check_work(struct work_struct *work)
 				deb_info("flexcop-pci: stream problem, resetting pid filter\n");
 
 				spin_lock_irq(&fc->demux.lock);
-				list_for_each_entry(feed, &fc->demux.feed_list,
-						list_head) {
+				list_for_each_entry(feed, &fc->demux.default_feeds->output_feed_list, next) {
 					flexcop_pid_feed_control(fc, feed, 0);
 				}
 
-				list_for_each_entry(feed, &fc->demux.feed_list,
-						list_head) {
+				list_for_each_entry(feed, &fc->demux.default_feeds->output_feed_list, next) {
 					flexcop_pid_feed_control(fc, feed, 1);
 				}
 				spin_unlock_irq(&fc->demux.lock);
