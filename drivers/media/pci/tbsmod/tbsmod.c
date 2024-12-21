@@ -3407,6 +3407,14 @@ static int tbsmod_probe(struct pci_dev *pdev,
 	break;
 	case 0x690b:
 		dev->cardid = 0x690b;
+		if(pdev->subsystem_device == 0x0001)
+			dev->mods_num =4;
+		else if(pdev->subsystem_device == 0x0020)
+			dev->mods_num = 2;
+		else if(pdev->subsystem_device == 0x0010)
+			dev->mods_num = 1;
+		else
+			printk("unknow card type!\n");
 	break;
 	case 0x6104:
 		dev->cardid = 0x6104;
@@ -3426,7 +3434,7 @@ static int tbsmod_probe(struct pci_dev *pdev,
 	break;
 	case 0x6032:
 		dev->cardid = 0x6032; 
-		if(pdev->subsystem_device == 0x008)
+		if(pdev->subsystem_device == 0x0008)
 			dev->mods_num = 8;
 		else if(pdev->subsystem_device == 0x0016)
 			dev->mods_num = 16;
@@ -3575,6 +3583,8 @@ fail0:
 static const struct pci_device_id tbsmod_id_table[] = {
 	MAKE_ENTRY(0x544d, 0x6178, 0x6004, 0x0001, "tbs6004 dvbc card"),
 	MAKE_ENTRY(0x544d, 0x6178, 0x690b, 0x0001, "tbs690b asi card"),
+	MAKE_ENTRY(0x544d, 0x6178, 0x690b, 0x0010, "TBS690B-Lite asi card"),
+	MAKE_ENTRY(0x544d, 0x6178, 0x690b, 0x0020, "TBS690B-Lite asi card"),
 	MAKE_ENTRY(0x544d, 0x6178, 0x6104, 0x0001, "tbs6104 dvbt card"),
 	MAKE_ENTRY(0x544d, 0x6178, 0x6014, 0x0001, "tbs6014 qamb card"),
 	MAKE_ENTRY(0x544d, 0x6178, 0x6008, 0x0001, "tbs6008 dvbc card"),

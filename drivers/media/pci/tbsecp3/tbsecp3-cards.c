@@ -808,7 +808,7 @@ struct tbsecp3_board tbsecp3_boards[] = {
 	},
 	[TBSECP3_BOARD_TBS6308X] = {
 			.board_id	= TBSECP3_BOARD_TBS6308X,
-			.name		= "TurboSight TBS 6308X HDMI Capture",
+			.name		= "TurboSight TBS 6308X 4K@30FPS HDMI PCIe Encoder",
 			.adapters	= 8,
 			.i2c_speed	= 39,
 			.eeprom_i2c	= 1,
@@ -930,7 +930,7 @@ struct tbsecp3_board tbsecp3_boards[] = {
 	},
 	[TBSECP3_BOARD_TBS6302X] = {
 		.board_id	= TBSECP3_BOARD_TBS6302X,
-		.name		= "TurboSight TBS 6302X HDMI Capture ",
+		.name		= "TurboSight TBS 6302X 4K@30FPS HDMI PCIe Encoder ",
 		.adapters	= 2,
 		.i2c_speed	= 39,
 		.eeprom_i2c	= 1,
@@ -962,9 +962,26 @@ struct tbsecp3_board tbsecp3_boards[] = {
 			},
 		}
 	},
+	[TBSECP3_BOARD_TBS6302RV] = {
+		.board_id	= TBSECP3_BOARD_TBS6302RV,
+		.name		= "TurboSight TBS 6302SE 4K@30FPS HDMI Capture ",
+		.adapters	= 2,
+		.i2c_speed	= 39,
+		.eeprom_i2c	= 1,
+		.adap_config	= {
+			{
+				.ts_in = 0,
+				.i2c_bus_nr = 3,
+			},
+			{
+				.ts_in = 1,
+				.i2c_bus_nr = 2,
+			},
+		}
+	},
 	[TBSECP3_BOARD_TBS6304X] = {
 		.board_id	= TBSECP3_BOARD_TBS6304X,
-		.name		= "TurboSight TBS 6304X HDMI Capture ",
+		.name		= "TurboSight TBS 6304X 4K@30FPS HDMI PCIe Encoder ",
 		.adapters	= 4,
 		.i2c_speed	= 39,
 		.eeprom_i2c	= 1,
@@ -1009,6 +1026,73 @@ struct tbsecp3_board tbsecp3_boards[] = {
 			{
 				.ts_in = 3,
 				.i2c_bus_nr = 0,
+			},
+		}
+	},
+	[TBSECP3_BOARD_TBS6304RV] = {
+		.board_id	= TBSECP3_BOARD_TBS6304RV,
+		.name		= "TurboSight TBS 6304SE 4K@30FPS HDMI Capture ",
+		.adapters	= 4,
+		.i2c_speed	= 39,
+		.eeprom_i2c	= 1,
+		.adap_config	= {
+			{
+				.ts_in = 0,
+				.i2c_bus_nr = 3,
+			},
+			{
+				.ts_in = 1,
+				.i2c_bus_nr = 2,
+			},
+			{
+				.ts_in = 2,
+				.i2c_bus_nr = 1,
+			},
+			{
+				.ts_in = 3,
+				.i2c_bus_nr = 0,
+			},
+		}
+	},
+	[TBSECP3_BOARD_TBS6324] = {
+		.board_id	= TBSECP3_BOARD_TBS6324,
+		.name		= "TurboSight TBS 6324 3G-SDI PCIe Encoder ",
+		.adapters	= 4,
+		.i2c_speed	= 39,
+		.eeprom_i2c	= 1,
+		.adap_config	= {
+			{
+				.ts_in = 0,
+				.i2c_bus_nr = 3,
+			},
+			{
+				.ts_in = 1,
+				.i2c_bus_nr = 2,
+			},
+			{
+				.ts_in = 2,
+				.i2c_bus_nr = 1,
+			},
+			{
+				.ts_in = 3,
+				.i2c_bus_nr = 0,
+			},
+		}
+	},
+	[TBSECP3_BOARD_TBS6322] = {
+		.board_id	= TBSECP3_BOARD_TBS6322,
+		.name		= "TurboSight TBS 6322 3G-SDI PCIe Encoder ",
+		.adapters	= 2,
+		.i2c_speed	= 39,
+		.eeprom_i2c	= 1,
+		.adap_config	= {
+			{
+				.ts_in = 0,
+				.i2c_bus_nr = 3,
+			},
+			{
+				.ts_in = 1,
+				.i2c_bus_nr = 2,
 			},
 		}
 	},

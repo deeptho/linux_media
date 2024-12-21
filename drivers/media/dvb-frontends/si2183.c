@@ -318,7 +318,10 @@ static int si2183_read_status(struct dvb_frontend *fe, enum fe_status *status)
 		c->cnr.stat[0].scale = FE_SCALE_DECIBEL;
 		c->cnr.stat[0].svalue = (s64) cmd.args[3] * 250;
 		c->cnr.stat[1].scale = FE_SCALE_RELATIVE;
-		c->cnr.stat[1].svalue = dev->snr;
+		c->cnr.stat[1].uvalue = dev->snr;
+		if (c->cnr.stat[1].uvalue > 0xffff)
+			c->cnr.stat[1].uvalue = 0xffff;
+
 
 		// writing missing properties
 		// CONSTELLATION or modulation
