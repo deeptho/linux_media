@@ -48,8 +48,10 @@
 
 		/* MACRO definitions */
 		#define ABS(X) ((X)<0 ? (-1*(X)) : (X))
+#if 0
 		#define MAX(X,Y) ((X)>=(Y) ? (X) : (Y))
 		#define MIN(X,Y) ((X)<=(Y) ? (X) : (Y))
+#endif
 		#define INRANGE(X,Y,Z) ((((X)<=(Y)) && ((Y)<=(Z)))||(((Z)<=(Y)) && ((Y)<=(X))) ? 1 : 0)
 		#define MAKEWORD16(X,Y) ( ((X) <<8)+(Y) )
 		#define LSB(X) ( ( (X) & 0xFF ) )

@@ -175,7 +175,7 @@ static int MostSignificantBit(int x)
 	return 31-i;
 }
 
-unsigned int STLog2(U32 value)
+static unsigned int STLog2(U32 value)
 {
 
 	unsigned int msb=0;
@@ -213,6 +213,7 @@ unsigned int STLog2(U32 value)
 /*computes 1000*log10(value)
 	return as s32 as the result will often be used in subtractions
  */
+
 s32 STLog10(U32 value)
 {
 	return ((STLog2(value) * STlog10_2)/1000);

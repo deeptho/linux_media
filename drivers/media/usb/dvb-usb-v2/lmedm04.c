@@ -938,7 +938,7 @@ static int lme_name(struct dvb_usb_adapter *adap)
 {
 	struct dvb_usb_device *d = adap_to_d(adap);
 	struct lme2510_state *st = adap_to_priv(adap);
-	const char *desc = d->name;
+	//const char *desc = d->name;
 	static const char * const fe_name[] = {
 		"", " LG TDQY-P001F", " SHARP:BS2F7HZ7395",
 		" SHARP:BS2F7HZ0194", " RS2000"};

@@ -13,7 +13,6 @@
 #include <linux/fs.h>
 #include <linux/kfifo.h>
 
-
 #include <media/dmxdev.h>
 #include <media/dvbdev.h>
 #include <media/dvb_demux.h>
@@ -225,20 +224,20 @@ static int ts_release(struct inode *inode, struct file *file)
 }
 
 
-void spi_read(struct tbs_pcie_dev *dev, struct mcu24cxx_info *info)
+static void spi_read(struct tbs_pcie_dev *dev, struct mcu24cxx_info *info)
 {
 	//	printk("%s bassaddr:%x ,reg: %x,val: %x\n", __func__,
 	//	       info->bassaddr, info->reg, info->data);
 	info->data = TBS_PCIE_READ(info->bassaddr, info->reg);
 }
-void spi_write(struct tbs_pcie_dev *dev, struct mcu24cxx_info *info)
+
+static void spi_write(struct tbs_pcie_dev *dev, struct mcu24cxx_info *info)
 {
 	TBS_PCIE_WRITE(info->bassaddr,info->reg,info->data);
 	//printk("%s size:%x, reg: %x, val: %x\n", __func__, info->bassaddr, info->reg,info->data);
 }
 static long tbsci_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
-
 	struct dvb_device *dvbdev = file->private_data;
 	struct ca_channel *chan = dvbdev->priv;
 	struct tbs_pcie_dev *dev = chan->dev;
@@ -316,7 +315,6 @@ static long tbsci_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	return ret;
 
 }
-
 
 static const struct file_operations ci_fops = {
 	.owner   = THIS_MODULE,
@@ -451,10 +449,7 @@ static void read_dma_work(struct work_struct *p_work)
 		pchannel->next_buffer = (u8)next_buffer;
 	}
 	spin_unlock(&pchannel->readlock);
-
 }
-
-
 
 static irqreturn_t tbsci_irq(int irq, void *dev_id)
 {
@@ -495,7 +490,7 @@ static irqreturn_t tbsci_irq(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
-int ca_read_attribute_mem(struct dvb_ca_en50221 *en50221,int slot, int address)
+static int ca_read_attribute_mem(struct dvb_ca_en50221 *en50221,int slot, int address)
 {
 	struct ca_channel *tbsca = en50221->data;
 	struct tbs_pcie_dev *dev = tbsca->dev;
@@ -518,7 +513,7 @@ int ca_read_attribute_mem(struct dvb_ca_en50221 *en50221,int slot, int address)
 	return (data & 0xff);
 }
 
-int ca_write_attribute_mem(struct dvb_ca_en50221 *en50221,int slot, int address, u8 value)
+static int ca_write_attribute_mem(struct dvb_ca_en50221 *en50221,int slot, int address, u8 value)
 {
 	struct ca_channel *tbsca = en50221->data;
 	struct tbs_pcie_dev *dev = tbsca->dev;
@@ -539,10 +534,9 @@ int ca_write_attribute_mem(struct dvb_ca_en50221 *en50221,int slot, int address,
 	mutex_unlock(&tbsca->lock);
 
 	return 0;
-
 }
 
-int ca_read_cam_control(struct dvb_ca_en50221 *en50221,int slot, u8 address)
+static int ca_read_cam_control(struct dvb_ca_en50221 *en50221,int slot, u8 address)
 {
 	struct ca_channel *tbsca = en50221->data;
 	struct tbs_pcie_dev *dev = tbsca->dev;
@@ -565,7 +559,7 @@ int ca_read_cam_control(struct dvb_ca_en50221 *en50221,int slot, u8 address)
 	return (data & 0xff);
 }
 
-int ca_write_cam_control(struct dvb_ca_en50221 *en50221,int slot, u8 address, u8 value)
+static int ca_write_cam_control(struct dvb_ca_en50221 *en50221,int slot, u8 address, u8 value)
 {
 	struct ca_channel *tbsca = en50221->data;
 	struct tbs_pcie_dev *dev = tbsca->dev;
@@ -587,7 +581,7 @@ int ca_write_cam_control(struct dvb_ca_en50221 *en50221,int slot, u8 address, u8
 	return 0;
 }
 
-int ca_slot_reset(struct dvb_ca_en50221 *en50221, int slot)
+static int ca_slot_reset(struct dvb_ca_en50221 *en50221, int slot)
 {
 	struct ca_channel *tbsca = en50221->data;
 	struct tbs_pcie_dev *dev = tbsca->dev;
@@ -606,7 +600,8 @@ int ca_slot_reset(struct dvb_ca_en50221 *en50221, int slot)
 	mutex_unlock (&tbsca->lock);
 	return 0;
 }
-int ca_slot_ctrl(struct dvb_ca_en50221 *en50221,
+
+static int ca_slot_ctrl(struct dvb_ca_en50221 *en50221,
 	int slot, int enable)
 {
 	struct ca_channel *tbsca = en50221->data;
@@ -623,17 +618,18 @@ int ca_slot_ctrl(struct dvb_ca_en50221 *en50221,
 	mutex_unlock(&tbsca->lock);
 	return 0;
 }
-int ca_slot_shutdown(struct dvb_ca_en50221 *en50221, int slot)
+
+static int ca_slot_shutdown(struct dvb_ca_en50221 *en50221, int slot)
 {
 		return ca_slot_ctrl(en50221, slot, 0);
 }
 
-int ca_slot_ts_enable(struct dvb_ca_en50221 *en50221, int slot)
+static int ca_slot_ts_enable(struct dvb_ca_en50221 *en50221, int slot)
 {
 		return ca_slot_ctrl(en50221, slot, 1);
 }
 
-int ca_poll_slot_status(struct dvb_ca_en50221 *en50221,int slot, int open)
+static int ca_poll_slot_status(struct dvb_ca_en50221 *en50221,int slot, int open)
 {
 	struct ca_channel *tbsca = en50221->data;
 	struct tbs_pcie_dev *dev = tbsca->dev;
@@ -675,7 +671,6 @@ static int tas2101_read_signal_strength(struct dvb_frontend *fe,
 	//printk("%s \n", __func__);
 	*signal_strength = 62940;
 	return 0;
-
 }
 
 static int tas2101_read_snr(struct dvb_frontend *fe, u16 *snr)
@@ -699,28 +694,24 @@ static int tas2101_read_status(struct dvb_frontend *fe, enum fe_status *status)
 	*status = FE_HAS_SIGNAL | FE_HAS_CARRIER |
 			FE_HAS_VITERBI | FE_HAS_SYNC | FE_HAS_LOCK;
 	return 0;
-
 }
 
 static int tas2101_set_voltage(struct dvb_frontend *fe,
 	enum fe_sec_voltage voltage)
 {
 	return 0;
-
 }
 
 static int tas2101_set_tone(struct dvb_frontend *fe,
 	enum fe_sec_tone_mode tone)
 {
 	return 0;
-
 }
 
 static int tas2101_send_diseqc_msg(struct dvb_frontend *fe,
 	struct dvb_diseqc_master_cmd *d)
 {
 	return 0;
-
 }
 
 static int tas2101_diseqc_send_burst(struct dvb_frontend *fe,
@@ -738,7 +729,6 @@ static void tas2101_release(struct dvb_frontend *fe)
 static int tas2101_initfe(struct dvb_frontend *fe)
 {
 	return 0;
-
 }
 
 static int tas2101_sleep(struct dvb_frontend *fe)
@@ -766,7 +756,6 @@ static int tas2101_tune(struct dvb_frontend *fe, bool re_tune,
 static enum dvbfe_algo tas2101_get_algo(struct dvb_frontend *fe)
 {
 	return DVBFE_ALGO_HW;
-
 }
 
 
@@ -807,8 +796,6 @@ static struct dvb_frontend_ops tas2101_ops = {
 //	.get_tune_settings = tas2101_get_tune_settings,
 //	.set_frontend = tas2101_set_frontend,
 	.get_frontend = tas2101_get_frontend,
-
-
 };
 
 static int start_feed(struct dvb_demux_feed *dvbdmxfeed)
@@ -832,7 +819,7 @@ static int stop_feed(struct dvb_demux_feed *dvbdmxfeed)
 }
 
 
-int my_dvb_dmx_ts_card_init(struct dvb_demux *dvbdemux, char *id,
+static int my_dvb_dmx_ts_card_init(struct dvb_demux *dvbdemux, char *id,
 			    int (*start_feed)(struct dvb_demux_feed *),
 			    int (*stop_feed)(struct dvb_demux_feed *),
 			    void *priv)
@@ -851,7 +838,7 @@ int my_dvb_dmx_ts_card_init(struct dvb_demux *dvbdemux, char *id,
 	return dvb_dmx_init(dvbdemux);
 }
 
-int my_dvb_dmxdev_ts_card_init(struct dmxdev *dmxdev,
+static int my_dvb_dmxdev_ts_card_init(struct dmxdev *dmxdev,
 			       struct dvb_demux *dvbdemux,
 			       struct dmx_frontend *hw_frontend,
 			       struct dmx_frontend *mem_frontend,
@@ -872,7 +859,6 @@ int my_dvb_dmxdev_ts_card_init(struct dmxdev *dmxdev,
 	dvbdemux->dmx.add_frontend(&dvbdemux->dmx, mem_frontend);
 	return dvbdemux->dmx.connect_frontend(&dvbdemux->dmx, hw_frontend);
 }
-
 
 struct dvb_ca_en50221 ca_config = {
 	.read_attribute_mem  = ca_read_attribute_mem,
@@ -1086,7 +1072,6 @@ static bool tbsci_enable_msi(struct pci_dev *pdev, struct tbs_pcie_dev *dev)
 	}
 	return true;
 }
-
 
 static int tbsci_probe(struct pci_dev *pdev,
 						const struct pci_device_id *pci_id)
