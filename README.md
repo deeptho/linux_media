@@ -276,6 +276,32 @@ User space applications should proceed as follows
   tuning properties have been added to indicate blind scanning and that additional properties are returned
   to indicate discovered modulation parameters.
 
+# Changes in release-1.5
+* Added a new demux interface allowing internal demuxing of bbrames; Extended stid135 driver to make
+  use of this demux interface.
+
+  As a result it is now possible to demux several or all streams from a multistream transponder using a
+  single demodulutor (but no user programs currently support this). This involves using some new ioctls
+  on /dev/dvb/adapterX/demuxY. In this is case there is no need to specify the desired stream_id (ISI) when tuning,
+  but instead ask the frontend to output bbframes and pass the desired stream to the new ioctl
+  DMX_SET_BBFRAMES_STREAM on /dev/dvb/adapterX/demuxY. By Opening the demux multiple times, additional streams
+  can de bemuxed simultaenously.
+
+  For backward compatibility it is still allowed to pass a stream_id to the frontend. In this case the
+  frontend will not embedded multistreams in bbframes and demuxing proceeds as before.
+
+* Added a driver option bbframes_auto to support legacy applications like tvheadend. When activated,
+  this option will instruct the stid135 driver to encapsulate all multistreams into an embedded bbframes
+  stream. The demuxer will automatically pick one of the streams and demux that for the legacy application
+
+This should be set by adding the line
+  ``options stid135 bbframes_auto=1''
+  in  /etc/modprobe.d/stid135.conf and rebooting, or by runnning the following command as root:
+  `` echo 1 > /sys/module/stid135/parameters/bbframes_auto'' (no need to reboot).
+
+# Changes in release-1.4.1
+* Fix deadlock introduced by e8c6a729c905f7464bd7
+
 # Changes in release-1.4
 * Revert "Experimental workaround for 12606V@5.0W to make stream 4 work" as it caused problems on some multistreams
 * Bug: tbs6916: not locking one of the chips when releasing rf_in
