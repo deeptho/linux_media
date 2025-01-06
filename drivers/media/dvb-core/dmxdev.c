@@ -19,6 +19,7 @@
 #include <linux/uaccess.h>
 #include <media/dmxdev.h>
 #include <media/dvb_vb2.h>
+#include <media/dmxdev-sysfs.h>
 
 static int debug;
 static int dtdebug=1;
@@ -1643,7 +1644,7 @@ int dvb_dmxdev_init(struct dmxdev *dmxdev, struct dvb_adapter *dvb_adapter)
 		goto err_register_dvr_dvbdev;
 
 	dvb_ringbuffer_init(&dmxdev->dvr_buffer, NULL, 8192);
-
+	dvb_dmxdev_make_sysfs(dmxdev);
 	return 0;
 
 err_register_dvr_dvbdev:
@@ -1661,6 +1662,7 @@ void dvb_dmxdev_release(struct dmxdev *dmxdev)
 	mutex_lock(&dmxdev->mutex);
 	dmxdev->exit = 1;
 	mutex_unlock(&dmxdev->mutex);
+	dvb_dmxdev_remove_sysfs(dmxdev);
 
 	if (dmxdev->dvbdev->users > 1) {
 		wait_event(dmxdev->dvbdev->wait_queue,
