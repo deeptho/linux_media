@@ -830,7 +830,7 @@ static enum fe_ioctl_result stid135_select_rf_in_(struct stv* state, struct fe_r
 		if(!old_chip || old_rf_in_no <0) {
 			state_dprintk("BUG: chip=%p old_chip=%p old_rf_in_no=%d\n", state->chip, old_chip, old_rf_in_no);
 		} else {
-			bool must_lock = old_chip != state->chip;
+			bool must_lock = (old_chip != state->chip) &&! state_chip_is_locked_by_state(state);
 			if(must_lock)
 				chip_chip_lock(old_chip);
 			err = fe_stid135_set_22khz_cont(&old_chip->ip, old_rf_in_no + 1, false);
