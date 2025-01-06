@@ -299,6 +299,11 @@ This should be set by adding the line
   in  /etc/modprobe.d/stid135.conf and rebooting, or by runnning the following command as root:
   `` echo 1 > /sys/module/stid135/parameters/bbframes_auto'' (no need to reboot).
 
+* One use of bbframes_auto is to provide a workaround for the non-working multistream 12606V@5.0W Streams a4 and 5 cannot
+  be decoded properly due to what is probably a hardware bug. By asking the chip to output bbframes, the buggy bbframe
+  decoding is skipped by the chip and instead done in the new demux software driver. As a result, both streams then work
+  in user programs such as tvheadend.
+
 # Changes in release-1.4.1
 * Fix deadlock introduced by e8c6a729c905f7464bd7
 
