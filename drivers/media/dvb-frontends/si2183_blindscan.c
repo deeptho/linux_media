@@ -1,6 +1,6 @@
 /*
  * Silicon Labs Si2183(2) DVB-T/T2/C/C2/S/S2 blindscan code
- * (c) Deep Thought <deeptho@gmail.com>
+ * (c) 2020-2025 Deep Thought <deeptho@gmail.com>
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or

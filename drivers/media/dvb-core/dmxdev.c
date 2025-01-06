@@ -4,6 +4,7 @@
  *
  * Copyright (C) 2000 Ralph Metzler & Marcus Metzler
  *		      for convergence integrated media GmbH
+ *           (C) 2025 DeepThought <deeptho@gmail.com> bbframes demuxing code
  */
 
 #define pr_fmt(fmt) "dmxdev: " fmt

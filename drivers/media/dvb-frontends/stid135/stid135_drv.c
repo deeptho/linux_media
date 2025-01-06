@@ -6,7 +6,7 @@
  * Copyright (c) <2014>-<2018>, STMicroelectronics - All Rights Reserved
  * Author(s): Mathias Hilaire (mathias.hilaire@st.com), Thierry Delahaye (thierry.delahaye@st.com) for STMicroelectronics.
  *
- * Copyright (C) Deep Thought <deeptho@gmail.com> - blindscan, spectrum and constellation scan
+ * Copyright (C) 2020-2025 Deep Thought <deeptho@gmail.com> - blindscan, spectrum and constellation scan
  * License terms: BSD 3-clause "New" or "Revised" License.
  *
  * Redistribution and use in source and binary forms, with or without

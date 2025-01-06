@@ -2,7 +2,7 @@
  * Driver for the STm STiD135 DVB-S/S2/S2X demodulator.
  *
  * Copyright (C) CrazyCat <crazycat69@narod.ru>
- * Copyright (C) Deep Thought <deeptho@gmail.com> - blindscan, spectrum and constellation scan
+ * Copyright (C) Deep Thought 2020-2025 <deeptho@gmail.com> - blindscan, spectrum and constellation scan
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License

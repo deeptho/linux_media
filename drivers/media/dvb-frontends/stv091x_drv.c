@@ -4,7 +4,7 @@
  * Copyright (C) 2014-2015 Ralph Metzler <rjkm@metzlerbros.de>
  * Marcus Metzler <mocm@metzlerbros.de>
  * developed for Digital Devices GmbH
- * Copyright (C) 2020-2023 Deep Thought <deeptho@gmail.com>: blindscan, spectrum, constellation code
+ * Copyright (C) 2020-2025 Deep Thought <deeptho@gmail.com>: blindscan, spectrum, constellation code
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * version 2 only, as published by the Free Software Foundation.

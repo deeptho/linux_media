@@ -8,7 +8,7 @@
  *				      for convergence integrated media GmbH
  *
  * Copyright (C) 2004 Andrew de Quincey (tuning thread cleanup)
- * Copyright (C) 2020-2023 Deep Thought <deeptho@gmail.com> (modifications) *
+ * Copyright (C) 2020-2025 Deep Thought <deeptho@gmail.com> (modifications) *
  */
 
 /* Enables DVBv3 compatibility bits at the headers */

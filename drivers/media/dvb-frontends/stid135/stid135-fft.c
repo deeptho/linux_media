@@ -1,7 +1,7 @@
 /*
  * This file is part of STiD135 OXFORD LLA
  *
- * Copyright (c) <2020>-<2022>, Deep Thought <deeptho@gmail.com>:
+ * Copyright (c) <2020-2025>, Deep Thought <deeptho@gmail.com>:
  *     Make this code actually work in the linux drivers
  *     Combine results in overall spectrum
  *     Interface with dvbapi code, and making it interruptible

@@ -2,7 +2,7 @@
     Tmax TAS2101 - DVBS/S2 Satellite demodulator driver
 
     Copyright (C) 2014 Luis Alves <ljalvs@gmail.com>
-		Copyright (C) 2020 Deep Thought <deeptho@gmail.com>: blindscan, spectrum, constellation code
+		Copyright (C) 2020-2025 Deep Thought <deeptho@gmail.com>: blindscan, spectrum, constellation code
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by

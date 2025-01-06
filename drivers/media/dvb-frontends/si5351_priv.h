@@ -4,7 +4,7 @@
  * Copyright (c) 2021 Davin zhang <Davin@tbsdtv.com> www.Turbosight.com
  *
  *
- * Copyright (C) 2022 Deep Thought <deeptho@gmail.com>: blindscan, spectrum, constellation code
+ * Copyright (C) 2022-2025 Deep Thought <deeptho@gmail.com>: blindscan, spectrum, constellation code
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * version 2 only, as published by the Free Software Foundation.

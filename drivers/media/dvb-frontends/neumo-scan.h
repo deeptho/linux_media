@@ -1,6 +1,6 @@
 /*
  *
- * Copyright (c) 2020-2022, Deep Thought <deepto@gmail.com> - All Rights Reserved
+ * Copyright (c) 2020-2025, Deep Thought <deepto@gmail.com> - All Rights Reserved
  *
  *
  * This program is free software; you can redistribute it and/or
