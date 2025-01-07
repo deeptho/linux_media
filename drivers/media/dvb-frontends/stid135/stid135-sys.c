@@ -222,9 +222,9 @@ static ssize_t stv_card_show(struct kobject *kobj, struct kobj_attribute *attr,
 			fn="";
 		if (locked)
 			ret += sprintf(buf+ret, "rf_in[%d]: use_count=%d owner=%d controller=%d"
-										 " voltage=%s tone=%s mutex_locked_by=%d at %s:%d\n",
+										 " voltage=%s tone=%s mutex_locked_by=%d.%d at %s:%d\n",
 										 i, rf_in->reservation.use_count, rf_in->reservation.owner, controlling_chip_no,
-										 voltage_str(rf_in->voltage), tone_str(rf_in->tone), card->lock.demod, fn, card->lock.line);
+										 voltage_str(rf_in->voltage), tone_str(rf_in->tone), card->lock.chip_no, card->lock.demod, fn, card->lock.line);
 		else
 			ret += sprintf(buf+ret, "rf_in[%d]: use_count=%d owner=%d controller=%d"
 										 " voltage=%s tone=%s\n",

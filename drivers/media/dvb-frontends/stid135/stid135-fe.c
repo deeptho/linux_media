@@ -957,7 +957,7 @@ static int stid135_select_rf_in_legacy_(struct stv* state)
 		ic.rf_in = rf_in_no;
 		ic.unicable_mode = true;
 		if(!state_chip_is_locked_by_state(state)) {
-			state_dprintk("Attempting select_rf_in_ without chp lock");
+			state_dprintk("Attempting select_rf_in_ without chip lock");
 			dump_stack();
 		}
 		result = stid135_select_rf_in_(state, &ic);
@@ -1749,7 +1749,7 @@ static int stid135_tune_(struct dvb_frontend* fe, bool re_tune,
 		state_dprintk("BUG active_rf_in==NULL\n");
 		return -1;
 	}
-	dprintk("demod=%d re_tune=%d\n", state->nr, re_tune);
+	state_dprintk("re_tune=%d\n", state->nr, re_tune);
 	if (re_tune) {
 		stid135_set_sec_ready_(fe);
 		state->signal_info.out_of_llr = false;
