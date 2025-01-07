@@ -684,7 +684,7 @@ int m88rs6060_get_gain(struct m88rs6060_state *dev, u32 freq_mhz, s32 * p_gain)
 
 }
 
-int m88rs6060_get_rf_level(struct m88rs6060_state* state, u32 freq_mhz, s32 * p_gain)
+static int m88rs6060_get_rf_level(struct m88rs6060_state* state, u32 freq_mhz, s32 * p_gain)
 {
 	s32 bb_power = 0;
 	u8 reg96 = 0;
@@ -743,7 +743,7 @@ static void m88rs6060_wakeup(struct m88rs6060_state *dev)
 
 	return;
 }
-
+#if 0
 static void m88rs6060_sleep(struct m88rs6060_state* state)
 {
 	m88rs6060_set_tuner_reg(state, 0x7, 0x6d);
@@ -751,7 +751,7 @@ static void m88rs6060_sleep(struct m88rs6060_state* state)
 	m88rs6060_set_tuner_reg(state, 0x11, 0x7d);
 	msleep(10);
 }
-
+#endif
 #if 0
 static int m88rs6060_sleep_(struct dvb_frontend *fe)
 {
@@ -819,7 +819,7 @@ static int m88rs6060_clear_stream(struct m88rs6060_state* state)
 	return 0;
 }
 
-void m88rs6060_tuner_set_default_mclk(struct m88rs6060_state* state)
+static void m88rs6060_tuner_set_default_mclk(struct m88rs6060_state* state)
 {
 	u8 reg15, reg16;
 	reg16 = 96;
@@ -1560,9 +1560,9 @@ static int m88rs6060_get_matype(struct m88rs6060_state* state, u16* matype)
 static int m88rs6060_get_channel_info(struct m88rs6060_state* state, struct dtv_frontend_properties* p)
 {
 	struct MT_FE_CHAN_INFO_DVBS2 info;
-	int count;
+	int count=0;
 	bool ret;
-	for(count==0; count <5; ++count) {
+	for(count=0; count <5; ++count) {
 		ret = m88rs6060_get_channel_info_(state, &info);
 		if(!info.is_dummy_frame)
 			break;
@@ -1640,7 +1640,7 @@ static void m88rs6060_get_total_carrier_offset(struct m88rs6060_state* state, s3
 }
 
 
-void m88rs6060_set_symbol_rate(struct m88rs6060_state* state, u32 symbol_rate_kss) {
+static void m88rs6060_set_symbol_rate(struct m88rs6060_state* state, u32 symbol_rate_kss) {
 	u32 tmp = ((symbol_rate_kss << 15) + (state->mclk / 4)) / (state->mclk / 2);
 	regmap_write(state->demod_regmap, 0x61, (u8) (tmp & 0xff));
 	regmap_write(state->demod_regmap, 0x62, (u8) ((tmp >> 8) & 0xff));
@@ -3620,7 +3620,7 @@ static int m88rs6060_spectrum_get(struct dvb_frontend* fe, struct dtv_fe_spectru
 	0 on success
  */
 
-int m88rs6060_spectral_scan_start(struct dvb_frontend *fe, unsigned int *delay,  enum fe_status *status)
+static int m88rs6060_spectral_scan_start(struct dvb_frontend *fe, unsigned int *delay,  enum fe_status *status)
 {
 	struct m88rs6060_state* state = fe->demodulator_priv;
 	struct spectrum_scan_state* ss = &state->spectrum_scan_state;

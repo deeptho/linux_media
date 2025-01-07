@@ -42,7 +42,7 @@
 #define    FLAT_THR_ONE_LOOP                28
 #define    BLINDSCAN_SYMRATE_KSS     45000//40000
 
-int m88rs6060_init_fft(struct m88rs6060_state* state)
+static int m88rs6060_init_fft(struct m88rs6060_state* state)
 {
 	u32 tmp;
 	u8 sm_buf;

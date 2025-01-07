@@ -221,7 +221,7 @@ static u32 pll_calc(u32 freq, struct Si5351RegSet *reg, int correction)
  * target_pll - Which PLL to set
  *     (use the si5351_pll enum)
  */
-void si5351_set_pll(struct m88rs6060_state *dev,u32 pll_freq, enum si5351_pll target_pll)
+static void si5351_set_pll(struct m88rs6060_state *dev,u32 pll_freq, enum si5351_pll target_pll)
 {
 
 	struct Si5351RegSet pll_reg;
