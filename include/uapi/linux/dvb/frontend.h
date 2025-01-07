@@ -8,6 +8,7 @@
  *		    Andre Draszik <ad@convergence.de>
  *		    for convergence integrated media GmbH
  *
+ * Copyright (C) 2020-2025 Deep Thought <deeptho@gmail.com> Blindscan interface
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
  * as published by the Free Software Foundation; either version 2.1
@@ -1188,11 +1189,10 @@ enum fe_ioctl_result {
 };
 
 enum fe_reservation_mode {
-	FE_RESERVATION_MODE_MASTER_OR_SLAVE = 0,
-	FE_RESERVATION_MODE_MASTER = 1,
-	FE_RESERVATION_MODE_SLAVE = 2,
+	FE_RESERVATION_MODE_MASTER_OR_SLAVE = 0, //driver will decide if caller can control voltage/tone/switches
+	FE_RESERVATION_MODE_MASTER = 1, //caller needs to control voltage/tone/switches
+	FE_RESERVATION_MODE_SLAVE = 2, //caller does not want to control voltage/tone/switches
 };
-
 
 struct fe_rf_input_control {
 	pid_t owner;
@@ -1202,8 +1202,6 @@ struct fe_rf_input_control {
 	s16 rf_in;
 	enum fe_reservation_mode mode;
 };
-
-
 
 /*
  * When set, this flag will disable any zigzagging or other "normal" tuning
@@ -1247,6 +1245,7 @@ struct fe_rf_input_control {
 
 #define FE_GET_EXTENDED_INFO		_IOR('o', 86, struct dvb_frontend_extended_info)
 #define FE_DISEQC_SEND_LONG_MASTER_CMD  _IOW('o', 87, struct dvb_diseqc_long_master_cmd)
+
 #if defined(__DVB_CORE__) || !defined(__KERNEL__)
 
 /*
