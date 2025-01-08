@@ -97,7 +97,7 @@ struct dvb_demux_section_filter {
  * @demux:		The hardware demux using the feeds
  * @embedding_pid:	the PID in which input bbframes are embedded, or -1 if the input is a transport stream
  * @isi:	    The Input Stream Identifier (ISI) of the transport stream (embedded in bbframes) to demux
- * @is_default_feeds: If true, this strct dvb_demux_feeds is used for feeds not specifying a dvb_demux_feeds
+ * @include_default_feeds: If true, this struct dvb_demux_feeds is used for feeds not specifying a dvb_demux_feeds
  * @refcount:	The number of &struct dvb_demux output feeds and sub demux feeds currently using this dvb_demux_feeds
  * @output_feed_list:	List of &struct dvb_demux_feed output feeds. The feeds can have the same PID if multiple users
                opened the same demux. Some feeds can be outputting sections, and others transport stream data
@@ -112,7 +112,7 @@ struct dvb_demux_feeds {
 	struct dvb_demux* demux;
 	int embedding_pid;
 	int isi;
-	bool is_default_feeds;
+	bool include_default_feeds;
 
 	struct kref refcount;
 	struct list_head output_feed_list; //list of dvb_demux_feed

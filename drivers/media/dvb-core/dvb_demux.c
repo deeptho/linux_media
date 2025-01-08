@@ -886,8 +886,8 @@ static void dvb_dmx_swfilter_packet(struct dvb_demux *demux, const u8 *buf, stru
 		}
 	}
 
-	//dmx_demux_dprintk_nice(demux,"feeds=%p feeds->is_default_feeds=%d\n", pid, feeds, feeds->is_default_feeds);
-	for(int i=0; i < (feeds->is_default_feeds ? 2 : 1); ++i) {
+	//dmx_demux_dprintk_nice(demux,"feeds=%p feeds->include_default_feeds=%d\n", pid, feeds, feeds->include_default_feeds);
+	for(int i=0; i < (feeds->include_default_feeds ? 2 : 1); ++i) {
 		if(i>0) {
 			feeds = demux->default_feeds;
 		}
@@ -1879,7 +1879,7 @@ int dvb_demux_set_bbframes_state(struct dvb_demux* demux, bool embedding_is_on, 
 		dprintk("calling dvbdmx_release_bbframes_stream_ to release demux->fe_bbframes_stream=%p\n", demux->fe_bbframes_stream);
 		ret = dvbdmx_release_bbframes_stream_(demux, demux->fe_bbframes_stream);
 		demux->fe_bbframes_stream = NULL;
-		demux->fe_feeds->is_default_feeds = true;
+		demux->fe_feeds->include_default_feeds = true;
 	}
 	if (embedding_is_on) {
 		dprintk("calling dvbdmx_allocate_bbframes_stream_ to set demux->fe_bbframes_stream\n");
@@ -1889,9 +1889,9 @@ int dvb_demux_set_bbframes_state(struct dvb_demux* demux, bool embedding_is_on, 
 
 		BUG_ON(!demux->fe_bbframes_stream);
 		BUG_ON(!demux->fe_bbframes_stream->feeds);
-		demux->fe_bbframes_stream->feeds->is_default_feeds = true;
+		demux->fe_bbframes_stream->feeds->include_default_feeds = true;
 	} else {
-		demux->fe_feeds->is_default_feeds = true;
+		demux->fe_feeds->include_default_feeds = true;
 	}
 	mutex_unlock(&demux->mutex);
 	return ret;
