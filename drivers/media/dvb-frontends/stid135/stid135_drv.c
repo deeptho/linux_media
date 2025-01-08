@@ -12814,7 +12814,8 @@ bool state_chip_is_locked_by_state(struct stv* state) {
 }
 
 void state_chip_sleep_(struct stv* state, int timems, const char* func, int line) {
-	bool may_unlock = card_is_locked_by_state(state);
+	bool may_unlock = !card_is_locked_by_state(state);
+	BUG_ON (!state_chip_is_locked_by_state(state));
 	if (may_unlock)
 		state_chip_unlock_(state, func, line);
 	else {
