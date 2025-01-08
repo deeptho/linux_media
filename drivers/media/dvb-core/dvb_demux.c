@@ -1870,7 +1870,7 @@ int dvb_demux_set_bbframes_state(struct dvb_demux* demux, bool embedding_is_on, 
 		return -ERESTARTSYS;
 
 	demux->default_stream_id = default_stream_id;
-	dprintk("called with default_stream_id=%d embedding_is_on=%d\n", default_stream_id, embedding_is_on);
+	dprintk("called with embedding_is_on=%d embedding_pid=%d default_stream_id=%d \n", default_stream_id, embedding_pid, embedding_is_on);
 
 	int ret;
 	//default_feeds is for legacy programs who do not / cannot  call allocate_bbframes_streams
@@ -1890,6 +1890,7 @@ int dvb_demux_set_bbframes_state(struct dvb_demux* demux, bool embedding_is_on, 
 		BUG_ON(!demux->fe_bbframes_stream);
 		BUG_ON(!demux->fe_bbframes_stream->feeds);
 		demux->fe_bbframes_stream->feeds->include_default_feeds = true;
+		demux->fe_feeds->include_default_feeds = false;
 	} else {
 		demux->fe_feeds->include_default_feeds = true;
 	}
