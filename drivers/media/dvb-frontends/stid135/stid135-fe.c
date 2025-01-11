@@ -351,6 +351,9 @@ I2C_RESULT I2cReadWrite(void *pI2CHost, I2C_MODE mode, u8 ChipAddress, u8 *Data,
 	ret = i2c_transfer(base->i2c, &msg, 1);
 	if(ret<0) {
 		dprintk("BUG: i2c_transfer returned %d\n", ret);
+		msleep(20);
+		ret = i2c_transfer(base->i2c, &msg, 1);
+		dprintk("BUG: i2c_transfer returned %d on re-attempt\n", ret);
 	}
 	return (ret == 1) ? I2C_ERR_NONE : I2C_ERR_ACK;
 }
