@@ -295,19 +295,21 @@ struct fe_sat_init_params {
 
 
 struct fe_sat_search_params {
-		u32 				frequency;		/* Transponder frequency (in KHz)				*/
-		u32 				symbol_rate;		/* Transponder symbol rate  (in bds)				*/
-		u32 				search_range_hz;		/* Range of the search (in Hz)  				*/
+	u32 				frequency;		/* Transponder frequency (in KHz)				*/
+	u32 				symbol_rate;		/* Transponder symbol rate  (in bds)				*/
+	u32 				search_range_hz;		/* Range of the search (in Hz)  				*/
 	enum fe_sat_search_standard	standard;		/* DVBS1,DVBS2, DSS or Turbo					*/
-	s32 stream_id;
-		enum fe_sat_modulation		modulation;		/* modulation type use	FE_MOD_UNKNOWN for auto 		*/
-		enum fe_sat_rate		puncture_rate;		/* DVBS1,DSS and turbo puncture rate use FE_PR_UNKNOWN for auto	*/
-		enum fe_sat_modcode		modcode;		/* DVBS2 modcode use FE_MODCODE_UNKNOWN for auto		*/
-		enum fe_sat_search_iq_inv	iq_inversion;		/* IQ spectrum search 			   			*/
-		enum fe_sat_search_algo		search_algo;		/* Search Algorithm 						*/
-		s32 				tuner_index_jump;	/* contains the freq index where the rising or falling edge occurs*/
+	s32 isi;
+	s32 pls_code;
+	s32 pls_mode;
+	enum fe_sat_modulation		modulation;		/* modulation type use	FE_MOD_UNKNOWN for auto 		*/
+	enum fe_sat_rate		puncture_rate;		/* DVBS1,DSS and turbo puncture rate use FE_PR_UNKNOWN for auto	*/
+	enum fe_sat_modcode		modcode;		/* DVBS2 modcode use FE_MODCODE_UNKNOWN for auto		*/
+	enum fe_sat_search_iq_inv	iq_inversion;		/* IQ spectrum search 			   			*/
+	enum fe_sat_search_algo		search_algo;		/* Search Algorithm 						*/
+	s32 				tuner_index_jump;	/* contains the freq index where the rising or falling edge occurs*/
 
-		u32				lo_frequency;		/* gb! Workaround til RF Frontend implementation		*/
+	u32				lo_frequency;		/* gb! Workaround til RF Frontend implementation		*/
 #ifdef USER2
 		enum fe_sat_rolloff		roll_off;		/* Rolloff factor (0.05, 0.1, 0.2, 0.25 or 0.35)	*/
 		BOOL				man_rolloff;		/* Manual (1) or automatic (0) roll-off detection */

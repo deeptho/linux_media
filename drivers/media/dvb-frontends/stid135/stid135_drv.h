@@ -453,7 +453,9 @@ struct stv {
 	/* Demod */
 	enum fe_sat_search_standard	demod_search_standard;/* Search standard:
 					Auto, DVBS1/DSS only or DVBS2 only*/
-	s32 demod_search_stream_id;
+	s32 demod_search_isi;
+	s32 demod_search_pls_mode;
+	s32 demod_search_pls_code;
 	enum fe_sat_search_algo		demod_search_algo; /* Algorithm for
 						search Blind, Cold or Warm*/
 	enum fe_sat_search_iq_inv	demod_search_iq_inv; /* I,Q
@@ -759,8 +761,7 @@ fe_lla_error_t fe_stid135_get_isi(struct stv* state, u8 *p_isi_current);
 fe_lla_error_t fe_stid135_select_isi(struct stv* state, u8 isi_wanted);
 
 fe_lla_error_t fe_stid135_set_mis_filtering(struct stv* state, BOOL EnableFiltering, u8 mis_filter, u8 mis_mask);
-fe_lla_error_t  set_stream_index(struct stv *state, int mis);
-
+fe_lla_error_t set_stream_index(struct stv *state, s32 isi, s32 pls_mode, s32 pls_code);
 fe_lla_error_t fe_stid135_unlock(struct stv* state);
 
 fe_lla_error_t fe_stid135_set_abort_flag(struct fe_stid135_internal_param* pParams, BOOL abort);

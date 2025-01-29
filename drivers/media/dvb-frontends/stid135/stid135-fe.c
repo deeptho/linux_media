@@ -1019,8 +1019,8 @@ static bool pls_search_list(struct dvb_frontend* fe)
 		s32 pktdelin;
 		u8 timeout = pls_code & 0xff;
 		BUG_ON(i <0 || i>= sizeof(p->pls_search_codes)/sizeof(p->pls_search_codes[0]));
-		vprintk("Trying scrambling mode=%d code %d stream_id=%d timeout=%d\n", (pls_code>>26) & 0x3,
-						(pls_code>>8) & 0x3FFFF, p->stream_id, timeout);
+		state_dprintk("Trying scrambling mode=%d code %d stream_id=%d timeout=%d\n", (pls_code>>26) & 0x3,
+									(pls_code>>8) & 0x3FFFF, p->stream_id, timeout);
 		set_pls_mode_code(state, (pls_code>>26) & 0x3, (pls_code>>8) & 0x3FFFF);
 #if 0
 		if(p->stream_id !=  NO_STREAM_ID_FILTER)
@@ -1047,16 +1047,26 @@ static bool pls_search_list(struct dvb_frontend* fe)
 		//locked = wait_for_dmdlock(fe, 1 /*require_data*/);
 		//dprintk("RESULT=%d\n", locked);
 			if(locked) {
+				int old_isi = p->stream_id &0xff;
 				error = fe_stid135_read_hw_matype(state, &matype_info, &isi);
 				state->mis_mode= !fe_stid135_check_sis_or_mis(matype_info);
-				dprintk("demod=%d: ISI mis_mode set to %d\n", state->nr, state->mis_mode);
-				dprintk("demod=%d: selecting stream_id=%d\n", state->nr, isi);
+				state_dprintk("selecting isi=%d old_isi=%d mis_mode=%d stream_id=%d\n", isi,
+											old_isi, state->mis_mode, p->stream_id);
+				if(isi==255)
+					state_dprintk("BUG: isi=255\n");
 				signal_info->isi = isi;
-				//p->matype = matype_info;
-				p->stream_id = 	(state->mis_mode? (isi&0xff):0xff) | (pls_code & ~0xff);
-				dprintk("mis_mode=%d isi=0x%x pls_code=0x%x stream_id=0x%x",
-								state->mis_mode, isi, pls_code, p->stream_id);
-				dprintk("SET stream_id=0x%x isi=%d\n",p->stream_id, isi);
+				if(old_isi <0) {
+					int old_stream_id = p->stream_id;
+					//p->matype = matype_info;
+					if(old_isi != isi)
+						state_dprintk("BUG: isi changed from %d to %d\n", old_isi, isi);
+					p->stream_id = 	(state->mis_mode? (isi&0xff):0xff) | (pls_code & ~0xff);
+					state_dprintk("changed stream_id=%d ols_stream_id=%d mis_mode=%d isi=0x%x pls_code=0x%x / 0x%x ",
+												p->stream_id, old_stream_id,
+												state->mis_mode, isi, state->signal_info.pls_code, pls_code);
+					state->signal_info.pls_code = pls_code;
+					state_dprintk("SET stream_id=0x%x isi=%d\n", p->stream_id, isi);
+				}
 				break;
 			}
 
@@ -1129,14 +1139,19 @@ static bool pls_search_range(struct dvb_frontend* fe)
 		}
 		vprintk("PLS RESULT=%d\n", locked);
 		if(locked) {
+			int old_isi = p->stream_id &0xff;
 			error = fe_stid135_read_hw_matype(state, &matype_info, &isi);
 			state->mis_mode= !fe_stid135_check_sis_or_mis(matype_info);
 			dprintk("demod=%d: ISI mis_mode set to %d; selecting stream_id=%d\n", state->nr, state->mis_mode, isi);
+			if(isi==255)
+				state_dprintk("BUG: isi=255\n");
 			signal_info->isi = isi;
+			if(old_isi != isi)
+					state_dprintk("BUG: isi changed from %d to %d\n", old_isi, isi);
 			p->stream_id = 	(state->mis_mode? (isi&0xff):0xff) | (pls_code & ~0xff);
-			dprintk("demod=%d: ISI mis_mode=%d isi=0x%x pls_code=0x%x stream_id=0x%x", state->nr,
-								state->mis_mode, isi, pls_code, p->stream_id);
-
+			dprintk("demod=%d: ISI mis_mode=%d isi=0x%x pls_code=0x%x / 0x%x stream_id=0x%x", state->nr,
+							state->mis_mode, isi, state->signal_info.pls_code, pls_code, p->stream_id);
+			state->signal_info.pls_code = pls_code;
 		  //p->matype = matype_info;
 			dprintk("PLS SET stream_id=0x%x isi=0x%x\n",p->stream_id, isi);
 				break;
@@ -1175,6 +1190,8 @@ static int stid135_set_parameters(struct dvb_frontend* fe)
 	s32 current_llr=0;
 	state->tune_time = ktime_get_coarse();
 	memset(signal_info, 0, sizeof(*signal_info));
+	signal_info->isi = -2; //not initialized
+	signal_info->matype = -2; //not initialized
 	vprintk(
 					"[%d] delivery_system=%u modulation=%u frequency=%u symbol_rate=%u inversion=%u stream_id=%d\n",
 					state->nr+1,
@@ -1184,8 +1201,7 @@ static int stid135_set_parameters(struct dvb_frontend* fe)
 			"delivery_system=%u modulation=%u frequency=%u symbol_rate=%u inversion=%u stream_id=%d\n",
 			p->delivery_system, p->modulation, p->frequency,
 					p->symbol_rate, p->inversion, p->stream_id);
-	dprintk("demod=%d: user set stream_id=0x%x", state->nr, p->stream_id);
-
+	state_dprintk("user set stream_id=%d", p->stream_id);
 	if(state->chip->card->blindscan_always) {
 		p->algorithm = ALGORITHM_WARM;
 		p->delivery_system = SYS_AUTO;
@@ -1203,7 +1219,7 @@ static int stid135_set_parameters(struct dvb_frontend* fe)
 	case ALGORITHM_COLD:
 	case ALGORITHM_COLD_BEST_GUESS:
 		search_params.search_algo		= FE_SAT_COLD_START;
-		search_params.symbol_rate = p->symbol_rate ;
+		search_params.symbol_rate = p->symbol_rate;
 		break;
 
 	case ALGORITHM_BLIND:
@@ -1239,8 +1255,11 @@ static int stid135_set_parameters(struct dvb_frontend* fe)
 #else
 	search_params.search_algo 	= FE_SAT_COLD_START;
 #endif
-
-	search_params.stream_id = p->stream_id;
+	search_params.isi = p->stream_id & 0xff;
+	if (search_params.isi== 0xff)
+		search_params.isi = -1;
+	search_params.pls_mode = ((p->stream_id >>26) & 0x3);
+	search_params.pls_code = ((p->stream_id >> 8)  & 0x3FFFF);
 
 	search_params.frequency		=  p->frequency*1000;
 	//search_params.symbol_rate		=		p->symbol_rate;
@@ -1335,7 +1354,7 @@ static int stid135_set_parameters(struct dvb_frontend* fe)
 		vprintk("now stream_id=0x%x\n", p->stream_id);
 		if(p->stream_id != NO_STREAM_ID_FILTER) {
 			vprintk("calling set_stream_index");
-			set_stream_index(state, p->stream_id);
+			set_stream_index(state, search_params.isi, search_params.pls_mode, search_params.pls_code);
 		}
 	}
 
@@ -1426,17 +1445,23 @@ static int stid135_set_parameters(struct dvb_frontend* fe)
 	}
 	if(p->stream_id == NO_STREAM_ID_FILTER) {
 		state->signal_info.pls_mode = 0x00; //ROOT
+		state_dprintk("setting pls_code=1 was %d \n", state->signal_info.pls_code);
 		state->signal_info.pls_code = 1;
 	} else {
+#if 0
 		state->signal_info.pls_mode = ((p->stream_id >>26) & 0x3);
 		state->signal_info.pls_code = ((p->stream_id >> 8)  & 0x3FFFF);
+		tst(fe);
+#endif
 	}
 
 	dprintk("set state->signal_info pls_mode=0x%x pls_code=0x%x stream_id=0%x",
 					state->signal_info.pls_mode, state->signal_info.pls_code, p->stream_id);
 
-	if(	state->signal_info.pls_code ==0)
+	if(	state->signal_info.pls_code ==0) {
 			state->signal_info.pls_code = 1;
+			state_dprintk("setting pls_code=1 was %d\n", state->signal_info.pls_code);
+	}
 	if (err != FE_LLA_NO_ERROR)
 		dev_err(&state->chip->i2c->dev, "%s: fe_stid135_set_mis_filtering error %d !\n", __func__, err);
 
@@ -1473,7 +1498,9 @@ static int stid135_get_frontend(struct dvb_frontend* fe, struct dtv_frontend_pro
 
 	p->pilot = state->signal_info.pilots == FE_SAT_PILOTS_ON ? PILOT_ON : PILOT_OFF;
 	p->fec_inner = dvb_fec(state, p->delivery_system);
-
+	int old_isi = p->stream_id&0xff;
+	if(old_isi != state->signal_info.isi &0xff)
+		state_dprintk("BUG: isi changed from %d to %d\n", old_isi, state->signal_info.isi);
 	p->stream_id = ((state->mis_mode ? (state->signal_info.isi &0xff) :0xff) |
 									(state->signal_info.pls_mode << 26) |
 									((state->signal_info.pls_code &0x3FFFF)<<8)
@@ -1645,7 +1672,6 @@ static int stid135_read_status_(struct dvb_frontend* fe, enum fe_status *status)
 
 	p->pilot = state->signal_info.pilots == FE_SAT_PILOTS_ON ? PILOT_ON : PILOT_OFF;
 	p->fec_inner = dvb_fec(state, p->delivery_system);
-
 	p->stream_id = ((state->mis_mode ? (state->signal_info.isi &0xff) :0xff) |
 									(state->signal_info.pls_mode << 26) |
 									((state->signal_info.pls_code &0x3FFFF)<<8)
@@ -1727,9 +1753,9 @@ static int stid135_set_demux_default_stream_id(struct dvb_frontend* fe) {
 	int stream_id = p->stream_id & 0xff;
 	if(stream_id==0xff)
 		stream_id = -1;
-	dprintk("before: p->output_bbframes=%d p->stream_id=%d bbframes_auto=%d\n",
-					p->output_bbframes, stream_id, bbframes_auto);
 	output_bbframes = (p->output_bbframes || bbframes_auto) && (stream_id!=-1);
+	state_dprintk("before: p->output_bbframes=%d stream_id=%d bbframes_auto=%d\n",
+					p->output_bbframes, stream_id, bbframes_auto);
 	p->output_bbframes = output_bbframes;
 	if(demux) {
 		ret=dvb_demux_set_bbframes_state(demux, p->output_bbframes, 0x10e /*embeddding pid*/ , stream_id);
@@ -1754,7 +1780,7 @@ static int stid135_tune_(struct dvb_frontend* fe, bool re_tune,
 	}
 	//state_dprintk("re_tune=%d\n", re_tune);
 	if (re_tune) {
-		state_dprintk("re_tune\n", state->nr);
+		state_dprintk("re_tune\n");
 		stid135_set_sec_ready_(fe);
 		state->signal_info.out_of_llr = false;
 
@@ -1782,7 +1808,7 @@ static int stid135_tune_(struct dvb_frontend* fe, bool re_tune,
 		memset(&state->signal_info.isi_list, 0, sizeof(state->signal_info.isi_list));
 		fe_stid135_get_signal_info(state);
 		if(p->output_bbframes) {
-			dprintk("Calling stid135_set_bbframe_output\n");
+			state_dprintk("Calling stid135_set_bbframe_output\n");
 		  stid135_set_bbframe_output(state);
 		}
 	}
@@ -1791,8 +1817,8 @@ static int stid135_tune_(struct dvb_frontend* fe, bool re_tune,
 		get rf level, CNR, BER
 	 */
 	r = stid135_read_status_(fe, status);
-	dprintk("demod=%d LOCK TIME %lldms locked=%d\n", state->nr,
-					ktime_to_ns(state->signal_info.lock_time)/1000000, state->signal_info.has_lock);
+	state_dprintk("LOCK TIME %lldms locked=%d\n",
+								ktime_to_ns(state->signal_info.lock_time)/1000000, state->signal_info.has_lock);
 	vprintk("demod=%d setting timedout=%d\n", state->nr, !state->signal_info.has_lock);
 	if(state->signal_info.has_timedout) {
 		*status |= FE_TIMEDOUT;
@@ -3004,9 +3030,6 @@ static void init_stv_chip(struct stv_chip_t* chip, struct stv_card_t* card, int 
 	chip->read_eeprom = cfg->read_eeprom;
 	chip->set_TSsampling = cfg->set_TSsampling;
 	chip->set_TSparam  = cfg->set_TSparam;
-#ifdef NEWXXX
-		mutex_init(&chip->lock.m);
-#endif
 }
 
 /*DT: called with  nr=adapter=0...7 and rf_in = nr/2=0...3
