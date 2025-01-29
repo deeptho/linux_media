@@ -37,6 +37,20 @@ enum dvb_dmx_filter_type {
 	DMX_TYPE_SEC
 };
 
+
+/**
+ * enum embedded_stream_type - type of embedded stream.
+ *
+ * @EMBEDDED_STREAM_TYPE_STID: bbbframes embedded in TS stream in stid format
+ * @EMBEDDED_STREAM_TYPE_T2MI: bbbframes embedded in TS stream in t2mi format
+ */
+enum embedded_stream_type {
+	EMBEDDED_STREAM_TYPE_UNKNOWN,
+	EMBEDDED_STREAM_TYPE_STID,
+	EMBEDDED_STREAM_TYPE_T2MI,
+};
+
+
 /**
  * enum dvb_dmx_state - state machine for a demux filter.
  *
@@ -116,7 +130,8 @@ struct dvb_demux_feeds {
 
 	struct kref refcount;
 	struct list_head output_feed_list; //list of dvb_demux_feed
-	struct xarray bbframes_demuxes; //struct bbframes_demux, indexed by embedding pid
+
+	struct xarray embedded_streams; //struct stid_stream, or struct t2mi streamindexed by embedding pid
 
 	uint8_t *cnt_storage; /* for TS continuity check */
 	ktime_t speed_last_time; /* for TS speed check */
@@ -124,11 +139,27 @@ struct dvb_demux_feeds {
 };
 
 /**
+ * struct ts_stream - represents the state of a partial TS packet
+ * @cc_counter:	The continuity counter of the packet
+ * @synced:	we have found the start of a packet (stream is synced)
+ * @buff_idx:	number of bytes already in the packet
+ * @buff: bytes of the packet
+ */
+struct ts_stream {
+	int buff_idx;
+	bool synced;
+	uint8_t buff[200];
+};
+
+
+/**
  * struct bbframes_stream - represents a single stream embedded in bbframes
  * @isi:	The Input Stream Identifier (ISI) of the stream.
+ * @plp:	PLP identifier (onlyu fro t2mi)
  * @upl:	User Packet Length.
  * @dfl:	Data Field Length.
  * @syncd:	Syncd field from stream.
+ * @issy: issy
  * @syncbyte:	The sync byte (normally 0x47)
  * @synced:		True if the strame has been synced (a bbframe header was received for isi)
  * @last_crc:	 The computed CRC of the last received user packet.
@@ -141,39 +172,124 @@ struct dvb_demux_feeds {
  */
 struct bbframes_stream {
 	int isi;
+	int plp;
+	struct kref refcount;
+	struct embedded_stream* parent_embedded_stream;
+	struct ts_stream ts;
+	struct dvb_demux_feeds* feeds;
+
+	int matype;
 	int upl;
 	int dfl;
 	int syncd;
-	u8 syncbyte;
+	int issy;
+
+	int bbf_crc8;
+
+	int bbf_payload_bytes_left; //number of bytes still to be read until frame is complete
+	uint8_t syncbyte;
 	bool synced;
-	int last_crc;
-	int buff_count;
-	struct kref refcount;
-	struct bbframes_demux* bbframes_demux;
-	struct dvb_demux_feeds* feeds;
-	u8 buff[65536]; //could be reduced in size if the bbframes stream contains only ts packet
+	bool hem_mode;
+
+	int num_crc_errors;
 };
 
 /**
- * struct bbframes_demux - Contains the state of a bbframes demuxes
- * @embedding_pid:	The pid of the TS which encapsulates the bbframes stream sent to this bbframes_demux
- * @current_isi:	The Input Stream Identifier (ISI) of the currently received user packet
- * @current_stream:	the &struct bbframes_stream with ISI current_isi
+ * struct embedded_stream - common part of stid_stream and t2mi_stream:
+ * one or more streams embedded in a transport stream
+ * @embedded_stream_type: type of embedded stream (e.g., stid or t2mi)
+ * @embedding_pid: pid of the TS in which the stream is embedded
+ * @bbf_streams: array containing all streams to decode, i.e., all streams for which one or more users are registered
  * @refcount:	The number of &struct bbframes_stream_streams currently using this bbframes_demux.
  *            This is the same as the number of entries in bbframes_streams.
- * @bbframes_streams:	The &struct bbframes_stream streams to be output by this bbframes_demux;
- *            Streams witjout a matching entry will be ignored.
+ * @parent_feeds:	The &struct dvb_demux_feeds containing the @bbframes_demuxes xarray from which
+ *            which onws this bbframes_demux
+ * @payload_len{0}: payload length in bytes
+ * @packet_count: packet count
+ * @bbf_header_crc8: crc8 of the output TS bytes already received
+ * @current_isi: ISI of the stream currently being processed
+ * @current_bbf: pointer to the struct bbframes_stream for the stream currently being processed
+ * @cc_counter: continuity counter of the input stream
+ * @isi_plp_bitset: each one bit indicates an ISI or plp_id value seen in the stream
+ * @high_rolloff_mode[256]:  bitset with bitset[idx]=1 if stream with ISI==idx uses high roll-off mode
+ * @num_streams[256]: the number of ISIs or PLPs seen in the stream
+ * @isi_plps[256]: isi_plps[idx] the matype of the stream with ISI or PLP equal to idx
+ */
+struct embedded_stream {
+	enum embedded_stream_type embedded_stream_type;
+	int embedding_pid;
+	struct xarray bbf_streams;
+	struct kref refcount;
+	struct dvb_demux_feeds* parent_feeds;
+	int payload_len;
+	int packet_count;
+	int bbf_header_crc8;
+	int current_isi;
+	struct bbframes_stream *current_bbf;
+	int cc_counter;  //cc_counter of the input packets for this stream
+	int32_t isi_plp_bitset[8];
+	int32_t high_rolloff_mode[8];
+	int num_streams;
+	uint8_t matypes[256];
+};
+
+//stid bbframes encapsulated stream embedded in ts backets
+/**
+ * struct stid_stream - state of a bbframes stream embedded in a transport stream
+ * @embedding_pid: pid of the TS in which the stream is embedded
+ * @payload_len{0}: payload length in bytes
+ * @packet_count: packet count
+ * @section_length: section length
+ * @bbf_header_crc8: crc8 of the output TS bytes already received
+ * @currenr_isi: ISI of the stream currently being processed
+ * @cc_counter: continuity counter of the input stream
+ * @refcount:	The number of &struct bbframes_stream_streams currently using this bbframes_demux.
+ *            This is the same as the number of entries in bbframes_streams.
  * @parent_feeds:	The &struct dvb_demux_feeds containing the @bbframes_demuxes xarray from which
  *            which onws this bbframes_demux
  */
-struct bbframes_demux {
-	int embedding_pid; //for debugging
-	int current_isi;
-	struct bbframes_stream* current_stream;
-	struct kref refcount;
-	struct xarray bbframes_streams; //
-	struct dvb_demux_feeds* parent_feeds;
+struct stid_stream {
+	struct embedded_stream emb;
+	int section_length;
 };
+
+/**
+ * struct t2mi_stream - state of a t2mi stream embedded in a transport stream
+ * @emb: state common with stid_stream
+ * @packet_type: t2mi packet type
+ * @superframe_idx: t2mi superframe_idx
+ * @crc_idx: number of bytes already read of the 4-byte crc field
+ * @synced: true when start of t2mi stream has been located
+ * @frame_idx{-1}: t2mi bbframe frame_idx
+ * @plp_id: t2mi bbframe  plp_id
+ * @intl_frame_start: t2mi intl_frame_start
+ * @t2mi_crc32: crc32 of t2mi bytes already read in the current t2mi frame
+ * @t2mi_payload_bytes_left{0}: number of bytes still to be read in the t2mi frame
+ * @bbheader_bytes_left: number of bytes still to read in bbheader
+ * @header_idx; number of header bytes already read in the t2mi header (in case of partial read)
+ * @bbheader_idx: number of header bytes alreadt read in the  t2mi-bbheader following the t2mi header
+ *  (in case of partial read)
+ * @buff:  buffer in which to store t2mi headers, t2mi-bbheaders and bbrame headers
+ */
+struct t2mi_stream {
+	struct embedded_stream emb;
+	int packet_type;
+	int superframe_idx;
+	int crc_idx;
+	bool synced;
+	int frame_idx;
+	int plp_id;
+	int packet_header_isi;
+	uint8_t intl_frame_start;
+	uint32_t t2mi_crc32;
+	int t2mi_payload_bytes_left;
+	int bbheader_bytes_left;
+	int header_idx;
+	int bbheader_idx;
+	uint8_t buff[188];
+	int num_crc_errors;
+};
+
 
 /**
  * struct dvb_demux_feed - describes a DVB feed from the point of view of the card
@@ -182,14 +298,14 @@ struct bbframes_demux {
  * @feed:	a union describing a digital TV feed.
  *		Depending on the feed type, it can be either
  *		@feed.ts or @feed.sec.
- * @feed.ts:	a &struct dmx_ts_feed pointer.
+ * @feed.ts:	a &struct demux_pid_feed pointer.
  *		For TS feed only.
  * @feed.sec:	a &struct dmx_section_feed pointer.
  *		For section feed only.
  * @cb:		a union describing digital TV callbacks.
  *		Depending on the feed type, it can be either
  *		@cb.ts or @cb.sec.
- * @cb.ts:	a dmx_ts_cb() calback function pointer.
+ * @cb.ts:	a dmx_pid_cb() calback function pointer.
  *		For TS feed only.
  * @cb.sec:	a dmx_section_cb() callback function pointer.
  *		For section feed only.
@@ -216,12 +332,12 @@ struct bbframes_demux {
  */
 struct dvb_demux_feed {
 	union {
-		struct dmx_ts_feed ts;
+		struct pid_stream pid_stream;
 		struct dmx_section_feed sec;
 	} feed;
 
 	union {
-		dmx_ts_cb ts;
+		dmx_pid_cb ts;
 		dmx_section_cb sec;
 	} cb;
 
@@ -457,6 +573,27 @@ void dvb_dmx_swfilter_204(struct dvb_demux *demux, const u8 *buf,
 void dvb_dmx_swfilter_raw(struct dvb_demux *demux, const u8 *buf,
 			  size_t count);
 
-#endif /* _DVB_DEMUX_H_ */
 
 int dvb_demux_set_bbframes_state(struct dvb_demux* demux, bool embedding_is_on, int embedding_pid, int default_stream_id);
+
+
+static inline void* embedded_stream_get_super_class(struct embedded_stream* emb,
+																																	enum embedded_stream_type t) {
+	if(!emb)
+		return NULL;
+	bool matches = (t==emb->embedded_stream_type || EMBEDDED_STREAM_TYPE_UNKNOWN);
+	switch (emb->embedded_stream_type) {
+	case EMBEDDED_STREAM_TYPE_UNKNOWN:
+	default:
+		BUG_ON(true);
+		return NULL;
+		break;
+	case EMBEDDED_STREAM_TYPE_STID:
+		return matches ? container_of(emb, struct stid_stream, emb) : NULL;
+	case EMBEDDED_STREAM_TYPE_T2MI:
+		return matches ? container_of(emb, struct t2mi_stream, emb) : NULL;
+	}
+}
+
+
+#endif /* _DVB_DEMUX_H_ */

@@ -59,94 +59,56 @@ static ssize_t dmxdev_show(struct kobject* kobj, struct kobj_attribute *attr,
 	int i;
 	int ret=0;
 	struct dmxdev_feed *feed;
-	struct dvb_demux_feeds *feeds;
-	struct dvb_demux_feed* demux_feed;
-	struct dvb_demux_feed* of;
-	struct bbframes_demux* bbd;
-	struct dmx_ts_feed* ts_feed ;
-	unsigned long index;
-	struct dmx_bbframes_stream* stream;
-	void* entry;
 	struct dvb_demux* dvb_demux;
 
 	ret += sprintf(buf+ret,
 								 "adapter_no=%d\n", adapter_no);
 	for (i = 0; i < dmxdev->filternum; i++)
 		if (dmxdev->filter[i].state != DMXDEV_STATE_FREE) {
-			struct dmxdev_filter* f =  &dmxdev->filter[i];
-			dvb_demux = container_of(f->dev->demux, struct dvb_demux, dmx);
-			switch(f->type) {
-			case DMXDEV_TYPE_PES:
-				ret += sprintf(buf+ret, "filter[%d]=%p: current_feeds=%p\n", i, f, f->current_feeds);
-#if 0
-				ret += sprintf(buf+ret, " demux=%p: demux->feedsx=%p\n", dvb_demux, dvb_demux->feedsx);
-#else
-				ret += sprintf(buf+ret, " demux=%p: demux->fe_feeds=%p demux->default_feeds=%p\n",
-											 dvb_demux, dvb_demux->fe_feeds, dvb_demux->default_feeds);
-#endif
-				ret += sprintf(buf+ret, "\n  <<<ts feeds>>>\n");
-				list_for_each_entry(feed, &f->feed.dmxdev_feed_list, next) {
-					ts_feed = feed->ts;
-					demux_feed = container_of(ts_feed, struct dvb_demux_feed, feed.ts);
-					ret += sprintf(buf+ret, "  dmxdev_feed=%p pid=%d tsfeed=%p demux_feed=%p\n",
-												 feed, feed->pid, ts_feed, demux_feed);
-					feeds = demux_feed->parent_feeds;
-					ret += sprintf(buf+ret,   "  pid=%d type=%d\n", demux_feed->pid, demux_feed->type);
-					ret += sprintf(buf+ret,   "  parent_feeds=%p index=%d\n", feeds, demux_feed->index);
-					if(feeds) {
-						ret += sprintf(buf+ret, "  embedding_pid=%d isi=%d refcnt=%d\n", feeds->embedding_pid, feeds->isi,
-													 atomic_read(&feeds->refcount.refcount.refs));
+			struct dmxdev_filter* filter =  &dmxdev->filter[i];
+			if(!filter) {
+				ret += sprintf(buf+ret, "slot[%i]=NULL\n", i);
+				continue;
+			}
+			if(!filter->dev) {
+				ret += sprintf(buf+ret, "slot[%i]->dev=NULL\n", i);
+				continue;
+			}
+			dvb_demux = container_of(filter->dev->demux, struct dvb_demux, dmx);
+			switch(filter->type) {
+			case DMXDEV_TYPE_PES: {
+				ret += sprintf(buf+ret, "filter[%d]=%p: current_feeds=%p\n", i, filter, filter->current_feeds);
+				list_for_each_entry(feed, &filter->feed.dmxdev_feed_list, next) {
 
-						ret += sprintf(buf+ret, "  ###bbframes_demuxes:###\n");
-						xa_for_each(&feeds->bbframes_demuxes, index, entry) {
-							bbd = (struct bbframes_demux*) entry;
-							ret += sprintf(buf+ret, "  bbd=%p bbframes_pid=%d parent_feeds=%p\n",
-														 bbd, bbd->embedding_pid, bbd->parent_feeds);
-						}
-						ret += sprintf(buf+ret, "  ###output_feeds_list:###\n");
-						list_for_each_entry(of, &feeds->output_feed_list, next) {
-							ret += sprintf(buf+ret, "  demux_feed=%p pid=%d type=%d  parent_feeds=%p index=%d\n",
-														 of, of->pid,
-														 of->type, of->parent_feeds, of->index);
-						}
-						ret += sprintf(buf+ret, "  #######################\n");
+					switch(feed->feed_type) {
+					case 	DMXDEV_FEED_TYPE_UNDEFINED:
+					default:
+						dprintk("Implementation error feed_type=%d\n", feed->feed_type);
+						break;
+					case DMXDEV_FEED_TYPE_STID: {
+						struct dmx_stid_stream* bbs = container_of(feed, struct dmx_stid_stream, f);
+						ret += sprintf(buf+ret, "  stid: embedding_pid=%d isi=%d stream=%p feeds=%p\n", bbs->embedding_pid, bbs->isi,
+													 bbs->stream, bbs->feeds);
 					}
-					ret += sprintf(buf+ret, "\n");
-				}
-
-				ret += sprintf(buf+ret, "\n  <<<<<<<>>>>>>>\n");
-				ret += sprintf(buf+ret, "\n  <<<bbframes_streams>>>\n");
-				list_for_each_entry(stream, &f->dmxdev_bbframes_stream_list, next) {
-					ret += sprintf(buf+ret, "  bb_frames_stream=%p embedding_pid=%d isi=%d\n",
-												 stream, stream->embedding_pid, stream->isi);
-					feeds = stream->feeds;
-					ret += sprintf(buf+ret,   "  pid=%d type=%d\n", demux_feed->pid, demux_feed->type);
-					ret += sprintf(buf+ret,   "  feeds=%p index=%d\n", feeds, demux_feed->index);
-					if(feeds) {
-						ret += sprintf(buf+ret, "  embedding_pid=%d isi=%d refcnt=%d\n", feeds->embedding_pid, feeds->isi,
-													 atomic_read(&feeds->refcount.refcount.refs));
-
-						ret += sprintf(buf+ret, "  ###bbframes_demuxes:###\n");
-						xa_for_each(&feeds->bbframes_demuxes, index, entry) {
-							bbd = (struct bbframes_demux*) entry;
-							ret += sprintf(buf+ret, "  bbd=%p bbframes_pid=%d parent_feeds=%p\n",
-														 bbd, bbd->embedding_pid, bbd->parent_feeds);
-						}
-						ret += sprintf(buf+ret, "  ###output_feeds_list:###\n");
-						list_for_each_entry(of, &feeds->output_feed_list, next) {
-							ret += sprintf(buf+ret, "  demux_feed=%p pid=%d type=%d  parent_feeds=%p index=%d\n",
-														 of, of->pid,
-														 of->type, of->parent_feeds, of->index);
-						}
-						ret += sprintf(buf+ret, "  #######################\n");
+						break;
+					case DMXDEV_FEED_TYPE_T2MI: {
+						struct dmx_t2mi_stream* t2mi = container_of(feed, struct dmx_t2mi_stream, f);
+						ret += sprintf(buf+ret, "  t2mi: embedding_pid=%d isi=%d stream=%p feeds=%p\n", t2mi->embedding_pid,
+													 t2mi->isi, t2mi->stream, t2mi->feeds);
 					}
-					ret += sprintf(buf+ret, "\n");
+						break;
+					case DMXDEV_FEED_TYPE_PID: {
+						struct dmx_pid_feed* pid_feed = container_of(feed, struct dmx_pid_feed, f);
+						ret += sprintf(buf+ret, "  feed: pid=%d stream=%p\n", pid_feed->pid,
+													 pid_feed->pid_stream);
+					}
+					}
 				}
-				ret += sprintf(buf+ret, "\n  <<<<<<<>>>>>>>\n");
 				break;
-			default:
-				ret += sprintf(buf+ret, "filter[%d]=%p: type=%d\n", i, f, f->type);
-				break;
+				default:
+					ret += sprintf(buf+ret, "filter[%d]=%p: type=%d\n", i, filter, filter->type);
+					break;
+			}
 			}
 		}
 	return ret;
@@ -169,25 +131,55 @@ static ssize_t dvb_demux_show_feeds(const char* feeds_name, struct dvb_demux_fee
 
 	if(feeds) {
 		indent += 2;
-		if(xa_empty(&feeds->bbframes_demuxes))
-			ret += sprintf(buf+ret, "%*sNo bbframes_demuxes\n", indent, " ");
+		if(xa_empty(&feeds->embedded_streams))
+			ret += sprintf(buf+ret, "%*sNo embedded streams\n", indent, " ");
 		else {
-			xa_for_each(&feeds->bbframes_demuxes, index, entry) {
-				struct bbframes_demux* bbd = (struct bbframes_demux*) entry;
-				void*  entry1;
-				ret += sprintf(buf+ret, "%*sbbd=%p bbframes_pid=%d parent_feeds=%p bbd.refcount=%d\n", indent, " ",
-											 bbd, bbd->embedding_pid, bbd->parent_feeds, atomic_read(&bbd->refcount.refcount.refs));
-				indent += 2;
-				ret += sprintf(buf+ret, "%*sStreams:\n", indent, " ");
-				indent += 2;
-				xa_for_each(&bbd->bbframes_streams, index1, entry1) {
-					struct bbframes_stream* stream = (struct bbframes_stream*) entry1;
-					char name1[256];
-					ret += sprintf(buf+ret, "%*sstream=%p isi=%d stream.refcount=%d bbd=%p feeds=%p\n",indent, " ",
-												 stream, stream->isi, atomic_read(&stream->refcount.refcount.refs), stream->bbframes_demux, stream->feeds);
+			xa_for_each(&feeds->embedded_streams, index, entry) {
+				struct embedded_stream* emb = (struct embedded_stream*) entry;
+				struct stid_stream* stid = embedded_stream_get_super_class(entry, EMBEDDED_STREAM_TYPE_STID);
+				if(stid) {
+					ret += sprintf(buf+ret, "%*sstid=%p bbframes_pid=%d parent_feeds=%p stid.refcount=%d\n", indent, " ",
+												 stid, stid->emb.embedding_pid, stid->emb.parent_feeds,
+												 atomic_read(&stid->emb.refcount.refcount.refs));
 					indent += 2;
-					sprintf(name1, "%s[isi=%d]", feeds_name, stream->isi);
-					ret = dvb_demux_show_feeds(name1, stream->feeds, buf, ret, indent);
+					ret += sprintf(buf+ret, "%*sStreams:\n", indent, " ");
+					indent += 2;
+				} else {
+					struct t2mi_stream* t2mi = embedded_stream_get_super_class(entry, EMBEDDED_STREAM_TYPE_T2MI);
+					if(t2mi) {
+						ret += sprintf(buf+ret, "%*st2mi=%p bbframes_pid=%d parent_feeds=%p crc_errs=%d stid.refcount=%d\n", indent, " ",
+													 t2mi, t2mi->emb.embedding_pid, t2mi->emb.parent_feeds, t2mi->num_crc_errors,
+													 atomic_read(&t2mi->emb.refcount.refcount.refs));
+						indent += 2;
+						ret += sprintf(buf+ret, "%*sStreams:\n", indent, " ");
+						indent += 2;
+					} else {
+						dprintk("Uninitialized stream type\n");
+						WARN_ON(true);
+					}
+				}
+				if(emb && emb->num_streams>0) {
+					ret += sprintf(buf+ret, "%*sISI/PLP:matype: ", indent, " ");
+					int isi;
+					for(isi=0; isi <256;++isi) {
+						if(!((emb->isi_plp_bitset[(isi>>5)&0x7] >> (isi&31))&1))
+							continue;
+						ret += sprintf(buf+ret, " %d:0x%x", isi, emb->matypes[isi]);
+						if((emb->high_rolloff_mode[(isi>>5)&0x7] >> (isi&31))&1)
+							ret += sprintf(buf+ret, " +");
+					}
+					ret += sprintf(buf+ret, "\n");
+				}
+				xa_for_each(&emb->bbf_streams, index1, entry) {
+					struct bbframes_stream* bbf = (struct bbframes_stream*) entry;
+					char name1[256];
+					ret += sprintf(buf+ret, "%*sbbf=%p isi=%d upl=%d dfl=%d issy=%d bbf.refcount=%d emb=%p "
+												 "feeds=%p crc8_errs=%d\n", indent, " ",
+												 bbf, bbf->isi, bbf->upl, bbf->dfl, bbf->issy,
+												 atomic_read(&bbf->refcount.refcount.refs), bbf->parent_embedded_stream, bbf->feeds, bbf->num_crc_errors);
+					indent += 2;
+					sprintf(name1, "%s[isi=%d]", feeds_name, bbf->isi);
+					ret = dvb_demux_show_feeds(name1, bbf->feeds, buf, ret, indent);
 					indent -=2;
 				}
 				indent -= 4;
@@ -230,7 +222,6 @@ static ssize_t dvb_demux_show(struct kobject* kobj, struct kobj_attribute *attr,
 								 d, d->fe_feeds, d->default_feeds, d->default_stream_id);
 	ret=dvb_demux_show_feeds("fe_feeds", d->fe_feeds, buf, ret, 2);
 	ret=dvb_demux_show_feeds("default_feeds", d->default_feeds, buf, ret, 2);
-	//ret=dvb_demux_show_feeds("feeds", d->feeds, buf, ret, 2);
 
 	return ret;
 }

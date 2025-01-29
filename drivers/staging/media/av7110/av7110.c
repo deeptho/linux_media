@@ -313,7 +313,7 @@ static int DvbDmxFilterCallback(u8 *buffer1, size_t buffer1_len,
 		if (dvbdmxfilter->feed->ts_type & TS_PAYLOAD_ONLY)
 			return dvbdmxfilter->feed->cb.ts(buffer1, buffer1_len,
 							 buffer2, buffer2_len,
-							 &dvbdmxfilter->feed->feed.ts,
+							 &dvbdmxfilter->feed->feed.pid_stream,
 							 NULL);
 		else
 			av7110_p2t_write(buffer1, buffer1_len,

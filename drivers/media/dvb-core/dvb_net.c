@@ -90,7 +90,7 @@ struct dvb_net_priv {
 	struct dmx_demux *demux;
 	struct dmx_section_feed *secfeed;
 	struct dmx_section_filter *secfilter;
-	struct dmx_ts_feed *tsfeed;
+	struct pid_stream* pid_stream;
 	int multi_num;
 	struct dmx_section_filter *multi_secfilter[DVB_NET_MULTICAST_MAX];
 	unsigned char multi_macs[DVB_NET_MULTICAST_MAX][6];
@@ -871,12 +871,12 @@ static void dvb_net_ule(struct net_device *dev, const u8 *buf, size_t buf_len)
 	}	/* for all available TS cells */
 }
 
-static int dvb_net_ts_callback(const u8 *buffer1, size_t buffer1_len,
+static int dvb_net_pid_callback(const u8 *buffer1, size_t buffer1_len,
 			       const u8 *buffer2, size_t buffer2_len,
-			       struct dmx_ts_feed *feed,
+			       struct pid_stream* pid_stream,
 			       u32 *buffer_flags)
 {
-	struct net_device *dev = feed->priv;
+	struct net_device *dev = pid_stream->priv;
 
 	if (buffer2)
 		pr_warn("buffer2 not NULL: %p.\n", buffer2);
@@ -1056,12 +1056,12 @@ static int dvb_net_feed_start(struct net_device *dev)
 	struct dvb_demux* dvb_demux =  container_of(demux, struct dvb_demux, dmx);
 	netdev_dbg(dev, "rx_mode %i\n", priv->rx_mode);
 	mutex_lock(&priv->mutex);
-	if (priv->tsfeed || priv->secfeed || priv->secfilter || priv->multi_secfilter[0])
+	if (priv->pid_stream || priv->secfeed || priv->secfilter || priv->multi_secfilter[0])
 		pr_err("%s: BUG %d\n", __func__, __LINE__);
 
 	priv->secfeed=NULL;
 	priv->secfilter=NULL;
-	priv->tsfeed = NULL;
+	priv->pid_stream = NULL;
 
 	if (priv->feedtype == DVB_NET_FEEDTYPE_MPE) {
 		netdev_dbg(dev, "alloc secfeed\n");
@@ -1107,20 +1107,20 @@ static int dvb_net_feed_start(struct net_device *dev)
 	} else if (priv->feedtype == DVB_NET_FEEDTYPE_ULE) {
 		ktime_t timeout = ns_to_ktime(10 * NSEC_PER_MSEC);
 		/* we have payloads encapsulated in TS */
-		netdev_dbg(dev, "alloc tsfeed\n");
-		ret = demux->allocate_ts_feed(demux, &priv->tsfeed, dvb_net_ts_callback,
-																	priv->pid, /* pid */
-																	TS_PACKET, /* type */
-																	DMX_PES_OTHER, /* pes type */
-																	timeout,    /* timeout */
-																	dvb_demux->default_feeds);
+		netdev_dbg(dev, "alloc pid_stream\n");
+		ret = demux->allocate_pid_stream(demux, &priv->pid_stream, dvb_net_pid_callback,
+																		 priv->pid, /* pid */
+																		 TS_PACKET, /* type */
+																		 DMX_PES_OTHER, /* pes type */
+																		 timeout,    /* timeout */
+																		 dvb_demux->default_feeds);
 		if (ret < 0) {
 			pr_err("%s: could not allocate ts feed\n", dev->name);
-			priv->tsfeed = NULL;
+			priv->pid_stream = NULL;
 			goto error;
 		}
 		netdev_dbg(dev, "start filtering\n");
-		priv->tsfeed->start_filtering(priv->tsfeed);
+		priv->pid_stream->start_filtering(priv->pid_stream);
 	} else
 		ret = -EINVAL;
 
@@ -1164,13 +1164,13 @@ static int dvb_net_feed_stop(struct net_device *dev)
 		} else
 			pr_err("%s: no feed to stop\n", dev->name);
 	} else if (priv->feedtype == DVB_NET_FEEDTYPE_ULE) {
-		if (priv->tsfeed) {
-			if (priv->tsfeed->is_filtering) {
-				netdev_dbg(dev, "stop tsfeed\n");
-				priv->tsfeed->stop_filtering(priv->tsfeed);
+		if (priv->pid_stream) {
+			if (priv->pid_stream->is_filtering) {
+				netdev_dbg(dev, "stop pid_stream\n");
+				priv->pid_stream->stop_filtering(priv->pid_stream);
 			}
-			priv->demux->release_ts_feed(priv->demux, priv->tsfeed);
-			priv->tsfeed = NULL;
+			priv->demux->release_pid_stream(priv->demux, priv->pid_stream);
+			priv->pid_stream = NULL;
 		}
 		else
 			pr_err("%s: no ts feed to stop\n", dev->name);

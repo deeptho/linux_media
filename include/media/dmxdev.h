@@ -21,6 +21,7 @@
 
 #include <linux/types.h>
 #include <linux/spinlock.h>
+#include <linux/kernel.h>
 #include <linux/time.h>
 #include <linux/timer.h>
 #include <linux/wait.h>
@@ -64,31 +65,15 @@ enum dmxdev_type {
  * @DMXDEV_STATE_TIMEDOUT:	Indicates a timeout condition.
  */
 enum dmxdev_state {
-	DMXDEV_STATE_FREE,
-	DMXDEV_STATE_ALLOCATED,
-	DMXDEV_STATE_SET_BBFRAMES,
-	DMXDEV_STATE_SET_PES,
-	DMXDEV_STATE_GO,
-	DMXDEV_STATE_DONE,
+	DMXDEV_STATE_FREE,       //state before opening device
+	DMXDEV_STATE_ALLOCATED,  //state  after opening device but before any ioctl
+	DMXDEV_STATE_SET_STREAM_SELECT, //state before any final output selection
+	DMXDEV_STATE_SET_PES,    //state after DMX_SET_FILTER or DMX_SET_PES
+	DMXDEV_STATE_GO,         //state when running
+	DMXDEV_STATE_DONE,      //state after one-short section filter has finished
 	DMXDEV_STATE_TIMEDOUT
 };
 
-/**
- * struct dmxdev_feed - digital TV dmxdev feed
- *
- * @pid:	Program ID to be filtered
- * @ts:		pointer to &struct dmx_ts_feed
- * @next:	&struct list_head pointing to the next feed.
- */
-struct dmxdev_feed {
-	/*The parameters below define how the struct dmx_ts_feed feed should be constructed
-		Construction only occurs when the filter is started, at which time the parameters are
-		copies into struct dmx_ts_feed
-	*/
-	u16 pid;
-	struct dmx_ts_feed *ts;
-	struct list_head next;
-};
 
 /**
  * struct dmxdev_filter - digital TV dmxdev filter
@@ -132,21 +117,37 @@ struct dmxdev_filter {
 		struct dmx_section_filter *sec;
 	} filter;
 
+	/*
+		The legacy code supports two types of filters
+		1. a filter unpacking sections in a single pid
+		2. a filter remuxing multiple pids into a partial or full transport stream
+
+		neumo changes this as follows
+		1. a filter unpacking sections in a single pid
+		2. a filter remuxing multiple pids into a partial or full transport stream, after optionally first
+		   internally extracting a transport stream from an embedded bbframes (stid) or t2mi stream
+
+		A future better interface would also allow internal extraction of a transport stream from an
+		embedded bbframes (stid) or t2mi stream, but very few legacy applications use section filters anyway
+	 */
 	union {
-		/* list of TS and PES feeds (struct dmxdev_feed) */
+		/* list of all output pid feeds and internal streams (t2mi, stid) activated by filter,
+			 in order of activation.
+			 This can only contain a single bbframes_stream and/or a single stid_stream, followed by
+			 multiple pid_streams, due to the interface calling conventions.
+		*/
 		struct list_head dmxdev_feed_list;
+		/*
+			or a single section feed
+		 */
 		struct dmx_section_feed *sec;
 	} feed;
-
-	/* list of all sub_demuxes activated by filter, in order of activation
-		 points to entries of type struct dmxdev_bbframes_stream
-	 */
-	struct list_head dmxdev_bbframes_stream_list;
 
 	union {
 		struct dmx_sct_filter_params sec;
 		struct dmx_pes_filter_params pes;
 	} params;
+
 	enum dmxdev_type type;
 	enum dmxdev_state state;
 	struct dmxdev *dev;

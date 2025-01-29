@@ -2453,22 +2453,22 @@ fe_lla_error_t FE_STiD135_CarrierGetQuality(STCHIP_Info_t* hChip, enum fe_stid13
 
 			Imin = 0;
 			Imax = lookup->size-1;
-			BUG_ON(Imin<0 || Imin>=sizeof(lookup->table)/sizeof(lookup->table[0]));
-			BUG_ON(Imax<0 || Imax>=sizeof(lookup->table)/sizeof(lookup->table[0]));
+			WARN_ON(Imin<0 || Imin>=sizeof(lookup->table)/sizeof(lookup->table[0]));
+			WARN_ON(Imax<0 || Imax>=sizeof(lookup->table)/sizeof(lookup->table[0]));
 			if (INRANGE(lookup->table[Imin].regval, regval,
 									lookup->table[Imax].regval))
 				{
 				while ((Imax - Imin) > 1) {
 					i = (Imax + Imin) >> 1;
-					BUG_ON(Imin<0 || Imin>=sizeof(lookup->table)/sizeof(lookup->table[0]));
+					WARN_ON(Imin<0 || Imin>=sizeof(lookup->table)/sizeof(lookup->table[0]));
 					if (INRANGE(lookup->table[Imin].regval,
 						regval,lookup->table[i].regval))
 						Imax = i;
 					else
 						Imin = i;
 				}
-				BUG_ON(Imin<0 || Imin>=sizeof(lookup->table)/sizeof(lookup->table[0]));
-				BUG_ON(Imax<0 || Imax>=sizeof(lookup->table)/sizeof(lookup->table[0]));
+				WARN_ON(Imin<0 || Imin>=sizeof(lookup->table)/sizeof(lookup->table[0]));
+				WARN_ON(Imax<0 || Imax>=sizeof(lookup->table)/sizeof(lookup->table[0]));
 				*c_n_p = ((regval - lookup->table[Imin].regval)
 					* (lookup->table[Imax].realval
 					- lookup->table[Imin].realval)
@@ -3354,7 +3354,7 @@ static fe_lla_error_t Estimate_Power_Int(struct stv* state,
 		/******** interpolate Gvana ************/
 		/* interpolate Gvana from LUT LutGvana */
 		//agc1 = (u32)((256 * agcrfin1) + agcrfin0);
-		BUG_ON(agcrfin1<0 || agcrfin1>=sizeof(LutGvanaIntegerTuner)/sizeof(LutGvanaIntegerTuner[0]));
+		WARN_ON(agcrfin1<0 || agcrfin1>=sizeof(LutGvanaIntegerTuner)/sizeof(LutGvanaIntegerTuner[0]));
 		switch(TunerNb) {
 			case AFE_TUNER1 :
 				gain_analogx1000 = LutGvanaIntegerTuner[agcrfin1];
@@ -3571,7 +3571,7 @@ static fe_lla_error_t estimate_band_power_demod_not_locked(struct stv* state,
 	agciqin1 = (u8)reg_value;
 	error |= ChipGetOneRegister(state->chip->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC1IQIN0(Demod), &reg_value);
 	agciqin0 = (u8)reg_value;
-	BUG_ON(agcrfin1<0 || agcrfin1>=sizeof(LutGvanaIntegerTuner)/sizeof(LutGvanaIntegerTuner[0]));
+	WARN_ON(agcrfin1<0 || agcrfin1>=sizeof(LutGvanaIntegerTuner)/sizeof(LutGvanaIntegerTuner[0]));
 	switch(TunerNb) {
 		case AFE_TUNER1 :
 			gain_analogx1000 = LutGvanaIntegerTuner[agcrfin1];
@@ -6512,7 +6512,7 @@ fe_lla_error_t fe_stid135_diseqc_send(struct stv* state,
 					error |= ChipGetField(handle_demod, FLD_FC8CODEW_DVBSX_DISEQC_DISTXSTATUS_TX_FIFO_FULL(tuner_nb), &fld_value);
 					//vprintk("[%d] fld[%d]=%x",  tuner_nb, i, fld_value);
 				}
-				BUG_ON(i<0 || i>=nbdata);
+				WARN_ON(i<0 || i>=nbdata);
 				//vprintk("[%d] data[%d]=%x",  tuner_nb, i, data[i]);
 				error |= ChipSetOneRegister(handle_demod, (u16)REG_RC8CODEW_DVBSX_DISEQC_DISTXFIFO(tuner_nb), data[i]);	/* send byte to FIFO :: WARNING don't use set field	!! */
 				i++;
@@ -10725,8 +10725,6 @@ fe_lla_error_t  set_pls_mode_code(struct stv *state, u8 pls_mode, u32 pls_code)
 	return fe_stid135_set_pls(state, pls_mode, pls_code);
 }
 
-
-
 fe_lla_error_t set_stream_index(struct stv *state, s32 isi, s32 pls_mode, s32 pls_code)
 {
 	fe_lla_error_t  err = FE_LLA_NO_ERROR;
@@ -10742,7 +10740,7 @@ fe_lla_error_t set_stream_index(struct stv *state, s32 isi, s32 pls_mode, s32 pl
 		state->signal_info.pls_mode = 0;
 		state->signal_info.pls_code = 1;
 	} else  {
-		BUG_ON (isi<0);
+		WARN_ON (isi<0);
 		set_pls_mode_code(state, pls_mode, pls_code);
 		state->signal_info.pls_mode = pls_mode;
 		state->signal_info.pls_code = pls_code;
@@ -12399,7 +12397,7 @@ STCHIP_Error_t stvvglna_init(SAT_VGLNA_Params_t *InitParams, STCHIP_Info_t** hCh
 			**     ----------------------
 			********************************/
 			ChipUpdateDefaultValues(hChip,DefSTVVGLNAVal);
-			BUG_ON(STVVGLNA_NBREGS > hChip->NbRegs);
+			WARN_ON(STVVGLNA_NBREGS > hChip->NbRegs);
 			for(i=0;i<STVVGLNA_NBREGS;i++)
 				hChip->pRegMapImage[i].Size = STCHIP_REGSIZE_8;
 
@@ -12830,7 +12828,7 @@ bool state_chip_is_locked_by_state(struct stv* state) {
 
 void state_chip_sleep_(struct stv* state, int timems, const char* func, int line) {
 	bool may_unlock = !card_is_locked_by_state(state);
-	BUG_ON (!state_chip_is_locked_by_state(state));
+	WARN_ON (!state_chip_is_locked_by_state(state));
 	if (may_unlock)
 		state_chip_unlock_(state, func, line);
 	else {

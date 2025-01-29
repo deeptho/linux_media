@@ -295,9 +295,12 @@ User space applications should proceed as follows
   stream. The demuxer will automatically pick one of the streams and demux that for the legacy application
 
 This should be set by adding the line
+
   ``options stid135 bbframes_auto=1''
-  in  /etc/modprobe.d/stid135.conf and rebooting, or by runnning the following command as root:
-  `` echo 1 > /sys/module/stid135/parameters/bbframes_auto'' (no need to reboot).
+  in  /etc/modprobe.d/stid135.conf and rebooting, or by runnning the following command as root (no need to reboot):
+
+  `` echo 1 > /sys/module/stid135/parameters/bbframes_auto''
+
 
 * One use of bbframes_auto is to provide a workaround for the non-working multistream 12606V@5.0W Streams a4 and 5 cannot
   be decoded properly due to what is probably a hardware bug. By asking the chip to output bbframes, the buggy bbframe
