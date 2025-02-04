@@ -722,7 +722,7 @@ static int dvb_dmxdev_start_feed(struct dmxdev *dmxdev,
 	else if (otype == DMX_OUT_TAP)
 		ts_type |= TS_PACKET | TS_DEMUX | TS_PAYLOAD_ONLY;
 
-	dprintk("feed=%p ts=%p currentsub_demux_feed=%p\n", feed, &feed->ts, 	filter->current_feeds);
+	dprintk("feed=%p ts=%p current_feeds=%p\n", feed, &feed->ts, 	filter->current_feeds);
 	ret = dmxdev->demux->allocate_ts_feed(dmxdev->demux, &feed->ts,
 																				dvb_dmxdev_ts_callback,
 																				feed->pid, ts_type, ts_pes, timeout,
@@ -849,14 +849,14 @@ static int dvb_dmxdev_filter_start(struct dmxdev_filter *filter)
 
 		/* if no feed found, try to allocate new one */
 		if (!*secfeed) {
+			dprintk("secfeed=%p current_feeds=%p\n", secfeed, filter->current_feeds);
 			ret = dmxdev->demux->allocate_section_feed(dmxdev->demux,
 																								 secfeed, dvb_dmxdev_section_callback,
 																								 para->pid,
 																								 (para->flags & DMX_CHECK_CRC) ? 1 : 0,
 																								 filter->current_feeds);
 			if (ret < 0) {
-				pr_err("DVB (%s): could not alloc feed\n",
-				       __func__);
+				dprintk("could not alloc feed ret=%d\n", ret);
 				return ret;
 			}
 		} else {
@@ -1250,6 +1250,7 @@ static int dvb_demux_do_ioctl(struct file *file,
 		}
 		ret = dvb_dmxdev_section_filter_set(dmxdev, dmxdevfilter, parg);
 		mutex_unlock(&dmxdevfilter->mutex);
+		dprintk("DONE: dvb_dmxdev_section_filter_set ret=%d\n", ret);
 		break;
 
 	case DMX_SET_PES_FILTER:
@@ -1259,7 +1260,7 @@ static int dvb_demux_do_ioctl(struct file *file,
 			return -ERESTARTSYS;
 		}
 		ret = dvb_dmxdev_pes_filter_set(dmxdev, dmxdevfilter, parg);
-		dprintk("DONE: dvb_dmxdev_pes_filter_set");
+		dprintk("DONE: dvb_dmxdev_pes_filter_set ret=%d\n", ret);
 		mutex_unlock(&dmxdevfilter->mutex);
 		break;
 

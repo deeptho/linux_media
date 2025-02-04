@@ -1304,10 +1304,7 @@ static int dvbdmx_allocate_ts_feed(struct dmx_demux *dmx_demux, struct dmx_ts_fe
 {
 	struct dvb_demux* demux =  container_of(dmx_demux, struct dvb_demux, dmx);
 	struct dvb_demux_feed *feed=0;
-	if(!parent_feeds)
-		parent_feeds= demux->default_feeds;
 
-	BUG_ON(!parent_feeds);
 	if (pid > DMX_MAX_PID)
 		return -EINVAL;
 
@@ -1318,6 +1315,10 @@ static int dvbdmx_allocate_ts_feed(struct dmx_demux *dmx_demux, struct dmx_ts_fe
 		mutex_unlock(&demux->mutex);
 		return -EBUSY;
 	}
+
+	if(!parent_feeds)
+		parent_feeds= demux->default_feeds;
+	BUG_ON(!parent_feeds);
 
 	feed->type = DMX_TYPE_TS;
 	feed->cb.ts = callback;
@@ -1585,27 +1586,29 @@ static int dmx_section_feed_release_filter(struct dmx_section_feed* secfeed,
 	return 0;
 }
 
-static int dvbdmx_allocate_section_feed(struct dmx_demux *demux, struct dmx_section_feed ** section_feed,
+static int dvbdmx_allocate_section_feed(struct dmx_demux *dmx_demux, struct dmx_section_feed ** section_feed,
 																				dmx_section_cb callback, u16 pid, bool check_crc,
 																				struct dvb_demux_feeds* parent_feeds)
 {
-	struct dvb_demux *dvbdmx = (struct dvb_demux *)demux;
+	struct dvb_demux* demux =  container_of(dmx_demux, struct dvb_demux, dmx);
 	struct dvb_demux_feed *feed;
-
 	if (pid > 0x1fff)
 		return -EINVAL;
 
-	if (mutex_lock_interruptible(&dvbdmx->mutex))
+	if (mutex_lock_interruptible(&demux->mutex))
 		return -ERESTARTSYS;
 
-	if (!(feed = dvb_dmx_feed_alloc(dvbdmx))) {
-		mutex_unlock(&dvbdmx->mutex);
+	if (!(feed = dvb_dmx_feed_alloc(demux))) {
+		mutex_unlock(&demux->mutex);
 		return -EBUSY;
 	}
-
+	if(!parent_feeds)
+		parent_feeds= demux->default_feeds;
+	dprintk("parent_feeds=%p\n", parent_feeds);
+	BUG_ON(!parent_feeds);
 	feed->type = DMX_TYPE_SEC;
 	feed->cb.sec = callback;
-	feed->demux = dvbdmx;
+	feed->demux = demux;
 	feed->pid = 0xffff;
 	feed->buffer_flags = 0;
 	feed->feed.sec.secbuf = feed->feed.sec.secbuf_base;
@@ -1616,7 +1619,7 @@ static int dvbdmx_allocate_section_feed(struct dmx_demux *demux, struct dmx_sect
 
 	(*section_feed) = &feed->feed.sec;
 	(*section_feed)->is_filtering = 0;
-	(*section_feed)->parent_dmx_demux = demux;
+	(*section_feed)->parent_dmx_demux = dmx_demux;
 	(*section_feed)->priv = NULL;
 
 	(*section_feed)->allocate_section_filter = dmx_section_feed_allocate_filter;
@@ -1630,7 +1633,7 @@ static int dvbdmx_allocate_section_feed(struct dmx_demux *demux, struct dmx_sect
 	feed->feed.sec.check_crc = check_crc;
 
 	feed->state = DMX_STATE_READY;
-	mutex_unlock(&dvbdmx->mutex);
+	mutex_unlock(&demux->mutex);
 	return 0;
 }
 
