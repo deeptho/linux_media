@@ -372,6 +372,17 @@ continuing to work ``as is''.
    DMX_SET_PES_FILTER is used to select a first PID to add to the output, and DMX_ADD_PID to add addional
    pids.
 
+# Changes in release-1.6
+* New demux api to support internal demuxing of bbframes streams (stid135-based cards only) and t2mi streams
+  (all cards).
+* Updated neumodvb api version to 1.6
+* Documented neumodvb api version 1.6
+* New /sys/module/dvb_core/demuxX/demux and /sys/module/dvb_core/demuxX/dmxdev entries to show the
+  internal state of demuxing.
+* Bug: incorrect unlocking during sleep.
+* Bug: pls_code set to 0 when blind-tuning from positioner_dialog.
+* Remove some of the confusing mess due to isi/pls_code/mode specification in stream_id in legacy applications.
+
 # Changes in release-1.5
 * Added a new demux interface allowing internal demuxing of bbrames; Extended stid135 driver to make
   use of this demux interface.
