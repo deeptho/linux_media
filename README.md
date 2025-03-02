@@ -114,6 +114,8 @@ through the sysfs interface it is possible to obtain more information about
 the cards and what they are doing. Also it is possible to slightly enhance using existing
 programs, such as tvheadend.
 
+
+## Additional information and configuration via sysfs
 * Through /sys/module/stid135/... it is possible to figure out which adapter belongs to which
   card. There is no guarantee that the directory layout and content will have this specific
   format in future. So do not rely on it.
@@ -145,7 +147,12 @@ programs, such as tvheadend.
   Note that TvHeadend will probably have difficulties coping with that much data, so it is best
   to stick with a smaller number of slave tuners.
 
-## The neumoDVB kernel api
+* /sys/module/dvb_core/demuxX/demux displays the internal state of the demuxer. It shows the hierarchy
+  of streams.
+* /sys/module/dvb_core/demuxX/dmxdev displays the internal state of the demuxer, but from the point
+  of view of each open file descriptor.
+
+## The neumoDVBapi
 
 This API has been kept mostly compatible with the existing DVB-V5 api, both internally in
 the kernel and externally towards user applications. However, the kernel-side
@@ -160,7 +167,18 @@ User space applications should proceed as follows
   sysfs file can also be used to distinghuish between different versions of the drivers. Note that the
   neumoDVB api is not yet finalized.
 
-* Using the *FE_GET_EXTENDED_INFO* ioctl, get information about the installed cards and adapters,
+* Then tune the frontend, which involved the existing DVB-V5 api ioctls, but with additional options,
+  to retrieve spectral data (instead of tuning), or to retrieve constellation samples (along with tuning),
+  to support blind tuning or blindscanning a satellite band. There is also an additional ioctl to
+  exploit internal switches on some multi-input DVB-S2 cards. These ioctls allow connecting a specific
+  internal frontend to one of four internal wide-band tuners.
+
+* Then use the demux ioctls to extract the desired transport stream or section data. New icoctls
+  have been added to select the desired embedded T2MI or STID streams.
+
+### The neumoDVBapi frontend ioctl api
+
+* *FE_GET_EXTENDED_INFO* Using this ioctl, get information about the installed cards and adapters,
   specificaly their names (for use in GUI and in log files) and their *MAC address*. The latter
   is a unique id, which can be used to associate configuration information. For instance, the adapter
   number of a specific adapter may differ from one boot to the next when a card has been removed,
@@ -170,7 +188,7 @@ User space applications should proceed as follows
   the MAC address will change. For USB devices there are even fewer guarantees, and the card may appear
   at a new MAC address after removing and re-attaching it.
 
-* When tuning to a specific mux, first call the *FE_SET_RF_INPUT* ioctl. This is used to connect
+* *FE_SET_RF_INPUT* When tuning to a specific mux, first call this ioctl to connect
   a demodulator to a specific RF_INPUT, but also to synchronize secondary device (LNBs and switches)
   configuration when multiple demodulators connect to the same tuner and thus to the same LNB and switches.
 
@@ -274,7 +292,85 @@ User space applications should proceed as follows
 
 * The remainder of the tuning process is similar as with the standard DVB-v5 api, except that additional
   tuning properties have been added to indicate blind scanning and that additional properties are returned
-  to indicate discovered modulation parameters.
+  to indicate discovered modulation parameters:
+
+  ** DTV_ALGORITHM: specify the type of blind tuning to perform
+  ** DTV_SEARCH_RANGE: specify the frequency range to search during blind tuning
+  ** DTV_ISI_LIST: retrieve list of ISI codes (stream ids)
+  ** DTV_PLS_SEARCH_LIST: specify a ist of PLS scrambling modes/codes to test during scan
+  ** DTV_PLS_SEARCH_RANGE: specify a range of PLS scrambling modes/codes to test during scan
+  ** DTV_SCAN_START_FREQUENCY: specify the start of the frequency range to scan
+  ** DTV_SCAN_END_FREQUENCY: specify the end of the frequency range to scan
+  ** DTV_SCAN_RESOLUTION: specify the frequency step for a range scan
+  ** DTV_SCAN_FFT_SIZE: specify the FFT size of frequency scan
+  ** DTV_SCAN: request blind scanning a range of frequencies
+  ** DTV_SPECTRUM: request starting a spectrum acquisition
+  ** DTV_MAX_SYMBOL_RATE: specify maximum allowed symbol rate during blindscan
+  ** DTV_CONSTELLATION: request constellation samples to be returned after tuning
+  ** DTV_HEARTBEAT: specify how frequently the API asks the drivers to check quality, strength, lock status...
+     of currently tuned demods
+  ** DTV_BITRATE: request returning the bit rate of the received stream
+  ** DTV_LOCKTIME: request returning the time until first lock
+  ** DTV_MATYPE_LIST: request returning a list of present matypes and stream_ids
+  ** DTV_RF_INPUT: request returning the currently connected rf_input
+  ** DTV_SET_SEC_CONFIGURED: inform the driver that the frontend's secondary equipment (diseqc switches,
+     power supply) has been properly configured and that the equipment is fully powered up and ready for
+     use by slave demods.
+  ** DTV_OUTPUT_BBFRAMES: forc stid135 based cards to send bbframes to the demux api when multi-stream
+     is received.
+
+### The neumoDVB demux api
+
+neumoDVB adds additional ioctls to the DVB-v5 API. These ioctls acitvate internal demuxing of
+T2MI- or STID-encapsulated transport streams:
+
+* STID-encapsulated streams are created by the stid135 chips on some TBS cards. When the chip receives
+  data in a non-TS format, the chip encapsulates those in a single-PID transport stream. When the
+  chip receives a multi-stream, the fronend usually specifies the desired transport stream by specifying its
+  stream id (ISI).
+
+  However, by specifying the bbframes_auto=1 as a module option to stid35.ko, or by
+  sending the command DTV_OUTPUT_BBFRAMES in the FE_SET_PROPERTY frontend ioctl during tuning, this embedding
+  can be forced. In that case the bbframes of **all** strems are embebedded into a single PID transport stream.
+  This is useful to work around a hardware bug, which in rare cases prevents correct reception of multi-streams.
+  It is also useful to receive and decode all streams simultaneously, while using only a single demod.
+
+* T2MI-encapsulated streams are DVB-T2 transport streams encapsulated in a single PID and transmitted over
+  DVB-S2 transport streams. Multiple such T2MI streams can be sent in the same DVB-S2 mux, embedded in different
+  PIDs.
+
+To make use of this functionality, user space programs may need to request  DTV_OUTPUT_BBFRAMES in the frontend
+FE_SET_PROPERTY ioctl or using the module option bbframes_auto. Moreover, additional demux ioctls  need
+to be used to internally demux embedded transport streams. In case the new demux ioctls are not used
+(e.g., in legacy programs) neumoDVB tries to select a reasonable default:
+When an ISI (stream_id) was specified during tuning (frontend ioctl FE_SET_PROPERTY), this ISI will be
+used for programs not calling the DMX_SET_STID_STREAM demux ioctl. This will result in legacy programs
+continuing to work ``as is''.
+
+* *DMX_SET_STID_STREAM* Call this ioctl first to specify the ISI to demux in a multi-stream.
+  Each open file descriptor of the demux device can only handle one transport stream. The selected ISI
+  therefore cannot be changed and all remaining ioctls will apply to the selected stream. It is however
+  possible to open the demux device multiple times in parallel and select a different ISI in each session.
+  This allows all streams in a multi-stream mux to be received simultaneously. Also, if a stream_id
+  was specifified during tuning, that stream_id (ISI) will be used if the DMX_SET_STID_STREAM is not
+  called.
+
+  It is illegal to call DMX_SET_STID_STREAM multiple times on the same open demux. It is also illegal
+  to call DMX_SET_STID_STREAM after a DMX_SET_T2MI_STREAM, DMX_SET_PES_FILTER,
+  DMX_SET_FILTER or DMX_ADD_PID ioctl. The only exception is immediately after a DMX_STOP call, which resets the
+  internal state to the initial one.
+
+* *DMX_SET_T2MI_STREAM* Call this ioctl first, or after DMX_SET_STID_STREAM, to specify which T2MI stream
+  to demux internally. All remaining ioctls will now apply to the thus selected transport stream.
+  In theory this selected transport stream can it self contain one or more T2MI streams, although this never
+  occurs in practice. It is then allowed to call DMX_SET_T2MI_STREAM a second time to select the desired
+  stream.
+
+  Again, it is illegal to call DMX_SET_T2MI_STREAM after  DMX_SET_PES_FILTER, DMX_SET_FILTER or DMX_ADD_PID.
+
+*  *DMX_SET_FILTER* and *DMX_SET_PES_FILTER*, *DMX_ADD_PID* behave as in DVB-V5 api. Speficically,
+   DMX_SET_PES_FILTER is used to select a first PID to add to the output, and DMX_ADD_PID to add addional
+   pids.
 
 # Changes in release-1.5
 * Added a new demux interface allowing internal demuxing of bbrames; Extended stid135 driver to make
