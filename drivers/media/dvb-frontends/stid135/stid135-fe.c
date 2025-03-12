@@ -93,7 +93,7 @@ static void tst_(struct dvb_frontend* fe, const char* func, int line)
 	struct stv *state = fe->demodulator_priv;
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
 	struct fe_sat_signal_info* si = &state->signal_info;
-	state_dprintk_(func, line, "isi=%d pls_mode=%d pls_code=%d "
+	state_dprintk_(func, line, "ZZZ isi=%d pls_mode=%d pls_code=%d "
 								 " stream_id=%d\n", si->isi, si->pls_mode, si->pls_code, p->stream_id);
 }
 
@@ -854,9 +854,6 @@ static enum fe_ioctl_result stid135_select_rf_in_(struct stv* state, struct fe_r
 			bool must_lock = (old_chip != state->chip) && !state_chip_is_locked_by_state(state);
 			if(must_lock)
 				chip_chip_lock(old_chip);
-			state_dprintk("must_lock=%d old_chip=%p state->chip=%p old_tune=%p new_tuner=%p is_locked=%d\n",
-										must_lock, old_chip,  state->chip, old_tuner, new_tuner,
-										state_chip_is_locked_by_state(state));
 			err = fe_stid135_set_22khz_cont(&old_chip->ip, old_rf_in_no + 1, false);
 			if(must_lock)
 				chip_chip_unlock(old_chip);
@@ -1746,9 +1743,13 @@ static int stid135_set_demux_default_stream_id(struct dvb_frontend* fe) {
 	bool output_bbframes = false;
 	int ret=0;
 	int stream_id = p->stream_id & 0xff;
+	bool is_mis = !((state->signal_info.matype >> 5) &0x1);
+	bool is_ts = ((state->signal_info.matype >> 6) &0x3) == 0x3;
+	dprintk("isi=%d%d is_mis=%d is_ts=%d\n", state->signal_info.isi, p->stream_id, is_mis, is_ts);
 	if(stream_id==0xff)
 		stream_id = -1;
-	output_bbframes = (p->output_bbframes || bbframes_auto) && (stream_id!=-1);
+	//only apply bbframes_auto in very specific case of a mult-stream transport stream
+	output_bbframes = (p->output_bbframes || (bbframes_auto && is_mis && is_ts)) && (stream_id!=-1);
 	state_dprintk("before: p->output_bbframes=%d stream_id=%d bbframes_auto=%d\n",
 					p->output_bbframes, stream_id, bbframes_auto);
 	p->output_bbframes = output_bbframes;
@@ -1775,12 +1776,10 @@ static int stid135_tune_(struct dvb_frontend* fe, bool re_tune,
 	}
 	//state_dprintk("re_tune=%d\n", re_tune);
 	if (re_tune) {
+		struct dtv_frontend_properties *p = &fe->dtv_property_cache;
 		state_dprintk("re_tune\n");
 		stid135_set_sec_ready_(fe);
 		state->signal_info.out_of_llr = false;
-
-		stid135_set_demux_default_stream_id(fe);
-
 		r = stid135_set_parameters(fe);
 		if (r) {
 			state->signal_info.has_error = true;
@@ -1791,10 +1790,9 @@ static int stid135_tune_(struct dvb_frontend* fe, bool re_tune,
 			return r;
 		}
 		state->tune_time = jiffies;
-	}
 
-	if(re_tune) {
-		struct dtv_frontend_properties *p = &fe->dtv_property_cache;
+		stid135_set_demux_default_stream_id(fe);
+
 		vprintk("[%d] RETUNE: GET SIGNAL\n", state->nr+1);
 		/*
 			 retrieve information about modulation, frequency, symbol_rate
@@ -2287,7 +2285,7 @@ static int stid135_read_signal_strength(struct dvb_frontend* fe, u16 *strength)
 
 	*strength = 0;
 	for (i=0; i < p->strength.len; i++) {
-		WARN_ON(i <0 || i>= sizeof(p->strength.stat)/sizeof(p->strength.stat[0])); //triggered
+		WARN_ON(i < 0 || i >= sizeof(p->strength.stat)/sizeof(p->strength.stat[0])); //triggered
 		if (p->strength.stat[i].scale == FE_SCALE_RELATIVE)
 			*strength = (u16)p->strength.stat[i].uvalue;
 		else if (p->strength.stat[i].scale == FE_SCALE_DECIBEL)
@@ -2304,7 +2302,7 @@ static int stid135_read_snr(struct dvb_frontend* fe, u16 *snr)
 
 	*snr = 0;
 	for (i=0; i < p->cnr.len; i++) {
-		WARN_ON(i <0 || i>= sizeof(p->cnr.stat)/sizeof(p->cnr.stat[0]));
+		WARN_ON(i < 0 || i >= sizeof(p->cnr.stat)/sizeof(p->cnr.stat[0]));
 		if (p->cnr.stat[i].scale == FE_SCALE_RELATIVE)
 			*snr = (u16)p->cnr.stat[i].uvalue;
 	}
@@ -2318,7 +2316,7 @@ static int stid135_read_ber(struct dvb_frontend* fe, u32 *ber)
 
 	*ber = 1;
 	for (i=0; i < p->post_bit_error.len; i++) {
-		WARN_ON(i <0 || i>= sizeof(p->post_bit_error.stat)/sizeof(p->post_bit_error.stat[0]));
+		WARN_ON(i < 0 || i >= sizeof(p->post_bit_error.stat)/sizeof(p->post_bit_error.stat[0]));
 		if ( p->post_bit_error.stat[0].scale == FE_SCALE_COUNTER )
 			*ber = (u32)p->post_bit_error.stat[0].uvalue;
 	}
