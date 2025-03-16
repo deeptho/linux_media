@@ -3271,7 +3271,7 @@ static int dvb_frontend_handle_ioctl(struct file *file,
 						(fe->ops.info.supports_neumo && fe->ops.info.default_rf_input >=0) ?
 						fe->ops.info.default_rf_input : fe->dvb->num);
 		info->supports_neumo = fe->ops.info.supports_neumo;
-		info->supports_bbframes = fe->ops.info.supports_neumo;
+		info->supports_bbframes = fe->ops.info.supports_bbframes;
 		info->default_rf_input = (fe->ops.info.supports_neumo && fe->ops.info.default_rf_input >=0) ?
 			fe->ops.info.default_rf_input : 0;
 		if (fe->ops.info.num_rf_inputs > 0 ) {
