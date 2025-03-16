@@ -2832,10 +2832,10 @@ int dvb_demux_set_bbframes_state(struct dvb_demux* demux, bool embedding_is_on, 
 	demux->default_stream_id = default_stream_id;
 	dprintk("called with embedding_is_on=%d embedding_pid=%d default_stream_id=%d \n", embedding_is_on,
 					embedding_pid, default_stream_id);
+	if(!xa_empty(&demux->default_feeds->embedded_streams))
+		dprintk("demux->default_feeds->embedded_streams is not empty\n");
 
 	int ret;
-	//default_feeds is for legacy programs who do not / cannot  call allocate_stid_streams
-	WARN_ON(!xa_empty(&demux->default_feeds->embedded_streams));
 	if(demux->fe_bbframes_stream) {
 		dprintk("calling dvbdmx_release_bbframes_stream_ to release demux->fe_bbframes_stream=%p\n", demux->fe_bbframes_stream);
 		ret = dvbdmx_release_bbframes_stream_(demux, demux->fe_bbframes_stream);
