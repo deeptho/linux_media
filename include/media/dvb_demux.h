@@ -155,7 +155,6 @@ struct ts_stream {
 /**
  * struct bbframes_stream - represents a single stream embedded in bbframes
  * @isi:	The Input Stream Identifier (ISI) of the stream.
- * @plp:	PLP identifier (onlyu fro t2mi)
  * @upl:	User Packet Length.
  * @dfl:	Data Field Length.
  * @syncd:	Syncd field from stream.
@@ -172,7 +171,6 @@ struct ts_stream {
  */
 struct bbframes_stream {
 	int isi;
-	int plp;
 	struct kref refcount;
 	struct embedded_stream* parent_embedded_stream;
 	struct ts_stream ts;

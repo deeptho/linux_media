@@ -658,7 +658,7 @@ struct dmx_demux {
 															struct dvb_demux_feeds* parent_feeds);
 	int (*allocate_t2mi_stream)(struct dmx_demux *demux,
 															struct dmx_t2mi_stream* stream_ret,
-															int embedding_pid, int embedded_isi, int embedded_plp,
+															int embedding_pid, int embedded_isi,
 															struct dvb_demux_feeds* parent_feeds);
 	int (*release_bbf_stream)(struct dmx_demux *demux, struct bbframes_stream* bbs);
 

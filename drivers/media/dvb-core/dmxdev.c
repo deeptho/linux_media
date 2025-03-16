@@ -582,7 +582,7 @@ static int dvb_dmxdev_feed_start(struct dmxdev_filter *filter)
 					dprintk("Calling with t2mi=%p  pid=%d isi=%d current_feeds=%p\n",
 									t2mi, t2mi->embedding_pid, t2mi->isi, filter->current_feeds);
 					ret = filter->dev->demux->allocate_t2mi_stream(filter->dev->demux, t2mi,
-																												 t2mi->embedding_pid, t2mi->isi, t2mi->plp,
+																												 t2mi->embedding_pid, t2mi->isi,
 																												 filter->current_feeds);
 					dprintk("setting current_feeds=%p was %p ret=%d\n", t2mi->feeds, filter->current_feeds, ret);
 					filter -> current_feeds = t2mi->feeds;
@@ -905,8 +905,7 @@ static int dvb_dmxdev_filter_start(struct dmxdev_filter *filter)
 				dprintk("Calling with bbs=%p  pid=%d isi=%d plp=%d current_feeds=%p\n",
 								bbs, bbs->embedding_pid, bbs->isi, bbs->plp, filter->current_feeds);
 				ret = filter->dev->demux->allocate_t2mi_stream(filter->dev->demux, bbs,
-																											bbs->embedding_pid, bbs->isi, bbs->plp,
-																											 filter->current_feeds);;
+																											 bbs->embedding_pid, bbs->isi, filter->current_feeds);
 
 				dprintk("setting current_feeds=%p was %p ret=%d\n", bbs->feeds, filter->current_feeds, ret);
 				filter -> current_feeds = bbs->feeds;

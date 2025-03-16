@@ -508,9 +508,8 @@ static void	bbframes_stream_reset(struct bbframes_stream* bbf) {
 
 static void	bbframes_stream_init(struct bbframes_stream* bbf,
 																 struct embedded_stream* parent_embedded_stream, struct dvb_demux* demux,
-																 int embedding_pid, int isi, int plp) {
+																 int embedding_pid, int isi) {
 	bbf->isi = isi;
-	bbf->plp = plp;
 	kref_init(&bbf->refcount);
 	bbf->parent_embedded_stream = parent_embedded_stream;
 	bbf->feeds = kzalloc(sizeof(struct dvb_demux_feeds), GFP_KERNEL);
@@ -2036,7 +2035,7 @@ static int demux_ts_feed_stop_filtering(struct pid_stream *ts_feed)
 }
 
 static struct bbframes_stream* dvb_dmx_find_or_alloc_bbf_stream
-(struct dvb_demux* demux, struct embedded_stream* emb, int embedding_pid, int isi, int plp) {
+(struct dvb_demux* demux, struct embedded_stream* emb, int embedding_pid, int isi) {
 	struct bbframes_stream* bbf = NULL;
 	struct bbframes_stream* old_bbf = NULL;
 	bbf = xa_load(&emb->bbf_streams, isi);
@@ -2044,7 +2043,7 @@ static struct bbframes_stream* dvb_dmx_find_or_alloc_bbf_stream
 		bbf = kzalloc(sizeof(struct bbframes_stream), GFP_KERNEL);
 		dprintk("ALLOC bbf=%p stid.refcount=%d embedding_pid=%d isi=%d\n", bbf,
 						atomic_read(&emb->refcount.refcount.refs), embedding_pid, isi);
-		bbframes_stream_init(bbf, emb, demux, embedding_pid, isi, plp);
+		bbframes_stream_init(bbf, emb, demux, embedding_pid, isi);
 		dprintk("inited bbf\n");
 		bbf->isi = isi;
 		bbf->bbf_crc8 = -1;
@@ -2129,7 +2128,7 @@ static int dvbdmx_allocate_stid_stream_(struct dvb_demux* demux,
 		embedded_stream_dprintk(emb, "attempting to allocate an stid stream for other embedded stream\n");
 	}
 
-	bbf = dvb_dmx_find_or_alloc_bbf_stream(demux, emb, embedding_pid, embedded_isi, 0 /*plp*/);
+	bbf = dvb_dmx_find_or_alloc_bbf_stream(demux, emb, embedding_pid, embedded_isi);
 	dprintk("called  dvb_dmx_find_or_alloc_bbf bbf=%p\n", bbf);
 	embedded_stream_dprintk(emb, "before dvb_dmx_feed_alloc feeds=%p bbf=%p\n", emb->parent_feeds, bbf);
 	WARN_ON(!bbf->feeds);
@@ -2165,7 +2164,6 @@ static int dvbdmx_allocate_stid_stream(struct dmx_demux* dmx_demux,
 static int dvbdmx_allocate_t2mi_stream_(struct dvb_demux* demux,
 																				struct bbframes_stream** bbf_ret,
 																				int embedding_pid, int embedded_isi,
-																				int embedded_plp,
 																				struct dvb_demux_feeds* parent_feeds)
 {
 	struct bbframes_stream* bbf =NULL;
@@ -2219,7 +2217,7 @@ static int dvbdmx_allocate_t2mi_stream_(struct dvb_demux* demux,
 		embedded_stream_dprintk(emb, "attempting to allocate an stid stream for other embedded stream\n");
 	}
 
-	bbf = dvb_dmx_find_or_alloc_bbf_stream(demux, emb, embedding_pid, embedded_isi, embedded_plp);
+	bbf = dvb_dmx_find_or_alloc_bbf_stream(demux, emb, embedding_pid, embedded_isi);
 	dprintk("called  dvb_dmx_find_or_alloc_bbf stream=%p\n", bbf);
 	embedded_stream_dprintk(emb, "before dvb_dmx_feed_alloc feeds=%p stream=%p\n", emb->parent_feeds, bbf);
 	WARN_ON(!bbf->feeds);
@@ -2231,7 +2229,7 @@ static int dvbdmx_allocate_t2mi_stream_(struct dvb_demux* demux,
 
 static int dvbdmx_allocate_t2mi_stream(struct dmx_demux* dmx_demux,
 																			 struct dmx_t2mi_stream* stream_ret,
-																			 int embedding_pid, int embedded_isi, int embedded_plp,
+																			 int embedding_pid, int embedded_isi,
 																			 struct dvb_demux_feeds* parent_feeds)
 {
 	struct dvb_demux* demux =  container_of(dmx_demux, struct dvb_demux, dmx);
@@ -2242,7 +2240,7 @@ static int dvbdmx_allocate_t2mi_stream(struct dmx_demux* dmx_demux,
 		return -ERESTARTSYS;
 	}
 
-	ret = dvbdmx_allocate_t2mi_stream_(demux, &bbs, embedding_pid, embedded_isi, embedded_plp, parent_feeds);
+	ret = dvbdmx_allocate_t2mi_stream_(demux, &bbs, embedding_pid, embedded_isi, parent_feeds);
 	if(ret>=0) {
 		stream_ret->stream = bbs;
 		stream_ret->feeds = bbs->feeds;
