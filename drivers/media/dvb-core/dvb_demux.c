@@ -1130,7 +1130,20 @@ static inline bool get_t2mi_bbheader(struct t2mi_stream* t2mi, const uint8_t** p
 	//t2mi_stream_dprintk_nice(t2mi, "ISI=%d plp=%d\n", isi, t2mi->plp_id);
 	embedded_stream_set_matype(&t2mi->emb, t2mi->plp_id, matype);
 
+	/*
+		in theory t2mi streams can have more than one PLP (identified by plp_id,
+		which is the same as isi) embedded in them, but almost always they have only one.
+		Therefore we allow the called setting isi=T2MI_ANY_ISI as the stream_id.,
+		In that case we pick a stream_id at random, which will be fine if there is only one present.
+	 */
+	if(t2mi->default_isi <0)
+		t2mi->default_isi = t2mi->plp_id;
+
 	struct bbframes_stream* bbf = xa_load(&t2mi->emb.bbf_streams, t2mi->plp_id);
+	if(!bbf &&  t2mi->plp_id == t2mi->default_isi) {
+		bbf = xa_load(&t2mi->emb.bbf_streams, T2MI_UNSPECIFIED_PLP);
+	}
+
 	t2mi->emb.current_bbf = bbf;
 	if(!bbf) {
 #if 0
