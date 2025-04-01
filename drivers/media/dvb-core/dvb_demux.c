@@ -102,6 +102,13 @@ MODULE_PARM_DESC(dvb_demux_feed_err_pkts,
 	} while (0)
 
 
+#define t2mi_stream_dprintk(t2mi, fmt, arg...) do {											\
+		if (dvb_demux_dtdebug)																							\
+			printk(KERN_DEBUG pr_fmt("%s:%d t2mi[%p] pid=%d feeds=%p " fmt),	\
+						 __func__, __LINE__, t2mi, t2mi->emb.embedding_pid, t2mi->emb.parent_feeds, ##arg); \
+	} while (0)
+
+
 #define t2mi_stream_dprintk_nice(t2mi, fmt, arg...) do {							\
 		static int count=0;																									\
 		if (count++%100 == 0 && dvb_demux_dtdebug)													\
@@ -294,6 +301,8 @@ static uint8_t compute_crc8(const uint8_t *p, uint8_t len)
     return crc;
 }
 
+static void	bbframes_stream_reset(struct bbframes_stream* bbf);
+
 static inline u16 section_length(const u8 *buf)
 {
 	return 3 + ((buf[1] & 0x0f) << 8) + buf[2];
@@ -402,6 +411,16 @@ static inline void embedded_stream_reset(struct embedded_stream* emb)
 	emb->current_isi = -1;
 	emb->cc_counter = -1;
 	emb->current_bbf = NULL;
+	memset(emb->isi_plp_bitset, 0, sizeof(emb->isi_plp_bitset));
+	memset(emb->high_rolloff_mode, 0, sizeof(emb->high_rolloff_mode));
+	emb->num_streams = 0;
+	memset(emb->matypes, 0, sizeof(emb->matypes));
+
+	unsigned long index;
+	struct bbframes_stream* entry;
+	xa_for_each(&emb->bbf_streams, index, entry) {
+		bbframes_stream_reset(entry);
+	}
 }
 
 static inline void embedded_stream_init(struct embedded_stream* emb, struct dvb_demux_feeds*parent_feeds,
@@ -439,7 +458,7 @@ static inline void embedded_stream_set_matype(struct embedded_stream* emb, uint8
 			}
 		}
 	} else {
-		//store mattype
+		//store matype
 		emb->num_streams++;
 		emb->matypes[stream_id] = matype;
 		bitset[0] |=  (1<<(stream_id&31));
@@ -470,6 +489,7 @@ static void t2mi_stream_reset(struct t2mi_stream* t2mi)
 	t2mi->synced = false;
 	t2mi->frame_idx = -1;
 	t2mi->plp_id = -1;
+	t2mi->packet_header_isi = -1;
 	t2mi->intl_frame_start = 0;
 	t2mi->t2mi_crc32 = 0;
 	t2mi->t2mi_payload_bytes_left = 0;
@@ -482,6 +502,7 @@ static void t2mi_stream_init(struct t2mi_stream* t2mi, struct dvb_demux_feeds*pa
 														 int embedding_pid)
 {
 	embedded_stream_init(&t2mi->emb, parent_feeds, EMBEDDED_STREAM_TYPE_T2MI, embedding_pid);
+	t2mi->default_isi = -1;
 	t2mi_stream_reset(t2mi);
 	t2mi->num_crc_errors=0;
 #if 0
@@ -493,17 +514,17 @@ static void t2mi_stream_init(struct t2mi_stream* t2mi, struct dvb_demux_feeds*pa
 	reset stream when restarting after an errors
  */
 static void	bbframes_stream_reset(struct bbframes_stream* bbf) {
+	ts_stream_reset(&bbf->ts);
 	bbf->matype = -1;
 	bbf->upl = -1;
 	bbf->dfl = -1;
 	bbf->syncd = -1;
-	bbf->bbf_crc8 = -1;
 	bbf->issy = 0;
+	bbf->bbf_crc8 = -1;
 	bbf->bbf_payload_bytes_left = 0;
+	bbf->syncbyte = 0x47;
 	bbf->synced = false;
 	bbf->hem_mode = false;
-	bbf->syncbyte = 0x47;
-	ts_stream_reset(&bbf->ts);
 }
 
 static void	bbframes_stream_init(struct bbframes_stream* bbf,
@@ -1049,7 +1070,9 @@ static inline bool get_t2mi_bbheader(struct t2mi_stream* t2mi, const uint8_t** p
 	int num = min(num_bytes_available, (int)13 - t2mi->bbheader_idx);
 	if(t2mi->bbheader_idx + num > sizeof(t2mi->buff)) {
 		WARN_ON_ONCE("buffer overrun\n");
+		t2mi_stream_dprintk(t2mi, "resetting\n");
 		t2mi_stream_reset(t2mi);
+		*p = NULL;
 		return true;
 	}
 	memcpy (&t2mi->buff[t2mi->bbheader_idx], *p, num);
@@ -1059,7 +1082,9 @@ static inline bool get_t2mi_bbheader(struct t2mi_stream* t2mi, const uint8_t** p
 	(*p) += num;
 	if (*p > pend) {
 		WARN_ON_ONCE("Buffer overflow\n");
+		t2mi_stream_dprintk(t2mi, "resetting\n");
 		t2mi_stream_reset(t2mi);
+		*p = NULL;
 		return true;
 	}
 	t2mi->bbheader_bytes_left -= num;
@@ -1094,8 +1119,10 @@ static inline bool get_t2mi_bbheader(struct t2mi_stream* t2mi, const uint8_t** p
 	bool bad_crc  = !!(hem_mode &~1);
 	if(bad_crc) {
 		t2mi_stream_dprintk_nice(t2mi, "bad t2mi header crc\n");
+		t2mi_stream_dprintk(t2mi, "resetting\n");
 		t2mi_stream_reset(t2mi);
 		t2mi->num_crc_errors++;
+		*p = NULL;
 		return true;
 	}
 	int matype = buff[0];
@@ -1114,7 +1141,9 @@ static inline bool get_t2mi_bbheader(struct t2mi_stream* t2mi, const uint8_t** p
 	}
 	if(buff - &t2mi->buff[0] +9 >= sizeof(t2mi->buff)) {
 		WARN_ON_ONCE("BUG buffer overrun\n");
+		t2mi_stream_dprintk(t2mi, "resetting\n");
 		t2mi_stream_reset(t2mi);
+		*p = NULL;
 		return true;
 	}
 	parse_bbheader(bbf, hem_mode, isi, buff);
@@ -1122,7 +1151,9 @@ static inline bool get_t2mi_bbheader(struct t2mi_stream* t2mi, const uint8_t** p
 		t2mi_stream_dprintk_nice(t2mi, "Unexpected: bbf->bbf_payload_bytes_lef=%d > "
 														 "t2mi->t2mi_payload_bytes_left=%d\n",
 														 bbf->bbf_payload_bytes_left, t2mi->t2mi_payload_bytes_left);
+		t2mi_stream_dprintk(t2mi, "resetting\n");
 		t2mi_stream_reset(t2mi);
+		*p = NULL;
 		return true;
 	}
 #if 0
@@ -1321,7 +1352,10 @@ static void t2mi_stream_add_packet(struct dvb_demux* demux, struct t2mi_stream* 
 			return;
 		bool cc_error = !discontinuity && new_cc_counter != (t2mi->emb.cc_counter+1)%16 && t2mi->emb.cc_counter>=0;
 		if(cc_error) {
-			t2mi_stream_dprintk_nice(t2mi, "CC counter error\n");
+			t2mi_stream_dprintk_nice(t2mi, "CC counter error t2mi->emb.cc_counter=%d\n", t2mi->emb.cc_counter);
+			t2mi_stream_dprintk(t2mi, "resetting\n");
+			t2mi_stream_reset(t2mi);
+			return;
 		}
 		t2mi->emb.cc_counter = new_cc_counter;
 
@@ -1400,6 +1434,8 @@ static void t2mi_stream_add_packet(struct dvb_demux* demux, struct t2mi_stream* 
 				}
 				const uint8_t * pold = p;
 				bool bbheader_complete = get_t2mi_bbheader(t2mi, &p, num_bytes, packet+188); //get next header;
+				if(!p)
+					return; //something went wrong
 				if(p-packet > 188) {
 					t2mi_stream_dprintk_nice(t2mi, "BUG: read outside buffer\n");
 					t2mi->synced = false;
@@ -2829,13 +2865,13 @@ int dvb_demux_set_bbframes_state(struct dvb_demux* demux, bool embedding_is_on, 
 	if(mutex_lock_interruptible(&demux->mutex))
 		return -ERESTARTSYS;
 
+	dprintk("called with embedding_is_on=%d embedding_pid=%d default_stream_id= %d => %d  \n", embedding_is_on,
+					embedding_pid, 	demux->default_stream_id, default_stream_id);
 	demux->default_stream_id = default_stream_id;
-	dprintk("called with embedding_is_on=%d embedding_pid=%d default_stream_id=%d \n", embedding_is_on,
-					embedding_pid, default_stream_id);
 	if(!xa_empty(&demux->default_feeds->embedded_streams))
 		dprintk("demux->default_feeds->embedded_streams is not empty\n");
 
-	int ret;
+	int ret=0;
 	if(demux->fe_bbframes_stream) {
 		dprintk("calling dvbdmx_release_bbframes_stream_ to release demux->fe_bbframes_stream=%p\n", demux->fe_bbframes_stream);
 		ret = dvbdmx_release_bbframes_stream_(demux, demux->fe_bbframes_stream);
