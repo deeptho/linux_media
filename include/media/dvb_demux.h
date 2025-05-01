@@ -37,7 +37,6 @@ enum dvb_dmx_filter_type {
 	DMX_TYPE_SEC
 };
 
-
 /**
  * enum embedded_stream_type - type of embedded stream.
  *
@@ -130,9 +129,7 @@ struct dvb_demux_feeds {
 
 	struct kref refcount;
 	struct list_head output_feed_list; //list of dvb_demux_feed
-
 	struct xarray embedded_streams; //struct stid_stream, or struct t2mi streamindexed by embedding pid
-
 	uint8_t *cnt_storage; /* for TS continuity check */
 	ktime_t speed_last_time; /* for TS speed check */
 	uint32_t speed_pkts_cnt; /* for TS speed check */

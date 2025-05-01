@@ -2397,8 +2397,10 @@ static int stv091x_tune_once(struct dvb_frontend *fe, bool* need_retune)
 		dprintk("This function should not be called with algorithm=%d\n", p->algorithm);
 		break;
 	}
+#if 0
 	dprintk("Setting stream_id filter: stream_id=%d", state->demod_search_stream_id);
 	set_stream_index(state, state->demod_search_stream_id);
+#endif
 	state->Started = 1;
 
 	locked = wait_for_dmdlock(fe, 1 /*require_data*/);

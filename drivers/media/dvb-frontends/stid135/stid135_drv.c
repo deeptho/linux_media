@@ -4346,7 +4346,7 @@ fe_lla_error_t FE_STiD135_Algo(struct stv* state, BOOL satellite_scan, enum fe_s
 			/* No edge detected, jump tuner bandwidth */
 			*signalType_p = FE_SAT_TUNER_NOSIGNAL;
 
-		}  else { /* falling edge detected or direct blind to be done */
+		} else { /* falling edge detected or direct blind to be done */
 			/* Set the IQ inversion search mode */
 
 			error |= (error1=ChipSetFieldImage(state->chip->ip.handle_demod,
@@ -5744,14 +5744,19 @@ fe_lla_error_t fe_stid135_manage_matype_info(struct stv* state)
 			if (!fe_stid135_check_sis_or_mis(matype_info)) { //multistream
 				mis = TRUE;
 				state->mis_mode = TRUE;
-				dprintk("ISI mis_mode set to %d\n", state->mis_mode);
+				dprintk("ISI mis_mode sxet to %d\n", state->mis_mode);
 				/* Get Min ISI and activate the MIS Filter */
 				if(state->demod_search_isi < 0) {
 					state->demod_search_isi = isi;
 				}
 				if(isi==255)
 					state_dprintk("BUG: isi=255\n");
-				state->signal_info.isi = isi;
+				if(state->signal_info.isi != isi) {
+					state_dprintk("Unexpected: state->signal_info.isi=%d != isi=%d\n",
+												state->signal_info.isi, isi);
+					state->signal_info.isi = isi;
+				}
+				state->signal_info.matype = matype_info;
 				state->signal_info.pls_mode = state->demod_search_pls_mode;
 				state->signal_info.pls_code = state->demod_search_pls_code;
 				error |= (error1=ChipSetField(state->chip->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG0_TSFIFO_BITSPEED(Demod), 0));
@@ -10602,6 +10607,9 @@ fe_lla_error_t fe_stid135_isi_scan(struct stv* state, struct fe_sat_isi_struct_t
 				p_isi_struct->isi_bitset[j] |= mask;
 #if 1
 				if( ((CurrentISI ==255) ? -1 : (int) CurrentISI) == state->signal_info.isi) {
+					if(state->signal_info.matype != matype)
+						state_dprintk("Unexpected: state->signal_info.matype=%d != matype=%d\n",
+													state->signal_info.matype, matype);
 					state->signal_info.matype = matype;
 				}
 #endif
@@ -12918,7 +12926,6 @@ fe_lla_error_t stid135_set_bbframe_output(struct stv* state)
 	enum fe_stid135_demod demod = state->nr+1;
 	int error = FE_LLA_NO_ERROR;
 	u32 reg_value=0;
-	u16 reg_field = 0;
 	STCHIP_Info_t* handle = state->chip->ip.handle_demod;
 	error = ChipGetOneRegister(handle, REG_RC8CODEW_DVBSX_PKTDELIN_PDELCTRL2(demod), &reg_value);
 	error |= ChipSetFieldImage(handle, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL2_FORCE_CONTINUOUS(demod),1);

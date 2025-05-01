@@ -205,7 +205,7 @@ struct stv {
 	u32   LastBERDenominator;
 	u8    BERScale;
 	s32 tuner_frequency; //last frequency tuned by the external tuner
-	s32 demod_search_stream_id;
+	//s32 demod_search_stream_id;
 	bool satellite_scan;
 	s32 scan_next_frequency;
 	s32 scan_end_frequency;

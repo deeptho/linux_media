@@ -186,20 +186,6 @@ static void dvb_dmx_swfilter_packet(struct dvb_demux *demux, const uint8_t *buf,
 		}																																		\
 	} while (0)
 
-#if 0
-inline void check_canary_(struct t2mi_stream* t2mi, const char* func, int line) {
-	if(t2mi==NULL)
-		printk(KERN_DEBUG pr_fmt("%s:%d  bad t2mi\n"),func, line);
-	if(t2mi->canary!=0xdeadfeed)
-		printk(KERN_DEBUG pr_fmt("%s:%d  MEMORY CORRUPTION\n"),func, line);
-
-}
-#define check_canary(t2mi) do { \
-	check_canary_(t2mi, __func__, __LINE__);\
-	} while(0)
-#endif
-
-
 // taken and adapted from libdtv, (c) Rolf Hakenes
 // CRC32 lookup table for polynomial 0x04c11db7
 static uint32_t crc32_table[256] = {
@@ -349,7 +335,6 @@ static void dvb_demux_feeds_init(struct dvb_demux_feeds* feeds, struct dvb_demux
 
 	INIT_LIST_HEAD(&feeds->output_feed_list);
 	xa_init(&feeds->embedded_streams);
-
 	feeds->cnt_storage = vmalloc(MAX_PID + 1);
 	dprintk("ALLOC feeds->cnt_storage=%p feeds=%p\n", feeds->cnt_storage, feeds);
 	if (!feeds->cnt_storage)
@@ -505,9 +490,6 @@ static void t2mi_stream_init(struct t2mi_stream* t2mi, struct dvb_demux_feeds*pa
 	t2mi->default_isi = -1;
 	t2mi_stream_reset(t2mi);
 	t2mi->num_crc_errors=0;
-#if 0
-	t2mi->canary = 0xdeadfeed;
-#endif
 }
 
 /*
@@ -556,7 +538,9 @@ static void embedded_stream_release_(struct kref *kref)
 	dprintk("FREE emb=%p\n", emb);
 	xa_destroy(&emb->bbf_streams);
 	void* p = embedded_stream_get_super_class(emb, EMBEDDED_STREAM_TYPE_UNKNOWN);
-	kfree(p);
+	WARN_ON(p);
+	dprintk("AFTER WARN emb NOW=%p\n", emb);
+	//kfree(p);
 }
 
 
@@ -2087,6 +2071,8 @@ static struct bbframes_stream* dvb_dmx_find_or_alloc_bbf_stream
 (struct dvb_demux* demux, struct embedded_stream* emb, int embedding_pid, int isi) {
 	struct bbframes_stream* bbf = NULL;
 	struct bbframes_stream* old_bbf = NULL;
+	dprintk("called with demux=%p emb=%p embedding_pid=%d isi=%d bbf_streams=%p\n",
+					demux, emb, isi, emb? &emb->bbf_streams : (struct xarray*) NULL);
 	bbf = xa_load(&emb->bbf_streams, isi);
 	if(!bbf) {
 		bbf = kzalloc(sizeof(struct bbframes_stream), GFP_KERNEL);
@@ -2101,6 +2087,7 @@ static struct bbframes_stream* dvb_dmx_find_or_alloc_bbf_stream
 						isi, bbf, old_bbf,
 						atomic_read(&bbf->refcount.refcount.refs));
 	} else {
+		dprintk("found=%p\n", bbf);
 		kref_get(&bbf->refcount);
 		dprintk("incremented refcount for isi=%d bbf.refcount=%d\n", isi, atomic_read(&bbf->refcount.refcount.refs));
 	}
@@ -2134,6 +2121,7 @@ static int dvbdmx_allocate_stid_stream_(struct dvb_demux* demux,
 					demux->default_feeds,
 					parent_feeds, &parent_feeds->embedded_streams);
 	//There is only stid_stream per pid, no matter how many users.
+	dprintk("before parent_feeds=%p\n", parent_feeds);
 	emb = xa_load(&parent_feeds->embedded_streams, embedding_pid);
 	dprintk("here emb=%p\n", emb);
 	if(!emb) {

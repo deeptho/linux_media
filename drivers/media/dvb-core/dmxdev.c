@@ -950,7 +950,7 @@ static int dvb_demux_open(struct inode *inode, struct file *file)
 	}
 
 	dmxdevfilter = &dmxdev->filter[i];
-	WARN_ON(dmxdevfilter->current_feeds);
+	//WARN_ON(dmxdevfilter->current_feeds);
 
 	dprintk("Got filter[%d]=%p\n", i, dmxdevfilter);
 	mutex_init(&dmxdevfilter->mutex);
@@ -1169,9 +1169,7 @@ static int dvb_dmxdev_add_t2mi_stream(struct dmxdev *dmxdev,
 	if (t2mi == NULL)
 		return -ENOMEM;
 	dmxdev_t2mi_stream_init(t2mi, params->embedding_pid, params->plp);
-
 	list_add(&t2mi->f.next, &dmxdevfilter->feed.dmxdev_feed_list);
-
 	dprintk("dmxdev=%p Added t2mi stream pid=0x%04x plp=%d ret=%d \n",
 					dmxdev,
 					params->embedding_pid, params->plp, ret);

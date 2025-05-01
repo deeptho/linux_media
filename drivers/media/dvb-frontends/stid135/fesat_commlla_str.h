@@ -293,7 +293,6 @@ struct fe_sat_init_params {
 						SEARCH STRUCTURES
 	 ****************************************************************/
 
-
 struct fe_sat_search_params {
 	u32 				frequency;		/* Transponder frequency (in KHz)				*/
 	u32 				symbol_rate;		/* Transponder symbol rate  (in bds)				*/
@@ -363,7 +362,9 @@ struct fe_sat_signal_info {
 	enum fe_sat_iq_inversion	spectrum;	/* IQ specrum swap setting				*/
 	u8				matype; //matype of current frame
 	bool low_roll_off_detected;
-	int 				isi;		/* Current value of ISI  or -1 for non-multistream or -2 for not initialized*/
+	int 				isi;		/* Actually selected ISI for output (if not in bbframes mode).
+													 pr default isi (if in bbframes mode). This will
+													 be -1 for non-multistream or -2 for not initialized*/
 	u8        pls_mode;
 	u32       pls_code;
 	fe_sat_isi_struct isi_list;
@@ -373,10 +374,7 @@ struct fe_sat_signal_info {
 	ktime_t viterbi_time;
 	ktime_t sync_time;
 	ktime_t lock_time;
-
-	} ;
-
-
+};
 
 struct fe_sat_slice {
 		u8			slice_id;	/* Slice ID in case of wideband signal	*/
