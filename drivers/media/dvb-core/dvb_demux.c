@@ -2382,8 +2382,8 @@ static int dvbdmx_release_pid_stream(struct dmx_demux *dmx, struct pid_stream *p
 	struct dvb_demux_feeds* feeds = feed->parent_feeds;
 	WARN_ON(!feeds);
 
-	dmx_demux_dprintk(dmx, "release dmx dvb_demux=%p section_filter=%p\n",
-										demux, feed->section_filter);
+	dmx_demux_dprintk(dmx, "release dmx dvb_demux=%p feed=%p section_filter=%p\n",
+										demux, feed, feed->section_filter);
 	mutex_lock(&demux->mutex);
 
 	if (feed->state == DMX_STATE_FREE) {

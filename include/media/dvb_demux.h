@@ -213,7 +213,7 @@ struct bbframes_stream {
 struct embedded_stream {
 	enum embedded_stream_type embedded_stream_type;
 	int embedding_pid;
-	struct xarray bbf_streams;
+	struct xarray bbf_streams; //bbframes_stream map
 	struct kref refcount;
 	struct dvb_demux_feeds* parent_feeds;
 	int payload_len;
