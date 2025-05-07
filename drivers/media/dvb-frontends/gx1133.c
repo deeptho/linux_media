@@ -171,7 +171,7 @@ static u32 gx1133_Get_BER_S(struct gx1133_priv *priv) /*TOKEN_FUNCTION*/
 	u32 Bit_error,return_value = 0;
 	u8 e_value = 0,temp = 0;
 
-
+	
 	gx1133_rd(priv,DVB_S2,0xD0,&temp);
 	flag = (temp&0x8E)|(error_type<<4);
 	gx1133_wr(priv,DVB_S2,0xD0,flag);
@@ -204,11 +204,11 @@ static u32 gx1133_Get_BER_S(struct gx1133_priv *priv) /*TOKEN_FUNCTION*/
 static void gx1133_core_rst(struct gx1133_priv *priv,Demod_CorRst_Sel type)
 {
 	u8 tmp;
-	tmp = 0x01<<type;
+	tmp = 0x01<<type;	
 	gx1133_wr(priv,Demod_TOP,cfg_core_rst,tmp);
 	gx1133_wr(priv,Demod_TOP,cfg_core_rst,0);
 
-	return;
+	return;	
 }
 static void gx1133_set_Pll(struct gx1133_priv *priv,u32 Osc_freq, Demod_PLL_SEL  pll, Demod_PLL_Freq  FreqSet)
 {
@@ -358,7 +358,7 @@ static void gx1133_set_adc(struct gx1133_priv *priv,u8 adc,u8 pp_sel,u8 fsctrl,u
 static void gx1133_set_work_bs_mode(struct gx1133_priv *priv,bool bs)
 {
 	u8 tmp,tmp1;
-
+	
 	gx1133_rd(priv,DVB_S2,GX1133_BCS_RST,&tmp);
 	gx1133_rd(priv,DVB_S2,GX1133_AUTO_RST,&tmp1);
 
@@ -371,7 +371,7 @@ static void gx1133_set_work_bs_mode(struct gx1133_priv *priv,bool bs)
 		gx1133_wr(priv,DVB_S2,GX1133_AUTO_RST,tmp1|0x60);
 
 	}
-	return;
+	return;	
 }
 static int gx1133_read_ber(struct dvb_frontend *fe, u32 *ber)
 {
@@ -498,7 +498,7 @@ static int gx1133_read_status(struct dvb_frontend *fe, enum fe_status *status)
 	reg &= 0x75;
 	if (reg == FEC_LOCKED) {
 		*status = FE_HAS_SIGNAL | FE_HAS_CARRIER |
-			FE_HAS_VITERBI | FE_HAS_SYNC | FE_HAS_LOCK;
+			FE_HAS_VITERBI | FE_HAS_SYNC | FE_HAS_LOCK;		
 	}
 
 	dev_dbg(&priv->i2c->dev, "%s() status = 0x%02x\n", __func__, *status);
@@ -545,10 +545,10 @@ static int gx1133_set_voltage(struct dvb_frontend *fe,
 			break;
 		case SEC_VOLTAGE_18:
 			if (priv->cfg->lnb_power)
-				    priv->cfg->lnb_power(fe, 1);
+				    priv->cfg->lnb_power(fe, 1);		
 				gx1133_rd(priv,DVB_S2,GX1133_DISEQC_MODE,&temp);
 				temp=temp|0x40; //13V select
-				gx1133_wr(priv,DVB_S2,GX1133_DISEQC_MODE,temp);
+				gx1133_wr(priv,DVB_S2,GX1133_DISEQC_MODE,temp);	
 
 			break;
 		default: /* OFF */
@@ -588,7 +588,7 @@ static int gx1133_set_tone(struct dvb_frontend *fe,
 		dev_warn(&priv->i2c->dev, "%s() invalid tone (%d)\n",
 			__func__, tone);
 		break;
-	}
+	}	
 	gx1133_wr(priv,DVB_S2,GX1133_DISEQC_MODE,temp);
 
 	//set diseqc pin as output
@@ -766,7 +766,7 @@ static int gx1133_i2c_select(struct i2c_adapter *adap,
 		goto err;
 
 	buf[2]=((buf[2]&0x7f)|(chan_id<<7));
-
+	
 	ret = __i2c_transfer(adap, &msg_wr, 1);
 	if (ret != 1)
 		goto err;
@@ -891,11 +891,11 @@ static int gx1133_initfe(struct dvb_frontend *fe)
 	msleep(10);
 	gx1133_rd(priv,Demod_TOP,cfg_i2c_sla_mode,&temp);   //set i2c sla mode
 	gx1133_wr(priv,Demod_TOP,cfg_i2c_sla_mode,(temp & 0xbf) |(1<<6));
-
+	
 	gx1133_rd(priv,Demod_TOP,cfg_dejit_div,&temp);     //i2c_sla key parametersetting.
 	temp= (temp&0xe0) | GXDemod_dejit_div; //cfg_dejit_div modified
 	gx1133_wr(priv,Demod_TOP,cfg_dejit_div,temp);
-	gx1133_rd(priv,Demod_TOP,cfg_dejit_div,&temp);
+	gx1133_rd(priv,Demod_TOP,cfg_dejit_div,&temp);  
 	temp= (temp&0x9f) | ((GXDemod_rpt_free&0x03) << 5);
 	gx1133_wr(priv,Demod_TOP,cfg_dejit_div,temp);
 
@@ -903,34 +903,34 @@ static int gx1133_initfe(struct dvb_frontend *fe)
 
 //	ts sequence config;
 	//GXDemod_ts_config(TS_Mod_CFG);
-	gx1133_rd(priv,Demod_TOP,cfg_ts_mod_ctrl,&temp);
-	temp = (temp&0xc0)|(0<<5)|(1<<4)|(0<<2)|(0<<1)|(0);
-	gx1133_wr(priv,Demod_TOP,cfg_ts_mod_ctrl,temp);
-
+	gx1133_rd(priv,Demod_TOP,cfg_ts_mod_ctrl,&temp); 
+	temp = (temp&0xc0)|(0<<5)|(1<<4)|(0<<2)|(0<<1)|(0);	
+	gx1133_wr(priv,Demod_TOP,cfg_ts_mod_ctrl,temp); 
+	
 	if(!priv->cfg->ts_mode){ //parallel_port
-		gx1133_rd(priv,Demod_TOP,cfg_TS_s_sel,&temp);
-		gx1133_wr(priv,Demod_TOP,cfg_TS_s_sel,temp&0xf7);
+		gx1133_rd(priv,Demod_TOP,cfg_TS_s_sel,&temp); 
+		gx1133_wr(priv,Demod_TOP,cfg_TS_s_sel,temp&0xf7);  
 		}
 	else{
-		gx1133_rd(priv,Demod_TOP,cfg_TS_s_sel,&temp);
+		gx1133_rd(priv,Demod_TOP,cfg_TS_s_sel,&temp); 
 		gx1133_wr(priv,Demod_TOP,cfg_TS_s_sel,(temp&0xf7)|0x08);
 		}
-	gx1133_wr(priv,Demod_TOP,0xc8,(priv->cfg->ts_cfg.TS_1<<4)+priv->cfg->ts_cfg.TS_0);
-	gx1133_wr(priv,Demod_TOP,0xc9,(priv->cfg->ts_cfg.TS_3<<4)+priv->cfg->ts_cfg.TS_2);
-	gx1133_wr(priv,Demod_TOP,0xca,(priv->cfg->ts_cfg.TS_5<<4)+priv->cfg->ts_cfg.TS_4);
-	gx1133_wr(priv,Demod_TOP,0xcb,(priv->cfg->ts_cfg.TS_7<<4)+priv->cfg->ts_cfg.TS_6);
-	gx1133_wr(priv,Demod_TOP,0xcc,(priv->cfg->ts_cfg.TS_9<<4)+priv->cfg->ts_cfg.TS_8);
+	gx1133_wr(priv,Demod_TOP,0xc8,(priv->cfg->ts_cfg.TS_1<<4)+priv->cfg->ts_cfg.TS_0); 
+	gx1133_wr(priv,Demod_TOP,0xc9,(priv->cfg->ts_cfg.TS_3<<4)+priv->cfg->ts_cfg.TS_2); 
+	gx1133_wr(priv,Demod_TOP,0xca,(priv->cfg->ts_cfg.TS_5<<4)+priv->cfg->ts_cfg.TS_4); 
+	gx1133_wr(priv,Demod_TOP,0xcb,(priv->cfg->ts_cfg.TS_7<<4)+priv->cfg->ts_cfg.TS_6); 
+	gx1133_wr(priv,Demod_TOP,0xcc,(priv->cfg->ts_cfg.TS_9<<4)+priv->cfg->ts_cfg.TS_8); 
 	gx1133_wr(priv,Demod_TOP,0xcd,(priv->cfg->ts_cfg.TS_11<<4)+priv->cfg->ts_cfg.TS_10);
 
 	//init chip
-	gx1133_wr(priv,Demod_TOP,cfg_mcu_onoff_line,0);
-	gx1133_set_Pll(priv,27, pll_a, pll_27M_to_182_25M);  //27M
+	gx1133_wr(priv,Demod_TOP,cfg_mcu_onoff_line,0);	
+	gx1133_set_Pll(priv,27, pll_a, pll_27M_to_182_25M);  //27M 
 	gx1133_set_Pll(priv,27, pll_b, pll_27M_to_91_125M);
 	gx1133_set_Pll(priv,27, pll_c, pll_27M_to_256_50M);
 
 	gx1133_wr(priv,Demod_TOP,cfg_pll_pd,(1 | 1 <<1 | 1 <<2 | 1 <<3));
 	gx1133_wr(priv,Demod_TOP,cfg_pll_pd,(0 | 0 <<1 | 0 <<2 | 0 <<3));
-
+	
 	gx1133_set_adc(priv,0,1,0,0,1);
 
 	//clock config
@@ -940,17 +940,17 @@ static int gx1133_initfe(struct dvb_frontend *fe)
 	gx1133_rd(priv,Demod_TOP,cfg_agc_a_sel,&temp);
 	temp =(temp & 0xf0) | 0x02; //in GX1133 ,the value is ifxed.
 	gx1133_wr(priv,Demod_TOP,cfg_agc_a_sel,temp);
-
+	
 	//cfg_adca_bitosync_inv set 0;
 	//GXDemod_Write_one_Byte(GXDemodID,0xb8,0x00);
-
+	
 	gx1133_rd(priv,Demod_TOP,cfg_cnl_rst,&temp);
 	gx1133_wr(priv,Demod_TOP,cfg_cnl_rst,temp|(1<<1));
 	msleep(1);
 	gx1133_wr(priv,Demod_TOP,cfg_cnl_rst,temp);
 
 	//chip platform configuration end.
-
+	
 	gx1133_rd(priv,DVB_S2,GX1133_RST,&temp);
 	temp|=0x02;
 	gx1133_wr(priv,DVB_S2,GX1133_RST,temp);
@@ -964,7 +964,7 @@ static int gx1133_initfe(struct dvb_frontend *fe)
 	//ok out and clk out select
 	gx1133_rd(priv,DVB_S2,GX1133_CLK_OK_SEL,&temp);
 	temp=(temp&0x00) | 0x75;
-	gx1133_wr(priv,DVB_S2,GX1133_CLK_OK_SEL,temp);
+	gx1133_wr(priv,DVB_S2,GX1133_CLK_OK_SEL,temp);	
 
 	gx1133_rd(priv,Demod_TOP,cfg_tuner_rpt,&temp);
 	temp= (temp&0x7f) | (0 <<7);
@@ -981,11 +981,11 @@ static int gx1133_initfe(struct dvb_frontend *fe)
 		{
 		temp=temp&0xbf;
 		}
-	gx1133_wr(priv,DVB_S2,GX1133_AGC_MODE,temp);
+	gx1133_wr(priv,DVB_S2,GX1133_AGC_MODE,temp);	
 
 	//Set the freq of 22K tone
 	Diseqc_Ratio=((((91125*10)/88)+5)/10)&0x07ff;
-	gx1133_wr(priv,DVB_S2,GX1133_DISEQC_RATIO_L, (u8)(Diseqc_Ratio&0xff));
+	gx1133_wr(priv,DVB_S2,GX1133_DISEQC_RATIO_L, (u8)(Diseqc_Ratio&0xff));	
 
 	//diseqc
 	gx1133_rd(priv,DVB_S2,GX1133_DISEQC_RATIO_H,&temp);
@@ -1096,13 +1096,13 @@ static int gx1133_initfe(struct dvb_frontend *fe)
 	gx1133_wr(priv,DVB_S2,GX1133_Fsample_Cfg_H,(91125>>16)&0x01);
 
 	gx1133_rd(priv,DVB_S2,0x0C,&temp);
-	gx1133_wr(priv,DVB_S2,0x0C, temp&0xFE);
+	gx1133_wr(priv,DVB_S2,0x0C, temp&0xFE);	
 
 	//set diseqc pin as output
 	gx1133_rd(priv,DVB_S2,GX1133_DISEQC_IO_CTRL,&temp);
 	temp=(temp&0xfe)|(0x01&0);
 	gx1133_wr(priv,DVB_S2,GX1133_DISEQC_IO_CTRL, temp);
-
+	
 	return 0;
 }
 
@@ -1110,7 +1110,7 @@ static int gx1133_sleep(struct dvb_frontend *fe)
 {
 	struct gx1133_priv *priv = fe->demodulator_priv;
 	dev_dbg(&priv->i2c->dev, "%s()\n", __func__);
-
+	
 	return 0;
 }
 
@@ -1405,7 +1405,7 @@ static int gx1133_set_pls_n(struct gx1133_priv *priv, u32 n)
 
 	nx = n+shift;
 	ny = shift;
-
+	
 	gx1133_rd(priv,DVB_S2,GX1133_SCRAM_1X1Y0X_H,&tmp);
 	gx1133_wr(priv,DVB_S2,GX1133_SCRAM_1X1Y0X_H,tmp & 0xbf);
 
@@ -1422,7 +1422,7 @@ static int gx1133_set_pls_n(struct gx1133_priv *priv, u32 n)
 		scram_1x = (scram_1x & 0x7ff7f) | xx_18 | xx_7;
 	}
 	scram_1y = 0xff60;
-
+	
 	gx1133_wr(priv,DVB_S2,GX1133_SCRAM_0X_L,scram_0x&0xff);
 	gx1133_wr(priv,DVB_S2,GX1133_SCRAM_0X_M,(scram_0x>>8)&0xff);
 
@@ -1505,7 +1505,7 @@ static int gx1133_set_frontend(struct dvb_frontend *fe)
 	gx1133_rd(priv,DVB_S2,GX1133_LDPC_PLS_CTRL,&temp);
 	temp&=0xfe;
 	gx1133_wr(priv,DVB_S2,GX1133_LDPC_PLS_CTRL,temp);
-
+	
 	gx1133_rd(priv,DVB_S2,GX1133_AUTO_RST,&temp);
 	temp|=0x01;
 	gx1133_wr(priv,DVB_S2,GX1133_AUTO_RST,temp);
@@ -1523,10 +1523,10 @@ static int gx1133_set_frontend(struct dvb_frontend *fe)
 	buf[2] = (u8) s;
 	buf[3] = (u8) (s >> 8);
 	ret = gx1133_wrm(priv, buf, 4);
-
+	
 	if (ret)
 		return ret;
-
+	
 	/* clear freq offset */
 	buf[0] = DVB_S2;
 	buf[1] = GX1133_FC_OFFSET_L;
@@ -1537,21 +1537,21 @@ static int gx1133_set_frontend(struct dvb_frontend *fe)
 	if (ret)
 		return ret;
 
-	if (fe->ops.tuner_ops.set_params) {
+		if (fe->ops.tuner_ops.set_params) {
 #ifndef GX1133_USE_I2C_MUX
-		if (fe->ops.i2c_gate_ctrl)
-			fe->ops.i2c_gate_ctrl(fe, 1);
+			if (fe->ops.i2c_gate_ctrl)
+				fe->ops.i2c_gate_ctrl(fe, 1);
 #endif
-		fe->ops.tuner_ops.set_params(fe);
+			fe->ops.tuner_ops.set_params(fe);
 #ifndef GX1133_USE_I2C_MUX
-		if (fe->ops.i2c_gate_ctrl)
-			fe->ops.i2c_gate_ctrl(fe, 0);
+			if (fe->ops.i2c_gate_ctrl)
+				fe->ops.i2c_gate_ctrl(fe, 0);
 #endif
-	}
+		}
 
 	gx1133_rd(priv,DVB_S2,GX1133_RST,&temp);
 	temp|=0x01;
-	gx1133_wr(priv,DVB_S2,GX1133_RST,temp);
+	gx1133_wr(priv,DVB_S2,GX1133_RST,temp);	
 
 	msleep(50);
 
@@ -1722,3 +1722,4 @@ MODULE_DESCRIPTION("DVB Frontend module for Nationalchip gx1133");
 MODULE_AUTHOR("Davin zhang(smiledavin@gmail.com)");
 MODULE_LICENSE("GPL");
 MODULE_VERSION("1.0");
+

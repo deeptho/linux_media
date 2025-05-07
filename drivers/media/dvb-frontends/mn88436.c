@@ -1075,10 +1075,10 @@ DMD_u8_t  MN88436_REG_AUTOCTRL[] = {
 	,0x72};
 
 /* MxLWare Driver version for MxL603 */
-UINT8 MxLWare603DrvVersion[] = {2, 1, 1, 3, 0};
+UINT8 MxLWare603DrvVersion[] = {2, 1, 1, 3, 0}; 
 
 
-MXL603_REG_CTRL_INFO_T MxL603_OverwriteDefaults[] =
+MXL603_REG_CTRL_INFO_T MxL603_OverwriteDefaults[] = 
 {
   {0x14, 0xFF, 0x13},
   {0x6D, 0xFF, 0x8A},
@@ -1107,7 +1107,7 @@ MXL603_REG_CTRL_INFO_T MxL603_OverwriteDefaults[] =
   {0,    0,    0}
 };
 
-MXL603_REG_CTRL_INFO_T MxL603_DigitalIsdbtAtsc[] =
+MXL603_REG_CTRL_INFO_T MxL603_DigitalIsdbtAtsc[] = 
 {
   {0x0C, 0xFF, 0x00},
   {0x13, 0xFF, 0x04},
@@ -1135,7 +1135,7 @@ MXL603_REG_CTRL_INFO_T MxL603_DigitalIsdbtAtsc[] =
   {0,    0,    0}
 };
 // Digital DVB-C application mode setting
-MXL603_REG_CTRL_INFO_T MxL603_DigitalDvbc[] =
+MXL603_REG_CTRL_INFO_T MxL603_DigitalDvbc[] = 
 {
   {0x0C, 0xFF, 0x00},
   {0x13, 0xFF, 0x04},
@@ -1166,7 +1166,7 @@ MXL603_REG_CTRL_INFO_T MxL603_DigitalDvbc[] =
   {0,    0,    0}
 };
 // Digital DVB-T 6MHz application mode setting
- MXL603_REG_CTRL_INFO_T MxL603_DigitalDvbt[] =
+ MXL603_REG_CTRL_INFO_T MxL603_DigitalDvbt[] = 
 {
   {0x0C, 0xFF, 0x00},
   {0x13, 0xFF, 0x04},
@@ -1298,13 +1298,13 @@ DMD_ERROR_t DMD_I2C_Read(struct dvb_frontend* fe,DMD_u8_t	slvadr , DMD_u8_t adr 
 				.len = 1
 			}
 		};
-
+		
 		ret = i2c_transfer(state->i2c, msg, 2);
 		if (ret != 2)
 			printk(" readreg error (reg == 0x%02x, ret == %i)\n",
 					 adr, ret);
 
-
+	
 		return DMD_E_OK;
 }
 
@@ -1337,7 +1337,7 @@ int MXL603_Write( struct mndmd_state *state , UINT8 RegAddr, UINT8 RegData)
 	int ret;
 
 	u8 buf1[]={RegAddr,RegData} ;
-
+	
 
 	struct i2c_msg msg= {
 		.addr= state->config->tuner_address,
@@ -1358,7 +1358,7 @@ int MXL603_Write( struct mndmd_state *state , UINT8 RegAddr, UINT8 RegData)
 
 //	return 0;
 
-
+	
 }
 
 int MXL603_Read(struct mndmd_state *state , UINT8 RegAddr , UINT8 *rdata )
@@ -1389,7 +1389,7 @@ int MXL603_Read(struct mndmd_state *state , UINT8 RegAddr , UINT8 *rdata )
 
 	return (ret != 2) ? 1 : 0;
 //	return 0;
-
+	
 }
 
 MXL_STATUS MxLWare603_OEM_WriteRegister(struct dvb_frontend *fe, UINT8 RegAddr, UINT8 RegData)
@@ -1444,7 +1444,7 @@ MXL_STATUS MxL603_Ctrl_ProgramRegisters(struct dvb_frontend *fe,  PMXL603_REG_CT
 		if ((ctrlRegInfoPtr[i].regAddr == 0) && (ctrlRegInfoPtr[i].mask == 0) && (ctrlRegInfoPtr[i].data == 0)) break;
 
 		// Check if partial bits of register were updated
-		if (ctrlRegInfoPtr[i].mask != 0xFF)
+		if (ctrlRegInfoPtr[i].mask != 0xFF)  
 		{
 			status = MxLWare603_OEM_ReadRegister(fe,ctrlRegInfoPtr[i].regAddr, &tmp);
 			if (status != MXL_TRUE) break;;
@@ -1463,16 +1463,16 @@ MXL_STATUS MxL603_Ctrl_ProgramRegisters(struct dvb_frontend *fe,  PMXL603_REG_CT
 }
 /*------------------------------------------------------------------------------
 --| FUNCTION NAME : MxLWare603_API_CfgDevSoftReset
---|
+--| 
 --| AUTHOR        : Mahendra Kondur
 --|
---| DATE CREATED  : 12/10/2011
+--| DATE CREATED  : 12/10/2011  
 --|
 --| DESCRIPTION   : This API is used to reset MxL603 tuner device. After reset,
---|                 all the device regiaters and modules will be set to power-on
---|                 default state.
+--|                 all the device regiaters and modules will be set to power-on  
+--|                 default state. 
 --|
---| RETURN VALUE  : MXL_SUCCESS, MXL_FAILED
+--| RETURN VALUE  : MXL_SUCCESS, MXL_FAILED 
 --|
 --|---------------------------------------------------------------------------*/
 
@@ -1480,35 +1480,35 @@ MXL_STATUS MxLWare603_API_CfgDevSoftReset(struct dvb_frontend *fe)
 {
 	UINT8 status = MXL_SUCCESS;
 
-	//  MxL_DLL_DEBUG0("%s", __FUNCTION__);
+	//  MxL_DLL_DEBUG0("%s", __FUNCTION__); 
 
-	// Write 0xFF with 0 to reset tuner
-	status = MxLWare603_OEM_WriteRegister(fe, AIC_RESET_REG, 0x00);
+	// Write 0xFF with 0 to reset tuner 
+	status = MxLWare603_OEM_WriteRegister(fe, AIC_RESET_REG, 0x00); 
 
 	return (MXL_STATUS)status;
 }
 
 /*------------------------------------------------------------------------------
 --| FUNCTION NAME : MxLWare603_API_CfgDevOverwriteDefaults
---|
+--| 
 --| AUTHOR        : Mahendra Kondur
 --|
---| DATE CREATED  : 12/10/2011
+--| DATE CREATED  : 12/10/2011  
 --|
---| DESCRIPTION   : Register(s) that requires default values to be overwritten
+--| DESCRIPTION   : Register(s) that requires default values to be overwritten 
 --|                 during initialization
 --|
 --| RETURN VALUE  : MXL_SUCCESS, MXL_FAILED
 --|
 --|---------------------------------------------------------------------------*/
 
-MXL_STATUS MxLWare603_API_CfgDevOverwriteDefaults(struct dvb_frontend *fe,
+MXL_STATUS MxLWare603_API_CfgDevOverwriteDefaults(struct dvb_frontend *fe, 
 															 MXL_BOOL singleSupply_3_3V)
 {
 	UINT8 status = MXL_SUCCESS;
 	UINT8 readData = 0;
 
-	//  MxL_DLL_DEBUG0("%s", __FUNCTION__);
+	//  MxL_DLL_DEBUG0("%s", __FUNCTION__); 
 
 	status |= MxL603_Ctrl_ProgramRegisters(fe, MxL603_OverwriteDefaults);
 
@@ -1529,13 +1529,13 @@ MXL_STATUS MxLWare603_API_CfgDevOverwriteDefaults(struct dvb_frontend *fe,
 
 /*------------------------------------------------------------------------------
 --| FUNCTION NAME : MxLWare603_API_CfgDevXtal
---|
+--| 
 --| AUTHOR        : Mahendra Kondur
 --|
---| DATE CREATED  : 12/10/2011
+--| DATE CREATED  : 12/10/2011  
 --|
 --| DESCRIPTION   : This API is used to configure XTAL settings of MxL603 tuner
---|                 device. XTAL settings include frequency, capacitance &
+--|                 device. XTAL settings include frequency, capacitance & 
 --|                 clock out
 --|
 --| RETURN VALUE  : MXL_SUCCESS, MXL_INVALID_PARAMETER, MXL_FAILED
@@ -1547,17 +1547,17 @@ MXL_STATUS MxLWare603_API_CfgDevXtal(struct dvb_frontend *fe,  MXL603_XTAL_SET_C
 	UINT8 status = MXL_SUCCESS;
 	UINT8 control = 0;
 
-	// MxL_DLL_DEBUG0("%s", __FUNCTION__);
+	// MxL_DLL_DEBUG0("%s", __FUNCTION__); 
 
-	// XTAL freq and cap setting, Freq set is located at bit<5>, cap bit<4:0>
+	// XTAL freq and cap setting, Freq set is located at bit<5>, cap bit<4:0> 
 	// and  XTAL clock out enable <0>
 	if ((xtalCfg.xtalFreqSel == MXL603_XTAL_16MHz) || (xtalCfg.xtalFreqSel == MXL603_XTAL_24MHz))
 	{
-		control = (UINT8)((xtalCfg.xtalFreqSel << 5) | (xtalCfg.xtalCap & 0x1F));
+		control = (UINT8)((xtalCfg.xtalFreqSel << 5) | (xtalCfg.xtalCap & 0x1F));  
 		control |= (xtalCfg.clkOutEnable << 7);
 		status = MxLWare603_OEM_WriteRegister(fe, XTAL_CAP_CTRL_REG, control);
 
-		// XTAL frequency div 4 setting <1>
+		// XTAL frequency div 4 setting <1> 
 		control = (0x01 & (UINT8)xtalCfg.clkOutDiv);
 
 		// XTAL sharing mode
@@ -1565,13 +1565,13 @@ MXL_STATUS MxLWare603_API_CfgDevXtal(struct dvb_frontend *fe,  MXL603_XTAL_SET_C
 		else control &= 0x01;
 
 		// program Clock out div & Xtal sharing
-		status |= MxLWare603_OEM_WriteRegister(fe, XTAL_ENABLE_DIV_REG, control);
+		status |= MxLWare603_OEM_WriteRegister(fe, XTAL_ENABLE_DIV_REG, control); 
 
 		// Main regulator re-program
 		if (MXL_ENABLE == xtalCfg.singleSupply_3_3V)
 			status |= MxLWare603_OEM_WriteRegister(fe, MAIN_REG_AMP, 0x14);
 	}
-	else
+	else 
 		status |= MXL_INVALID_PARAMETER;
 
 	return ( MXL_STATUS)status;
@@ -1579,12 +1579,12 @@ MXL_STATUS MxLWare603_API_CfgDevXtal(struct dvb_frontend *fe,  MXL603_XTAL_SET_C
 
 /*------------------------------------------------------------------------------
 --| FUNCTION NAME : MxLWare603_API_CfgDevPowerMode
---|
+--| 
 --| AUTHOR        : Mahendra Kondur
 --|
---| DATE CREATED  : 12/10/2011
+--| DATE CREATED  : 12/10/2011  
 --|
---| DESCRIPTION   : This function configures MxL603 power mode
+--| DESCRIPTION   : This function configures MxL603 power mode 
 --|
 --| RETURN VALUE  : MXL_SUCCESS, MXL_INVALID_PARAMETER, MXL_FAILED
 --|
@@ -1594,7 +1594,7 @@ MXL_STATUS MxLWare603_API_CfgDevPowerMode(struct dvb_frontend *fe, MXL603_PWR_MO
 {
 	UINT8 status = MXL_SUCCESS;
 
-	// MxL_DLL_DEBUG0("%s", __FUNCTION__);
+	// MxL_DLL_DEBUG0("%s", __FUNCTION__); 
 
 	switch(powerMode)
 	{
@@ -1620,13 +1620,13 @@ MXL_STATUS MxLWare603_API_CfgDevPowerMode(struct dvb_frontend *fe, MXL603_PWR_MO
 
 /*------------------------------------------------------------------------------
 --| FUNCTION NAME : MxLWare603_API_CfgDevGPO
---|
+--| 
 --| AUTHOR        : Mahendra Kondur
 --|
---| DATE CREATED  : 12/10/2011
+--| DATE CREATED  : 12/10/2011  
 --|
 --| DESCRIPTION   : This API configures GPO pin of MxL603 tuner device.
---|                 There is only 1 GPO pin available in MxL603 device.
+--|                 There is only 1 GPO pin available in MxL603 device.  
 --|
 --| RETURN VALUE  : MXL_SUCCESS, MXL_INVALID_PARAMETER, MXL_FAILED
 --|
@@ -1637,7 +1637,7 @@ MXL_STATUS MxLWare603_API_CfgDevGPO(struct dvb_frontend *fe, MXL603_GPO_STATE_E 
 	UINT8 status = MXL_SUCCESS;
 	UINT8 regData = 0;
 
-	//  MxL_DLL_DEBUG0("%s", __FUNCTION__);
+	//  MxL_DLL_DEBUG0("%s", __FUNCTION__); 
 
 	switch(gpoState)
 	{
@@ -1650,7 +1650,7 @@ MXL_STATUS MxLWare603_API_CfgDevGPO(struct dvb_frontend *fe, MXL603_GPO_STATE_E 
 		else
 		{
 			regData &= 0xFC;
-			regData |= (UINT8)(0x01 | (gpoState << 1));
+			regData |= (UINT8)(0x01 | (gpoState << 1)); 
 		}
 
 		status |= MxLWare603_OEM_WriteRegister(fe, GPO_SETTING_REG, regData);
@@ -1665,10 +1665,10 @@ MXL_STATUS MxLWare603_API_CfgDevGPO(struct dvb_frontend *fe, MXL603_GPO_STATE_E 
 
 /*------------------------------------------------------------------------------
 --| FUNCTION NAME : MxLWare603_API_ReqDevVersionInfo
---|
+--| 
 --| AUTHOR        : Mahendra Kondur
 --|
---| DATE CREATED  : 12/10/2011
+--| DATE CREATED  : 12/10/2011  
 --|
 --| DESCRIPTION   : This function is used to get MxL603 version information.
 --|
@@ -1677,28 +1677,31 @@ MXL_STATUS MxLWare603_API_CfgDevGPO(struct dvb_frontend *fe, MXL603_GPO_STATE_E 
 --|---------------------------------------------------------------------------*/
 
 MXL_STATUS MxLWare603_API_ReqDevVersionInfo(struct dvb_frontend *fe, MXL603_VER_INFO_T* mxlDevVerInfoPtr)
-
+														
 {
 	UINT8 status = MXL_SUCCESS;
 	UINT8 readBack = 0;
 	UINT8 k = 0;
 
 
-	// MxL_DLL_DEBUG0("%s", __FUNCTION__);
+	// MxL_DLL_DEBUG0("%s", __FUNCTION__); 
 
 	if (mxlDevVerInfoPtr)
 	{
 		status |= MxLWare603_OEM_ReadRegister(fe, CHIP_ID_REQ_REG, &readBack);
-		mxlDevVerInfoPtr->chipId = (readBack & 0xFF);
+		mxlDevVerInfoPtr->chipId = (readBack & 0xFF); 
 
 		status |= MxLWare603_OEM_ReadRegister(fe, CHIP_VERSION_REQ_REG, &readBack);
-		mxlDevVerInfoPtr->chipVersion = (readBack & 0xFF);
+		mxlDevVerInfoPtr->chipVersion = (readBack & 0xFF); 
+
+	//	printk("Chip ID = 0x%d, Version = 0x%d \n", mxlDevVerInfoPtr->chipId, 
+	//		mxlDevVerInfoPtr->chipVersion);
 
 		// Get MxLWare version infromation
 		for (k = 0; k < MXL603_VERSION_SIZE; k++)
 			mxlDevVerInfoPtr->mxlwareVer[k] = MxLWare603DrvVersion[k];
 	}
-	else
+	else 
 		status = MXL_INVALID_PARAMETER;
 
 	return (MXL_STATUS)status;
@@ -1706,10 +1709,10 @@ MXL_STATUS MxLWare603_API_ReqDevVersionInfo(struct dvb_frontend *fe, MXL603_VER_
 
 /*------------------------------------------------------------------------------
 --| FUNCTION NAME : MxLWare603_API_ReqDevGPOStatus
---|
+--| 
 --| AUTHOR        : Mahendra Kondur
 --|
---| DATE CREATED  : 12/10/2011
+--| DATE CREATED  : 12/10/2011  
 --|
 --| DESCRIPTION   : This API is used to get GPO pin's status information from
 --|                 MxL603 tuner device.
@@ -1718,13 +1721,13 @@ MXL_STATUS MxLWare603_API_ReqDevVersionInfo(struct dvb_frontend *fe, MXL603_VER_
 --|
 --|---------------------------------------------------------------------------*/
 
-MXL_STATUS MxLWare603_API_ReqDevGPOStatus(struct dvb_frontend *fe,
+MXL_STATUS MxLWare603_API_ReqDevGPOStatus(struct dvb_frontend *fe, 
 													  MXL603_GPO_STATE_E* gpoStatusPtr)
 {
 	UINT8 status = MXL_SUCCESS;
 	UINT8 regData = 0;
 
-	//MxL_DLL_DEBUG0("%s", __FUNCTION__);
+	//MxL_DLL_DEBUG0("%s", __FUNCTION__); 
 
 	if (gpoStatusPtr)
 	{
@@ -1742,12 +1745,12 @@ MXL_STATUS MxLWare603_API_ReqDevGPOStatus(struct dvb_frontend *fe,
 
 /*------------------------------------------------------------------------------
 --| FUNCTION NAME : MxLWare603_API_CfgTunerMode
---|
+--| 
 --| AUTHOR        : Mahendra Kondur
 --|
---| DATE CREATED  : 12/10/2011
+--| DATE CREATED  : 12/10/2011  
 --|
---| DESCRIPTION   : This fucntion is used to configure MxL603 tuner's
+--| DESCRIPTION   : This fucntion is used to configure MxL603 tuner's 
 --|                 application modes like DVB-T, DVB-C, ISDB-T etc.
 --|
 --| RETURN VALUE  : MXL_SUCCESS, MXL_INVALID_PARAMETER, MXL_FAILED
@@ -1755,12 +1758,17 @@ MXL_STATUS MxLWare603_API_ReqDevGPOStatus(struct dvb_frontend *fe,
 --|---------------------------------------------------------------------------*/
 
 MXL_STATUS MxLWare603_API_CfgTunerMode(struct dvb_frontend *fe, MXL603_TUNER_MODE_CFG_T tunerModeCfg)
-
+												   
 {
 	UINT8 status = MXL_SUCCESS;
 	UINT8 dfeRegData = 0;
 	//struct MXL603_REG_CTRL_INFO_T* tmpRegTable;
 
+////	printk(" Signal Mode = %d, IF Freq = %d, xtal = %d, IF Gain = %d", 
+//		tunerModeCfg.signalMode,
+//		tunerModeCfg.ifOutFreqinKHz,
+//		tunerModeCfg.xtalFreqSel,
+//		tunerModeCfg.ifOutGainLevel); 
 
 	switch(tunerModeCfg.signalMode)
 	{
@@ -1872,11 +1880,11 @@ MXL_STATUS MxLWare603_API_CfgTunerMode(struct dvb_frontend *fe, MXL603_TUNER_MOD
 		break;
 	}
 
-	if (status == MXL_SUCCESS)
+	if (status == MXL_SUCCESS)  
 	{
 		// XTAL calibration
-		status |= MxLWare603_OEM_WriteRegister(fe, XTAL_CALI_SET_REG, 0x00);
-		status |= MxLWare603_OEM_WriteRegister(fe, XTAL_CALI_SET_REG, 0x01);
+		status |= MxLWare603_OEM_WriteRegister(fe, XTAL_CALI_SET_REG, 0x00);   
+		status |= MxLWare603_OEM_WriteRegister(fe, XTAL_CALI_SET_REG, 0x01);   
 
 		// 50 ms sleep after XTAL calibration
 		msleep(50);
@@ -1887,10 +1895,10 @@ MXL_STATUS MxLWare603_API_CfgTunerMode(struct dvb_frontend *fe, MXL603_TUNER_MOD
 
 /*------------------------------------------------------------------------------
 --| FUNCTION NAME : MxLWare603_API_CfgTunerAGC
---|
+--| 
 --| AUTHOR        : Mahendra Kondur
 --|
---| DATE CREATED  : 12/10/2011
+--| DATE CREATED  : 12/10/2011  
 --|
 --| DESCRIPTION   : This function is used to configure AGC settings of MxL603
 --|                 tuner device.
@@ -1902,14 +1910,19 @@ MXL_STATUS MxLWare603_API_CfgTunerMode(struct dvb_frontend *fe, MXL603_TUNER_MOD
 MXL_STATUS MxLWare603_API_CfgTunerAGC(struct dvb_frontend *fe, MXL603_AGC_CFG_T agcCfg)
 {
 	UINT8 status = MXL_SUCCESS;
-	UINT8 regData = 0;
+	UINT8 regData = 0; 
 
+//	printk("%s, AGC sel = %d, attack point set = %d, Flip = %d \n", 
+//		__FUNCTION__, 
+//		agcCfg.agcType,
+//		agcCfg.setPoint, 
+//		agcCfg.agcPolarityInverstion);
 
-	if ((agcCfg.agcPolarityInverstion <= MXL_ENABLE) &&
+	if ((agcCfg.agcPolarityInverstion <= MXL_ENABLE) && 
 		(agcCfg.agcType <= MXL603_AGC_EXTERNAL))
 	{
 		// AGC selecton <3:2> and mode setting <0>
-		status |= MxLWare603_OEM_ReadRegister(fe, AGC_CONFIG_REG, &regData);
+		status |= MxLWare603_OEM_ReadRegister(fe, AGC_CONFIG_REG, &regData); 
 		regData &= 0xF2; // Clear bits <3:2> & <0>
 		regData = (UINT8) (regData | (agcCfg.agcType << 2) | 0x01);
 		status |= MxLWare603_OEM_WriteRegister(fe, AGC_CONFIG_REG, regData);
@@ -1934,10 +1947,10 @@ MXL_STATUS MxLWare603_API_CfgTunerAGC(struct dvb_frontend *fe, MXL603_AGC_CFG_T 
 
 /*------------------------------------------------------------------------------
 --| FUNCTION NAME : MxLWare603_API_CfgTunerLoopThrough
---|
+--| 
 --| AUTHOR        : Mahendra Kondur, Dong Liu
 --|
---| DATE CREATED  : 12/10/2011, 06/18/2012
+--| DATE CREATED  : 12/10/2011, 06/18/2012   
 --|
 --| DESCRIPTION   : This function is used to enable or disable Loop-Through
 --|                 settings of MxL603 tuner device.
@@ -1950,7 +1963,7 @@ MXL_STATUS MxLWare603_API_CfgTunerLoopThrough(struct dvb_frontend *fe, MXL_BOOL 
 {
 	UINT8 status = MXL_SUCCESS, regData;
 
-//	MxL_DLL_DEBUG0("%s", __FUNCTION__);
+//	MxL_DLL_DEBUG0("%s", __FUNCTION__); 
 
 	if (loopThroughCtrl <= MXL_ENABLE)
 	{
@@ -1959,9 +1972,9 @@ MXL_STATUS MxLWare603_API_CfgTunerLoopThrough(struct dvb_frontend *fe, MXL_BOOL 
 		status |= MxLWare603_OEM_ReadRegister(fe, DIG_ANA_GINJO_LT_REG, &regData);
 
 		if (loopThroughCtrl == MXL_ENABLE)
-			regData |= 0x10;  // Bit<4> = 1
+			regData |= 0x10;  // Bit<4> = 1       
 		else
-			regData &= 0xEF;  // Bit<4> = 0
+			regData &= 0xEF;  // Bit<4> = 0  
 		status |= MxLWare603_OEM_WriteRegister(fe, DIG_ANA_GINJO_LT_REG, regData);
 
 		status |= MxLWare603_OEM_WriteRegister(fe, PAGE_CHANGE_REG, 0x00);
@@ -1974,12 +1987,12 @@ MXL_STATUS MxLWare603_API_CfgTunerLoopThrough(struct dvb_frontend *fe, MXL_BOOL 
 
 /*------------------------------------------------------------------------------
 --| FUNCTION NAME : MxLWare603_API_CfgTunerChanTune
---|
+--| 
 --| AUTHOR        : Mahendra Kondur
 --|
---| DATE CREATED  : 12/10/2011
+--| DATE CREATED  : 12/10/2011  
 --|
---| DESCRIPTION   : This API configures RF channel frequency and bandwidth.
+--| DESCRIPTION   : This API configures RF channel frequency and bandwidth. 
 --|                 Radio Frequency unit is Hz, and Bandwidth is in MHz units.
 --|
 --| RETURN VALUE  : MXL_SUCCESS, MXL_INVALID_PARAMETER, MXL_FAILED
@@ -1987,7 +2000,7 @@ MXL_STATUS MxLWare603_API_CfgTunerLoopThrough(struct dvb_frontend *fe, MXL_BOOL 
 --|---------------------------------------------------------------------------*/
 
 MXL_STATUS MxLWare603_API_CfgTunerChanTune(struct dvb_frontend *fe, MXL603_CHAN_TUNE_CFG_T chanTuneCfg)
-
+													   
 {
 	UINT64 frequency;
 	UINT32 freq = 0;
@@ -1997,27 +2010,34 @@ MXL_STATUS MxLWare603_API_CfgTunerChanTune(struct dvb_frontend *fe, MXL603_CHAN_
 	UINT8 dfeTuneData = 0;
 	UINT8 dfeCdcData = 0;
 
+//	printk("%s, signal type = %d, Freq = %d, BW = %d, Xtal = %d \n",  
+//		__FUNCTION__,
+//		chanTuneCfg.signalMode, 
+//		chanTuneCfg.freqInHz, 
+//		chanTuneCfg.bandWidth, 
+//		chanTuneCfg.xtalFreqSel);
+
 	// Abort Tune
-	status |= MxLWare603_OEM_WriteRegister(fe, START_TUNE_REG, 0x00);
+	status |= MxLWare603_OEM_WriteRegister(fe, START_TUNE_REG, 0x00); 
 
 	if (chanTuneCfg.startTune == MXL_ENABLE)
 	{
-		if (chanTuneCfg.signalMode <= MXL603_DIG_J83B)
+		if (chanTuneCfg.signalMode <= MXL603_DIG_J83B) 
 		{
-			// RF Frequency VCO Band Settings
-			if (chanTuneCfg.freqInHz < 700000000)
+			// RF Frequency VCO Band Settings 
+			if (chanTuneCfg.freqInHz < 700000000) 
 			{
 				status |= MxLWare603_OEM_WriteRegister(fe, 0x7C, 0x1F);
-				if ((chanTuneCfg.signalMode == MXL603_DIG_DVB_C) || (chanTuneCfg.signalMode == MXL603_DIG_J83B))
+				if ((chanTuneCfg.signalMode == MXL603_DIG_DVB_C) || (chanTuneCfg.signalMode == MXL603_DIG_J83B)) 
 					regData = 0xC1;
 				else
 					regData = 0x81;
 
 			}
-			else
+			else 
 			{
 				status |= MxLWare603_OEM_WriteRegister(fe, 0x7C, 0x9F);
-				if ((chanTuneCfg.signalMode == MXL603_DIG_DVB_C) || (chanTuneCfg.signalMode == MXL603_DIG_J83B))
+				if ((chanTuneCfg.signalMode == MXL603_DIG_DVB_C) || (chanTuneCfg.signalMode == MXL603_DIG_J83B)) 
 					regData = 0xD1;
 				else
 					regData = 0x91;
@@ -2044,9 +2064,9 @@ MXL_STATUS MxLWare603_API_CfgTunerChanTune(struct dvb_frontend *fe, MXL603_CHAN_
 
 				/* Calculate RF Channel = DIV(64*RF(Hz), 1E6) */
 				frequency *= 64;
-				freq = (UINT32)(frequency / 1000000);
+				freq = (UINT32)(frequency / 1000000); 
 
-				// Set RF
+				// Set RF  
 				status |= MxLWare603_OEM_WriteRegister(fe, CHAN_TUNE_LOW_REG, (UINT8)(freq & 0xFF));
 				status |= MxLWare603_OEM_WriteRegister(fe, CHAN_TUNE_HI_REG, (UINT8)((freq >> 8 ) & 0xFF));
 				break;
@@ -2060,12 +2080,12 @@ MXL_STATUS MxLWare603_API_CfgTunerChanTune(struct dvb_frontend *fe, MXL603_CHAN_
 			status |= MxLWare603_OEM_WriteRegister(fe, TUNER_ENABLE_REG, 0x01);
 
 			// Start Sequencer settings
-			status |= MxLWare603_OEM_WriteRegister(fe, PAGE_CHANGE_REG, 0x01);
+			status |= MxLWare603_OEM_WriteRegister(fe, PAGE_CHANGE_REG, 0x01); 
 			status |= MxLWare603_OEM_ReadRegister(fe, DIG_ANA_GINJO_LT_REG, &regData);
-			status |= MxLWare603_OEM_WriteRegister(fe, PAGE_CHANGE_REG, 0x00);
+			status |= MxLWare603_OEM_WriteRegister(fe, PAGE_CHANGE_REG, 0x00); 
 
 			status |= MxLWare603_OEM_ReadRegister(fe, 0xB6, &agcData);
-			status |= MxLWare603_OEM_WriteRegister(fe, PAGE_CHANGE_REG, 0x01);
+			status |= MxLWare603_OEM_WriteRegister(fe, PAGE_CHANGE_REG, 0x01); 
 			status |= MxLWare603_OEM_ReadRegister(fe, 0x60, &dfeTuneData);
 			status |= MxLWare603_OEM_ReadRegister(fe, 0x5F, &dfeCdcData);
 
@@ -2099,20 +2119,20 @@ MXL_STATUS MxLWare603_API_CfgTunerChanTune(struct dvb_frontend *fe, MXL603_CHAN_
 				dfeCdcData |= 0x37;
 			}
 
-			status |= MxLWare603_OEM_WriteRegister(fe, 0x60, dfeTuneData);
-			status |= MxLWare603_OEM_WriteRegister(fe, 0x5F, dfeCdcData);
-			status |= MxLWare603_OEM_WriteRegister(fe, PAGE_CHANGE_REG, 0x00);
-			status |= MxLWare603_OEM_WriteRegister(fe, 0xB6, agcData);
+			status |= MxLWare603_OEM_WriteRegister(fe, 0x60, dfeTuneData); 
+			status |= MxLWare603_OEM_WriteRegister(fe, 0x5F, dfeCdcData); 
+			status |= MxLWare603_OEM_WriteRegister(fe, PAGE_CHANGE_REG, 0x00); 
+			status |= MxLWare603_OEM_WriteRegister(fe, 0xB6, agcData); 
 
 			// Bit <0> 1 : start , 0 : abort calibrations
-			status |= MxLWare603_OEM_WriteRegister(fe, START_TUNE_REG, 0x01);
+			status |= MxLWare603_OEM_WriteRegister(fe, START_TUNE_REG, 0x01); 
 
 			// Sleep 15 ms
 			msleep(15);
 
-			// dfe_agc_auto = 1
+			// dfe_agc_auto = 1 
 			agcData = (agcData | 0x40);
-			status |= MxLWare603_OEM_WriteRegister(fe, 0xB6, agcData);
+			status |= MxLWare603_OEM_WriteRegister(fe, 0xB6, agcData); 
 
 		}
 		else
@@ -2124,12 +2144,12 @@ MXL_STATUS MxLWare603_API_CfgTunerChanTune(struct dvb_frontend *fe, MXL603_CHAN_
 
 /*------------------------------------------------------------------------------
 --| FUNCTION NAME : MxLWare603_API_CfgTunerIFOutParam
---|
+--| 
 --| AUTHOR        : Mahendra Kondur
 --|
---| DATE CREATED  : 12/10/2011
+--| DATE CREATED  : 12/10/2011  
 --|
---| DESCRIPTION   : This function is used to configure IF out settings of MxL603
+--| DESCRIPTION   : This function is used to configure IF out settings of MxL603 
 --|                 tuner device.
 --|
 --| RETURN VALUE  : MXL_SUCCESS, MXL_INVALID_PARAMETER, MXL_FAILED
@@ -2143,16 +2163,19 @@ MXL_STATUS MxLWare603_API_CfgTunerIFOutParam(struct dvb_frontend *fe,  MXL603_IF
 	UINT8 readData = 0;
 	UINT8 control = 0;
 
-	//Test only
+//	printk("%s, Manual set = %d \n", __FUNCTION__, ifOutCfg.manualFreqSet); 
+
+	//Test only 
 	MxLWare603_OEM_WriteRegister(fe, 0x10, 0x99);
 	MxLWare603_OEM_ReadRegister(fe, 0x10, &readData);
+//	printk("\n ----------- test Tuner I2C read out = 0x%x [ if 0x99, I2C OK!]-------------\n", readData); 
 
-	// Read back register for manual IF Out
+	// Read back register for manual IF Out 
 	status = MxLWare603_OEM_ReadRegister(fe, IF_FREQ_SEL_REG, &readData);
 
 	if (ifOutCfg.manualFreqSet == MXL_ENABLE)
 	{
-		printk("%s, IF Freq = %d \n", __FUNCTION__, ifOutCfg.manualIFOutFreqInKHz);
+		printk("%s, IF Freq = %d \n", __FUNCTION__, ifOutCfg.manualIFOutFreqInKHz); 
 
 		// IF out manual setting : bit<5>
 		readData |= 0x20;
@@ -2160,15 +2183,15 @@ MXL_STATUS MxLWare603_API_CfgTunerIFOutParam(struct dvb_frontend *fe,  MXL603_IF
 
 		// Manual IF freq set
 		ifFcw = (UINT16)(ifOutCfg.manualIFOutFreqInKHz * 8192 / 216000);
-		control = (ifFcw & 0xFF); // Get low 8 bit
-		status |= MxLWare603_OEM_WriteRegister(fe, IF_FCW_LOW_REG, control);
+		control = (ifFcw & 0xFF); // Get low 8 bit 
+		status |= MxLWare603_OEM_WriteRegister(fe, IF_FCW_LOW_REG, control); 
 
-		control = ((ifFcw >> 8) & 0x0F); // Get high 4 bit
+		control = ((ifFcw >> 8) & 0x0F); // Get high 4 bit 
 		status |= MxLWare603_OEM_WriteRegister(fe, IF_FCW_HIGH_REG, control);
 	}
 	else if (ifOutCfg.manualFreqSet == MXL_DISABLE)
 	{
-		// bit<5> = 0, use IF frequency from IF frequency table
+		// bit<5> = 0, use IF frequency from IF frequency table  
 		readData &= 0xC0;
 
 		// IF Freq <4:0>
@@ -2180,18 +2203,18 @@ MXL_STATUS MxLWare603_API_CfgTunerIFOutParam(struct dvb_frontend *fe,  MXL603_IF
 
 	if (status == MXL_SUCCESS)
 	{
-		// Set spectrum invert, gain level and IF path
+		// Set spectrum invert, gain level and IF path 
 		// Spectrum invert indication is bit<7:6>
 		if (ifOutCfg.ifInversion <= MXL_ENABLE)
 		{
 			control = 0;
 			if (MXL_ENABLE == ifOutCfg.ifInversion) control = 0x3 << 6;
 
-			// Gain level is bit<3:0>
+			// Gain level is bit<3:0> 
 			control += (ifOutCfg.gainLevel & 0x0F);
 			control |= (0x20); // Enable IF out
 			status |= MxLWare603_OEM_WriteRegister(fe, IF_PATH_GAIN_REG, control);
-		}
+		} 
 		else
 			status |= MXL_INVALID_PARAMETER;
 	}
@@ -2201,10 +2224,10 @@ MXL_STATUS MxLWare603_API_CfgTunerIFOutParam(struct dvb_frontend *fe,  MXL603_IF
 
 /*------------------------------------------------------------------------------
 --| FUNCTION NAME : MxLWare603_API_ReqTunerAGCLock
---|
+--| 
 --| AUTHOR        : Mahendra Kondur
 --|
---| DATE CREATED  : 12/10/2011
+--| DATE CREATED  : 12/10/2011  
 --|
 --| DESCRIPTION   : This function returns AGC Lock status of MxL603 tuner.
 --|
@@ -2220,12 +2243,12 @@ MXL_STATUS MxLWare603_API_ReqTunerAGCLock(struct dvb_frontend *fe, MXL_BOOL* agc
 
 	if (agcLockStatusPtr)
 	{
-		status = MxLWare603_OEM_ReadRegister(fe, AGC_SAGCLOCK_STATUS_REG, &regData);
+		status = MxLWare603_OEM_ReadRegister(fe, AGC_SAGCLOCK_STATUS_REG, &regData);  
 		if ((regData & 0x08) == 0x08) lockStatus = MXL_LOCKED;
 
 		*agcLockStatusPtr =  lockStatus;
 
-		//printk(" Agc lock = %d", (UINT8)*agcLockStatusPtr);
+		//printk(" Agc lock = %d", (UINT8)*agcLockStatusPtr); 
 	}
 	else
 		status = MXL_INVALID_PARAMETER;
@@ -2235,10 +2258,10 @@ MXL_STATUS MxLWare603_API_ReqTunerAGCLock(struct dvb_frontend *fe, MXL_BOOL* agc
 
 /*------------------------------------------------------------------------------
 --| FUNCTION NAME : MxLWare603_API_ReqTunerLockStatus
---|
+--| 
 --| AUTHOR        : Mahendra Kondur
 --|
---| DATE CREATED  : 12/10/2011
+--| DATE CREATED  : 12/10/2011  
 --|
 --| DESCRIPTION   : This function returns Tuner Lock status of MxL603 tuner.
 --|
@@ -2246,7 +2269,7 @@ MXL_STATUS MxLWare603_API_ReqTunerAGCLock(struct dvb_frontend *fe, MXL_BOOL* agc
 --|
 --|---------------------------------------------------------------------------*/
 
-MXL_STATUS MxLWare603_API_ReqTunerLockStatus(struct dvb_frontend *fe,  MXL_BOOL* rfLockPtr,
+MXL_STATUS MxLWare603_API_ReqTunerLockStatus(struct dvb_frontend *fe,  MXL_BOOL* rfLockPtr, 
 														 	 MXL_BOOL* refLockPtr)
 {
 	MXL_STATUS status = MXL_SUCCESS;
@@ -2258,7 +2281,7 @@ MXL_STATUS MxLWare603_API_ReqTunerLockStatus(struct dvb_frontend *fe,  MXL_BOOL*
 
 	if ((rfLockPtr) && (refLockPtr))
 	{
-		status = MxLWare603_OEM_ReadRegister(fe, RF_REF_STATUS_REG, &regData);
+		status = MxLWare603_OEM_ReadRegister(fe, RF_REF_STATUS_REG, &regData);  
 
 		if ((regData & 0x02) == 0x02) rfLockStatus = MXL_LOCKED;
 		if ((regData & 0x01) == 0x01) refLockStatus = MXL_LOCKED;
@@ -2274,9 +2297,9 @@ MXL_STATUS MxLWare603_API_ReqTunerLockStatus(struct dvb_frontend *fe,  MXL_BOOL*
 
 /*------------------------------------------------------------------------------
 --| FUNCTION NAME : MxLWare603_API_ReqTunerRxPower
---|
+--| 
 --| AUTHOR        : Mahendra Kondur
---|                 Dong Liu
+--|                 Dong Liu 
 --|
 --| DATE CREATED  : 12/10/2011
 --|                 06/18/2012
@@ -2323,7 +2346,7 @@ MXL_STATUS MxLWare603_API_ReqTunerRxPower(struct dvb_frontend *fe, SINT16* rxPwr
 
 MXL_STATUS MXL603_init(struct dvb_frontend *fe)
 {
-	MXL_STATUS status;
+	MXL_STATUS status; 
 //	UINT8 devId;
 	MXL_BOOL singleSupply_3_3V;
 	MXL603_XTAL_SET_CFG_T xtalCfg;
@@ -2331,11 +2354,11 @@ MXL_STATUS MXL603_init(struct dvb_frontend *fe)
 	MXL603_AGC_CFG_T agcCfg;
 	MXL603_TUNER_MODE_CFG_T tunerModeCfg;
 	MXL603_VER_INFO_T	mxl603Version;
-
+	
 	MxLWare603_API_ReqDevVersionInfo(fe, &mxl603Version);
 
 
-	/* If OEM data is not required, customer should treat devId as
+	/* If OEM data is not required, customer should treat devId as 
 	I2C slave Address */
 //	devId = MXL603_I2C_ADDR;
 
@@ -2343,23 +2366,23 @@ MXL_STATUS MXL603_init(struct dvb_frontend *fe)
 	status = MxLWare603_API_CfgDevSoftReset(fe);
 	if (status != MXL_SUCCESS)
 	{
-		printk("Error! MxLWare603_API_CfgDevSoftReset\n");
+		printk("Error! MxLWare603_API_CfgDevSoftReset\n");    
 	}
 
 	//Step 2 : Overwrite Default
 	/*Parameter : singleSupply_3_3V
-	- Enable :  Single power supply to Tuner (3.3v only;  3.3v -> 1.8V tuner internally inverts )
-	- Disable : Dual power supply to Tuner (3.3v+1.8v; internal regulator be bypassed)
-	\A1\EF If set wrongly toward hardware layout, Tuner will loose control of AGC(at least)
+	- Enable :  Single power supply to Tuner (3.3v only;  3.3v -> 1.8V tuner internally inverts ) 
+	- Disable : Dual power supply to Tuner (3.3v+1.8v; internal regulator be bypassed) 
+	\A1\EF If set wrongly toward hardware layout, Tuner will loose control of AGC(at least) 
 	*/
 	singleSupply_3_3V = MXL_ENABLE; //MXL_DISABLE;
 	status = MxLWare603_API_CfgDevOverwriteDefaults(fe, singleSupply_3_3V);
 	if (status != MXL_SUCCESS)
 	{
-		printk("Error! MxLWare603_API_CfgDevOverwriteDefaults\n");
+		printk("Error! MxLWare603_API_CfgDevOverwriteDefaults\n");    
 	}
 
-	//Step 3 : XTAL Setting
+	//Step 3 : XTAL Setting 
 
 	/* Single XTAL for tuner and demod sharing*/
 	xtalCfg.xtalFreqSel = MXL603_XTAL_24MHz;
@@ -2372,12 +2395,12 @@ MXL_STATUS MXL603_init(struct dvb_frontend *fe)
 	status = MxLWare603_API_CfgDevXtal(fe, xtalCfg);
 	if (status != MXL_SUCCESS)
 	{
-		printk("Error! MxLWare603_API_CfgDevXtal\n");
+		printk("Error! MxLWare603_API_CfgDevXtal\n");    
 	}
 
 	//Step 4 : IF Out setting
-	//IF freq set, should match Demod request
-	ifOutCfg.ifOutFreq = MXL603_IF_5MHz; //we suggest 5Mhz for ATSC MN88436
+	//IF freq set, should match Demod request 
+	ifOutCfg.ifOutFreq = MXL603_IF_5MHz; //we suggest 5Mhz for ATSC MN88436 
 
 	ifOutCfg.ifInversion = MXL_DISABLE;
 	ifOutCfg.gainLevel = 11;
@@ -2386,7 +2409,7 @@ MXL_STATUS MXL603_init(struct dvb_frontend *fe)
 	status = MxLWare603_API_CfgTunerIFOutParam(fe, ifOutCfg);
 	if (status != MXL_SUCCESS)
 	{
-		printk("Error! MxLWare603_API_CfgTunerIFOutParam\n");
+		printk("Error! MxLWare603_API_CfgTunerIFOutParam\n");    
 	}
 
 	//Step 5 : AGC Setting
@@ -2397,13 +2420,13 @@ MXL_STATUS MXL603_init(struct dvb_frontend *fe)
 	status = MxLWare603_API_CfgTunerAGC(fe, agcCfg);
 	if (status != MXL_SUCCESS)
 	{
-		printk("Error! MxLWare603_API_CfgTunerAGC\n");
+		printk("Error! MxLWare603_API_CfgTunerAGC\n");    
 	}
 
 	//Step 6 : Application Mode setting
 	tunerModeCfg.signalMode = MXL603_DIG_ISDBT_ATSC;//MXL603_DIG_DVB_T_DTMB;
 
-	//IF freq set, should match Demod request
+	//IF freq set, should match Demod request 
 	tunerModeCfg.ifOutFreqinKHz = 5000;
 
 
@@ -2413,8 +2436,8 @@ MXL_STATUS MXL603_init(struct dvb_frontend *fe)
 	status = MxLWare603_API_CfgTunerMode(fe, tunerModeCfg);
 	if (status != MXL_SUCCESS)
 	{
-		printk("##### Error! pls. make sure return value no problem, otherwise, it will cause Tuner unable to unlock signal #####\n");
-		printk("Error! MxLWare603_API_CfgTunerMode\n");
+		printk("##### Error! pls. make sure return value no problem, otherwise, it will cause Tuner unable to unlock signal #####\n");   
+		printk("Error! MxLWare603_API_CfgTunerMode\n");    
 	}
 
 
@@ -2431,40 +2454,40 @@ MXL_STATUS MXL603_init(struct dvb_frontend *fe)
 
 MXL_STATUS Mxl603SetFreqBw(struct dvb_frontend *fe,UINT32 freq)
 {
-	MXL_STATUS status;
+	MXL_STATUS status; 
 //	UINT8 devId;
 	MXL_BOOL refLockPtr;
 	MXL_BOOL rfLockPtr;
 	MXL603_CHAN_TUNE_CFG_T chanTuneCfg;
 	UINT32 rf;
 //	devId = MXL603_I2C_ADDR;
-
+	
 	//Step 7 : Channel frequency & bandwidth setting
 //	printk("freq=%d",freq);
 	if(freq>1000000)rf=freq;
 	else if(freq>1000)rf=freq*1000;
 	else
 		rf=freq*1000000;
-
-
+	
+	
 	chanTuneCfg.bandWidth = MXL603_TERR_BW_6MHz;
 	chanTuneCfg.freqInHz = rf;
 	if(param.system == DMD_E_ATSC)
 	chanTuneCfg.signalMode = MXL603_DIG_ISDBT_ATSC;
 	else
 	chanTuneCfg.signalMode = MXL603_DIG_J83B;
-
+	
 	chanTuneCfg.startTune = MXL_START_TUNE;
 	chanTuneCfg.xtalFreqSel =MXL603_XTAL_16MHz;
 
-	//chanTuneCfgis global struct.
+	//chanTuneCfgis global struct. 
 	status = MxLWare603_API_CfgTunerChanTune(fe, chanTuneCfg);
 	if (status != MXL_SUCCESS)
 	{
-		printk("Error! MxLWare603_API_CfgTunerChanTune\n");
+		printk("Error! MxLWare603_API_CfgTunerChanTune\n");    
 	}
 
-	// Wait 15 ms
+	// Wait 15 ms 
 	msleep(15);
 
 	// Read back Tuner lock status
@@ -2478,7 +2501,7 @@ MXL_STATUS Mxl603SetFreqBw(struct dvb_frontend *fe,UINT32 freq)
 //		else
 //			printk("Tuner unlocked\n");
 //	}
-	return status;
+	return status; 
 }
 
 DMD_ERROR_t  DMD_open(  DMD_PARAMETER_t* param)
@@ -2490,13 +2513,13 @@ DMD_ERROR_t  DMD_open(  DMD_PARAMETER_t* param)
 	/* Initialize Parameter Variable */
 	for(i=0;i<DMD_INFORMATION_MAX;i++)
 	{
-		param->info[i] = 0;		//NOT_DEFINED
+		param->info[i] = 0;		//NOT_DEFINED 
 	}
 	param->bw		= DMD_E_BW_6MHZ;
 	param->freq		= 0;
 	param->funit	= DMD_E_KHZ;
 
-	//ts output method select
+	//ts output method select 
 	param->ts_out = DMD_E_TSOUT_PARALLEL_BRTG_MODE;
 
 	//troy.wang, 20120801, for customer to pass test in lab.( SPEC : A74-2010 )
@@ -2548,7 +2571,7 @@ DMD_ERROR_t DMD_device_init(struct dvb_frontend* fe, DMD_PARAMETER_t* param )
 	switch( param->system ){
 			case DMD_E_ATSC:
 			DMD_send_registers(fe, DMD_I2C_SLAVE[param->devid] , DMD_REG_ATSC );
-			//DMD_device_load_pseq( param ); //troy.wangyx masked, 20120801, only need do once, in initialization.
+			//DMD_device_load_pseq( param ); //troy.wangyx masked, 20120801, only need do once, in initialization. 
 			break;
 		case DMD_E_QAMB_64QAM:
 			DMD_send_registers(fe, DMD_I2C_SLAVE[param->devid] , DMD_REG_QAM_B_64QAM );
@@ -2595,7 +2618,7 @@ DMD_ERROR_t DMD_device_load_pseq( struct dvb_frontend* fe, DMD_PARAMETER_t* para
 /* **************************************************** */
 /*!	Set Register setting for I2C communication mode between DMD  and Tuner*/
 /* **************************************************** */
-//Troy.wangyx 20120801, set once is enough
+//Troy.wangyx 20120801, set once is enough 
 DMD_ERROR_t	DMD_device_set_TCB_mode(struct dvb_frontend* fe, DMD_PARAMETER_t* param)
 {
 	DMD_ERROR_t	ret;
@@ -2621,71 +2644,71 @@ DMD_ERROR_t	DMD_device_set_TCB_mode(struct dvb_frontend* fe, DMD_PARAMETER_t* pa
 
 /* Set TS parallel or serial mode. If you want to set to parallel, make sure your hardware connection no problem */
 DMD_ERROR_t DMD_set_ts_output(struct dvb_frontend* fe, DMD_PARAMETER_t* param,  DMD_TSCLK_POLARITY ts_clk_polarity )
-{
+{  
 	switch(param->ts_out)
 	{
 		case DMD_E_TSOUT_PARALLEL_BRTG_MODE:
-			//TS parallel
+			//TS parallel	
 			DMD_I2C_Write(fe, DMD_BANK_MAIN(param->devid) , DMD_MAIN_CPOSET2 , 0xc1 );
 			DMD_I2C_Write(fe, DMD_BANK_MAIN(param->devid) , DMD_MAIN_GPSET1 , 0xff );//troy.wang, 121010, for parallel data setting
 			DMD_I2C_Write(fe, DMD_BANK_MAIN(param->devid) , DMD_MAIN_CPOSET1 , 0x01 );
 
 			break;
-
+		
 		case DMD_E_TSOUT_PARALLEL_SMOOTH_MODE:
-			//TS parallel conventional mode : smooth
+			//TS parallel conventional mode : smooth 
 			DMD_I2C_Write(fe,DMD_BANK_MAIN(param->devid) , DMD_MAIN_CPOSET2 , 0x01 );
 			DMD_I2C_Write(fe, DMD_BANK_MAIN(param->devid) , DMD_MAIN_GPSET1 , 0xff );//troy.wang, 121010, for parallel data setting
 			DMD_I2C_Write(fe, DMD_BANK_MAIN(param->devid) , DMD_MAIN_CPOSET1 , 0x00 ); //address : 0x01
 			break;
-
+			
 		case DMD_E_TSOUT_PARALLEL_BURST_GATED_MODE:
 			//TS parallel conventional mode : burst(gated mode)
 			DMD_I2C_Write(fe, DMD_BANK_MAIN(param->devid) , DMD_MAIN_CPOSET2 , 0x01 );
 			DMD_I2C_Write(fe, DMD_BANK_MAIN(param->devid) , DMD_MAIN_GPSET1 , 0xff );//troy.wang, 121010, for parallel data setting
-			DMD_I2C_Write(fe, DMD_BANK_MAIN(param->devid) , DMD_MAIN_CPOSET1 , 0x02 );
+			DMD_I2C_Write(fe, DMD_BANK_MAIN(param->devid) , DMD_MAIN_CPOSET1 , 0x02 ); 
 			break;
-
+		
 		case DMD_E_TSOUT_PARALLEL_BURST_CONTINUOUS_MODE:
 			//TS parallel conventional mode : burst(continous mode)
 			DMD_I2C_Write(fe, DMD_BANK_MAIN(param->devid) , DMD_MAIN_CPOSET2 , 0x01 );
 			DMD_I2C_Write(fe, DMD_BANK_MAIN(param->devid) , DMD_MAIN_GPSET1 , 0xff );//troy.wang, 121010, for parallel data setting
-			DMD_I2C_Write(fe, DMD_BANK_MAIN(param->devid) , DMD_MAIN_CPOSET1 , 0x0a );
+			DMD_I2C_Write(fe, DMD_BANK_MAIN(param->devid) , DMD_MAIN_CPOSET1 , 0x0a ); 
 			break;
-
-		case DMD_E_TSOUT_SERIAL_BRTG_MODE:
-			//TS serial BRTG mode
+		
+		case DMD_E_TSOUT_SERIAL_BRTG_MODE:					
+			//TS serial BRTG mode 
 			DMD_I2C_Write(fe, DMD_BANK_MAIN(param->devid) , DMD_MAIN_CPOSET2 , 0xc0 );
 			DMD_I2C_Write(fe, DMD_BANK_MAIN(param->devid) , DMD_MAIN_GPSET1 , 0xC0 ); //set error output
 			break;
-
+		
 		case DMD_E_TSOUT_SERIAL_SMOOTH_MODE:
-			//TS serial conventional mode : smooth
+			//TS serial conventional mode : smooth 
 			DMD_I2C_Write(fe, DMD_BANK_MAIN(param->devid) , DMD_MAIN_CPOSET2 , 0x00 );
 			DMD_I2C_Write(fe, DMD_BANK_MAIN(param->devid) , DMD_MAIN_GPSET1 , 0xC0 ); //set error output
 			DMD_I2C_Write(fe, DMD_BANK_MAIN(param->devid) , DMD_MAIN_CPOSET1 , 0x00 ); //address : 0x01
 			break;
-
+		
 		case DMD_E_TSOUT_SERIAL_BURST_GATED_MODE:
 			//TS serial conventional mode : burst(gated mode)
 			DMD_I2C_Write(fe, DMD_BANK_MAIN(param->devid) , DMD_MAIN_CPOSET2 , 0x00 );
 			DMD_I2C_Write(fe, DMD_BANK_MAIN(param->devid) , DMD_MAIN_GPSET1 , 0xC0 ); //set error output
-			DMD_I2C_Write(fe, DMD_BANK_MAIN(param->devid) , DMD_MAIN_CPOSET1 , 0x02 );
+			DMD_I2C_Write(fe, DMD_BANK_MAIN(param->devid) , DMD_MAIN_CPOSET1 , 0x02 ); 
 			break;
-
+		
 		case DMD_E_TSOUT_SERIAL_BURST_CONTINUOUS_MODE:
 			//TS serial conventional mode : burst(continous mode)
 			DMD_I2C_Write(fe, DMD_BANK_MAIN(param->devid) , DMD_MAIN_CPOSET2 , 0x00 );
 			DMD_I2C_Write(fe, DMD_BANK_MAIN(param->devid) , DMD_MAIN_GPSET1 , 0xC0 ); //set error output
-			DMD_I2C_Write(fe, DMD_BANK_MAIN(param->devid) , DMD_MAIN_CPOSET1 , 0x0a );
+			DMD_I2C_Write(fe, DMD_BANK_MAIN(param->devid) , DMD_MAIN_CPOSET1 , 0x0a ); 
 			break;
-
+			
 		default:
 			return DMD_E_ERROR;
 
 	}
 		if (ts_clk_polarity == DMD_E_TSCLK_POLARITY_INVERSE)
-		{
+		{		
 			if (param->ts_out & 0x10) //serial clk
 			{
 				DMD_I2C_Write(fe, DMD_BANK_MAIN(param->devid) , DMD_MAIN_INVSET, 0x01 );
@@ -2748,7 +2771,7 @@ DMD_ERROR_t DMD_lock(struct dvb_frontend* fe, DMD_PARAMETER_t* param )
 	if( lockstatus )
 	{
 		param->info[DMD_E_INFO_LOCK] = DMD_E_LOCKED;
-	}
+	} 
 	else if( param->info[DMD_E_INFO_LOCK] == DMD_E_LOCKED )
 	{
 		param->info[DMD_E_INFO_LOCK] = DMD_E_LOCK_ERROR;
@@ -2763,7 +2786,7 @@ DMD_ERROR_t DMD_scan_vq(struct dvb_frontend* fe, DMD_PARAMETER_t *param )
 	DMD_u32_t	timeout = 1500 ;
 	DMD_u8_t	rd;
 	DMD_ERROR_t	ret = DMD_E_ERROR;
-	param->info[DMD_E_INFO_LOCK] = DMD_E_LOCK_ERROR;
+	param->info[DMD_E_INFO_LOCK] = DMD_E_LOCK_ERROR;	
 	int i=0;
 	//timeout setting & etc.
 	switch( param->system )
@@ -2775,20 +2798,20 @@ DMD_ERROR_t DMD_scan_vq(struct dvb_frontend* fe, DMD_PARAMETER_t *param )
 		timeout = 2000;
 		break;
 	}
-
+	
 	for(i=0;i<230;i++)
 	{
 		DMD_I2C_Read(fe, DMD_BANK_MAIN(param->devid)  ,DMD_MAIN_STSMON1	 , &rd );
 		//VQ LOCK
 		if( rd & 0x1 )
 		{
-			param->info[DMD_E_INFO_LOCK] = DMD_E_LOCKED;
+			param->info[DMD_E_INFO_LOCK] = DMD_E_LOCKED;	
 			ret = DMD_E_OK;
 			//printk("Singal LOCK.");
 			break;
 		}
 		msleep(2);			//wait 1ms
-
+		
 	}
 
 	return ret;
@@ -2817,7 +2840,7 @@ DMD_ERROR_t	DMD_device_set_system(struct dvb_frontend* fe, DMD_PARAMETER_t* para
 	switch( param->system ){
 		case DMD_E_ATSC:
 			DMD_send_registers(fe, DMD_I2C_SLAVE[param->devid] , DMD_REG_ATSC );
-			//DMD_device_load_pseq( param ); //troy.wangyx masked, 20120801, only need do once, in initialization.
+			//DMD_device_load_pseq( param ); //troy.wangyx masked, 20120801, only need do once, in initialization. 
 			break;
 		case DMD_E_QAMB_64QAM:
 			DMD_send_registers(fe, DMD_I2C_SLAVE[param->devid] , DMD_REG_QAM_B_64QAM );
@@ -2837,11 +2860,11 @@ DMD_ERROR_t	DMD_device_set_system(struct dvb_frontend* fe, DMD_PARAMETER_t* para
 
 }
 DMD_ERROR_t DMD_device_set_echo_enhance(struct dvb_frontend* fe,DMD_PARAMETER_t* param, DMD_ECHO_PERFORMANCE_SET echo_out )
-{
+{    
 	switch(echo_out)
        {
 	       case DMD_E_ENHANCE_MINUS_ECHO_DELAY_DEFAULT:
-			// DMD_MAIN_VEQSET2	0x80   |  field test passed result
+			// DMD_MAIN_VEQSET2	0x80   |  field test passed result	
 			DMD_I2C_Write( fe,DMD_BANK_MAIN(param->devid) , DMD_MAIN_VEQSET2 , 0x80 );
 			break;
 		case DMD_E_ENHANCE_MINUS_ECHO_DELAY_NO_SIDEEFFECT:
@@ -2865,20 +2888,20 @@ DMD_ERROR_t DMD_set_system( struct dvb_frontend* fe,DMD_PARAMETER_t* param )
 			printk("ERROR:device set system");
 			return DMD_E_ERROR;
 		}
-
+		
 		/* '11/08/29 : OKAMOTO	Select TS output. */
 		if( DMD_set_ts_output(fe,param, param->ts_out ) == DMD_E_ERROR ){
 			printk("ERROR:set ts output");
 			return DMD_E_ERROR;
 		}
-
+		
 		/* 20120801, troy, set echo performance */
 		if (DMD_device_set_echo_enhance(fe, param, param->echo_set) == DMD_E_ERROR )
 		{
 			printk("===== ERROR: DMD set echo performace =====\r\n");
 			return DMD_E_ERROR;
 		}
-
+		
 
 	return DMD_E_OK;
 }
@@ -2911,7 +2934,7 @@ DMD_ERROR_t DMD_init( struct dvb_frontend* fe, DMD_PARAMETER_t* param )
 
 
 static int MNDMD_init(struct dvb_frontend* fe)
-{
+{	
 	struct mndmd_state *state = fe->demodulator_priv;
 	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
 
@@ -2989,7 +3012,7 @@ static int DMD_read_status(struct dvb_frontend *fe, enum fe_status *status)
 
 
 	MxLWare603_API_ReqTunerRxPower(fe,&rfpower);
-
+	
 	msleep(2);
 	c->strength.len = 2;
 	c->strength.stat[0].scale = FE_SCALE_DECIBEL;
@@ -3011,7 +3034,7 @@ static int DMD_read_status(struct dvb_frontend *fe, enum fe_status *status)
 	{
 		//after EQ
 		val = 4634 - log10_easy( y );
-
+		
 	}
 	else
 	{
@@ -3056,7 +3079,7 @@ static int DMD_read_status(struct dvb_frontend *fe, enum fe_status *status)
 	c->post_bit_error.stat[0].uvalue = berr;
 	c->post_bit_count.len = 1;
 	c->post_bit_count.stat[0].scale = FE_SCALE_COUNTER;
-	c->post_bit_count.stat[0].uvalue = berr;
+	c->post_bit_count.stat[0].uvalue = berr;	
 	}
 	return 0;
 }
@@ -3071,7 +3094,7 @@ static int DMD_tune(struct dvb_frontend *fe, bool re_tune,
 		if (ret)
 			return ret;
 		}
-
+	 
 	return DMD_read_status(fe,status);
 }
 static int DMD_get_tune_settings(struct dvb_frontend* fe, struct dvb_frontend_tune_settings* fe_tune_settings)
@@ -3086,9 +3109,9 @@ static int DMD_get_tune_settings(struct dvb_frontend* fe, struct dvb_frontend_tu
 static void DMD_release(struct dvb_frontend* fe)
 {
 	struct mndmd_state* state = fe->demodulator_priv;
-
+	
 	kfree(state);
-
+	
 }
 
 static int DMD_read_signal_strength(struct dvb_frontend* fe, u16* strength)
@@ -3200,3 +3223,5 @@ EXPORT_SYMBOL_GPL(mndmd_attach);
 MODULE_DESCRIPTION("mn88436 qamb atsc demodulator driver");
 MODULE_AUTHOR("Georg Acher, Bob Liu, Igor liplianin");
 MODULE_LICENSE("GPL");
+
+

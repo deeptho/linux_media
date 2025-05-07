@@ -397,8 +397,8 @@ static int saa716x_vp1028_frontend_attach(struct saa716x_adapter *adapter, int c
 
 		dprintk(SAA716x_ERROR, 1, "Probing for MB86A16 (DVB-S/DSS)");
 		adapter->fe = dvb_attach(mb86a16_attach,
-					 &vp1028_mb86a16_config,
-					 &i2c->i2c_adapter);
+														 &vp1028_mb86a16_config,
+														 &i2c->i2c_adapter);
 		if (adapter->fe) {
 			dprintk(SAA716x_ERROR, 1, "found MB86A16 DVB-S/DSS frontend @0x%02x",
 				vp1028_mb86a16_config.demod_address);
@@ -589,9 +589,9 @@ static int skystar2_express_hd_frontend_attach(struct saa716x_adapter *adapter,
 		msleep(10);
 
 		adapter->fe = dvb_attach(stv090x_attach,
-					 &skystar2_stv090x_config,
-					 &i2c->i2c_adapter,
-					 STV090x_DEMODULATOR_0);
+														 &skystar2_stv090x_config,
+														 &i2c->i2c_adapter,
+														 STV090x_DEMODULATOR_0);
 
 		if (adapter->fe) {
 			dprintk(SAA716x_NOTICE, 1, "found STV0903 @0x%02x",
@@ -604,9 +604,9 @@ static int skystar2_express_hd_frontend_attach(struct saa716x_adapter *adapter,
 		adapter->fe->ops.enable_high_lnb_voltage = skystar2_voltage_boost;
 
 		ctl = dvb_attach(stv6110x_attach,
-				 adapter->fe,
-				 &skystar2_stv6110x_config,
-				 &i2c->i2c_adapter);
+										 adapter->fe,
+										 &skystar2_stv6110x_config,
+										 &i2c->i2c_adapter);
 
 		if (ctl) {
 			dprintk(SAA716x_NOTICE, 1, "found STV6110(A) @0x%02x",
@@ -1495,7 +1495,7 @@ static int saa716x_tbs6923_frontend_attach(
 	msleep(120);
 
 	adapter->fe = dvb_attach(tas2101_attach, &tbs6923_cfg,
-													 &dev->i2c[SAA716x_I2C_BUS_A].i2c_adapter, count);
+													 &dev->i2c[SAA716x_I2C_BUS_A].i2c_adapter, 0);
 	if (adapter->fe == NULL)
 		goto err;
 
@@ -1772,7 +1772,7 @@ static int saa716x_tbs6982_frontend_attach(
 	msleep(120);
 
 	adapter->fe = dvb_attach(tas2101_attach, &tbs6982_cfg[count],
-													 &dev->i2c[1 - count].i2c_adapter, count);
+													 &dev->i2c[1 - count].i2c_adapter, 0);
 	if (adapter->fe == NULL)
 		goto err;
 
@@ -1917,7 +1917,7 @@ static int saa716x_tbs6982se_frontend_attach(
 		goto err;
 
 	adapter->fe = dvb_attach(tas2101_attach, &tbs6982se_cfg[count],
-													 &dev->i2c[count].i2c_adapter, count);
+													 &dev->i2c[count].i2c_adapter, 0);
 	if (adapter->fe == NULL)
 		goto err;
 
@@ -2046,12 +2046,12 @@ static void tbs6984_lnb_pwr(struct dvb_frontend *fe, int pin, int onoff)
 		saa716x_gpio_write(dev, pin, 1);
 }
 
-void tbs6984_lnb_pwr0(struct dvb_frontend *fe, int demod, int onoff)
+static void tbs6984_lnb_pwr0(struct dvb_frontend *fe, int demod, int onoff)
 {
 	tbs6984_lnb_pwr(fe, (demod == 0) ? 19 : 2, onoff);
 }
 
-void tbs6984_lnb_pwr1(struct dvb_frontend *fe, int demod, int onoff)
+static void tbs6984_lnb_pwr1(struct dvb_frontend *fe, int demod, int onoff)
 {
 	tbs6984_lnb_pwr(fe, (demod == 0) ? 5 : 3, onoff);
 }
@@ -2299,7 +2299,7 @@ static int saa716x_tbs6985_frontend_attach(struct saa716x_adapter *adapter, int 
 		goto err;
 
 	adapter->fe = dvb_attach(tas2101_attach, &tbs6985_cfg[count],
-													 &dev->i2c[1 - (count >> 1)].i2c_adapter, count);
+													 &dev->i2c[1 - (count >> 1)].i2c_adapter, 0);
 	if (adapter->fe == NULL)
 		goto err;
 
@@ -2427,11 +2427,11 @@ static void tbs6991_lnb1_power(struct dvb_frontend *fe, int onoff)
 */
 #define TBS6991_TSMODE0	    (0x33)
 #define TBS6991_TSMODE1	    (0x31)
-#define TBS6991_TSMODE	    TBS6991_TSMODE0
+#define TBS6991_TSMODE	    TBS6991_TSMODE1
 static struct tas2101_config tbs6991_cfg[] = {
 	{
 		.i2c_address   = 0x68,
-		.id            = ID_TAS2101,
+		.id            = ID_TAS2100,
 		.reset_demod   = tbs6991_reset_fe0,
 		.lnb_power     = tbs6991_lnb0_power,
 		.init          = {0x10, 0x32, 0x54, 0x76, 0xa8, 0x9b, TBS6991_TSMODE},
@@ -2439,7 +2439,7 @@ static struct tas2101_config tbs6991_cfg[] = {
 	},
 	{
 		.i2c_address   = 0x68,
-		.id            = ID_TAS2101,
+		.id            = ID_TAS2100,
 		.reset_demod   = tbs6991_reset_fe1,
 		.lnb_power     = tbs6991_lnb1_power,
 		.init          = {0x30, 0x21, 0x54, 0x76, 0xb8, 0x9a, TBS6991_TSMODE},
@@ -2449,7 +2449,7 @@ static struct tas2101_config tbs6991_cfg[] = {
 
 static struct av201x_config tbs6991_av201x_cfg = {
 	.i2c_address = 0x63,
-	.id          = ID_AV2012,
+	.id          = ID_AV2011,
 	.xtal_freq   = 27000,		/* kHz */
 };
 
@@ -2466,7 +2466,7 @@ static int saa716x_tbs6991_frontend_attach(
 		goto err;
 
 	adapter->fe = dvb_attach(tas2101_attach, &tbs6991_cfg[count],
-													 &dev->i2c[1-count].i2c_adapter, count);
+													 &dev->i2c[1-count].i2c_adapter, 0);
 	if (adapter->fe == NULL)
 		goto err;
 
@@ -2552,6 +2552,12 @@ static struct tas2101_config tbs6991se_cfg[] = {
 	}
 };
 
+static struct av201x_config tbs6991se_av201x_cfg = {
+	.i2c_address = 0x63,
+	.id          = ID_AV2012,
+	.xtal_freq   = 27000,		/* kHz */
+};
+
 static int saa716x_tbs6991se_frontend_attach(
 	struct saa716x_adapter *adapter, int count)
 {
@@ -2563,13 +2569,12 @@ static int saa716x_tbs6991se_frontend_attach(
 		dev->config->model_name, count);
 	if (count > 1)
 		goto err;
-
-	adapter->fe = dvb_attach(tas2101_attach, &tbs6991se_cfg[count],
-													 &dev->i2c[1-count].i2c_adapter, count);
+	struct i2c_adapter *i2c =&dev->i2c[1-count].i2c_adapter;
+	adapter->fe = dvb_attach(tas2101_attach, &tbs6991se_cfg[count], i2c, 0);
 	if (adapter->fe == NULL)
 		goto err;
 
-	if (dvb_attach(av201x_attach, adapter->fe, &tbs6991_av201x_cfg,
+	if (dvb_attach(av201x_attach, adapter->fe, &tbs6991se_av201x_cfg,
 			tas2101_get_i2c_adapter(adapter->fe, 2)) == NULL) {
 		dvb_frontend_detach(adapter->fe);
 		adapter->fe = NULL;
@@ -2630,7 +2635,6 @@ static struct saa716x_config saa716x_tbs6991se_config = {
 };
 
 #define SAA716x_MODEL_TBS6983	"TurboSight TBS 6983 "
-#define SAA716x_MODEL_SHORT_NAME_TBS6983	"TBS 6983 "
 #define SAA716x_DEV_TBS6983	"DVB-S/S2"
 
 static struct stv091x_cfg tbs6983_stv0910_cfg = {
@@ -2734,8 +2738,6 @@ static int saa716x_tbs6983_frontend_attach(struct saa716x_adapter *adapter, int 
 		memcpy(adapter->dvb_adapter.proposed_mac, mac, 6);
 		dev_notice(&dev->pdev->dev, "%s MAC[%d]=%pM\n", dev->config->model_name, count, adapter->dvb_adapter.proposed_mac);
 	}
-	memcpy(&adapter->fe->ops.info.card_mac_address, mac, sizeof(mac));
-	strscpy(adapter->fe->ops.info.card_short_name, "TBS 6983", sizeof(adapter->fe->ops.info.card_short_name));
 
 	return 0;
 err:
@@ -2746,7 +2748,6 @@ err:
 
 static struct saa716x_config saa716x_tbs6983_config = {
 	.model_name		= SAA716x_MODEL_TBS6983,
-	.model_short_name = SAA716x_MODEL_SHORT_NAME_TBS6983,
 	.dev_type		= SAA716x_DEV_TBS6983,
 	.boot_mode		= SAA716x_EXT_BOOT,
 	.adapters		= 2,

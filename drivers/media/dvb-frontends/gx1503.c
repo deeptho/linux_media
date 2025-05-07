@@ -16,13 +16,13 @@ static int GX1503_100Log(int iNumber_N)
 		else
 			iChangeN_Y = iNumber_N << iLeftMoveCount_M;
 	}
-	iBuMaY_X = 65536 - iChangeN_Y;
-	k = iBuMaY_X * 10000  /65536;
+	iBuMaY_X = 65536 - iChangeN_Y;	
+	k = iBuMaY_X * 10000  /65536;		
 	iTemp = k + (k*k)/20000 + ((k*k/10000)*(k*33/100))/10000 + ((k*k/100000)*(k*k/100000))/400;
-	iResult = 48165 - (iTemp * 10000 / 23025);
+	iResult = 48165 - (iTemp * 10000 / 23025);	
 	k = iResult - 3010 * (iLeftMoveCount_M - 1);
 	iReturn_value = (k/100);
-
+	
 	return iReturn_value;
 }
 
@@ -44,8 +44,8 @@ static int GX1503_WriteRegWithMask(struct i2c_client *client,unsigned int regAdd
 	readback_value = (readback_value & (~(mask << bit_L))) | (value_mask << bit_L);
 	regmap_write(dev->regmap,regAddr,readback_value);
 
-	return 0;
-
+	return 0;	
+	
 
 }
 
@@ -82,14 +82,14 @@ static int gx1503_init(struct dvb_frontend *fe)
 		goto err_release_firmware;
 
 	}
-
+	
 	dev_info(&client->dev, "downloading firmware from file '%s'\n",
 			fw_name);
 	for(i = 0;i<fw->size;i++)
 		 ret = regmap_write(dev->regmap,0xF6,fw->data[i]);
 
 	release_firmware(fw);
-
+	
 	dev->fw_loaded = true;
 	}
 
@@ -99,15 +99,15 @@ static int gx1503_init(struct dvb_frontend *fe)
 		goto err;
 
 	dev->active = true;
-
+	
 	return 0;
-
+	
 err_release_firmware:
 	release_firmware(fw);
 
 err:
 	dev_dbg(&client->dev,"failed = %d\n",ret);
-	return ret;
+	return ret;	
 }
 
 static int GX1503_Set_Clock(struct i2c_client *client, int fs)
@@ -118,7 +118,7 @@ static int GX1503_Set_Clock(struct i2c_client *client, int fs)
 	unsigned int SysClk_div_L;
 	unsigned int SysClk_div_M;
 	unsigned int SysClk_div_H;
-
+	
 	temp = (unsigned int)(fs*1000/4);
 	SysClk_div_L = (temp & 0xff);
 	SysClk_div_M = ((temp>>8)& 0xff);
@@ -153,7 +153,7 @@ static int GX1503_Set_BandWidth(struct i2c_client *client,int Band)
 		fs_H = ((fs>>16) & 0x7f);
 	else
 		fs_H = ((fs>>16) & 0x7f) | 0x80;
-
+	
 	ret = regmap_write(dev->regmap,INT_FREQ_L,fs_L);
 	ret = regmap_write(dev->regmap,INT_FREQ_M,fs_M);
 	ret = regmap_write(dev->regmap,INT_FREQ_H,fs_H);
@@ -176,11 +176,11 @@ static int GX1503_Set_IntFrq(struct i2c_client *client,int int_frq, int fs)
 	int temp,ret;
 	int IF_freq_L;
 	int IF_freq_H;
-
+	
 	temp = (int)(int_frq*1000/1024);
 	IF_freq_L = (temp& 0xff);
 	IF_freq_H = ((temp>>8)& 0xff);
-
+	
 	ret = regmap_write(dev->regmap,IF_FREQ_L,IF_freq_L);
 	ret = regmap_write(dev->regmap,IF_FREQ_H,IF_freq_H);
 	if(ret)
@@ -201,13 +201,13 @@ static int gx1503_set_frontend(struct dvb_frontend *fe)
 	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
 	int ret,temp;
 	int bandwidth,fs;
-
+		
 	dev_dbg(&client->dev,
 			" modulation=%u frequency=%u bandwidth_hz=%u \n",
 			 c->modulation, c->frequency,c->bandwidth_hz);
 
-
-
+	 
+			
 	if(!dev->active){
 		ret = -EAGAIN;
 		goto err;
@@ -225,14 +225,14 @@ static int gx1503_set_frontend(struct dvb_frontend *fe)
 	if(bandwidth==0)
 		bandwidth = 8;
 
-	GX1503_WriteRegWithMask(client,0xF5,1,6,6);
+	GX1503_WriteRegWithMask(client,0xF5,1,6,6); 
 	GX1503_WriteRegWithMask(client,0xF5,0,6,6);
 	msleep(50);
 	if(dev->clk_freq==24000)
 		fs = 30750;
 	else
 		fs = dev->clk_freq;
-
+	
 	if(fs==30750)
 		GX1503_WriteRegWithMask(client,0xF4,0x28,6,0); //NF
 	else if(fs==30400)
@@ -259,7 +259,7 @@ static int gx1503_set_frontend(struct dvb_frontend *fe)
 	GX1503_WriteRegWithMask(client,0x0A,0x0,2,2); //AdcChnSel   - data from I channel
 	GX1503_WriteRegWithMask(client,0xF9,0x3,7,6); //adc opm	  - 3-active 0-powerdown
 
-	//set fsample clock freq - 30.75MHz or 30.4MHz
+	//set fsample clock freq - 30.75MHz or 30.4MHz	
 	ret = GX1503_Set_Clock(client,fs);
 	if(ret)
 		goto err;
@@ -273,7 +273,7 @@ static int gx1503_set_frontend(struct dvb_frontend *fe)
 
 	//set IF freq
 	GX1503_Set_IntFrq(client,5000,fs);
-
+	
 	//Open TS port
 	GX1503_WriteRegWithMask(client,0xD1,1,7,7		);// ts_out_ena
 
@@ -284,15 +284,14 @@ static int gx1503_set_frontend(struct dvb_frontend *fe)
 		temp = temp &0xbf;
 
 	regmap_write(dev->regmap,0xd0,temp);
-
-	regmap_write(dev->regmap,GX1503B_CFG_TS_0,0x10);
-	regmap_write(dev->regmap,GX1503B_CFG_TS_2,0x32);
-
-	regmap_write(dev->regmap,GX1503B_CFG_TS_4,0x54);
-	regmap_write(dev->regmap,GX1503B_CFG_TS_6,0x76);
-	regmap_write(dev->regmap,GX1503B_CFG_TS_8,0x9A);
-	regmap_write(dev->regmap,GX1503B_CFG_TS_A,0x8B);
-
+	if(dev->ts_config!=1){
+		regmap_write(dev->regmap,GX1503B_CFG_TS_0,0x10);
+		regmap_write(dev->regmap,GX1503B_CFG_TS_2,0x32);			
+		regmap_write(dev->regmap,GX1503B_CFG_TS_4,0x54);
+		regmap_write(dev->regmap,GX1503B_CFG_TS_6,0x76);
+		regmap_write(dev->regmap,GX1503B_CFG_TS_8,0x9A);
+		regmap_write(dev->regmap,GX1503B_CFG_TS_A,0x8B);
+	}
 	//Open sdram port
 	GX1503_WriteRegWithMask(client,0x0A,0,1,1 	);
 
@@ -303,7 +302,7 @@ static int gx1503_set_frontend(struct dvb_frontend *fe)
 	GX1503_WriteRegWithMask(client,0x93,1,6,6 	);// cfg_h_det
 	GX1503_WriteRegWithMask(client,0x9E,3,3,2 	);// cfg_noise_sel
 	GX1503_WriteRegWithMask(client,0xa1,1,7,7 	);// cfg_pn_zero == 1;
-	GX1503_WriteRegWithMask(client,0xE5,7,3,0 	);// cfg_disnum_sel
+	GX1503_WriteRegWithMask(client,0xE5,7,3,0 	);// cfg_disnum_sel 
 	//dwp initialization
 	GX1503_WriteRegWithMask(client,0xB2,255,7,0	);// h distance
 	GX1503_WriteRegWithMask(client,0xB7,0,7,6 	);// h far gain
@@ -325,10 +324,10 @@ static int gx1503_set_frontend(struct dvb_frontend *fe)
 		goto err;
 
 	return 0;
-
+	
 err:
 	dev_dbg(&client->dev,"failed = %d\n",ret);
-	return ret;
+	return ret;	
 }
 
 static int gx1503_read_status(struct dvb_frontend *fe, enum fe_status *status)
@@ -338,7 +337,7 @@ static int gx1503_read_status(struct dvb_frontend *fe, enum fe_status *status)
 	int ret,temp;
 
 	*status = 0;
-
+	
 	if (!dev->active) {
 		ret = -EAGAIN;
 		goto err;
@@ -357,11 +356,12 @@ static int gx1503_read_status(struct dvb_frontend *fe, enum fe_status *status)
 	return 0;
 err:
 	dev_dbg(&client->dev,"failed = %d\n",ret);
-	return ret;
+	return ret;	
 }
 
 static int gx1503_read_snr(struct dvb_frontend * fe,u16 * snr)
 {
+	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
 	struct i2c_client *client = fe->demodulator_priv;
 	struct gx1503_dev *dev = i2c_get_clientdata(client);
 	unsigned int Hl,Hh;
@@ -379,25 +379,52 @@ static int gx1503_read_snr(struct dvb_frontend * fe,u16 * snr)
 	regmap_read(dev->regmap,H_POW_H,&Hh);
 	regmap_read(dev->regmap,NOISE_L,&Nl);
 	regmap_read(dev->regmap,NOISE_H,&Nh);
-
+	
 	regmap_read(dev->regmap,AUTO_TPS0,&temp);
 	gi_mode = (temp & 0x0c)>>2;
 	if(gi_mode<0 || gi_mode>2)gi_mode = 0;
-
+					
 	H_pow	  = (Hl + Hh*256);
 	Noise_pow = (Nh*256+Nl);
-
+	
 	if(Noise_pow==0)
 	   Noise_pow = 1;
-
+	
 	log_data = H_pow * 2048 / gi_len[gi_mode] * 64 / Noise_pow ;
-	SNR = GX1503_100Log(log_data)/10 - snr_mod[gi_mode] - 10;
+	SNR = GX1503_100Log(log_data)/10 - snr_mod[gi_mode] - 10;	
+	
 	if(SNR <= 0)
 		SNR = 0;
-
-	*snr = SNR;
+		
+	c->cnr.len = 2;
+	c->cnr.stat[0].scale = FE_SCALE_DECIBEL;
+	c->cnr.stat[0].svalue = (s64)SNR*250;
+	c->cnr.stat[1].scale = FE_SCALE_RELATIVE;
+	c->cnr.stat[1].uvalue = (s64)SNR*328;
+		
+	*snr = c->cnr.stat[1].uvalue;
 
 	return 0;
+}
+static int gx1503_read_strength(struct dvb_frontend*fe, u16 *strength)
+{
+    struct dtv_frontend_properties *c = &fe->dtv_property_cache;
+    int i = 0;
+    
+    *strength = 0;
+
+    if(fe->ops.tuner_ops.get_rf_strength)
+    	fe->ops.tuner_ops.get_rf_strength(fe,strength);	
+   else{		
+    for(i = 0;i<c->strength.len;i++)
+    {
+	if (c->strength.stat[i].scale == FE_SCALE_RELATIVE)
+		*strength = (u16)c->strength.stat[i].uvalue;
+	else if (c->strength.stat[i].scale == FE_SCALE_DECIBEL)
+		*strength = ((100000 + (s32)c->strength.stat[i].svalue)/1000) * 656;   
+    }
+    }
+    return 0;
 }
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 7, 0)
@@ -451,10 +478,10 @@ static const struct dvb_frontend_ops gx1503_ops = {
 		.delsys = {SYS_DVBT},
 		.info = {
 			.name = "NationalChip gx1503",
-			.frequency_min_hz = 474 * MHz,
+			.frequency_min_hz = 100 * MHz,
 			.frequency_max_hz = 858 * MHz,
 			.frequency_stepsize_hz = 10 * kHz,
-			.caps =
+			.caps = 
 				FE_CAN_FEC_AUTO |
 				FE_CAN_QAM_AUTO |
                 FE_CAN_TRANSMISSION_MODE_AUTO |
@@ -464,8 +491,9 @@ static const struct dvb_frontend_ops gx1503_ops = {
 		.init    = gx1503_init,
 		.set_frontend = gx1503_set_frontend,
 		.read_status = gx1503_read_status,
+		.read_signal_strength = gx1503_read_strength,
 		.read_snr = gx1503_read_snr,
-
+		
 };
 
 static int gx1503_probe(struct i2c_client *client)
@@ -496,7 +524,7 @@ static int gx1503_probe(struct i2c_client *client)
 	ret = regmap_read(dev->regmap,CHIP_ADDR,&temp);
 	if(ret)
 		goto err_regmap_exit;
-
+	
 	dev_info(&client->dev,"read the chip id is %x",temp);
 	if(temp!=0x45){
 		dev_err(&client->dev,"the chip id error!");
@@ -504,7 +532,7 @@ static int gx1503_probe(struct i2c_client *client)
 		}
 	else
 		dev_info(&client->dev,"Deceted the gx1503 chip");
-
+	
 	i2c_set_clientdata(client,dev);
 	mutex_init(&dev->i2c_mutex);
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 7, 0)
@@ -519,7 +547,7 @@ static int gx1503_probe(struct i2c_client *client)
 	ret = i2c_mux_add_adapter(dev->muxc,0,0);
 	if(ret)
 		goto err_regmap_exit;
-
+	
 	*cfg->i2c_adapter = dev->muxc->adapter[0];
 #else
 	dev->tuner_adapter = i2c_add_mux_adapter(client->adapter,&client->dev,
@@ -537,13 +565,14 @@ static int gx1503_probe(struct i2c_client *client)
 	dev->fe.demodulator_priv = client;
 	*cfg->fe = &dev->fe;
 	dev->ts_mode = cfg->ts_mode;
+	dev->ts_config = cfg->ts_config;
 	dev->clk_freq = cfg->clk_freq;
 	dev->fw_loaded = false;
 	dev->active = false;
-
+		
 	return 0;
-
-
+	
+	
 err_regmap_exit:
 	regmap_exit(dev->regmap);
 err_free:
@@ -556,14 +585,14 @@ err:
 static void gx1503_remove(struct i2c_client *client)
 {
 	struct gx1503_dev*dev = i2c_get_clientdata(client);
-
+	
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 7, 0)
 	i2c_mux_del_adapters(dev->muxc);
-#else
+#else	
 	i2c_del_mux_adapter(dev->tuner_adapter);
 #endif
 	regmap_exit(dev->regmap);
-
+	
 	dev->fe.ops.release = NULL;
 	dev->fe.demodulator_priv = NULL;
 	kfree(dev);
@@ -587,6 +616,6 @@ static struct i2c_driver gx1503_driver = {
 
 module_i2c_driver(gx1503_driver);
 
-MODULE_AUTHOR("Davin<smiledavin@gmail.com>");
+MODULE_AUTHOR("Davin<Davin@tbsdtv.com>");
 MODULE_DESCRIPTION("gx1503 DTMB(GB20600-2006) driver");
 MODULE_LICENSE("GPL");

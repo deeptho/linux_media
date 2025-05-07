@@ -66,9 +66,6 @@ static int i2c_detect(struct i2c_adapter *adapter, struct i2c_driver *driver);
 
 static DEFINE_STATIC_KEY_FALSE(i2c_trace_msg_key);
 static bool is_registered;
-#define dprintk(fmt, arg...)																					\
-	printk(KERN_DEBUG pr_fmt("%s:%d " fmt), __func__, __LINE__, ##arg)
-
 
 int i2c_transfer_trace_reg(void)
 {
@@ -622,11 +619,11 @@ static void i2c_device_remove(struct device *dev)
 
 	driver = to_i2c_driver(dev->driver);
 	if (driver->remove) {
-		printk("remove dev=%p driver=%p dev->remove=%p\n", dev, driver, driver? driver->remove : NULL );
+		dev_dbg(dev, "remove\n");
 
 		driver->remove(client);
 	}
-	printk("After remove client client=%p dev=%p \n", client, dev);
+
 	devres_release_group(&client->dev, client->devres_group_id);
 
 	dev_pm_domain_detach(&client->dev, true);
@@ -953,7 +950,7 @@ i2c_new_client_device(struct i2c_adapter *adap, struct i2c_board_info const *inf
 							 info->num_resources);
 
 	strscpy(client->name, info->type, sizeof(client->name));
-	printk("i2c_new_client_device: client=%p name=%s\n", client, client->name);
+
 	status = i2c_check_addr_validity(client->addr, client->flags);
 	if (status) {
 		dev_err(&adap->dev, "Invalid %d-bit I2C address 0x%02hx\n",
@@ -986,7 +983,6 @@ i2c_new_client_device(struct i2c_adapter *adap, struct i2c_board_info const *inf
 	}
 
 	status = device_register(&client->dev);
-	printk("after device_register: client=%p dev=%p\n", client, client ? &client->dev : NULL);
 	if (status)
 		goto out_remove_swnode;
 
@@ -1071,15 +1067,9 @@ static int dummy_probe(struct i2c_client *client)
 	return 0;
 }
 
-static void dummy_remove(struct i2c_client *client)
-{
-	printk("dummy_remove called\n");
-}
-
 static struct i2c_driver dummy_driver = {
 	.driver.name	= "dummy",
 	.probe		= dummy_probe,
-	.remove = dummy_remove,
 	.id_table	= dummy_id,
 };
 
@@ -1724,29 +1714,26 @@ void i2c_del_adapter(struct i2c_adapter *adap)
 	found = idr_find(&i2c_adapter_idr, adap->nr);
 	mutex_unlock(&core_lock);
 	if (found != adap) {
-		printk("attempting to delete unregistered adapter [%s]\n", adap->name);
+		pr_debug("attempting to delete unregistered adapter [%s]\n", adap->name);
 		return;
 	}
-	printk("before i2c_acpi_remove_space_handler\n");
+
 	i2c_acpi_remove_space_handler(adap);
-	printk("after i2c_acpi_remove_space_handler\n");
 	/* Tell drivers about this removal */
 	mutex_lock(&core_lock);
 	bus_for_each_drv(&i2c_bus_type, NULL, adap,
 			       __process_removed_adapter);
 	mutex_unlock(&core_lock);
-	printk("before _sysfs removal\n");
+
 	/* Remove devices instantiated from sysfs */
 	mutex_lock_nested(&adap->userspace_clients_lock,
 			  i2c_adapter_depth(adap));
 	list_for_each_entry_safe(client, next, &adap->userspace_clients,
 				 detected) {
-		printk("Removing %s at 0x%x\n", client->name,
+		dev_dbg(&adap->dev, "Removing %s at 0x%x\n", client->name,
 			client->addr);
 		list_del(&client->detected);
-		printk("after list_del unregistering client=%p\n", client);
 		i2c_unregister_device(client);
-		printk("after i2c_unregister_device client=%p\n", client);
 	}
 	mutex_unlock(&adap->userspace_clients_lock);
 
@@ -1764,7 +1751,7 @@ void i2c_del_adapter(struct i2c_adapter *adap)
 #endif
 
 	/* device name is gone after device_unregister */
-	printk("adapter %p [%s] unregistered\n", adap, adap->name);
+	dev_dbg(&adap->dev, "adapter [%s] unregistered\n", adap->name);
 
 	pm_runtime_disable(&adap->dev);
 
@@ -1778,9 +1765,7 @@ void i2c_del_adapter(struct i2c_adapter *adap)
 	 * should be thoroughly tested with DEBUG_KOBJECT_RELEASE enabled!
 	 */
 	init_completion(&adap->dev_released);
-	printk("before device_unregister adap=%p adap->dev=%p\n", adap, adap ? &adap->dev : (void*)NULL);
 	device_unregister(&adap->dev);
-	printk("after device_unregister adap=%p adap->dev=%p\n", adap, adap ? &adap->dev : (void*)NULL);
 	wait_for_completion(&adap->dev_released);
 
 	/* free bus id */
@@ -2602,12 +2587,10 @@ void i2c_put_adapter(struct i2c_adapter *adap)
 {
 	if (!adap)
 		return;
-	printk("before module_put adap=%p\n", adap);
+
 	module_put(adap->owner);
-	printk("before put_device adap=%p\n", adap);
 	/* Should be last, otherwise we risk use-after-free with 'adap' */
 	put_device(&adap->dev);
-	printk("after put_device adap=%p\n", adap);
 }
 EXPORT_SYMBOL(i2c_put_adapter);
 

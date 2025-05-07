@@ -51,9 +51,6 @@ DVB_DEFINE_MOD_OPT_ADAPTER_NR(adapter_nr);
 #define CX231XX_DVB_MAX_PACKETSIZE 564
 #define CX231XX_DVB_MAX_PACKETS 64
 
-#define dprintk(fmt, arg...)																					\
-	printk(KERN_DEBUG pr_fmt("%s:%d " fmt),  __func__, __LINE__, ##arg)
-
 static struct s5h1432_config dvico_s5h1432_config = {
 	.output_mode   = S5H1432_SERIAL_OUTPUT,
 	.gpio          = S5H1432_GPIO_ON,
@@ -516,7 +513,7 @@ static int attach_xc5000(u8 addr, struct cx231xx *dev)
 		return -EINVAL;
 	}
 
-	fe = dvb_attach(xc5000_attach, dev->dvb[0]->frontend[0], &cfg);
+	fe = dvb_attach(xc5000_attach, dev->dvb[0]->frontend[0], &cfg, 0);
 	if (!fe) {
 		dev_err(dev->dev, "%s/2: xc5000 attach failed\n", dev->name);
 		dvb_frontend_detach(dev->dvb[0]->frontend[0]);
@@ -695,8 +692,7 @@ static int register_dvb(struct cx231xx_dvb *dvb,
 		goto fail_fe_conn;
 	}
 
-	memcpy(dvb->adapter.proposed_mac, dvb->mac, 6);
-
+	memcpy(dvb->adapter.proposed_mac,dvb->mac,6);
 	/* register network adapter */
 	dvb_net_init(&dvb->adapter, &dvb->net, &dvb->demux.dmx);
 #if 0
@@ -759,64 +755,32 @@ static void unregister_dvb(struct cx231xx_dvb *dvb)
 
 static int tbs_cx_mac(struct i2c_adapter *i2c_adap, u8 count, u8 *mac)
 {
-	u8 b[64], e[256];
-	int ret, i, start0, start1, end0, end1;
-	struct i2c_msg msg[] = {
-		{ .addr = 0x50, .flags = 0,
-			.buf = b, .len = 1 },
-		{ .addr = 0x50, .flags = I2C_M_RD,
-			.buf = b, .len = 64 }
-	};
+    u8 b[64], e[256];
+    int ret, i;
 
-	for (i = 0; i < 4; i++) {
-		b[0] = 64 * i;
+    struct i2c_msg msg[] = {
+	{ .addr = 0x50, .flags = 0,
+	    .buf = b, .len = 1 },
+	{ .addr = 0x50, .flags = I2C_M_RD,
+	    .buf = b, .len = 64 }
+    };
 
-		ret = i2c_transfer(i2c_adap, msg, 2);
+    for (i = 0; i < 4; i++) {
+	b[0] = 64 * i;
 
-		if (ret != 2) {
-			printk("TBS CX read MAC failed\n");
-			return -1;
-			}
+	ret = i2c_transfer(i2c_adap, msg, 2);
 
-		memcpy(&e[64 * i], b , 64);
+	if (ret != 2) {
+	    printk("TBS CX read MAC failed\n");
+	    return -1;
 	}
 
-	start0 = end0  = -1;
-	start1 = end1  = -1;
+	memcpy(&e[64 * i], b , 64);
+    }
 
-	for(i=0; i <256; ++i) {
-		if(e[i] == 0xff)
-			continue;
-		start0 = i;
-		break;
-	}
-	for(; i <256; ++i) {
-		if(e[i] != 0xff)
-			continue;
-		end0 = i;
-		break;
-	}
-	for(; i <256; ++i) {
-		if(e[i] == 0xff)
-			continue;
-		start1 = i;
-		break;
-	}
+    memcpy(mac, &e[0xa0 + 16*count], 6);
 
-	for(; i <256; ++i) {
-		if(e[i] != 0xff)
-			continue;
-		end1 = i;
-		break;
-	}
-	dprintk("MAX offsets: %d %d %d %d\n", start0, end0, start1, end1);
-	if(end0-start0 == 6)
-		dprintk("mac0 found at offset %d\n", start0);
-	if(end1-start1 == 6)
-		dprintk("mac1 found at offset %d\n", start1);
-	memcpy(mac, &e[count ? start1: start0], 6);
-
-	return 0;
+    return 0;
 }
 
 static int dvb_init(struct cx231xx *dev)
@@ -827,7 +791,6 @@ static int dvb_init(struct cx231xx *dev)
 	struct i2c_adapter *demod_i2c;
 	struct i2c_client *client;
 	struct i2c_adapter *adapter;
-	uint64_t card_mac_address = 0;
 
 	if (!dev->board.has_dvb) {
 		/* This device does not support the extension */
@@ -1291,7 +1254,7 @@ static int dvb_init(struct cx231xx *dev)
 	{
 		tbs_reset_fe(dev, i ? 20 : 24);
 		dvb->frontend[0] = dvb_attach(tas2101_attach, &tbs5990_tas2101_cfg[i],
-																	demod_i2c, i);
+																	demod_i2c, 0);
 
 		if (!dvb->frontend[0]) {
 			dev_err(dev->dev,
@@ -1317,8 +1280,6 @@ static int dvb_init(struct cx231xx *dev)
 		dvb->frontend[0]->callback = cx231xx_tuner_callback;
 
 		strscpy(dvb->frontend[0]->ops.info.name,dev->board.name,52);
-		strscpy(dvb->frontend[0]->ops.info.card_short_name, "TBS 5990",
-						sizeof(dvb->frontend[0]->ops.info.card_short_name));
 
 		break;
 	}
@@ -1448,21 +1409,6 @@ static int dvb_init(struct cx231xx *dev)
 		result = -EINVAL;
 		goto out_free;
 	}
-
-	if (card_mac_address == 0) {
-		uint64_t proposed_mac=0;
-		memcpy(&proposed_mac, dvb->mac, 6);
-		if (proposed_mac == 0xffffffffffff)
-			proposed_mac = 0 ; 			//card which has not been initialised properly
-		card_mac_address = proposed_mac;
-	}
-
-	if(dvb->frontend[0]->ops.info.card_mac_address == 0 ) {
-		dprintk("setting mac=0x%llx\n", card_mac_address);
-		dvb->frontend[0]->ops.info.card_mac_address = card_mac_address; //Select mac of first adapter as card mac_address
-	}
-	snprintf(dvb->frontend[0]->ops.info.card_address, sizeof(dvb->frontend[0]->ops.info.card_address),
-					 "usb%s", dev_name(&dev->udev->dev));
 
 	/* register everything */
 	result = register_dvb(dvb, THIS_MODULE, dev, dev->dev);

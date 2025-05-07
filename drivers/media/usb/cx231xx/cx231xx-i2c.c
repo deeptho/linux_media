@@ -186,10 +186,10 @@ static int cx231xx_i2c_send_bytes(struct i2c_adapter *i2c_adap,
 					size = 0;
 
 			} while (size > 0);
-
+			
 			bus->i2c_nostop = 0;
 			bus->i2c_reserve = 0;
-
+			
 		} else {
 
 			/* prepare xfer_data struct */
