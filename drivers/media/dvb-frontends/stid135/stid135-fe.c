@@ -339,7 +339,7 @@ I2C_RESULT I2cReadWrite(void *pI2CHost, I2C_MODE mode, u8 ChipAddress, u8 *Data,
 {
 	struct stv_chip_t     *base = (struct stv_chip_t *)pI2CHost;
 	struct i2c_msg msg = {.addr = ChipAddress>>1, .flags = 0,
-						.buf = Data, .len = NbData};
+												.buf = Data, .len = NbData};
 	int ret;
 
 
@@ -351,6 +351,7 @@ I2C_RESULT I2cReadWrite(void *pI2CHost, I2C_MODE mode, u8 ChipAddress, u8 *Data,
 	ret = i2c_transfer(base->i2c, &msg, 1);
 	if(ret<0) {
 		dprintk("BUG: i2c_transfer returned %d\n", ret);
+		dump_stack();
 		msleep(20);
 		ret = i2c_transfer(base->i2c, &msg, 1);
 		dprintk("BUG: i2c_transfer returned %d on re-attempt\n", ret);
@@ -615,9 +616,9 @@ static enum fe_ioctl_result reserve_tuner_and_rf_in_(struct stv* state, struct f
 			will_be_master = false;
 			if(must_be_master) {
 				if(ic->config_id > new_tuner->reservation.config_id) {
-					state_dprintk("can not yet become master because of other users: config_id=%d -> %d; use_count=%d\n",
+					state_dprintk("can not yet become master because of other users: config_id=%d -> %d; use_count=%d old_tuner=%p new_tuner=%p\n",
 												new_tuner->reservation.config_id, ic->config_id,
-												new_tuner->reservation.use_count);
+												new_tuner->reservation.use_count, old_tuner, new_tuner);
 					goto tempfail_;
 				} else {
 					state_dprintk("can NEVER become master because of other users: config_id=%d -> %d; use_count=%d\n",
@@ -627,9 +628,9 @@ static enum fe_ioctl_result reserve_tuner_and_rf_in_(struct stv* state, struct f
 				goto fatal_;
 			} else {
 				if(ic->config_id >  new_tuner->reservation.config_id) {
-					state_dprintk("cannot yet become slave: waiting for master config_id=%d -> %d; use_count=%d\n",
+					state_dprintk("cannot yet become slave: waiting for master config_id=%d -> %d; use_count=%d old_tuner=%p new_tuner=%p\n",
 												new_tuner->reservation.config_id, ic->config_id,
-												new_tuner->reservation.use_count);
+												new_tuner->reservation.use_count, old_tuner, new_tuner);
 					goto tempfail_;
 				} else if(ic->config_id <  new_tuner->reservation.config_id)  {
 					state_dprintk("can NEVER become slave because of other users: config_id=%d -> %d; use_count=%d\n",
@@ -649,10 +650,19 @@ static enum fe_ioctl_result reserve_tuner_and_rf_in_(struct stv* state, struct f
 			//Our application owns the tuner; we can use it, but not control it
 			will_be_master = false;
 			if(must_be_master) {
-				state_dprintk("cannot become master because of other users config_id=%d -> %d; use_count=%d\n",
-											new_rf_in->reservation.config_id, ic->config_id,
-										new_rf_in->reservation.use_count);
-				goto fatal_;
+				if(ic->config_id >  new_tuner->reservation.config_id) {
+					state_dprintk("cannot yet become master because of other users config_id=%d -> %d; use_count=%d\n",
+												new_rf_in->reservation.config_id, ic->config_id,
+												new_rf_in->reservation.use_count);
+					goto tempfail_;
+				}  else if(ic->config_id <  new_rf_in->reservation.config_id) {
+					if(!state->legacy_rf_in) {
+						state_dprintk("can NEVER become master because of other users: config_id=%d -> %d; use_count=%d\n",
+													new_rf_in->reservation.config_id, ic->config_id,
+													new_rf_in->reservation.use_count);
+						goto fatal_;
+					}
+				}
 			} else {
 				if(ic->config_id >  new_tuner->reservation.config_id) {
 					state_dprintk("cannot yet become slave: waiting for master config_id=%d -> %d; use_count=%d\n",
@@ -697,7 +707,7 @@ static enum fe_ioctl_result reserve_tuner_and_rf_in_(struct stv* state, struct f
 
 	if(old_rf_in) {
 		if (!same_rf_in) {
-			state_dprintk("decrementing rf_in[%d].use_count=%d\n", old_rf_in->rf_in_no, old_rf_in->reservation.use_count);
+			state_dprintk("decrementing old rf_in[%d].use_count=%d\n", old_rf_in->rf_in_no, old_rf_in->reservation.use_count);
 			--old_rf_in->reservation.use_count;
 		}
 		if(old_rf_in->reservation.use_count == 0) {
@@ -712,7 +722,7 @@ static enum fe_ioctl_result reserve_tuner_and_rf_in_(struct stv* state, struct f
 
 	if(old_tuner) {
 		if(!same_tuner) {
-			state_dprintk("decrementing tuner[%d].use_count=%d\n", old_tuner->tuner_no, old_tuner->reservation.use_count);
+			state_dprintk("decrementing old tuner[%d].use_count=%d\n", old_tuner->tuner_no, old_tuner->reservation.use_count);
 			--old_tuner->reservation.use_count;
 		}
 		if(old_tuner->reservation.use_count == 0) {
@@ -767,7 +777,7 @@ static enum fe_ioctl_result reserve_tuner_and_rf_in_(struct stv* state, struct f
 	}
 	if(!same_tuner)
 		new_tuner->reservation.use_count++;
-	if(new_tuner->reservation.owner <0) {
+	if(new_tuner->reservation.owner < 0) {
 		new_tuner->reservation.owner = ic->owner;
 		new_tuner->reservation.config_id = ic->config_id;
 	} else {
@@ -826,7 +836,7 @@ static enum fe_ioctl_result stid135_select_rf_in_(struct stv* state, struct fe_r
 			return result;
 	} else {
 
-		state_dprintk("old_rf_in=%d RELEASED; result=%s ic=%p\n", old_rf_in_no, reservation_result_str(result), ic);
+		state_dprintk("old_rf_in=%d RELEASED; result=%s ic=%p new+tuner=%p\n", old_rf_in, reservation_result_str(result), ic, new_tuner);
 
 		if(result != FE_RESERVATION_RELEASED)
 			state_dprintk("BUG: result=%s\n", reservation_result_str(result));
@@ -869,6 +879,7 @@ static enum fe_ioctl_result stid135_select_rf_in_(struct stv* state, struct fe_r
 		state->quattro_rf_in_mask = 0;
 		state->quattro_rf_in = 0;
 		state->legacy_rf_in = false;
+		state_dprintk("returning FE_RESERVATION_FAILED\n");
 		return FE_RESERVATION_FAILED;
 	}
 
@@ -2264,9 +2275,9 @@ static int stid135_sleep(struct dvb_frontend* fe)
 	} else {
 		state_chip_lock(state);
 		card_lock(state);
-		state_dprintk("sleep tuner[%d].use_count=%d rf_in[%d].use_count=%d\n", tuner->tuner_no,
-									tuner->reservation.use_count, rf_in->rf_in_no,
-									rf_in->reservation.use_count);
+		state_dprintk("sleep tuner[%d].use_count=%d owner=%d config_id=%d  rf_in[%d].use_count=%d\n", tuner->tuner_no,
+									tuner->reservation.use_count, tuner->reservation.owner, tuner->reservation.config_id,
+									rf_in->rf_in_no, rf_in->reservation.use_count);
 		if(tuner->reservation.use_count<=0)
 			state_dprintk("BUG: sleep tuner_use_count=%d <=0 \n", tuner->reservation.use_count);
 		if(rf_in->reservation.use_count<=0)
