@@ -46,7 +46,7 @@ static int i2c_xfer(struct i2c_adapter *adapter, struct i2c_msg *msg, int num)
 
 	mutex_lock(&bus->lock);
 	//clear the i2c status
-	tbs_read(bus->base, 0x00);
+	tbs_read(bus->base, 0x00); //TBSECP3_I2C_STAT=0x00
 
 	for (i = 0; i < num; i++) {
 

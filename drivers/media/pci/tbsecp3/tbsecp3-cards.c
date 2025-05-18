@@ -26,7 +26,7 @@ struct tbsecp3_board tbsecp3_boards[] = {
 #if 0
 		.i2c_speed	= 39, //TBS provided value
 #else
-		.i2c_speed = 5, //default=9 value from TBS6909X
+		.i2c_speed = 5, //default=9, 6 was a good value
 #endif
 		.eeprom_i2c	= 1,
 		.eeprom_addr	= 0x02,

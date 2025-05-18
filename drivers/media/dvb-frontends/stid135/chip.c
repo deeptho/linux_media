@@ -722,7 +722,6 @@ STCHIP_Error_t  ChipSetRegisters(STCHIP_Info_t* hChip, u16 FirstReg, s32 NbRegs)
 
 					if(I2cReadWrite(hChip->pI2CHost,I2C_WRITE,hChip->I2cAddr,data,nbdata) != I2C_ERR_NONE) {	/* write data buffer */
 						dprintk("BUG: NO_ACK");
-						dump_stack();
 						hChip->Error = CHIPERR_I2C_NO_ACK;
 					}
 
@@ -804,7 +803,6 @@ STCHIP_Error_t ChipGetRegisters(STCHIP_Info_t* hChip, u16 FirstReg, s32 NbRegs)
 
 								if(I2cReadWrite(hChip->pI2CHost,I2C_WRITE,hChip->I2cAddr,data,nbdata) != I2C_ERR_NONE)	{/* Write sub address */
 									dprintk("BUG: NO_ACK");
-									dump_stack();
 									hChip->Error = CHIPERR_I2C_NO_ACK;
 								}
 
@@ -823,7 +821,6 @@ STCHIP_Error_t ChipGetRegisters(STCHIP_Info_t* hChip, u16 FirstReg, s32 NbRegs)
 
 									if(I2cReadWrite(hChip->pI2CHost,I2C_READ,hChip->I2cAddr,data,nbdata) != I2C_ERR_NONE)	{/* Read data buffer */
 										dprintk("BUG: NO_ACK");
-										dump_stack();
 										hChip->Error = CHIPERR_I2C_NO_ACK;
 									}
 
@@ -1261,24 +1258,23 @@ int ChipCheckAck(STCHIP_Info_t* hChip)
 	{
 		hChip->Error = CHIPERR_NO_ERROR;
 
-		#ifndef NO_I2C
-				if(hChip->Repeater && hChip->RepeaterHost && hChip->RepeaterFn)
-						hChip->RepeaterFn(hChip->RepeaterHost,TRUE);	/* Set repeater ON */
+#ifndef NO_I2C
+		if(hChip->Repeater && hChip->RepeaterHost && hChip->RepeaterFn)
+			hChip->RepeaterFn(hChip->RepeaterHost,TRUE);	/* Set repeater ON */
 
 					// PJ 07/2012 change polling access to WRITE, since a READ could clear flags on target device
 					//status = I2cReadWrite(hChip->pI2CHost,I2C_READ,hChip->I2cAddr,&data,1);
-					status = I2cReadWrite(hChip->pI2CHost,I2C_WRITE,hChip->I2cAddr,&data,0);
+		status = I2cReadWrite(hChip->pI2CHost,I2C_WRITE,hChip->I2cAddr,&data,0);
 
-					if(hChip->Repeater && hChip->RepeaterHost && hChip->RepeaterFn)
-						hChip->RepeaterFn(hChip->RepeaterHost,FALSE);	/* Set repeater OFF */
+		if(hChip->Repeater && hChip->RepeaterHost && hChip->RepeaterFn)
+			hChip->RepeaterFn(hChip->RepeaterHost,FALSE);	/* Set repeater OFF */
 
-		#else
+#else
 			status = I2C_ERR_NONE;
 		#endif
 
 			if(status != I2C_ERR_NONE) {
 				dprintk("BUG: NO_ACK");
-				dump_stack();
 				hChip->Error = CHIPERR_I2C_NO_ACK;
 			}
 	}

@@ -12844,13 +12844,13 @@ bool state_chip_is_locked_by_state(struct stv* state) {
 void state_chip_sleep_(struct stv* state, int timens, const char* func, int line) {
 	bool may_unlock_chip = !card_is_locked_by_state(state);
 	WARN_ON (!state_chip_is_locked_by_state(state));
-	if (may_unlock_chip)
+	if (may_unlock_chip) //??? TODO not needed
 		state_chip_unlock_(state, func, line);
 	else {
 		state_dprintk_(func, line, "Sleeping without state_unlock because card is locked by %d.%d at %s:%d\n",
 									 state->chip->card->lock.chip_no, state->chip->card->lock.demod,
 									 state->chip->card->lock.func ? state->chip->card->lock.func: "??", state->chip->card->lock.line);
-		dump_stack();
+		//dump_stack();
 	}
 	msleep(timens);
 	if(may_unlock_chip)
