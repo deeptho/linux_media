@@ -2451,7 +2451,7 @@ fe_lla_error_t FE_STiD135_CarrierGetQuality(STCHIP_Info_t* hChip, enum fe_stid13
 				regval += MAKEWORD16(ChipGetFieldImage(hChip, noiseField1),
 								 ChipGetFieldImage(hChip, noiseField0));
 
-				ChipWaitOrAbort(hChip, 1);
+				msleep(1);
 			}
 			regval /=8;
 
@@ -3311,10 +3311,10 @@ static fe_lla_error_t Estimate_Power_Int(struct stv* state,
 	agcrfin0 = (u8)reg_value;
 	error |= ChipGetOneRegister(state->chip->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC2REF(Demod), &reg_value);
 	agc2ref = (u8)reg_value;
-	ChipWaitOrAbort(state->chip->ip.handle_demod,1);
+	msleep(1);
 	error |= ChipGetOneRegister(state->chip->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC1REF(Demod), &reg_value);
 	agc1ref = (u8)reg_value;
-	ChipWaitOrAbort(state->chip->ip.handle_demod,1);
+	msleep(1);
 	error |= ChipGetOneRegister(state->chip->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC1POWERI(Demod), &reg_value);
 	agc1poweri = (u8)reg_value;
 	error |= ChipGetOneRegister(state->chip->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_AGC1POWERQ(Demod), &reg_value);
@@ -11824,7 +11824,7 @@ fe_lla_error_t fe_stid135_measure_harmonic(struct fe_stid135_internal_param *pPa
 		while((contmode != TRUE) && (timeout < 40)){
 			error |= ChipGetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_GSTAT_PSD_DONE(Demod), &contmode);
 			timeout = (u8)(timeout + 1);
-			ChipWaitOrAbort(pParams->handle_demod, 1);
+			msleep(1);
 		}
 	}
 
@@ -12841,19 +12841,19 @@ bool state_chip_is_locked_by_state(struct stv* state) {
 	}
 }
 
-void state_chip_sleep_(struct stv* state, int timems, const char* func, int line) {
-	bool may_unlock = !card_is_locked_by_state(state);
+void state_chip_sleep_(struct stv* state, int timens, const char* func, int line) {
+	bool may_unlock_chip = !card_is_locked_by_state(state);
 	WARN_ON (!state_chip_is_locked_by_state(state));
-	if (may_unlock)
+	if (may_unlock_chip)
 		state_chip_unlock_(state, func, line);
 	else {
-		state_dprintk_(func, line, "Sleeping without unlock because card is locked by %d.%d at %s:%d\n",
+		state_dprintk_(func, line, "Sleeping without state_unlock because card is locked by %d.%d at %s:%d\n",
 									 state->chip->card->lock.chip_no, state->chip->card->lock.demod,
 									 state->chip->card->lock.func ? state->chip->card->lock.func: "??", state->chip->card->lock.line);
 		dump_stack();
 	}
-	ChipWaitOrAbort(state->chip->ip.handle_demod, timems);
-	if(may_unlock)
+	msleep(timens);
+	if(may_unlock_chip)
 		state_chip_lock_(state, func, line);
 }
 
