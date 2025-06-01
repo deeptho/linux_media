@@ -372,6 +372,28 @@ continuing to work ``as is''.
    DMX_SET_PES_FILTER is used to select a first PID to add to the output, and DMX_ADD_PID to add addional
    pids.
 
+# Changes in release-1.7
+
+* Merged tbs code up to c6af36f453d22ef8b38d2bb6
+* Reduce log verbosity
+* Ignore bbframes_auto for non transport streams.
+* Auto detect plp_id in t2mi streams, which is useful as usually only one stream is present.
+* Recover t2mi processing after stream error occurs; this fixes the problem that some t2mi streams output corrupt data if demux is started before frontend is tuned.
+* Remove plp filtering.
+* Bug; confusion between supports.bbframes and supports.neumo
+* Bug: frontend thread keeps running after frontend device is closed, leading to i2c xfer errors.
+* Show adapter_no in debug messages.
+* stid135: Bug: allow retrying SET_RF_INPUT when it failes for a master request
+* stid135:  Replace ChipWaitOrAbort by msleep.
+* stid135: fix race in turning off adapters.
+* stid135: fix deadlocksl
+* stid135: avoid detecting wrong isi when in bbframes mode
+* Bug: Remove double free in embedded_stream_release_.
+* Fixes for newer kernels: remove_new updates
+* m88rs6060: make autoclock work.
+* Allow bbframes mode also for non-multi-streams
+* Prevent fe monitoring from running after close. Improved debugging.
+
 # Changes in release-1.6
 * New demux api to support internal demuxing of bbframes streams (stid135-based cards only) and t2mi streams
   (all cards).
