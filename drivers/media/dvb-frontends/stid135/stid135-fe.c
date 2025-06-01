@@ -2061,13 +2061,13 @@ static int stid135_set_tone(struct dvb_frontend* fe, enum fe_sec_tone_mode tone)
 	return 0;
 }
 
-static int stid135_send_long_master_cmd(struct dvb_frontend* fe,
-																				 struct dvb_diseqc_long_master_cmd *cmd)
+
+static int stid135_send_long_master_cmd_(struct stv *state, struct dvb_diseqc_long_master_cmd *cmd)
 {
 
-	struct stv *state = fe->demodulator_priv;
 	int err=0;
 	state_dprintk("diseqc");
+
 	struct stv_rf_in_t* rf_in = active_rf_in(state);
 	struct stv_tuner_t* tuner = state->active_tuner;
 
@@ -2076,9 +2076,10 @@ static int stid135_send_long_master_cmd(struct dvb_frontend* fe,
 		return -EPERM;
 	}
 
-	if ((!tuner || ! rf_in)) {//@todo: locking maybe not needed
+	//First select default rf_in for legacy cards
+	if ((!tuner || ! rf_in)) {
 		//for older applications, which do not call FE_SET_RF_INPUT
-		card_lock(state); //DeepThought: maybe not needed (as it does not use stid135 chips)
+		card_lock(state);
 		err |= stid135_select_rf_in_legacy_(state);
 		card_unlock(state);
 		rf_in = active_rf_in(state);

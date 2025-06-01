@@ -383,7 +383,7 @@ continuing to work ``as is''.
 * Bug; confusion between supports.bbframes and supports.neumo
 * Bug: frontend thread keeps running after frontend device is closed, leading to i2c xfer errors.
 * Show adapter_no in debug messages.
-* stid135: Bug: allow retrying SET_RF_INPUT when it failes for a master request
+* stid135: Bug: allow retrying SET_RF_INPUT when it fails for a master request
 * stid135:  Replace ChipWaitOrAbort by msleep.
 * stid135: fix race in turning off adapters.
 * stid135: fix deadlocksl
