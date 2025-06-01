@@ -1993,7 +1993,10 @@ static void dvb_demux_output_feed_del(struct dvb_demux_feed *feed)
 		       __func__, feed->type, feed->state, feed->pid);
 		goto out;
 	}
+
+	feeds_dprintk(feeds, "before list_del feed->next=%p\n");
 	list_del(&feed->next);
+	feeds_dprintk(feeds, "After list_del feed->next=%p\n");
 	feeds_dprintk(feeds, "calling kref_put feeds.refcount=%d\n",
 								atomic_read(&feeds->refcount.refcount.refs));
 	kref_put(&feeds->refcount, dvb_demux_feeds_release_);
