@@ -2894,7 +2894,6 @@ static int m88rs6060_read_status(struct dvb_frontend* fe, enum fe_status* status
 	init_signal_quality(fe, p);
 
 	//todo: if not locked, and signal is too low FE_HAS_SIGNAL should be removed
-	*status = FE_HAS_SIGNAL;
 	dprintk("delsys=%d\n", p->delivery_system);
 	switch (p->delivery_system) {
 	case SYS_DVBS:
@@ -2976,8 +2975,9 @@ static int m88rs6060_read_status(struct dvb_frontend* fe, enum fe_status* status
 	state->fe_status = *status;
 	dev_dbg(&client->dev, "lock=%02x status=%02x\n", reg0d, *status);
 
-	if ((state->fe_status & FE_HAS_LOCK)&&(state->TsClockChecked)){
+	if ((!state->config.ts_autoclock) && (state->fe_status & FE_HAS_LOCK) && (state->TsClockChecked)){
 		state->TsClockChecked = false;
+		//state->frequency = p->frequency;
 		m88rs6060_set_clock_ratio(state, p);
 	}
 
@@ -2985,8 +2985,14 @@ static int m88rs6060_read_status(struct dvb_frontend* fe, enum fe_status* status
 	{
 		u32 clock = 0;
 		u32 value = 0;
+#ifdef NEW
 		int stat = 0;
 		u32 speed = 0;
+#endif
+#ifdef TODO
+		mutex_lock(&state->priv->base1->i2c_mutex_ci);
+#endif
+#ifdef NEW
 		msleep(50);
 		state->config.SetSpeedstatus(client->adapter,state->config.num);
 		msleep(50);
@@ -2998,9 +3004,19 @@ static int m88rs6060_read_status(struct dvb_frontend* fe, enum fe_status* status
 		clock = ((speed*4)*204*8/1024)+500; //khz
 		if(clock<42000)
 			clock = 42000;
+#else
+		struct i2c_client *client = state->demod_client;
+		struct i2c_adapter* i2c = client->adapter;
+		clock = state->config.SetCIClock(i2c, state->config.num);
+
+		clock = state->config.SetCIClock(i2c,state->config.num);
+#endif
 		value = (clock/8*204/188*25000/6)+500;
 		si5351_set_freq(state,value,0,SI5351_CLK0);
 		state->newTP = false;
+#ifdef TODO
+		mutex_unlock(&state->priv->base1->i2c_mutex_ci);
+#endif
 	}
 
 	//get signal to noise
@@ -3449,6 +3465,9 @@ static int m88rs6060_tune(struct dvb_frontend *fe, bool re_tune,
 													unsigned int mode_flags, unsigned int *delay, enum fe_status *status)
 {
 	struct m88rs6060_state* state = fe->demodulator_priv;
+	struct i2c_client *client = state->demod_client;
+	struct i2c_adapter* i2c = client->adapter;
+
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
 	int r = -1;
 	bool blind = (p->algorithm == ALGORITHM_BLIND ||p->algorithm == ALGORITHM_BLIND_BEST_GUESS);
@@ -3469,6 +3488,14 @@ static int m88rs6060_tune(struct dvb_frontend *fe, bool re_tune,
 		dprintk("tune called with freq=%d srate=%d re_tune=%d blind=%d algo=%d\n", p->frequency, p->symbol_rate, re_tune, blind, p->algorithm);
 		m88rs6060_stop_task(fe);
 		m88rs6060_tune_once(fe, blind);
+
+		if(state->config.RF_switch)
+			state->config.RF_switch(i2c, state->config.num,0);  //
+		if(state->config.TS_switch)
+			state->config.TS_switch(i2c,1);  //
+
+		if(state->config.LED_switch)
+			state->config.LED_switch(i2c,2);  //
 	}
 
 	/*
@@ -3728,7 +3755,7 @@ static int m88rs6060_scan_sat(struct dvb_frontend* fe, bool init,
 		p->search_range = (p->scan_fft_size * p->scan_resolution*1000);
 
 		p->symbol_rate = p->symbol_rate==0? 1000000: p->symbol_rate;
-		p->stream_id = -1;
+		p->stream_id = NO_STREAM_ID_FILTER;
 		dprintk("FREQ=%d search_range=%dkHz fft=%d res=%dkHz srate=%dkS/s\n",
 						p->frequency, p->search_range/1000,
 						p->scan_fft_size, p->scan_resolution, p->symbol_rate/1000);
@@ -3946,26 +3973,42 @@ struct i2c_client* m88rs6060_attach(struct i2c_adapter* i2c, struct i2c_board_in
 	state->config.ts_mode = cfg->ts_mode;
 	state->config.i2c_wr_max = cfg->i2c_wr_max;
 	state->config.ts_pinswitch = cfg->ts_pinswitch;
+	state->config.ts_autoclock = cfg->ts_autoclock;
 	state->config.repeater_value = cfg->repeater_value;
 	state->config.read_properties = cfg->read_properties;
 	state->config.write_properties = cfg->write_properties;
 	state->config.read_eeprom = cfg->read_eeprom;
 	state->config.write_eeprom = cfg->write_eeprom;
+#ifdef NEW
+#else
+	state->config.RF_switch	= cfg->RF_switch;
+	state->config.TS_switch = cfg->TS_switch;
+	state->config.LED_switch = cfg->LED_switch;
+#endif
 	state->config.envelope_mode = cfg->envelope_mode;
+	state->config.disable_22k   = cfg->disable_22k;
+#ifdef NEW
+#else
 	state->demod_client = client;
+#endif
 	state->TsClockChecked = false;
-
+#ifdef NEW
 	//for ci clk si5351
 	state->config.GetSpeed = cfg->GetSpeed;
 	state->config.SetSpeedstatus = cfg->SetSpeedstatus;
 	state->config.GetSpeedstatus = cfg->GetSpeedstatus;
+#else
+	state->config.SetCIClock= cfg->SetCIClock;
+#endif
 	state->config.SetTimes= cfg->SetTimes;
 	state->config.HAS_CI = cfg->HAS_CI;
 	state->config.num = cfg->num;
+#ifdef NEW
+#else
 	state->plla_freq = 0;
 	state->pllb_freq = 0;
+#endif
 	state->newTP = 0;
-
 	state->demod_regmap = devm_regmap_init_i2c(state->demod_client, &regmap_config);
 	if (IS_ERR(state->demod_regmap)) {
 		ret = PTR_ERR(state->demod_regmap);
