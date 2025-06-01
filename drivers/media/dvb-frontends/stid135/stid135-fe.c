@@ -1881,6 +1881,12 @@ static int stid135_set_voltage(struct dvb_frontend* fe, enum fe_sec_voltage volt
 	}
 
 	if (state->chip->set_voltage && (!tuner || ! rf_in)) {//@todo: locking maybe not needed
+		if(!rf_in && voltage == SEC_VOLTAGE_OFF) {
+			state_dprintk("Skipping SEC_VOLTAGE_OFF; legacy call?\n");
+			return 0;
+		} else if (voltage == SEC_VOLTAGE_OFF) {
+			state_dprintk("Calling legact SEC_VOLTAGE_OFF; rf_in=%p\n", rf_in);
+		}
 		//for older applications, which do not call FE_SET_RF_INPUT
 		state_dprintk("before lock\n");
 		state_chip_lock(state); //DeepThought: needed as this may call select_rf_in_ which needs chip access
@@ -2092,26 +2098,22 @@ static int stid135_send_long_master_cmd(struct dvb_frontend* fe,
 		if(!rf_in->unicable_mode) //unicable slaves are allowed to send diseqc messages
 			return 0;
 	}
+
 	if(!rf_in->controlling_chip) {
 		state_dprintk("BUG: rf_in[%d]->controlling_chip=NULL; tuner[%d].use_count=%d rf_in[%d].use_count=%d\n", rf_in->rf_in_no,
 									tuner->tuner_no,
 									tuner->reservation.use_count, rf_in->rf_in_no, rf_in->reservation.use_count);
 		return -1;
 	}
-	state_chip_lock(state);
-	card_lock(state);
+
 	if(rf_in->sec_configured && ! state->legacy_rf_in && ! state->is_master && ! rf_in->unicable_mode) {
-		card_unlock(state);
 		state_dprintk("SKIPPING diseqc: rf_in=%d; tuner[%d].use_count=%d rf_in[%d].use_count=%d legacy=%d\n",
 									rf_in->rf_in_no,
 									tuner->tuner_no,
 									tuner->reservation.use_count, rf_in->rf_in_no, rf_in->reservation.use_count, state->legacy_rf_in);
-		state_chip_unlock(state);
 	} else {
-		card_unlock(state); //we do not need lock anymore, and it prevents chip_sleep
 		err |= fe_stid135_diseqc_init(&rf_in->controlling_chip->ip, rf_in->rf_in_no + 1, FE_SAT_DISEQC_2_3_PWM);
 		err |= fe_stid135_diseqc_send(state, rf_in->rf_in_no + 1, cmd->msg, cmd->msg_len);
-		state_chip_unlock(state);
 		state_dprintk("diseqc sent: rf_in=%d; tuner[%d].use_count=%d rf_in[%d].use_count=%d\n", rf_in->rf_in_no,
 								tuner->tuner_no,
 									tuner->reservation.use_count, rf_in->rf_in_no, rf_in->reservation.use_count);
@@ -2119,6 +2121,19 @@ static int stid135_send_long_master_cmd(struct dvb_frontend* fe,
 		return err != 0 ? -1 : 0;
 	}
 	return 0;
+}
+
+static int stid135_send_long_master_cmd(struct dvb_frontend* fe,
+																				 struct dvb_diseqc_long_master_cmd *cmd)
+{
+
+	struct stv *state = fe->demodulator_priv;
+	int ret=0;
+	state_dprintk("diseqc");
+	state_chip_lock(state);
+	ret = stid135_send_long_master_cmd_(state, cmd);
+	state_chip_unlock(state);
+	return ret;
 }
 
 static int stid135_recv_slave_reply(struct dvb_frontend* fe,
