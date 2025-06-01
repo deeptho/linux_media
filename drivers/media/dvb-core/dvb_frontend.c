@@ -3748,12 +3748,27 @@ static int dvb_frontend_release(struct inode *inode, struct file *file)
 		fepriv->release_jiffies = jiffies;
 		mb();
 	}
-
+	fe_dprintk("Calling dvb_generic_release\n");
 	ret = dvb_generic_release(inode, file);
-
-	dprintk("called dvb_generic_release dvbdev->users=%d\n", dvbdev->users);
+	fe_dprintk("called dvb_generic_release dvbdev->users=%d\n", dvbdev->users);
 	if (dvbdev->users == -1) {
-		dprintk("Waking up wait queue\n");
+
+		fe_dprintk("Calling stop_task\n");
+		atomic_set(&fe->algo_state.task_should_stop, true);
+		if (down_interruptible(&fepriv->sem))
+			return -ERESTARTSYS;
+		if (fe->ops.stop_task) {
+			fe->ops.stop_task(fe);
+		}
+		fepriv->state = FESTATE_IDLE;
+		atomic_set(&fe->algo_state.task_should_stop, false);
+
+		dvb_frontend_clear_events(fe);
+		dvb_frontend_add_event(fe, FE_IDLE);
+
+		up(&fepriv->sem);
+
+		fe_dprintk("Waking up wait queue\n");
 		wake_up(&fepriv->wait_queue);
 #ifdef CONFIG_MEDIA_CONTROLLER_DVB
 		mutex_lock(&fe->dvb->mdev_lock);
