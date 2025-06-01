@@ -3759,7 +3759,9 @@ static int dvb_frontend_release(struct inode *inode, struct file *file)
 
 	ret = dvb_generic_release(inode, file);
 
+	dprintk("called dvb_generic_release dvbdev->users=%d\n", dvbdev->users);
 	if (dvbdev->users == -1) {
+		dprintk("Waking up wait queue\n");
 		wake_up(&fepriv->wait_queue);
 #ifdef CONFIG_MEDIA_CONTROLLER_DVB
 		mutex_lock(&fe->dvb->mdev_lock);
@@ -3771,8 +3773,11 @@ static int dvb_frontend_release(struct inode *inode, struct file *file)
 		}
 		mutex_unlock(&fe->dvb->mdev_lock);
 #endif
-		if (fe->exit != DVB_FE_NO_EXIT)
+		dprintk("fe->exit=%d != DVB_FE_NO_EXIT=%d\n", fe->exit, DVB_FE_NO_EXIT);
+		if (fe->exit != DVB_FE_NO_EXIT) {
+			dprintk("waling up dvbdev->wait_queue\n");
 			wake_up(&dvbdev->wait_queue);
+		}
 		if (fe->ops.ts_bus_ctrl)
 			fe->ops.ts_bus_ctrl(fe, 0);
 	}

@@ -16,6 +16,8 @@
 */
 
 #include "tbsecp3.h"
+#define dprintk(fmt, arg...)																					\
+	printk(KERN_DEBUG pr_fmt("%s:%d " fmt), __func__, __LINE__, ##arg)
 
 union tbsecp3_i2c_ctrl {
 	struct {

@@ -331,7 +331,7 @@ T2MI- or STID-encapsulated transport streams:
 
   However, by specifying the bbframes_auto=1 as a module option to stid35.ko, or by
   sending the command DTV_OUTPUT_BBFRAMES in the FE_SET_PROPERTY frontend ioctl during tuning, this embedding
-  can be forced. In that case the bbframes of **all** strems are embebedded into a single PID transport stream.
+  can be forced. In that case the bbframes of **all** streams are embebedded into a single PID transport stream.
   This is useful to work around a hardware bug, which in rare cases prevents correct reception of multi-streams.
   It is also useful to receive and decode all streams simultaneously, while using only a single demod.
 

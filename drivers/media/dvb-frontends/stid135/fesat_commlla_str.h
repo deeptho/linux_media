@@ -360,8 +360,9 @@ struct fe_sat_signal_info {
 	s32				C_N;		/* Carrier to noise ratio (dB x10) 	*/
 	u32				ber;		/* Bit error rate	(x10^7)				*/
 	enum fe_sat_iq_inversion	spectrum;	/* IQ specrum swap setting				*/
-	u8				matype; //matype of current frame
+	int				matype; //matype of current frame (1 bytes; negative indicates uninitialized)
 	bool low_roll_off_detected;
+	bool bbframes_on;
 	int 				isi;		/* Actually selected ISI for output (if not in bbframes mode).
 													 pr default isi (if in bbframes mode). This will
 													 be -1 for non-multistream or -2 for not initialized*/

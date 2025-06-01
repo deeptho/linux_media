@@ -764,7 +764,9 @@ fe_lla_error_t fe_stid135_set_mis_filtering(struct stv* state, BOOL EnableFilter
 fe_lla_error_t set_stream_index(struct stv *state, s32 isi, s32 pls_mode, s32 pls_code);
 fe_lla_error_t fe_stid135_unlock(struct stv* state);
 
+#if 0
 fe_lla_error_t fe_stid135_set_abort_flag(struct fe_stid135_internal_param* pParams, BOOL abort);
+#endif
 
 fe_lla_error_t fe_stid135_set_standby(struct fe_stid135_internal_param* pParams, u8 standby_on);
 
@@ -855,7 +857,7 @@ fe_lla_error_t get_raw_bit_rate(struct stv* state, s32* raw_bit_rate);
 fe_lla_error_t get_current_llr(struct stv* state, s32 *current_llr);
 fe_lla_error_t  set_pls_mode_code(struct stv *state, u8 pls_mode, u32 pls_code);
 fe_lla_error_t FE_STiD135_GetFECLock(struct stv* state, u32 TimeOut, BOOL* lock_bool_p);
-fe_lla_error_t fe_stid135_read_hw_matype(struct stv* state, u8 *matype, u8 *isi_read);
+fe_lla_error_t fe_stid135_read_hw_matype(struct stv* state, int *matype, u8 *isi_read);
 bool fe_stid135_check_sis_or_mis(u8 matype);
 
 int stid135_spectral_scan_start(struct dvb_frontend *fe);

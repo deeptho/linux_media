@@ -4008,9 +4008,9 @@ fe_lla_error_t fe_stid135_get_signal_info(struct stv* state)
 					 pParams->demod_search_algo[Demod-1] == FE_SAT_NEXT)*/) {
 					int error1 = FE_LLA_NO_ERROR;
 					//memset(&state->signal_info.isi_list, 0, sizeof(state->signal_info.isi_list));
-					dprintk("demod=%d: Calling isi_scan\n", state->nr);
+					state_dprintk("Calling isi_scan\n");
 					error1 = fe_stid135_isi_scan(state, &state->signal_info.isi_list);
-					dprintk("MIS DETECTION: error=%d\n", error1);
+					state_dprintk("MIS DETECTION: error=%d\n", error1);
 				} else {
 					u8 isi_read;
 					fe_stid135_read_hw_matype(state, &pInfo->matype, &isi_read);
@@ -5655,7 +5655,7 @@ fe_lla_error_t FE_STiD135_Term(struct fe_stid135_internal_param* pParams)
 --RETURN	::	error
 --***************************************************/
 static fe_lla_error_t fe_stid135_read_hw_matype_(STCHIP_Info_t* hChip,
-	enum fe_stid135_demod Demod, u8 *matype, u8 *isi_read)
+	enum fe_stid135_demod Demod, int *matype, u8 *isi_read)
 {
 	/*
 		MATYPE (2 bytes) describes the input stream format, the type of mode adaptation and the
@@ -5687,7 +5687,7 @@ static fe_lla_error_t fe_stid135_read_hw_matype_(STCHIP_Info_t* hChip,
 
 }
 
- fe_lla_error_t fe_stid135_read_hw_matype(struct stv* state, u8 *matype, u8 *isi_read)
+ fe_lla_error_t fe_stid135_read_hw_matype(struct stv* state, int *matype, u8 *isi_read)
 {
 	STCHIP_Info_t* hChip = state->chip->ip.handle_demod;
 	fe_lla_error_t ret;
@@ -5711,7 +5711,8 @@ fe_lla_error_t fe_stid135_manage_matype_info(struct stv* state)
 	enum fe_stid135_demod Demod = state->nr+1;
 	int error = FE_LLA_NO_ERROR;
 	int error1 = FE_LLA_NO_ERROR;
-	u8 matype_info, isi, genuine_matype;
+	int matype_info;
+	u8 isi, genuine_matype;
 	s32 fld_value;
 	BOOL mis = FALSE;
 	struct fe_stid135_internal_param *pParams = &state->chip->ip;
@@ -5735,28 +5736,23 @@ fe_lla_error_t fe_stid135_manage_matype_info(struct stv* state)
 				dprintk("demod=%d: error=%d\n", state->nr, error1);
 			/* Read Matype */
 			error = (error1 = fe_stid135_read_hw_matype(state, &matype_info, &isi));
-			dprintk("demod=%d: isi=0x%x matype=0x%x\n", state->nr, isi, matype_info);
+			dprintk("demod=%d: isi=%d matype=%d\n", state->nr, isi, matype_info);
 			genuine_matype = matype_info;
 			state->signal_info.matype = genuine_matype;
+			state->signal_info.isi = isi;
 			if(error1)
 				dprintk("demod=%d: error=%d\n", state->nr, error1);
 			/* Check if MIS stream (Multi Input Stream). If yes then set the MIS Filter to get the Min ISI */
 			if (!fe_stid135_check_sis_or_mis(matype_info)) { //multistream
 				mis = TRUE;
 				state->mis_mode = TRUE;
-				dprintk("ISI mis_mode sxet to %d\n", state->mis_mode);
+				dprintk("ISI mis_mode set to %d\n", state->mis_mode);
 				/* Get Min ISI and activate the MIS Filter */
 				if(state->demod_search_isi < 0) {
 					state->demod_search_isi = isi;
 				}
 				if(isi==255)
 					state_dprintk("BUG: isi=255\n");
-				if(state->signal_info.isi != isi) {
-					state_dprintk("Unexpected: state->signal_info.isi=%d != isi=%d\n",
-												state->signal_info.isi, isi);
-					state->signal_info.isi = isi;
-				}
-				state->signal_info.matype = matype_info;
 				state->signal_info.pls_mode = state->demod_search_pls_mode;
 				state->signal_info.pls_code = state->demod_search_pls_code;
 				error |= (error1=ChipSetField(state->chip->ip.handle_demod, FLD_FC8CODEW_DVBSX_HWARE_TSCFG0_TSFIFO_BITSPEED(Demod), 0));
@@ -6046,7 +6042,8 @@ fe_lla_error_t fe_stid135_get_matype_infos(struct stv* state, struct fe_sat_dvbs
 	STCHIP_Info_t* hChip = state->chip->ip.handle_demod;
 	enum fe_stid135_demod Demod = state->nr+1;
 
-	u8 matype_val,isi;
+	int matype_val;
+	u8 isi;
 	s32 fld_value;
 
 	if (state->chip->ip.handle_demod->Error )
@@ -10529,6 +10526,7 @@ static fe_lla_error_t fe_stid135_select_min_isi(struct stv* state)
 			error |= ChipSetOneRegister(state->chip->ip.handle_demod, (u16)REG_RC8CODEW_DVBSX_PKTDELIN_ISIBITENA(demod), (u32)0xFF);
 			dprintk("set mis_filter min_isi=0x%x error=%d\n", min_isi, error);
 			state->demod_search_stream_id = min_isi;
+			state->signal_info.matype = matype;
 			state->signal_info.isi = min_isi;
 			/* Reset the packet delineator */
 			error |= ChipSetField(state->chip->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL1_ALGOSWRST(demod), 1);
@@ -10578,7 +10576,8 @@ fe_lla_error_t fe_stid135_isi_scan(struct stv* state, struct fe_sat_isi_struct_t
 {
 	enum fe_stid135_demod demod = state->nr+1;
 	int error = FE_LLA_NO_ERROR;
-	u8 CurrentISI, matype;
+	u8 CurrentISI;
+	int matype;
 	u8 i;
 	u32 j=0;
 	//struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
@@ -10600,19 +10599,19 @@ fe_lla_error_t fe_stid135_isi_scan(struct stv* state, struct fe_sat_isi_struct_t
 				j = CurrentISI/32;
 				mask = ((uint32_t)1)<< (CurrentISI%32);
 				if( ! (p_isi_struct->isi_bitset[j] & mask)) {
-					dprintk("Found new ISI=%d matype=%d error=%d mis=%d\n",  CurrentISI, matype, error, state->mis_mode);
+					state_dprintk("Found new ISI=%d matype=%d error=%d mis=%d\n",  CurrentISI, matype, error, state->mis_mode);
 					if(p_isi_struct->num_matypes < sizeof(p_isi_struct->matypes)/sizeof(p_isi_struct->matypes[0]))
 						p_isi_struct->matypes[p_isi_struct->num_matypes++] = (matype<<(int)8)|CurrentISI;
-				}
-				p_isi_struct->isi_bitset[j] |= mask;
+					p_isi_struct->isi_bitset[j] |= mask;
 #if 1
 				if( ((CurrentISI ==255) ? -1 : (int) CurrentISI) == state->signal_info.isi) {
-					if(state->signal_info.matype != matype)
-						state_dprintk("Unexpected: state->signal_info.matype=%d != matype=%d\n",
-													state->signal_info.matype, matype);
+					if(state->signal_info.matype != matype && state->signal_info.matype>=0)
+						state_dprintk("Unexpected: state->signal_info.matype=%d != matype=%d isi=%d/%d\n",
+														state->signal_info.matype, matype, CurrentISI, state->signal_info.isi);
 					state->signal_info.matype = matype;
 				}
 #endif
+				}
 				state_chip_sleep(state, 10);
 			}
 			// Go back to previous value of test mode
@@ -10749,6 +10748,7 @@ fe_lla_error_t set_stream_index(struct stv *state, s32 isi, s32 pls_mode, s32 pl
 		err |= fe_stid135_set_mis_filtering(state,  FALSE, 0, 0xFF);
 		state_dprintk("SET stream_id=%d pls_code=%d pls_mode=%d",  isi, pls_code, pls_mode);
 		state->signal_info.isi = -1;
+		state->signal_info.matype = 256;
 		state->signal_info.pls_mode = 0;
 		state->signal_info.pls_code = 1;
 	} else  {
@@ -10758,6 +10758,7 @@ fe_lla_error_t set_stream_index(struct stv *state, s32 isi, s32 pls_mode, s32 pl
 		state->signal_info.pls_code = pls_code;
 		err |= fe_stid135_set_mis_filtering(state,  TRUE, isi, 0xFF);
 		state->signal_info.isi = isi;
+		state->signal_info.matype = -2;
 	}
 	vprintk("demod=%d: error=%d locked=%d\n", state->nr, err, state->signal_info.has_lock);
 	if (err != FE_LLA_NO_ERROR)
@@ -10793,6 +10794,7 @@ fe_lla_error_t fe_stid135_unlock(struct stv* state)
 	return(error);
 }
 
+#if 0 //unused
 /*****************************************************
 --FUNCTION	::	fe_stid135_set_abort_flag
 --ACTION	::	Set Abort flag On/Off
@@ -10817,6 +10819,7 @@ fe_lla_error_t fe_stid135_set_abort_flag(struct fe_stid135_internal_param* pPara
 		}
 	return(error);
 }
+#endif
 
 /*****************************************************
 --FUNCTION	::	fe_stid135_set_standby
@@ -12934,6 +12937,7 @@ fe_lla_error_t stid135_set_bbframe_output(struct stv* state)
 	error |= ChipSetField(handle, FLD_FC8CODEW_DVBSX_HWARE_TSCFG0_TSFIFO_EMBINDVB(demod), 1);
 	error |= ChipSetField(handle, FLD_FC8CODEW_DVBSX_PKTDELIN_BBHCTRL2_FORCE_MATYPEMSB(demod), 1);
 	state_dprintk("set BBFRAME mode: error=%d", error);
+	state->signal_info.bbframes_on = true;
 	return error;
 }
 

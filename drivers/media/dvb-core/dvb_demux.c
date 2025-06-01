@@ -1199,7 +1199,10 @@ inline static bool get_stid_header(struct stid_stream* stid, const uint8_t** p) 
 	}
 	int matype = buff[0];
 	int isi = buff[1];
+	bool is_sis = (matype >> 5)& 1;
 	embedded_stream_set_matype(&stid->emb, isi, matype);
+	if(is_sis)
+		isi = 256;
 	if(isi != stid->emb.current_isi) {
 		bbf = xa_load(&stid->emb.bbf_streams, isi);
 		stid->emb.current_bbf = bbf;
@@ -2073,6 +2076,8 @@ static struct bbframes_stream* dvb_dmx_find_or_alloc_bbf_stream
 	struct bbframes_stream* old_bbf = NULL;
 	dprintk("called with demux=%p emb=%p embedding_pid=%d isi=%d bbf_streams=%p\n",
 					demux, emb, isi, emb? &emb->bbf_streams : (struct xarray*) NULL);
+	if (isi <0)
+		isi=256;
 	bbf = xa_load(&emb->bbf_streams, isi);
 	if(!bbf) {
 		bbf = kzalloc(sizeof(struct bbframes_stream), GFP_KERNEL);
@@ -2385,20 +2390,19 @@ static int dvbdmx_release_pid_stream(struct dmx_demux *dmx, struct pid_stream *p
 	dmx_demux_dprintk(dmx, "release dmx dvb_demux=%p feed=%p section_filter=%p\n",
 										demux, feed, feed->section_filter);
 	mutex_lock(&demux->mutex);
-
+	dprintk("here pid_feed=%p feed=%p parent_feeds=%p", pid_feed, feed, feeds);
 	if (feed->state == DMX_STATE_FREE) {
 		mutex_unlock(&demux->mutex);
+		dprintk("here pid_feed=%p feed=%p parent_feeds=%p", pid_feed, feed, feeds);
 		return -EINVAL;
 	}
-
+	dprintk("here pid_feed=%p feed=%p parent_feeds=%p\n", pid_feed, feed, feeds);
 	feed->state = DMX_STATE_FREE;
 	if(feed->section_filter)
 		feed->section_filter->state = DMX_STATE_FREE;
-
-	dvb_demux_feed_dprintk(feed, "calling  kref_put feeds=%p\n", feeds);
+	dvb_demux_feed_dprintk(feed, "calling dvb_demux_output_feed_del\n", feeds);
 	dvb_demux_output_feed_del(feed);
 	dvb_demux_feed_dprintk(feed, "called  dvb_demux_feed_del\n");
-
 
 	feed->pid = 0xffff;
 

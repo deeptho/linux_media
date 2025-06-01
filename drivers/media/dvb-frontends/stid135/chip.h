@@ -271,8 +271,7 @@ typedef enum
 		u16	RdStart;		  /* Id of the first readable register */
 		u32	RdSize;			  /* Number of readable registers */
 		s32	LastRegIndex;	  /* Last accessed register index in the register map Image */
-		BOOL	Abort;			  /* Abort flag when set to on no register access and no wait  are done  */
-
+		BOOL	Abort;			  /* Abort flag; when set to True no register access and no wait  are done  */
 		void	*pData;			  /* pointer to chip data */
 		u8	TunerNb;		  /* number of tuner from 0 to 3, field added to match Oxford */
 		atomic_t num_parallel;

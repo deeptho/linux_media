@@ -1294,7 +1294,7 @@ static int dvb_demux_do_ioctl(struct file *file,
 		break;
 
 	case DMX_SET_STID_STREAM:
-		dprintk("DMX_SET_BBFRAMES_STREAM\n");
+		dprintk("DMX_SET_STID_STREAM\n");
 
 		if (mutex_lock_interruptible(&dmxdevfilter->mutex)) {
 			mutex_unlock(&dmxdev->mutex);
@@ -1305,7 +1305,7 @@ static int dvb_demux_do_ioctl(struct file *file,
 			set the pes filter for the embedding pid
 		*/
 		ret = dvb_dmxdev_add_stid_stream(dmxdev, dmxdevfilter, parg);
-		dprintk("DONE: dvb_dmxdev_bbframes_filter_set");
+		dprintk("DONE: dvb_dmxdev_add_stid_stream");
 		mutex_unlock(&dmxdevfilter->mutex);
 		break;
 

@@ -819,14 +819,14 @@ static enum fe_ioctl_result stid135_select_rf_in_(struct stv* state, struct fe_r
 
 	enum fe_ioctl_result result = reserve_tuner_and_rf_in_(state, ic);
 	if(new_tuner) {
-		state_dprintk("owner=%d  config_id=%d old_rf_in=%d new_rf_in=%d; result=%s\n",
-									ic->owner, ic->config_id, old_rf_in_no, new_rf_in_no, reservation_result_str(result));
+		state_dprintk("owner=%d config_id=%d old_rf_in=%d new_rf_in=%d; result=%s powered_on=%d\n",
+									ic->owner, ic->config_id, old_rf_in_no, new_rf_in_no, reservation_result_str(result), new_tuner->powered_on);
 
 		if(result != FE_RESERVATION_MASTER && result != FE_RESERVATION_SLAVE)
 			return result;
 	} else {
 
-		state_dprintk("old_rf_in=%d RELEASED; result=%s\n", old_rf_in_no, reservation_result_str(result));
+		state_dprintk("old_rf_in=%d RELEASED; result=%s ic=%p\n", old_rf_in_no, reservation_result_str(result), ic);
 
 		if(result != FE_RESERVATION_RELEASED)
 			state_dprintk("BUG: result=%s\n", reservation_result_str(result));
@@ -981,7 +981,7 @@ static void stid135_release(struct dvb_frontend* fe)
 {
 	struct stv *state = fe->demodulator_priv;
 	dev_dbg(&state->chip->i2c->dev, "%s: demod %d\n", __func__, state->nr);
-
+	state_dprintk("release");
 	state->chip->use_count--;
 	if (state->chip->use_count == 0) {
 		state_chip_lock(state);
@@ -1012,7 +1012,7 @@ static bool pls_search_list(struct dvb_frontend* fe)
 	struct fe_sat_signal_info* signal_info = &state->signal_info;
 	int i = 0;
 	int locked = 0;
-	u8 matype_info;
+	int matype_info;
 	u8 isi;
 	for(i=0; i<p->pls_search_codes_len;++i) {
 		u32 pls_code = p->pls_search_codes[i];
@@ -1022,13 +1022,6 @@ static bool pls_search_list(struct dvb_frontend* fe)
 		state_dprintk("Trying scrambling mode=%d code %d stream_id=%d timeout=%d\n", (pls_code>>26) & 0x3,
 									(pls_code>>8) & 0x3FFFF, p->stream_id, timeout);
 		set_pls_mode_code(state, (pls_code>>26) & 0x3, (pls_code>>8) & 0x3FFFF);
-#if 0
-		if(p->stream_id !=  NO_STREAM_ID_FILTER)
-			fe_stid135_set_mis_filtering(state,  TRUE, p->stream_id & 0xFF, 0xFF);
-		else
-			fe_stid135_set_mis_filtering(state,  TRUE, state->signal_info.isi & 0xFF, 0xFF);
-		//fe_stid135_set_mis_filtering(state,  FALSE, 0, 0xFF);
-#endif
 		//write_reg(state, RSTV0910_P2_DMDISTATE + state->regoff, 0x15);
 		//write_reg(state, RSTV0910_P2_DMDISTATE + state->regoff, 0x18);
 		msleep(timeout? timeout: 100); //0 means: use default
@@ -1059,6 +1052,7 @@ static bool pls_search_list(struct dvb_frontend* fe)
 												signal_info->isi, isi);
 					signal_info->isi = isi;
 				}
+#if 0 //unreachable
 				if(old_isi <0) {
 					int old_stream_id = p->stream_id;
 					//p->matype = matype_info;
@@ -1071,6 +1065,7 @@ static bool pls_search_list(struct dvb_frontend* fe)
 					state->signal_info.pls_code = pls_code;
 					state_dprintk("SET stream_id=0x%x isi=%d\n", p->stream_id, isi);
 				}
+#endif
 				break;
 			}
 
@@ -1099,7 +1094,7 @@ static bool pls_search_range(struct dvb_frontend* fe)
 	int locked = 0;
 	u8 timeout = p->pls_search_range_start & 0xff;
 	int count=0;
-	u8 matype_info;
+	int matype_info;
 	u8 isi;
 	if(p->pls_search_range_end == 0)
 		return false;
@@ -1199,6 +1194,7 @@ static int stid135_set_parameters(struct dvb_frontend* fe)
 	state->tune_time = ktime_get_coarse();
 	memset(signal_info, 0, sizeof(*signal_info));
 	signal_info->isi = -2; //not initialized
+	signal_info->bbframes_on = false;
 	signal_info->matype = -2; //not initialized
 	vprintk(
 					"[%d] delivery_system=%u modulation=%u frequency=%u symbol_rate=%u inversion=%u stream_id=%d\n",
@@ -1591,15 +1587,34 @@ static int stid135_read_status_(struct dvb_frontend* fe, enum fe_status *status)
 	vprintk("p->num_matypes=%d %d\n", p->num_matypes, state->signal_info.isi_list.num_matypes);
 
 	{
-		u8 matype;
-		u8 isi_read;
-		fe_stid135_read_hw_matype(state, &matype, &isi_read);
-		if ( !!((matype &0x3) == 0x3) != !!((state->signal_info.matype &0x3) == 0x3)) {
-			state->signal_info.low_roll_off_detected = true;
-		}
-
-		if(!((matype &0x3) == 0x3))
+		if(state->signal_info.low_roll_off_detected) {
+#if 0 //interferes with bbframes_on
+			if(!((matype &0x3) == 0x3)) {
+				if(state->signal_info.matype != matype)
+					dprintk("Changing matype from %d to %d\n", state->signal_info.matype, matype);
+				state->signal_info.matype = matype;
+			}
+#endif
+		} else {
+			int matype;
+			u8 isi_read;
+			fe_stid135_read_hw_matype(state, &matype, &isi_read);
+			if ( !!((matype &0x3) == 0x3) != !!((state->signal_info.matype &0x3) == 0x3)) {
+				//detected rolloff switched between reserved and another value
+				state->signal_info.low_roll_off_detected = true;
+				if(!!((matype &0x3) == 0x3)) {
+						//prefer the matype value which signifies low roll off
+						matype = (state->signal_info.matype & ~0x3 ) | (matype &0x3);
+						dprintk("Changing matype from %d to %d\n", state->signal_info.matype, matype);
+						state->signal_info.matype = matype;
+					}
+			}
+#if 0 //interferes with bbframes_on
+			if(state->signal_info.matype != matype)
+				dprintk("Changing matype from %d to %d\n", state->signal_info.matype, matype);
 			state->signal_info.matype = matype;
+#endif
+		}
 		switch(state->signal_info.matype) {
 		case 0:
 			state->signal_info.roll_off = state->signal_info.low_roll_off_detected ? FE_SAT_15: FE_SAT_35;
@@ -1712,16 +1727,21 @@ static int stid135_set_demux_default_stream_id(struct dvb_frontend* fe) {
 	int stream_id = p->stream_id & 0xff;
 	bool is_mis = !((state->signal_info.matype >> 5) &0x1);
 	bool is_ts = ((state->signal_info.matype >> 6) &0x3) == 0x3;
-	dprintk("isi=%d%d is_mis=%d is_ts=%d\n", state->signal_info.isi, p->stream_id, is_mis, is_ts);
+	dprintk("isi=%d/%d is_mis=%d is_ts=%d\n", state->signal_info.isi, p->stream_id, is_mis, is_ts);
 	if(stream_id==0xff)
 		stream_id = -1;
 	//only apply bbframes_auto in very specific case of a mult-stream transport stream
+#if 0
 	output_bbframes = (p->output_bbframes || (bbframes_auto && is_mis && is_ts)) && (stream_id!=-1);
+#else
+	output_bbframes = p->output_bbframes || (bbframes_auto && is_mis && is_ts);
+#endif
 	state_dprintk("before: p->output_bbframes=%d stream_id=%d bbframes_auto=%d\n",
 					p->output_bbframes, stream_id, bbframes_auto);
 	p->output_bbframes = output_bbframes;
+
 	if(demux) {
-		ret=dvb_demux_set_bbframes_state(demux, p->output_bbframes, 0x10e /*embeddding pid*/ , stream_id);
+		ret = dvb_demux_set_bbframes_state(demux, p->output_bbframes, 0x10e /*embeddding pid*/ , stream_id);
 		state_dprintk("set stream_id=%d bbframes_mode=%d\n", stream_id, p->output_bbframes);
 	} else {
 		state_dprintk("Implementation error. NO DEMUX set stream_id=%d bbframes_mode=%d\n", stream_id,
