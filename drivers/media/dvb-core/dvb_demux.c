@@ -50,6 +50,14 @@ MODULE_PARM_DESC(dvb_demux_feed_err_pkts,
 						 __func__, __LINE__, ##arg);										\
 	} while (0)
 
+#define dprintk_nice(fmt, arg...) do {																	\
+		static int count=0;																									\
+		if (count++%100 == 0 && dvb_demux_dtdebug)													\
+			printk(KERN_DEBUG pr_fmt("%s:%d count=%d " fmt),									\
+						 __func__, __LINE__, count, ##arg);													\
+	} while (0)
+
+
 #define dmx_demux_dprintk(dmx_demux, fmt, arg...) do {									\
 		if (dvb_demux_dtdebug)																							\
 			printk(KERN_DEBUG pr_fmt("%s:%d dmx_demux[%p] " fmt),							\
@@ -94,11 +102,11 @@ MODULE_PARM_DESC(dvb_demux_feed_err_pkts,
 
 
 
-#define stid_stream_dprintk_nice(stid, fmt, arg...) do {							\
+#define stid_stream_dprintk_nice(stid, fmt, arg...) do {								\
 		static int count=0;																									\
 		if (count++%100 == 0 && dvb_demux_dtdebug)													\
 			printk(KERN_DEBUG pr_fmt("%s:%d stid[%p] pid=%d feeds=%p count=%d " fmt), \
-						 __func__, __LINE__, stid, stid->emb.embedding_pid, stid->emb.parent_feeds, count, ##arg);	\
+						 __func__, __LINE__, stid, stid->emb.embedding_pid, stid->emb.parent_feeds, count, ##arg); \
 	} while (0)
 
 
@@ -972,7 +980,10 @@ static const uint8_t* bbf_output_ts_bytes(struct dvb_demux* demux,
 		}
 		bbf->bbf_payload_bytes_left -= n;
 		if(bbf->bbf_payload_bytes_left < 0) {
-			dmx_demux_dprintk_nice(bbf, ">bbf_payload_bytes_left=%d\n", bbf->bbf_payload_bytes_left);
+			dmx_demux_dprintk_nice(bbf, "num_ts_bytes=%d n=%d bbf_payload_bytes_left=%d bbf->syncd=%d bbf->buff_idx=%d\n",
+														 num_ts_bytes, n, bbf->bbf_payload_bytes_left, bbf->syncd, ts->buff_idx);
+			bbf->bbf_payload_bytes_left = 0;
+			return NULL;
 		}
 	}
 
