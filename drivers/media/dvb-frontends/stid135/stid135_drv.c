@@ -3842,193 +3842,190 @@ fe_lla_error_t fe_stid135_get_signal_info(struct stv* state)
 	int count;
 
 	pParams = &state->chip->ip;
-	//	dprintk("signal_info: start\n");
+	state->chip->ip.handle_demod->Error =0;
 	if ( state->chip->ip.handle_demod->Error ) {
-				error = FE_LLA_I2C_ERROR;
-	} else {
-		{
-			bool has_carrier, has_sync, has_viterbi;
-			error |= fe_stid135_get_lock_status(state, &has_carrier, &has_viterbi, &has_sync);
-			dprintk("demod=%d: Called fe_stid135_get_lock_status: carrier=%d sync=%d\n", state->nr, has_carrier, has_sync);
-			//pInfo->has_sync = has_sync;
-			//pInfo->has_carrier = has_carrier;
+		dprintk("signal_info: clearing err=%d\n", state->chip->ip.handle_demod->Error );
+	}
+	{
+		bool has_carrier, has_sync, has_viterbi;
+		error |= fe_stid135_get_lock_status(state, &has_carrier, &has_viterbi, &has_sync);
+		dprintk("demod=%d: Called fe_stid135_get_lock_status: carrier=%d sync=%d\n", state->nr, has_carrier, has_sync);
+		//pInfo->has_sync = has_sync;
+		//pInfo->has_carrier = has_carrier;
+	}
+	/* transponder_frequency = tuner +  demod carrier
+		 frequency */
+	pInfo->frequency = pParams->lo_frequency / 1000; //always 1.5Ghz
+	/* On auxiliary demod, frequency found is not true, we have to pick it on master demod  */
+	/* On auxiliary demod, SR found is not true, we have to pick it on master demod  */
+	if(Demod == FE_SAT_DEMOD_2) {
+		error |= ChipGetField(state->chip->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG2_MODE_HAUTDEBIT(Demod), &(fld_value[0]));
+		dprintk("demod=%d: HAUTDEBIT read=%d\n", state->nr, fld_value[0]);
+		if(fld_value[0] == 3) { //if demod is in aux demod mode
+			error |= FE_STiD135_GetCarrierFrequencyOffset_(state->chip->ip.handle_demod, FE_SAT_DEMOD_1, pParams->master_clock, &carrier_frequency);
+			carrier_frequency /= 1000;
+			error |= FE_STiD135_GetSymbolRate_(state->chip->ip.handle_demod, FE_SAT_DEMOD_1, pParams->master_clock, &(pInfo->symbol_rate));
+			error |= FE_STiD135_TimingGetOffset_(state->chip->ip.handle_demod, FE_SAT_DEMOD_1, pInfo->symbol_rate,  &symbolRateOffset);
 		}
-		/* transponder_frequency = tuner +  demod carrier
-			 frequency */
-		pInfo->frequency = pParams->lo_frequency / 1000; //always 1.5Ghz
-		/* On auxiliary demod, frequency found is not true, we have to pick it on master demod  */
-		/* On auxiliary demod, SR found is not true, we have to pick it on master demod  */
-		if(Demod == FE_SAT_DEMOD_2) {
-			error |= ChipGetField(state->chip->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG2_MODE_HAUTDEBIT(Demod), &(fld_value[0]));
-			dprintk("demod=%d: HAUTDEBIT read=%d\n", state->nr, fld_value[0]);
-			if(fld_value[0] == 3) { //if demod is in aux demod mode
-				error |= FE_STiD135_GetCarrierFrequencyOffset_(state->chip->ip.handle_demod, FE_SAT_DEMOD_1, pParams->master_clock, &carrier_frequency);
-				carrier_frequency /= 1000;
-				error |= FE_STiD135_GetSymbolRate_(state->chip->ip.handle_demod, FE_SAT_DEMOD_1, pParams->master_clock, &(pInfo->symbol_rate));
-				error |= FE_STiD135_TimingGetOffset_(state->chip->ip.handle_demod, FE_SAT_DEMOD_1, pInfo->symbol_rate,  &symbolRateOffset);
-			}
-			}
-			if(Demod == FE_SAT_DEMOD_4) {
-				error |= ChipGetField(state->chip->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG2_MODE_HAUTDEBIT(Demod), &(fld_value[0]));
-				dprintk("demod=%d: HAUTDEBIT read=%d\n", state->nr, fld_value[0]);
-				if(fld_value[0] == 3) { //if demod is in aux demod mode
-					error |= FE_STiD135_GetCarrierFrequencyOffset_(state->chip->ip.handle_demod, FE_SAT_DEMOD_3, pParams->master_clock,  &carrier_frequency);
-					carrier_frequency /= 1000;
-					error |= FE_STiD135_GetSymbolRate_(state->chip->ip.handle_demod, FE_SAT_DEMOD_3, pParams->master_clock, &(pInfo->symbol_rate));
-					error |= FE_STiD135_TimingGetOffset_(state->chip->ip.handle_demod, FE_SAT_DEMOD_3, pInfo->symbol_rate, &symbolRateOffset);
-				}
-			}
-			if(((Demod != FE_SAT_DEMOD_2) && (Demod != FE_SAT_DEMOD_4)) ||
-					((Demod == FE_SAT_DEMOD_2) && (fld_value[0] != 3)) ||
-					((Demod == FE_SAT_DEMOD_4) && (fld_value[0] != 3))) {
-				error |= FE_STiD135_GetCarrierFrequencyOffset(state, pParams->master_clock, &carrier_frequency);
-				carrier_frequency /= 1000;
-				error |= FE_STiD135_GetSymbolRate(state, pParams->master_clock, &(pInfo->symbol_rate));
-				error |= FE_STiD135_TimingGetOffset(state, pInfo->symbol_rate, &symbolRateOffset);
-			}
+	}
+	if(Demod == FE_SAT_DEMOD_4) {
+		error |= ChipGetField(state->chip->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_HDEBITCFG2_MODE_HAUTDEBIT(Demod), &(fld_value[0]));
+		dprintk("demod=%d: HAUTDEBIT read=%d\n", state->nr, fld_value[0]);
+		if(fld_value[0] == 3) { //if demod is in aux demod mode
+			error |= FE_STiD135_GetCarrierFrequencyOffset_(state->chip->ip.handle_demod, FE_SAT_DEMOD_3, pParams->master_clock,  &carrier_frequency);
+			carrier_frequency /= 1000;
+			error |= FE_STiD135_GetSymbolRate_(state->chip->ip.handle_demod, FE_SAT_DEMOD_3, pParams->master_clock, &(pInfo->symbol_rate));
+			error |= FE_STiD135_TimingGetOffset_(state->chip->ip.handle_demod, FE_SAT_DEMOD_3, pInfo->symbol_rate, &symbolRateOffset);
+		}
+	}
+	if(((Demod != FE_SAT_DEMOD_2) && (Demod != FE_SAT_DEMOD_4)) ||
+		 ((Demod == FE_SAT_DEMOD_2) && (fld_value[0] != 3)) ||
+		 ((Demod == FE_SAT_DEMOD_4) && (fld_value[0] != 3))) {
+		error |= FE_STiD135_GetCarrierFrequencyOffset(state, pParams->master_clock, &carrier_frequency);
+		carrier_frequency /= 1000;
+		error |= FE_STiD135_GetSymbolRate(state, pParams->master_clock, &(pInfo->symbol_rate));
+		error |= FE_STiD135_TimingGetOffset(state, pInfo->symbol_rate, &symbolRateOffset);
+	}
 #if 0
-			dprintk("CFROFFSET carrier_freq= %d => %d\n", pInfo->frequency, (s32)pInfo->frequency + (s32) carrier_frequency);
+	dprintk("CFROFFSET carrier_freq= %d => %d\n", pInfo->frequency, (s32)pInfo->frequency + (s32) carrier_frequency);
 #endif
-			if(carrier_frequency < 0) {
-				carrier_frequency *= (-1);
-				pInfo->frequency -= (u32)carrier_frequency;
-			}
-			else
-				pInfo->frequency += (u32)carrier_frequency;
+	if(carrier_frequency < 0) {
+		carrier_frequency *= (-1);
+		pInfo->frequency -= (u32)carrier_frequency;
+	}
+	else
+		pInfo->frequency += (u32)carrier_frequency;
 
-			/* Get timing loop offset */
-			if(symbolRateOffset < 0) {
-				symbolRateOffset *= (-1);
-				pInfo->symbol_rate -= (u32)symbolRateOffset;
-			}
-			else
-				pInfo->symbol_rate += (u32)symbolRateOffset;
+	/* Get timing loop offset */
+	if(symbolRateOffset < 0) {
+		symbolRateOffset *= (-1);
+		pInfo->symbol_rate -= (u32)symbolRateOffset;
+	}
+	else
+		pInfo->symbol_rate += (u32)symbolRateOffset;
 
-			error |= FE_STiD135_GetStandard(
-				state->chip->ip.handle_demod, Demod, &(pInfo->standard));
+	error |= FE_STiD135_GetStandard(
+																	state->chip->ip.handle_demod, Demod, &(pInfo->standard));
 
-			 error |= FE_STiD135_GetViterbiPunctureRate(state, &(pInfo->puncture_rate));
-			for(count=0; count<5;++count) {
-				error |= fe_stid135_get_mode_code(state,
-																					&pInfo->modcode,
-																					&pInfo->frame_length,
-																					&pInfo->pilots);
-				vprintk("demod=%d: GOT MODCODE %d count=%d\n", state->nr, pInfo->modcode, count);
-				error |= ChipGetField(state->chip->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_TMGOBS_ROLLOFF_STATUS(Demod), &(fld_value[0]));
-				if(pInfo->modcode != FE_SAT_DUMMY_PLF)
-					break;
-				state_chip_sleep(state,5);
-			}
-			pInfo->roll_off = (enum fe_sat_rolloff)(fld_value[0]);
+	error |= FE_STiD135_GetViterbiPunctureRate(state, &(pInfo->puncture_rate));
+	for(count=0; count<5;++count) {
+		error |= fe_stid135_get_mode_code(state,
+																			&pInfo->modcode,
+																			&pInfo->frame_length,
+																			&pInfo->pilots);
+		vprintk("demod=%d: GOT MODCODE %d count=%d\n", state->nr, pInfo->modcode, count);
+		error |= ChipGetField(state->chip->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_TMGOBS_ROLLOFF_STATUS(Demod), &(fld_value[0]));
+		if(pInfo->modcode != FE_SAT_DUMMY_PLF)
+			break;
+		state_chip_sleep(state,5);
+	}
+	pInfo->roll_off = (enum fe_sat_rolloff)(fld_value[0]);
 
 
-			error |= FE_STiD135_GetBer(state, &(pInfo->ber));
-			error |= FE_STiD135_GetRFLevel(state, &pch_rf, &pband_rf);
-			pInfo->power = pch_rf;
-			pInfo->powerdBmx10 = pch_rf * 10;
-			pInfo->band_power = pband_rf;
-			error |= FE_STiD135_CarrierGetQuality(state->chip->ip.handle_demod, Demod, &(pInfo->C_N), &(pInfo->standard));
+	error |= FE_STiD135_GetBer(state, &(pInfo->ber));
+	error |= FE_STiD135_GetRFLevel(state, &pch_rf, &pband_rf);
+	pInfo->power = pch_rf;
+	pInfo->powerdBmx10 = pch_rf * 10;
+	pInfo->band_power = pband_rf;
+	error |= FE_STiD135_CarrierGetQuality(state->chip->ip.handle_demod, Demod, &(pInfo->C_N), &(pInfo->standard));
 
-			if(pInfo->standard == FE_SAT_DVBS2_STANDARD) {
-				error |= ChipGetField(state->chip->ip.handle_demod,FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS6_SPECINV_DEMOD(Demod), &(fld_value[0]));
-				pInfo->spectrum = (enum fe_sat_iq_inversion)(fld_value[0]);
-				if(pInfo->modcode == FE_SAT_DUMMY_PLF) {
-					pInfo->modulation = FE_SAT_MOD_DUMMY_PLF;
-					dprintk("state->signal_info.modulation=%d\n", pInfo->modulation);
-				} else if (((pInfo->modcode >= FE_SAT_QPSK_14) && (pInfo->modcode <= FE_SAT_QPSK_910))
-					|| ((pInfo->modcode >= FE_SAT_DVBS1_QPSK_12) && (pInfo->modcode <= FE_SAT_DVBS1_QPSK_78))
-					|| ((pInfo->modcode >= FE_SATX_QPSK_13_45) && (pInfo->modcode <= FE_SATX_QPSK_11_20))
-					|| ((pInfo->modcode >= FE_SATX_QPSK_11_45) && (pInfo->modcode <= FE_SATX_QPSK_32_45)))
-					pInfo->modulation = FE_SAT_MOD_QPSK;
+	if(pInfo->standard == FE_SAT_DVBS2_STANDARD) {
+		error |= ChipGetField(state->chip->ip.handle_demod,FLD_FC8CODEW_DVBSX_DEMOD_DSTATUS6_SPECINV_DEMOD(Demod), &(fld_value[0]));
+		pInfo->spectrum = (enum fe_sat_iq_inversion)(fld_value[0]);
+		if(pInfo->modcode == FE_SAT_DUMMY_PLF) {
+			pInfo->modulation = FE_SAT_MOD_DUMMY_PLF;
+			dprintk("state->signal_info.modulation=%d\n", pInfo->modulation);
+		} else if (((pInfo->modcode >= FE_SAT_QPSK_14) && (pInfo->modcode <= FE_SAT_QPSK_910))
+							 || ((pInfo->modcode >= FE_SAT_DVBS1_QPSK_12) && (pInfo->modcode <= FE_SAT_DVBS1_QPSK_78))
+							 || ((pInfo->modcode >= FE_SATX_QPSK_13_45) && (pInfo->modcode <= FE_SATX_QPSK_11_20))
+							 || ((pInfo->modcode >= FE_SATX_QPSK_11_45) && (pInfo->modcode <= FE_SATX_QPSK_32_45)))
+			pInfo->modulation = FE_SAT_MOD_QPSK;
 
-				else if (((pInfo->modcode >= FE_SAT_8PSK_35) && (pInfo->modcode <= FE_SAT_8PSK_910))
-					|| ((pInfo->modcode >= FE_SATX_8PSK_23_36) && (pInfo->modcode <= FE_SATX_8PSK_13_18))
-					|| ((pInfo->modcode >= FE_SATX_8PSK_7_15) && (pInfo->modcode <= FE_SATX_8PSK_32_45))
-								 || (pInfo->modcode == FE_SATX_8PSK)) {
-					pInfo->modulation=FE_SAT_MOD_8PSK;
-				}
-
-				else if (((pInfo->modcode >= FE_SAT_16APSK_23) && (pInfo->modcode <= FE_SAT_16APSK_910))
-					|| ((pInfo->modcode >= FE_SATX_16APSK_26_45) && (pInfo->modcode <= FE_SATX_16APSK_23_36))
-					|| ((pInfo->modcode >= FE_SATX_16APSK_25_36) && (pInfo->modcode <= FE_SATX_16APSK_77_90))
-					|| ((pInfo->modcode >= FE_SATX_16APSK_7_15) && (pInfo->modcode <= FE_SATX_16APSK_32_45))
-					|| (pInfo->modcode == FE_SATX_16APSK))
-					pInfo->modulation=FE_SAT_MOD_16APSK;
-
-				else if (((pInfo->modcode >= FE_SAT_32APSK_34) && (pInfo->modcode <= FE_SAT_32APSK_910))
-					|| ((pInfo->modcode >= FE_SATX_32APSK_R_58) && (pInfo->modcode <= FE_SATX_32APSK_7_9))
-					|| ((pInfo->modcode >= FE_SATX_32APSK_2_3) && (pInfo->modcode <= FE_SATX_32APSK_32_45_S))
-					|| (pInfo->modcode == FE_SATX_32APSK))
-					pInfo->modulation = FE_SAT_MOD_32APSK;
-
-				else if ((pInfo->modcode == FE_SATX_VLSNR1) || (pInfo->modcode == FE_SATX_VLSNR2))
-					pInfo->modulation = FE_SAT_MOD_VLSNR;
-
-				else if (((pInfo->modcode >= FE_SATX_64APSK_11_15) && (pInfo->modcode <= FE_SATX_64APSK_5_6))
-					|| (pInfo->modcode == FE_SATX_64APSK))
-					pInfo->modulation = FE_SAT_MOD_64APSK;
-
-				else if ((pInfo->modcode == FE_SATX_128APSK_3_4) || (pInfo->modcode == FE_SATX_128APSK_7_9))
-					pInfo->modulation = FE_SAT_MOD_128APSK;
-
-				else if ((pInfo->modcode == FE_SATX_256APSK_32_45) || (pInfo->modcode == FE_SATX_256APSK_3_4)
-					|| (pInfo->modcode == FE_SATX_256APSK))
-					pInfo->modulation = FE_SAT_MOD_256APSK;
-
-				else if ((pInfo->modcode == FE_SATX_8APSK_5_9_L) || (pInfo->modcode == FE_SATX_8APSK_26_45_L))
-					pInfo->modulation = FE_SAT_MOD_8PSK_L;
-
-				else if (((pInfo->modcode >= FE_SATX_16APSK_1_2_L) && (pInfo->modcode <= FE_SATX_16APSK_5_9_L))
-					|| (pInfo->modcode == FE_SATX_16APSK_3_5_L)
-					|| (pInfo->modcode == FE_SATX_16APSK_2_3_L))
-					pInfo->modulation = FE_SAT_MOD_16APSK_L;
-
-				else if (pInfo->modcode == FE_SATX_32APSK_2_3_L)
-					pInfo->modulation = FE_SAT_MOD_32APSK_L;
-
-				else if (pInfo->modcode == FE_SATX_64APSK_32_45_L)
-					pInfo->modulation = FE_SAT_MOD_64APSK_L;
-
-				else if (((pInfo->modcode >= FE_SATX_256APSK_29_45_L) && (pInfo->modcode <= FE_SATX_256APSK_31_45_L))
-					|| (pInfo->modcode == FE_SATX_256APSK_11_15_L))
-					pInfo->modulation = FE_SAT_MOD_256APSK_L;
-
-				else if (pInfo->modcode == FE_SATX_1024APSK)
-					pInfo->modulation = FE_SAT_MOD_1024APSK;
-
-				else
-					pInfo->modulation = FE_SAT_MOD_UNKNOWN;
-
-				/*reset the error counter to PER*/
-				error |= ChipSetOneRegister(state->chip->ip.handle_demod,
-																		(u16)REG_RC8CODEW_DVBSX_HWARE_ERRCTRL1(Demod), 0x67);
-				vprintk("demod=%d: MIS: mis_mode=%d\n", state->nr, state->mis_mode);
-				if(state->mis_mode /* &&
-					 (pParams->demod_search_algo[Demod-1] == FE_SAT_BLIND_SEARCH ||
-					 pParams->demod_search_algo[Demod-1] == FE_SAT_NEXT)*/) {
-					int error1 = FE_LLA_NO_ERROR;
-					//memset(&state->signal_info.isi_list, 0, sizeof(state->signal_info.isi_list));
-					state_dprintk("Calling isi_scan\n");
-					error1 = fe_stid135_isi_scan(state, &state->signal_info.isi_list);
-					state_dprintk("MIS DETECTION: error=%d\n", error1);
-				} else {
-					u8 isi_read;
-					fe_stid135_read_hw_matype(state, &pInfo->matype, &isi_read);
-				}
-
-			} else { /*DVBS1/DSS*/
-				vprintk("demod=%d: DVBS1\n", state->nr);
-				error |= ChipGetField(state->chip->ip.handle_demod, FLD_FC8CODEW_DVBSX_VITERBI_FECM_IQINV(Demod), &(fld_value[0]));
-				pInfo->spectrum = (enum fe_sat_iq_inversion)(fld_value[0]);
-				pInfo->modulation = FE_SAT_MOD_QPSK;
-				pInfo->matype = 0;
-			}
-
-			if (state->chip->ip.handle_demod->Error)
-				error |= FE_LLA_I2C_ERROR;
-
+		else if (((pInfo->modcode >= FE_SAT_8PSK_35) && (pInfo->modcode <= FE_SAT_8PSK_910))
+						 || ((pInfo->modcode >= FE_SATX_8PSK_23_36) && (pInfo->modcode <= FE_SATX_8PSK_13_18))
+						 || ((pInfo->modcode >= FE_SATX_8PSK_7_15) && (pInfo->modcode <= FE_SATX_8PSK_32_45))
+						 || (pInfo->modcode == FE_SATX_8PSK)) {
+			pInfo->modulation=FE_SAT_MOD_8PSK;
 		}
 
+		else if (((pInfo->modcode >= FE_SAT_16APSK_23) && (pInfo->modcode <= FE_SAT_16APSK_910))
+						 || ((pInfo->modcode >= FE_SATX_16APSK_26_45) && (pInfo->modcode <= FE_SATX_16APSK_23_36))
+						 || ((pInfo->modcode >= FE_SATX_16APSK_25_36) && (pInfo->modcode <= FE_SATX_16APSK_77_90))
+						 || ((pInfo->modcode >= FE_SATX_16APSK_7_15) && (pInfo->modcode <= FE_SATX_16APSK_32_45))
+						 || (pInfo->modcode == FE_SATX_16APSK))
+			pInfo->modulation=FE_SAT_MOD_16APSK;
+
+		else if (((pInfo->modcode >= FE_SAT_32APSK_34) && (pInfo->modcode <= FE_SAT_32APSK_910))
+						 || ((pInfo->modcode >= FE_SATX_32APSK_R_58) && (pInfo->modcode <= FE_SATX_32APSK_7_9))
+						 || ((pInfo->modcode >= FE_SATX_32APSK_2_3) && (pInfo->modcode <= FE_SATX_32APSK_32_45_S))
+						 || (pInfo->modcode == FE_SATX_32APSK))
+			pInfo->modulation = FE_SAT_MOD_32APSK;
+
+		else if ((pInfo->modcode == FE_SATX_VLSNR1) || (pInfo->modcode == FE_SATX_VLSNR2))
+			pInfo->modulation = FE_SAT_MOD_VLSNR;
+
+		else if (((pInfo->modcode >= FE_SATX_64APSK_11_15) && (pInfo->modcode <= FE_SATX_64APSK_5_6))
+						 || (pInfo->modcode == FE_SATX_64APSK))
+			pInfo->modulation = FE_SAT_MOD_64APSK;
+
+		else if ((pInfo->modcode == FE_SATX_128APSK_3_4) || (pInfo->modcode == FE_SATX_128APSK_7_9))
+			pInfo->modulation = FE_SAT_MOD_128APSK;
+
+		else if ((pInfo->modcode == FE_SATX_256APSK_32_45) || (pInfo->modcode == FE_SATX_256APSK_3_4)
+						 || (pInfo->modcode == FE_SATX_256APSK))
+			pInfo->modulation = FE_SAT_MOD_256APSK;
+
+		else if ((pInfo->modcode == FE_SATX_8APSK_5_9_L) || (pInfo->modcode == FE_SATX_8APSK_26_45_L))
+			pInfo->modulation = FE_SAT_MOD_8PSK_L;
+
+		else if (((pInfo->modcode >= FE_SATX_16APSK_1_2_L) && (pInfo->modcode <= FE_SATX_16APSK_5_9_L))
+						 || (pInfo->modcode == FE_SATX_16APSK_3_5_L)
+						 || (pInfo->modcode == FE_SATX_16APSK_2_3_L))
+			pInfo->modulation = FE_SAT_MOD_16APSK_L;
+
+		else if (pInfo->modcode == FE_SATX_32APSK_2_3_L)
+			pInfo->modulation = FE_SAT_MOD_32APSK_L;
+
+		else if (pInfo->modcode == FE_SATX_64APSK_32_45_L)
+			pInfo->modulation = FE_SAT_MOD_64APSK_L;
+
+		else if (((pInfo->modcode >= FE_SATX_256APSK_29_45_L) && (pInfo->modcode <= FE_SATX_256APSK_31_45_L))
+						 || (pInfo->modcode == FE_SATX_256APSK_11_15_L))
+			pInfo->modulation = FE_SAT_MOD_256APSK_L;
+
+		else if (pInfo->modcode == FE_SATX_1024APSK)
+			pInfo->modulation = FE_SAT_MOD_1024APSK;
+
+		else
+			pInfo->modulation = FE_SAT_MOD_UNKNOWN;
+
+		/*reset the error counter to PER*/
+		error |= ChipSetOneRegister(state->chip->ip.handle_demod,
+																(u16)REG_RC8CODEW_DVBSX_HWARE_ERRCTRL1(Demod), 0x67);
+		vprintk("demod=%d: MIS: mis_mode=%d\n", state->nr, state->mis_mode);
+		if(state->mis_mode /* &&
+													(pParams->demod_search_algo[Demod-1] == FE_SAT_BLIND_SEARCH ||
+													pParams->demod_search_algo[Demod-1] == FE_SAT_NEXT)*/) {
+			int error1 = FE_LLA_NO_ERROR;
+			//memset(&state->signal_info.isi_list, 0, sizeof(state->signal_info.isi_list));
+			state_dprintk("Calling isi_scan\n");
+			error1 = fe_stid135_isi_scan(state, &state->signal_info.isi_list);
+			state_dprintk("MIS DETECTION: error=%d\n", error1);
+		} else {
+			u8 isi_read;
+			fe_stid135_read_hw_matype(state, &pInfo->matype, &isi_read);
+		}
+
+	} else { /*DVBS1/DSS*/
+		vprintk("demod=%d: DVBS1\n", state->nr);
+		error |= ChipGetField(state->chip->ip.handle_demod, FLD_FC8CODEW_DVBSX_VITERBI_FECM_IQINV(Demod), &(fld_value[0]));
+		pInfo->spectrum = (enum fe_sat_iq_inversion)(fld_value[0]);
+		pInfo->modulation = FE_SAT_MOD_QPSK;
+		pInfo->matype = 0;
+	}
+
+	if (state->chip->ip.handle_demod->Error)
+		error |= FE_LLA_I2C_ERROR;
 
 	return error;
 }
@@ -5816,7 +5813,7 @@ fe_lla_error_t fe_stid135_manage_matype_info(struct stv* state)
 				}
 			}
 			/* If TS/GS = 10 (GSE-HEM High Efficiency Mode) reset matype force bit, load frames in MPEG packets and disable latency regulation */
-				else if(((genuine_matype>>6) & 0x3) == 0x2){ //GSE
+				else if(((genuine_matype>>6) & 0x3) == 0x2){ //GSE-HEM
 #ifdef USER1 //code not used
 				/* Force HEM mode */
 					error |= ChipSetField(state->chip->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL0_HEMMODE_SELECT(Demod), 3);
@@ -10582,16 +10579,16 @@ fe_lla_error_t fe_stid135_isi_scan(struct stv* state, struct fe_sat_isi_struct_t
 	u32 j=0;
 	//struct fe_stid135_internal_param *pParams = (struct fe_stid135_internal_param *)handle;
 
-		if (state->chip->ip.handle_demod->Error)
-			error=FE_LLA_I2C_ERROR;
-		else {
-			// Test mode to be able to read all ISIs in MATSTR0 register,
-			// otherwise only selected ISI is in MATSTR0 register
-			error |= ChipSetField(state->chip->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_TPKTDELIN_TESTBUS_SELECT(demod), 8);
-			/* Setup HW to store Current ISI */
-			error |= ChipSetField(state->chip->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL0_ISIOBS_MODE(demod), 0);
-			state_chip_sleep(state, 100);
-			/* Get Current ISI and store in struct */
+	if (state->chip->ip.handle_demod->Error)
+		error=FE_LLA_I2C_ERROR;
+	else {
+		// Test mode to be able to read all ISIs in MATSTR0 register,
+		// otherwise only selected ISI is in MATSTR0 register
+		error |= ChipSetField(state->chip->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_TPKTDELIN_TESTBUS_SELECT(demod), 8);
+		/* Setup HW to store Current ISI */
+		error |= ChipSetField(state->chip->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELCTRL0_ISIOBS_MODE(demod), 0);
+		state_chip_sleep(state, 100);
+		/* Get Current ISI and store in struct */
 			for (i=0; i < 40; i++) {
 				uint32_t mask;
 
