@@ -2914,4 +2914,40 @@ int dvb_demux_set_bbframes_state(struct dvb_demux* demux, bool embedding_is_on, 
 	return ret;
 }
 
+int dvb_demux_get_matypes(struct dvb_demux* demux, int32_t (*isi_bitset)[8], int32_t (*high_rolloff_mode)[8], uint8_t (*matypes)[256])
+{
+	if(mutex_lock_interruptible(&demux->mutex))
+		return -ERESTARTSYS;
+	int num_streams=0;
+	//WARN_ON(!demux->fe_bbframes_stream);
+	if(demux->fe_bbframes_stream) {
+		struct embedded_stream*  emb = demux->fe_bbframes_stream->parent_embedded_stream;
+		if(emb) {
+				memcpy(&isi_bitset[0], &emb->isi_plp_bitset[0], sizeof(int32_t)*8);
+				memcpy(&high_rolloff_mode[0], &emb->high_rolloff_mode[0], sizeof(int32_t)*8);
+				memcpy(&matypes[0], &emb->matypes[0], sizeof(int8_t)*256);
+				num_streams = emb->num_streams;
+		}
+	}
+	mutex_unlock(&demux->mutex);
+	if(num_streams>0) {
+		char buf[4096]="";
+		int ret=0;
+		int indent=0;
+		ret += sprintf(buf+ret, "%*sISI/PLP:matype: ", indent, " ");
+		int isi;
+		for(isi=0; isi <256;++isi) {
+			if(!(((*isi_bitset)[(isi>>5)&0x7] >> (isi&31))&1))
+				continue;
+			ret += sprintf(buf+ret, " %d:0x%x", isi, (*matypes)[isi]);
+			if(((*high_rolloff_mode)[(isi>>5)&0x7] >> (isi&31))&1)
+				ret += sprintf(buf+ret, " +");
+		}
+		ret += sprintf(buf+ret, "\n");
+		dprintk("%s", buf);
+	}
+	return 0;
+}
+
 EXPORT_SYMBOL(dvb_demux_set_bbframes_state);
+EXPORT_SYMBOL(dvb_demux_get_matypes);

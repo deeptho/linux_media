@@ -394,11 +394,10 @@ struct dvb_demux_feed {
  *			logic.
  * @lock:		pointer to &spinlock_t, used to protect buffer handling.
  * @default_stream_id: set by frontend to help pick an Input Stream ID for legacy applications not picking one
- * @fe_bbframes_stream: &struct bbframes_stream allocated by frontend when it sends
- *          encapsulated bbfrmaes
+ * @fe_bbframes_stream: &struct bbframes_stream allocated by frontend when it sends encapsulated bbframes
  * @fe_feeds: &struct dvb_demux_feed container of feeds which the frontend will address directly
  * @default_feeds: &struct dvb_demux_feed container of feeds used by frontend applications
-  * @kobject* sysfs_kobject;
+ * @kobject* sysfs_kobject;
  */
 struct dvb_demux {
 	struct dmx_demux dmx;
@@ -571,6 +570,7 @@ void dvb_dmx_swfilter_raw(struct dvb_demux *demux, const u8 *buf,
 
 
 int dvb_demux_set_bbframes_state(struct dvb_demux* demux, bool embedding_is_on, int embedding_pid, int default_stream_id);
+int dvb_demux_get_matypes(struct dvb_demux* demux, int32_t (*isi_bitset)[8], int32_t (*high_rolloff_mode)[8], uint8_t (*matypes)[256]);
 
 
 static inline void* embedded_stream_get_super_class(struct embedded_stream* emb,
