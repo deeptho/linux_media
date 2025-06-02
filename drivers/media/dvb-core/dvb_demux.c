@@ -388,7 +388,7 @@ static void	ts_stream_reset(struct ts_stream* ts) {
 /*
 	reset prior to restarting decoding, e.g., after a crc error
  */
-static inline void embedded_stream_reset(struct embedded_stream* emb)
+static inline void embedded_stream_reset(struct embedded_stream* emb, bool full_reset)
 {
 	emb->payload_len = 0;
 	emb->packet_count = -1;
@@ -396,15 +396,16 @@ static inline void embedded_stream_reset(struct embedded_stream* emb)
 	emb->current_isi = -1;
 	emb->cc_counter = -1;
 	emb->current_bbf = NULL;
-	memset(emb->isi_plp_bitset, 0, sizeof(emb->isi_plp_bitset));
-	memset(emb->high_rolloff_mode, 0, sizeof(emb->high_rolloff_mode));
-	emb->num_streams = 0;
-	memset(emb->matypes, 0, sizeof(emb->matypes));
-
-	unsigned long index;
-	struct bbframes_stream* entry;
-	xa_for_each(&emb->bbf_streams, index, entry) {
-		bbframes_stream_reset(entry);
+	if(full_reset) {
+		memset(emb->isi_plp_bitset, 0, sizeof(emb->isi_plp_bitset));
+		memset(emb->high_rolloff_mode, 0, sizeof(emb->high_rolloff_mode));
+		emb->num_streams = 0;
+		memset(emb->matypes, 0, sizeof(emb->matypes));
+		unsigned long index;
+		struct bbframes_stream* entry;
+		xa_for_each(&emb->bbf_streams, index, entry) {
+			bbframes_stream_reset(entry);
+		}
 	}
 }
 
@@ -421,7 +422,7 @@ static inline void embedded_stream_init(struct embedded_stream* emb, struct dvb_
 	kref_get(&emb->parent_feeds->refcount);
 	feeds_dprintk(emb->parent_feeds, "After kref_get: refcount=%d\n",
 								atomic_read(&emb->parent_feeds->refcount.refcount.refs));
-	embedded_stream_reset(emb);
+	embedded_stream_reset(emb, true/*full_reset*/);
 }
 
 static inline void embedded_stream_set_matype(struct embedded_stream* emb, uint8_t stream_id, uint8_t matype)
@@ -452,7 +453,7 @@ static inline void embedded_stream_set_matype(struct embedded_stream* emb, uint8
 
 static inline void stid_stream_reset(struct stid_stream* stid)
 {
-	embedded_stream_reset(&stid->emb);
+	embedded_stream_reset(&stid->emb, false /*full_reset*/);
 	stid->section_length = 0;
 }
 
@@ -465,9 +466,9 @@ static void stid_stream_init(struct stid_stream* stid, struct dvb_demux_feeds*pa
 
 /*Reset prior to restarting decoding, e.g., after a crc error
  */
-static void t2mi_stream_reset(struct t2mi_stream* t2mi)
+static void t2mi_stream_reset(struct t2mi_stream* t2mi, bool full_reset)
 {
-	embedded_stream_reset(&t2mi->emb);
+	embedded_stream_reset(&t2mi->emb, full_reset);
 	t2mi->packet_type = -1;
 	t2mi->superframe_idx = 0;
 	t2mi->crc_idx = 0;
@@ -488,7 +489,7 @@ static void t2mi_stream_init(struct t2mi_stream* t2mi, struct dvb_demux_feeds*pa
 {
 	embedded_stream_init(&t2mi->emb, parent_feeds, EMBEDDED_STREAM_TYPE_T2MI, embedding_pid);
 	t2mi->default_isi = -1;
-	t2mi_stream_reset(t2mi);
+	t2mi_stream_reset(t2mi, true/*full_reset*/);
 	t2mi->num_crc_errors=0;
 }
 
@@ -1055,7 +1056,7 @@ static inline bool get_t2mi_bbheader(struct t2mi_stream* t2mi, const uint8_t** p
 	if(t2mi->bbheader_idx + num > sizeof(t2mi->buff)) {
 		WARN_ON_ONCE("buffer overrun\n");
 		t2mi_stream_dprintk(t2mi, "resetting\n");
-		t2mi_stream_reset(t2mi);
+		t2mi_stream_reset(t2mi, false /*full_reset*/);
 		*p = NULL;
 		return true;
 	}
@@ -1067,7 +1068,7 @@ static inline bool get_t2mi_bbheader(struct t2mi_stream* t2mi, const uint8_t** p
 	if (*p > pend) {
 		WARN_ON_ONCE("Buffer overflow\n");
 		t2mi_stream_dprintk(t2mi, "resetting\n");
-		t2mi_stream_reset(t2mi);
+		t2mi_stream_reset(t2mi, false /*full_reset*/);
 		*p = NULL;
 		return true;
 	}
@@ -1104,7 +1105,7 @@ static inline bool get_t2mi_bbheader(struct t2mi_stream* t2mi, const uint8_t** p
 	if(bad_crc) {
 		t2mi_stream_dprintk_nice(t2mi, "bad t2mi header crc\n");
 		t2mi_stream_dprintk(t2mi, "resetting\n");
-		t2mi_stream_reset(t2mi);
+		t2mi_stream_reset(t2mi, false /*full_reset*/);
 		t2mi->num_crc_errors++;
 		*p = NULL;
 		return true;
@@ -1139,7 +1140,7 @@ static inline bool get_t2mi_bbheader(struct t2mi_stream* t2mi, const uint8_t** p
 	if(buff - &t2mi->buff[0] +9 >= sizeof(t2mi->buff)) {
 		WARN_ON_ONCE("BUG buffer overrun\n");
 		t2mi_stream_dprintk(t2mi, "resetting\n");
-		t2mi_stream_reset(t2mi);
+		t2mi_stream_reset(t2mi, false /*full_reset*/);
 		*p = NULL;
 		return true;
 	}
@@ -1149,7 +1150,7 @@ static inline bool get_t2mi_bbheader(struct t2mi_stream* t2mi, const uint8_t** p
 														 "t2mi->t2mi_payload_bytes_left=%d\n",
 														 bbf->bbf_payload_bytes_left, t2mi->t2mi_payload_bytes_left);
 		t2mi_stream_dprintk(t2mi, "resetting\n");
-		t2mi_stream_reset(t2mi);
+		t2mi_stream_reset(t2mi, false /*full_reset*/);
 		*p = NULL;
 		return true;
 	}
@@ -1354,7 +1355,7 @@ static void t2mi_stream_add_packet(struct dvb_demux* demux, struct t2mi_stream* 
 		if(cc_error) {
 			t2mi_stream_dprintk_nice(t2mi, "CC counter error t2mi->emb.cc_counter=%d\n", t2mi->emb.cc_counter);
 			t2mi_stream_dprintk(t2mi, "resetting\n");
-			t2mi_stream_reset(t2mi);
+			t2mi_stream_reset(t2mi, false /*full_reset*/);
 			return;
 		}
 		t2mi->emb.cc_counter = new_cc_counter;
@@ -1573,7 +1574,6 @@ static void stid_stream_add_packet(struct dvb_demux* demux, struct stid_stream* 
 	pid &= 0x01F;
 	pid <<= 8;
 	pid |= packet[2];
-	//stid_stream_dprintk_nice(stid, "pid=%d\n", pid);
 	if(pid != stid->emb.embedding_pid) {
 		stid_stream_dprintk_nice(stid, "Unexpected pid: 0x%02x\n", pid);
 		return;
