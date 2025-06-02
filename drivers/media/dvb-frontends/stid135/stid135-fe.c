@@ -1588,7 +1588,7 @@ static int stid135_read_status_(struct dvb_frontend* fe, enum fe_status *status)
 		dev_warn(&state->chip->i2c->dev, "%s: fe_stid135_filter_forbidden_modcodes error %d !\n", __func__, err);
 
 	//update isi list
-	if(state->mis_mode) {
+	if(state->mis_mode || p->stream_id != NO_STREAM_ID_FILTER) {
 		vprintk("ISI calling isi_scan\n");
 		err = fe_stid135_isi_scan(state, &state->signal_info.isi_list);
 	}
