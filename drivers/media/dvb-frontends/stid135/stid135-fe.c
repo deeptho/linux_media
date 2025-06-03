@@ -1594,6 +1594,13 @@ static int stid135_read_status_(struct dvb_frontend* fe, enum fe_status *status)
 	}
 	memcpy(p->isi_bitset, state->signal_info.isi_list.isi_bitset, sizeof(p->isi_bitset));
 	memcpy(p->matypes, state->signal_info.isi_list.matypes, sizeof(p->matypes));
+	if(p->output_bbframes) {
+		struct dvb_demux * demux = state->demux;
+		int32_t isi_bitset[8];
+		int32_t high_rolloff_mode[8];
+		uint8_t matypes[256];
+		dvb_demux_get_matypes(demux, &isi_bitset, &high_rolloff_mode, &matypes);
+	}
 	p->num_matypes = state->signal_info.isi_list.num_matypes;
 	vprintk("p->num_matypes=%d %d\n", p->num_matypes, state->signal_info.isi_list.num_matypes);
 
