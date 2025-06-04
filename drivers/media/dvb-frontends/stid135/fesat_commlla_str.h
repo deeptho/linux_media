@@ -325,6 +325,8 @@ struct fe_sat_isi_struct_t
 	u32 isi_bitset[8]; //bitset; 1 bit indicates corresponding ISI is in use
 	u32 num_matypes;
 	u16 matypes[256];
+	s16 default_isi;
+	s16 default_matype;
 };
 typedef  struct fe_sat_isi_struct_t  fe_sat_isi_struct;
 

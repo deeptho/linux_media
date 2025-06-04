@@ -4448,8 +4448,11 @@ fe_lla_error_t FE_STiD135_Algo(struct stv* state, BOOL satellite_scan, enum fe_s
 #else
 					error |= fe_stid135_manage_matype_info_raw_bbframe(pParams, Demod);
 #endif
-				} else {
+				}
+				else {
 					dprintk("Returning FE_LLA_SEARCH_FAILED fld_value=0x%x pdel_status_timeout=%d\n", fld_value, pdel_status_timeout);
+					state_dprintk("vit=%d sync=%d timing_lock=%d fec_locked=%d \n", state->signal_info.has_viterbi, state->signal_info.has_sync,
+												state->signal_info.has_timing_lock, state->signal_info.has_lock);
 					return(FE_LLA_SEARCH_FAILED);
 				}
 			}
@@ -10596,7 +10599,12 @@ fe_lla_error_t fe_stid135_isi_scan(struct stv* state, struct fe_sat_isi_struct_t
 				j = CurrentISI/32;
 				mask = ((uint32_t)1)<< (CurrentISI%32);
 				if( ! (p_isi_struct->isi_bitset[j] & mask)) {
+					state->mis_mode |= !fe_stid135_check_sis_or_mis(matype);
 					state_dprintk("Found new ISI=%d matype=%d error=%d mis=%d\n",  CurrentISI, matype, error, state->mis_mode);
+					if(state->mis_mode &&  p_isi_struct->default_isi <0) {
+						p_isi_struct->default_isi = CurrentISI;
+						p_isi_struct->default_matype = matype;
+					}
 					if(p_isi_struct->num_matypes < sizeof(p_isi_struct->matypes)/sizeof(p_isi_struct->matypes[0]))
 						p_isi_struct->matypes[p_isi_struct->num_matypes++] = (matype<<(int)8)|CurrentISI;
 					p_isi_struct->isi_bitset[j] |= mask;

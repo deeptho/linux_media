@@ -1094,7 +1094,6 @@ static bool pls_search_list(struct dvb_frontend* fe)
 	return locked;
 }
 
-
 static bool pls_search_range(struct dvb_frontend* fe)
 {
 	struct stv *state = fe->demodulator_priv;
@@ -1189,6 +1188,12 @@ static int stid135_set_rf_input(struct dvb_frontend* fe, struct fe_rf_input_cont
 	return result;
 }
 
+static void init_signal_info(struct  fe_sat_signal_info* signal_info)
+{
+	memset(signal_info, 0, sizeof(*signal_info));
+	signal_info->isi_list.default_isi = -1;
+	signal_info->isi_list.default_matype = -1;
+}
 
 static int stid135_set_parameters(struct dvb_frontend* fe)
 {
@@ -1203,7 +1208,7 @@ static int stid135_set_parameters(struct dvb_frontend* fe)
 	struct fe_sat_signal_info* signal_info = &state->signal_info;
 	s32 current_llr=0;
 	state->tune_time = ktime_get_coarse();
-	memset(signal_info, 0, sizeof(*signal_info));
+	init_signal_info(signal_info);
 	signal_info->isi = -2; //not initialized
 	signal_info->bbframes_on = false;
 	signal_info->matype = -2; //not initialized
@@ -1275,7 +1280,7 @@ static int stid135_set_parameters(struct dvb_frontend* fe)
 		search_params.isi = -1;
 	search_params.pls_mode = ((p->stream_id >>26) & 0x3);
 	search_params.pls_code = ((p->stream_id >> 8)  & 0x3FFFF);
-
+	state_dprintk("pls_mode=%d pls_code=%d\n", search_params.pls_mode, search_params.pls_code);
 	search_params.frequency		=  p->frequency*1000;
 	//search_params.symbol_rate		=		p->symbol_rate;
 	vprintk("[%d] symbol_rate=%dkS/s\n", state->nr+1, p->symbol_rate/1000);
@@ -1361,6 +1366,20 @@ static int stid135_set_parameters(struct dvb_frontend* fe)
 			locked = pls_search_range(fe);
 		if(locked) {
 			dprintk("demod=%d: PLS locked=%d\n", state->nr, locked);
+			state_dprintk("Calling isi_scan\n");
+			err = fe_stid135_isi_scan(state, &state->signal_info.isi_list);
+			if(state->mis_mode && p->stream_id == NO_STREAM_ID_FILTER) {
+				if(state->signal_info.isi_list.default_isi >=0) {
+					state_dprintk("User requested single stream or any stream; arbitrarily choosing isi=%d (%d)\n",
+												state->signal_info.isi_list.default_isi, state->signal_info.isi	);
+					state->signal_info.isi = state->signal_info.isi_list.default_isi;
+					state->signal_info.matype = state->signal_info.isi_list.default_matype;
+					p->stream_id = ((state->signal_info.isi &0xff) |
+													(state->signal_info.pls_mode << 26) |
+													((state->signal_info.pls_code &0x3FFFF)<<8)
+													);
+					}
+			}
 		} else {
 			set_pls_mode_code(state, 0, 1);
 		}
@@ -1588,7 +1607,7 @@ static int stid135_read_status_(struct dvb_frontend* fe, enum fe_status *status)
 		dev_warn(&state->chip->i2c->dev, "%s: fe_stid135_filter_forbidden_modcodes error %d !\n", __func__, err);
 
 	//update isi list
-	if(state->mis_mode || p->stream_id != NO_STREAM_ID_FILTER) {
+	if(state->mis_mode) {
 		vprintk("ISI calling isi_scan\n");
 		err = fe_stid135_isi_scan(state, &state->signal_info.isi_list);
 	}
@@ -1745,7 +1764,7 @@ static int stid135_set_demux_default_stream_id(struct dvb_frontend* fe) {
 	int stream_id = p->stream_id & 0xff;
 	bool is_mis = !((state->signal_info.matype >> 5) &0x1);
 	bool is_ts = ((state->signal_info.matype >> 6) &0x3) == 0x3;
-	dprintk("isi=%d/%d is_mis=%d is_ts=%d\n", state->signal_info.isi, p->stream_id, is_mis, is_ts);
+	dprintk("isi=%d/%d is_mis=%d is_ts=%d\n", state->signal_info.isi, (p->stream_id)&0xff, is_mis, is_ts);
 	if(stream_id==0xff)
 		stream_id = -1;
 	//only apply bbframes_auto in very specific case of a mult-stream transport stream
