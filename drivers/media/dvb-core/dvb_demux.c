@@ -1743,13 +1743,13 @@ static void dvb_dmx_swfilter_packet(struct dvb_demux *demux, const uint8_t *buf,
 		if(stid) {
 			//dmx_demux_dprintk_nice(demux, "calling stid_stream_add_packet stid=%p pid=%d from_bbf=%d\n", stid, pid, frombbf);
 			stid_stream_add_packet(demux, stid, buf);
-			return;
+			//return;
 		} else if (emb) {
 			struct t2mi_stream* t2mi =  embedded_stream_get_super_class(emb, EMBEDDED_STREAM_TYPE_T2MI);
 			//dmx_demux_dprintk_nice(demux, "emb=%p t2mi=%p pid=%d\n", emb, t2mi, pid);
 			if(t2mi) {
 				t2mi_stream_add_packet(demux, t2mi, buf);
-				return;
+				//return;
 			}
 		}
 	}
@@ -2216,6 +2216,12 @@ static int dvbdmx_allocate_stid_stream(struct dmx_demux* dmx_demux,
 	return ret;
 }
 
+
+static struct dvb_demux_feeds* dvbdmx_get_fe_feeds(struct dmx_demux* dmx_demux)
+{
+	struct dvb_demux* demux =  container_of(dmx_demux, struct dvb_demux, dmx);
+	return demux->fe_feeds;
+}
 
 static int dvbdmx_allocate_t2mi_stream_(struct dvb_demux* demux,
 																				struct bbframes_stream** bbf_ret,
@@ -2835,6 +2841,7 @@ int dvb_dmx_init(struct dvb_demux *dvbdemux)
 	dmx->open = dvbdmx_open;
 	dmx->close = dvbdmx_close;
 	dmx->write = dvbdmx_write;
+	dmx->get_fe_feeds = dvbdmx_get_fe_feeds;
 	dmx->allocate_pid_stream = dvbdmx_allocate_pid_stream;
 	dmx->allocate_stid_stream = dvbdmx_allocate_stid_stream;
 	dmx->allocate_t2mi_stream = dvbdmx_allocate_t2mi_stream;

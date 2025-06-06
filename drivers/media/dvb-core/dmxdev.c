@@ -894,7 +894,7 @@ static int dvb_dmxdev_filter_start(struct dmxdev_filter *filter)
 				dprintk("Calling with bbs=%p  pid=%d isi=%d current_feeds=%p\n",
 								bbs, bbs->embedding_pid, bbs->isi, filter->current_feeds);
 				ret = filter->dev->demux->allocate_stid_stream(filter->dev->demux, bbs,
-																											bbs->embedding_pid, bbs->isi, filter->current_feeds);;
+																											bbs->embedding_pid, bbs->isi, filter->current_feeds);
 
 				dprintk("setting current_feeds=%p was %p ret=%d\n", bbs->feeds, filter->current_feeds, ret);
 				filter -> current_feeds = bbs->feeds;
@@ -1324,7 +1324,18 @@ static int dvb_demux_do_ioctl(struct file *file,
 		dprintk("DONE: dvb_dmxdev_add_t2mi_stream");
 		mutex_unlock(&dmxdevfilter->mutex);
 		break;
+	case DMX_SET_FE_STREAM: {
+		if (mutex_lock_interruptible(&dmxdevfilter->mutex)) {
+			mutex_unlock(&dmxdev->mutex);
+			return -ERESTARTSYS;
+		}
 
+		dmxdevfilter->current_feeds = dmxdevfilter->dev->demux->get_fe_feeds(dmxdevfilter->dev->demux);
+		dprintk("Setting current_feeds=%p\n", dmxdevfilter->current_feeds);
+		ret = 0;
+		mutex_unlock(&dmxdevfilter->mutex);
+	}
+		break;
 	case DMX_SET_BUFFER_SIZE:
 		if (mutex_lock_interruptible(&dmxdevfilter->mutex)) {
 			mutex_unlock(&dmxdev->mutex);

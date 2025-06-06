@@ -5,7 +5,7 @@
  * registering low-level, hardware specific driver to a hardware independent
  * demux layer.
  *
- * Copyright (c) 2005 Deep Thought <deeptho@gmail.com>
+ * Copyright (c) 2025 Deep Thought <deeptho@gmail.com>
  *
  * Copyright (c) 2002 Convergence GmbH
  *
@@ -661,6 +661,8 @@ struct dmx_demux {
 															int embedding_pid, int embedded_isi,
 															struct dvb_demux_feeds* parent_feeds);
 	int (*release_bbf_stream)(struct dmx_demux *demux, struct bbframes_stream* bbs);
+
+	struct dvb_demux_feeds* (*get_fe_feeds)(struct dmx_demux *demux);
 
 	int (*allocate_pid_stream)(struct dmx_demux *demux,
 													struct pid_stream **pid_stream,
