@@ -1051,9 +1051,10 @@ static bool pls_search_list(struct dvb_frontend* fe)
 		//locked = wait_for_dmdlock(fe, 1 /*require_data*/);
 		//dprintk("RESULT=%d\n", locked);
 			if(locked) {
+#if 0 //cannot work
 				int old_isi = p->stream_id &0xff;
 				error = fe_stid135_read_hw_matype(state, &matype_info, &isi);
-				state->mis_mode= !fe_stid135_check_sis_or_mis(matype_info);
+				state->mis_mode = !fe_stid135_check_sis_or_mis(matype_info);
 				state_dprintk("selecting isi=%d old_isi=%d mis_mode=%d stream_id=%d\n", isi,
 											old_isi, state->mis_mode, p->stream_id);
 				if(isi==255)
@@ -1063,6 +1064,7 @@ static bool pls_search_list(struct dvb_frontend* fe)
 												signal_info->isi, isi);
 					signal_info->isi = isi;
 				}
+#endif
 #if 0 //unreachable
 				if(old_isi <0) {
 					int old_stream_id = p->stream_id;
@@ -1148,6 +1150,7 @@ static bool pls_search_range(struct dvb_frontend* fe)
 		}
 		vprintk("PLS RESULT=%d\n", locked);
 		if(locked) {
+#if 0 //cannot work
 			int old_isi = p->stream_id &0xff;
 			error = fe_stid135_read_hw_matype(state, &matype_info, &isi);
 			state->mis_mode= !fe_stid135_check_sis_or_mis(matype_info);
@@ -1167,6 +1170,7 @@ static bool pls_search_range(struct dvb_frontend* fe)
 			state->signal_info.pls_code = pls_code;
 		  //p->matype = matype_info;
 			dprintk("PLS SET stream_id=0x%x isi=0x%x\n",p->stream_id, isi);
+#endif
 				break;
 		}
 	}

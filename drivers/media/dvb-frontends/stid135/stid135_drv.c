@@ -2833,11 +2833,6 @@ static fe_lla_error_t fe_stid135_manage_manual_rolloff(struct fe_stid135_interna
 	if(handle != NULL) {
 		pParams = (struct fe_stid135_internal_param *) handle;
 
-
-#ifdef TOTEST //DeepThought This may not be needed 20201226
-		error |= ChipSetField(state->chip->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEMOD_MANUALS2_ROLLOFF(demod), 1);
-		error |= ChipSetField(state->chip->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEMOD_MANUALSX_ROLLOFF(demod), 1);
-#endif
 		switch(pParams->roll_off[demod-1]) {
 			case FE_SAT_05:
 				error |= ChipSetField(state->chip->ip.handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_DEMOD_ROLLOFF_CONTROL(demod), 4);
