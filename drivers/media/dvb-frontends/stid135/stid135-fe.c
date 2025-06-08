@@ -840,7 +840,6 @@ static enum fe_ioctl_result stid135_select_rf_in_(struct stv* state, struct fe_r
 
 		if(result != FE_RESERVATION_RELEASED)
 			state_dprintk("BUG: result=%s\n", reservation_result_str(result));
-
 	}
 
 	if(old_rf_in && old_rf_in->reservation.use_count==0) {
@@ -879,8 +878,12 @@ static enum fe_ioctl_result stid135_select_rf_in_(struct stv* state, struct fe_r
 		state->quattro_rf_in_mask = 0;
 		state->quattro_rf_in = 0;
 		state->legacy_rf_in = false;
-		state_dprintk("returning FE_RESERVATION_FAILED\n");
-		return FE_RESERVATION_FAILED;
+		if(ic) {
+			state_dprintk("returning FE_RESERVATION_FAILED\n");
+			return FE_RESERVATION_FAILED;
+		} else {
+			return FE_RESERVATION_RELEASED;
+		}
 	}
 
 	state_dprintk("use_counts: tuner=%d/%d rf_in=%d/%d\n", new_tuner_use_count_before,
