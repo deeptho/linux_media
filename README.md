@@ -372,6 +372,21 @@ continuing to work ``as is''.
    DMX_SET_PES_FILTER is used to select a first PID to add to the output, and DMX_ADD_PID to add addional
    pids.
 
+# Changes in release-1.8
+
+* BUG: when user specifies isi=-1 on a multistream, a corrupt mix of all streams is produced; also an incorrect isi=-1 is returned. The new code picks an arbitrary stream
+* Run isi-scan even when currently selected isi is invalid.
+* Incorrect setting of mis_mode (bad code without effect).
+* In case bbframes_mode is on, also allow demux users to directly access bbframes embedded in pid 270.
+* Implement receiving matypes from demux.
+
+* Incorrect log message.
+* stid135: call get_signal_info even when error state has been set.
+* stid135: BUG: isi_scan not called when user requests non-existing ISI.
+* BUG: bbframes processing: out of buffer writing after receiving incorrect data.
+* bbframe processing in dvb_demux: Avoid clearing isi list on crc error.
+
+
 # Changes in release-1.7
 
 * Merged tbs code up to c6af36f453d22ef8b38d2bb6
