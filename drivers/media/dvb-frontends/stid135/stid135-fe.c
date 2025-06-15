@@ -1368,8 +1368,9 @@ static int stid135_set_parameters(struct dvb_frontend* fe)
 		//print_signal_info(state, "(before trying pls)");
 		vprintk("demod=%d: Trying pls: p->stream_id=%d state->signal_info.isi=0x%x\n", state->nr,
 						p->stream_id, state->signal_info.isi);
-		locked = pls_search_list(fe);
-		if(!locked)
+		if(!state->signal_info.fec_locked)
+			locked = pls_search_list(fe);
+		if(!state->signal_info.fec_locked && !locked)
 			locked = pls_search_range(fe);
 		if(locked) {
 			dprintk("demod=%d: PLS locked=%d\n", state->nr, locked);
@@ -1387,7 +1388,7 @@ static int stid135_set_parameters(struct dvb_frontend* fe)
 													);
 					}
 			}
-		} else {
+		} else if(state->signal_info.fec_locked) {
 			set_pls_mode_code(state, 0, 1);
 		}
 		vprintk("After Trying pls: p->stream_id=%d locked=%d\n", p->stream_id, locked);
