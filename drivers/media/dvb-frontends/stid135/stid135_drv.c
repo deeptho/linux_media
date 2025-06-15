@@ -4444,7 +4444,7 @@ fe_lla_error_t FE_STiD135_Algo(struct stv* state, BOOL satellite_scan, enum fe_s
 #endif
 				}
 				else {
-					dprintk("Returning FE_LLA_SEARCH_FAILED fld_value=0x%x pdel_status_timeout=%d\n", fld_value, pdel_status_timeout);
+					state_dprintk("Returning FE_LLA_SEARCH_FAILED fld_value=0x%x pdel_status_timeout=%d\n", fld_value, pdel_status_timeout);
 					state_dprintk("vit=%d sync=%d timing_lock=%d fec_locked=%d \n", state->signal_info.has_viterbi, state->signal_info.has_sync,
 												state->signal_info.has_timing_lock, state->signal_info.has_lock);
 					return(FE_LLA_SEARCH_FAILED);
@@ -4480,12 +4480,22 @@ fe_lla_error_t FE_STiD135_Algo(struct stv* state, BOOL satellite_scan, enum fe_s
 				dprintk("demod=%d: ERROR=%d\n", state->nr, error1);
 
 			// - end of new management of NCR
-			//TODO: at this point we should already have achieved fec lock, so why check again?
+#if 0
+			/*At this point we should already have achieved fec lock, so why check again?
+				Worse is that this calls FE_STiD135_GetDemodLock again, but this fails sometimes.
+				probably because its main while loop immediately exists because of already being locked
+				causing something else to be go wrong
+			 */
 		error |= (error1=FE_STiD135_WaitForLock(state, demodTimeout, fecTimeout, satellite_scan, &lockstatus, &fec_lock));
 		if(error1)
 			dprintk("demod=%d: ERROR=%d\n", state->nr, error1);
-
 		state->signal_info.fec_locked = fec_lock;
+#else
+		error |= FE_STiD135_GetFECLock(state, fecTimeout, &fec_lock);
+		state->signal_info.fec_locked = fec_lock;
+		lockstatus = state->signal_info.has_lock;
+		print_signal_info(state);
+#endif
 		if (lockstatus == TRUE) {
 			lock = TRUE;
 			//dprintk("demod=%d setting has_lock=%d\n", , state->nr, 1);
