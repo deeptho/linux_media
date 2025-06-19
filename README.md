@@ -686,7 +686,16 @@ sudo dnf install -y kernel-devel-MYKERNEL
 sudo dnf install -y perl-File-Copy #not needed?
 sudo dnf install -y perl
 sudo dnf install -y perl-Proc-ProcessTable
+Also, disable selinux by setting
 
+```
+SELINUX=disabled
+```
+in /etc/selinux.conf and reboot.
+
+Then compile with
+
+```
 cd media_build
 git checkout deepthought
 git reset --hard
