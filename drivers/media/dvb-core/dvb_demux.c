@@ -1749,7 +1749,7 @@ static void dvb_dmx_swfilter_packet(struct dvb_demux *demux, const uint8_t *buf,
 			//dmx_demux_dprintk_nice(demux, "emb=%p t2mi=%p pid=%d\n", emb, t2mi, pid);
 			if(t2mi) {
 				t2mi_stream_add_packet(demux, t2mi, buf);
-				//return;
+				return;
 			}
 		}
 	}
