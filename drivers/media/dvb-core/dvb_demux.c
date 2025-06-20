@@ -1129,15 +1129,18 @@ static inline bool get_t2mi_bbheader(struct t2mi_stream* t2mi, const uint8_t** p
 	/*
 		in theory t2mi streams can have more than one PLP (identified by plp_id,
 		which is the same as isi) embedded in them, but almost always they have only one.
-		Therefore we allow the called setting isi=T2MI_ANY_ISI as the stream_id.,
+		Therefore we allow the called setting isi=T2MI_UNSPECIFIED_PLP as the stream_id.,
 		In that case we pick a stream_id at random, which will be fine if there is only one present.
 	 */
-	if(t2mi->default_isi <0)
+	if(t2mi->default_isi < 0) {
+		t2mi_stream_dprintk_nice(t2mi, "Setting default_isi=%d\n", t2mi->plp_id);
 		t2mi->default_isi = t2mi->plp_id;
+	}
 
 	struct bbframes_stream* bbf = xa_load(&t2mi->emb.bbf_streams, t2mi->plp_id);
 	if(!bbf &&  t2mi->plp_id == t2mi->default_isi) {
-		bbf = xa_load(&t2mi->emb.bbf_streams, T2MI_UNSPECIFIED_PLP);
+		bbf = xa_load(&t2mi->emb.bbf_streams, 256);
+		t2mi_stream_dprintk_nice(t2mi, "Looked bbf=%p\n", bbf);
 	}
 
 	t2mi->emb.current_bbf = bbf;
@@ -1363,12 +1366,14 @@ static void t2mi_stream_add_packet(struct dvb_demux* demux, struct t2mi_stream* 
 		if (!t2mi->synced && ! pusi)
 			return;
 		bool cc_error = !discontinuity && new_cc_counter != (t2mi->emb.cc_counter+1)%16 && t2mi->emb.cc_counter>=0;
+
 		if(cc_error) {
 			t2mi_stream_dprintk_nice(t2mi, "CC counter error t2mi->emb.cc_counter=%d\n", t2mi->emb.cc_counter);
 			t2mi_stream_dprintk(t2mi, "resetting\n");
 			t2mi_stream_reset(t2mi, false /*full_reset*/);
 			return;
 		}
+
 		t2mi->emb.cc_counter = new_cc_counter;
 
 		int uimsbf = 0; /*pointer to the location in this packet where next bbframe starts

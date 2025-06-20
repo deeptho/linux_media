@@ -902,8 +902,8 @@ static int dvb_dmxdev_filter_start(struct dmxdev_filter *filter)
 				break;
 			case DMXDEV_FEED_TYPE_T2MI: {
 				struct dmx_t2mi_stream* bbs = container_of(feed, struct dmx_t2mi_stream, f);
-				dprintk("Calling with bbs=%p  pid=%d isi=%d plp=%d current_feeds=%p\n",
-								bbs, bbs->embedding_pid, bbs->isi, bbs->plp, filter->current_feeds);
+				dprintk("Calling with bbs=%p  pid=%d plp=%d current_feeds=%p\n",
+								bbs, bbs->embedding_pid, bbs->isi, filter->current_feeds);
 				ret = filter->dev->demux->allocate_t2mi_stream(filter->dev->demux, bbs,
 																											 bbs->embedding_pid, bbs->isi, filter->current_feeds);
 
@@ -1135,7 +1135,7 @@ static void	dmxdev_t2mi_stream_init(struct dmx_t2mi_stream* bbs, int embedding_p
 	bbs->f.feed_type = 	DMXDEV_FEED_TYPE_T2MI;
 	bbs->embedding_pid = embedding_pid;
 	bbs->isi = plp;
-	bbs->plp = plp;
+	//bbs->plp = plp;
 	INIT_LIST_HEAD(&bbs->f.next);
 }
 

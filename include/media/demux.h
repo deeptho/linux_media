@@ -115,7 +115,6 @@ struct dmxdev_feed {
  *
  * @embedding_pid: The pid of the TS in which the bbframes stream is embedded.
  * @isi:	The Input Stream Identifier of the stream.
- * @plp:	The PLP Identifier of the stream.
  * @feeds:	The &struct dmx_demux_feeds container listing the feeds subscribed in the stream
  * @stream:	 The internal &struct bbframes_stream state of the stream
  */
