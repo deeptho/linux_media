@@ -2023,10 +2023,9 @@ fe_lla_error_t FE_STiD135_WaitForLock(struct stv* state,
 	}
 #endif
 
-
+#if 0
 	/* LINEOK check is not performed during Satellite Scan */
 	if (satellite_scan == FALSE) {
-#if 0
 		if (*lock_p) {
 			*lock_p = 0;
 
@@ -2039,8 +2038,8 @@ fe_lla_error_t FE_STiD135_WaitForLock(struct stv* state,
 				timer++;
 			}
 		}
-#endif
 	}
+#endif
 	state->signal_info.fec_locked = *lock_p;
 	state->signal_info.has_sync = *lock_p;
 	{ s32 fld_value;

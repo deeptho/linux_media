@@ -123,7 +123,6 @@ struct dmx_t2mi_stream {
 	struct dmxdev_feed f;
 	int embedding_pid;
 	int isi;
-	int plp;
 	struct dvb_demux_feeds* feeds;
 	struct bbframes_stream* stream;
 };
