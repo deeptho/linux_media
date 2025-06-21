@@ -1673,7 +1673,7 @@ static void dvb_dmx_swfilter_packet(struct dvb_demux *demux, const uint8_t *buf,
 	u16 pid = ts_pid(buf);
 	int dvr_done = 0;
 	enum dmx_buffer_flags buffer_flags;
-	bool flag_error=false;
+	bool flag_error = false;
 	if(!demux) {
 		dmx_demux_dprintk_nice(demux, "demux=NULL\n");
 		return;
@@ -1747,6 +1747,10 @@ static void dvb_dmx_swfilter_packet(struct dvb_demux *demux, const uint8_t *buf,
 			}
 			/* end check */
 		}
+
+	/*first pass on embedded frames streams. In this case, there should be no TS errors, so flag_error should be false,
+		but we check anyway
+	*/
 	if(!flag_error)  {
 		struct embedded_stream* emb =  (struct embedded_stream*)xa_load(&feeds->embedded_streams, pid);
 		struct stid_stream* stid =  embedded_stream_get_super_class(emb, EMBEDDED_STREAM_TYPE_STID);
@@ -1754,17 +1758,12 @@ static void dvb_dmx_swfilter_packet(struct dvb_demux *demux, const uint8_t *buf,
 		if(stid) {
 			//dmx_demux_dprintk_nice(demux, "calling stid_stream_add_packet stid=%p pid=%d from_bbf=%d\n", stid, pid, frombbf);
 			stid_stream_add_packet(demux, stid, buf);
-			//return;
-		} else if (emb) {
-			struct t2mi_stream* t2mi =  embedded_stream_get_super_class(emb, EMBEDDED_STREAM_TYPE_T2MI);
-			//dmx_demux_dprintk_nice(demux, "emb=%p t2mi=%p pid=%d\n", emb, t2mi, pid);
-			if(t2mi) {
-				t2mi_stream_add_packet(demux, t2mi, buf);
-				return;
-			}
 		}
 	}
-	for(int i=0; i < (feeds->include_default_feeds ? 2 : 1); ++i) {
+
+	bool try_default_feeds =  feeds->include_default_feeds && feeds != demux->default_feeds;
+
+	for(int i=0; i < (try_default_feeds ? 2 : 1); ++i) {
 		if(i>0) {
 			feeds = demux->default_feeds;
 			if(!feeds) {
@@ -1775,9 +1774,9 @@ static void dvb_dmx_swfilter_packet(struct dvb_demux *demux, const uint8_t *buf,
 		struct embedded_stream* emb =  (struct embedded_stream*)xa_load(&feeds->embedded_streams, pid);
 		struct t2mi_stream* t2mi =  embedded_stream_get_super_class(emb, EMBEDDED_STREAM_TYPE_T2MI);
 		//dmx_demux_dprintk_nice(demux, "emb=%p t2mi=%p pid=%d\n", emb, t2mi, pid);
-		if(t2mi) {
+		if(!flag_error && t2mi) {
 			t2mi_stream_add_packet(demux, t2mi, buf);
-			return;
+			//do not return, as it is possible that some demux users what the pid itself, rather than the embedded stream
 		}
 		list_for_each_entry(feed, &feeds->output_feed_list, next) {
 			if ((feed->pid != pid) && (feed->pid != 0x2000))
@@ -1803,6 +1802,8 @@ static void dvb_dmx_swfilter_packet(struct dvb_demux *demux, const uint8_t *buf,
 #else
 				//dmx_demux_dprintk_nice(demux, "calling dvb_dmx_swfilter_packet feed=%p pid=%d from_bbf=%d\n", feed, pid,
 				//											 frombbf);
+
+				//Output packet (after possible header stripping or section processing to the demux
 				dvb_dmx_swfilter_packet_type(feed, buf);
 #endif
 			}
@@ -1812,6 +1813,8 @@ static void dvb_dmx_swfilter_packet(struct dvb_demux *demux, const uint8_t *buf,
 #else
 				//dmx_demux_dprintk_nice(demux, "calling cb.ts feed=%p pid=%d from_bbf=%d\n", feed, pid,
 				//											 frombbf);
+
+				//Output packet to the demux without further processing
 				feed->cb.ts(buf, 188, NULL, 0, &feed->feed.pid_stream, &feed->buffer_flags);
 #endif
 			}
