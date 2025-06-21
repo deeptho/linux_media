@@ -572,16 +572,16 @@ void dvb_dmx_swfilter_raw(struct dvb_demux *demux, const u8 *buf,
 int dvb_demux_set_bbframes_state(struct dvb_demux* demux, bool embedding_is_on, int embedding_pid, int default_stream_id);
 int dvb_demux_get_matypes(struct dvb_demux* demux, int32_t (*isi_bitset)[8], int32_t (*high_rolloff_mode)[8], uint8_t (*matypes)[256]);
 
-
+//dma
 static inline void* embedded_stream_get_super_class(struct embedded_stream* emb,
 																																	enum embedded_stream_type t) {
 	if(!emb)
 		return NULL;
-	bool matches = (t==emb->embedded_stream_type || EMBEDDED_STREAM_TYPE_UNKNOWN);
+	bool matches = (t == emb->embedded_stream_type || EMBEDDED_STREAM_TYPE_UNKNOWN);
 	switch (emb->embedded_stream_type) {
 	case EMBEDDED_STREAM_TYPE_UNKNOWN:
 	default:
-		BUG_ON(true);
+		printk_once("BUG: EMBEDDED_STREAM_TYPE_UNKNOWN\n");
 		return NULL;
 		break;
 	case EMBEDDED_STREAM_TYPE_STID:

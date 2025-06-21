@@ -142,8 +142,6 @@ MODULE_PARM_DESC(dvb_demux_feed_err_pkts,
 	} while (0)
 
 
-
-
 #define dprintk_tscheck(x...) do {			\
 	if (dvb_demux_tscheck && printk_ratelimit())	\
 		dprintk(x);				\
@@ -593,6 +591,7 @@ static void bbframes_stream_release(struct bbframes_stream* bbf) {
  * Software filter functions
  ******************************************************************************/
 
+//dma
 static inline int dvb_dmx_swfilter_payload(struct dvb_demux_feed *feed,
 					   const u8 *buf)
 {
@@ -857,6 +856,11 @@ static int dvb_dmx_swfilter_section_packet(struct dvb_demux_feed *feed, const u8
 	return 0;
 }
 
+/* Process packets that are actually delivered to the user of the demux:
+	 -strip the packet headers if so requested
+	 -filter for specific sections
+ */
+//dma
 static inline void dvb_dmx_swfilter_packet_type(struct dvb_demux_feed *feed, const uint8_t *buf)
 {
 	switch (feed->type) {
@@ -1066,7 +1070,7 @@ static inline bool get_t2mi_bbheader(struct t2mi_stream* t2mi, const uint8_t** p
 	int num = min(num_bytes_available, (int)13 - t2mi->bbheader_idx);
 	if(t2mi->bbheader_idx + num > sizeof(t2mi->buff)) {
 		WARN_ON_ONCE("buffer overrun\n");
-		t2mi_stream_dprintk(t2mi, "resetting\n");
+		t2mi_stream_dprintk_nice(t2mi, "resetting\n");
 		t2mi_stream_reset(t2mi, false /*full_reset*/);
 		*p = NULL;
 		return true;
@@ -1078,7 +1082,7 @@ static inline bool get_t2mi_bbheader(struct t2mi_stream* t2mi, const uint8_t** p
 	(*p) += num;
 	if (*p > pend) {
 		WARN_ON_ONCE("Buffer overflow\n");
-		t2mi_stream_dprintk(t2mi, "resetting\n");
+		t2mi_stream_dprintk_nice(t2mi, "resetting\n");
 		t2mi_stream_reset(t2mi, false /*full_reset*/);
 		*p = NULL;
 		return true;
@@ -1115,7 +1119,7 @@ static inline bool get_t2mi_bbheader(struct t2mi_stream* t2mi, const uint8_t** p
 	bool bad_crc  = !!(hem_mode &~1);
 	if(bad_crc) {
 		t2mi_stream_dprintk_nice(t2mi, "bad t2mi header crc\n");
-		t2mi_stream_dprintk(t2mi, "resetting\n");
+		t2mi_stream_dprintk_nice(t2mi, "resetting\n");
 		t2mi_stream_reset(t2mi, false /*full_reset*/);
 		t2mi->num_crc_errors++;
 		*p = NULL;
@@ -1153,7 +1157,7 @@ static inline bool get_t2mi_bbheader(struct t2mi_stream* t2mi, const uint8_t** p
 	}
 	if(buff - &t2mi->buff[0] +9 >= sizeof(t2mi->buff)) {
 		WARN_ON_ONCE("BUG buffer overrun\n");
-		t2mi_stream_dprintk(t2mi, "resetting\n");
+		t2mi_stream_dprintk_nice(t2mi, "resetting\n");
 		t2mi_stream_reset(t2mi, false /*full_reset*/);
 		*p = NULL;
 		return true;
@@ -1163,7 +1167,7 @@ static inline bool get_t2mi_bbheader(struct t2mi_stream* t2mi, const uint8_t** p
 		t2mi_stream_dprintk_nice(t2mi, "Unexpected: bbf->bbf_payload_bytes_lef=%d > "
 														 "t2mi->t2mi_payload_bytes_left=%d\n",
 														 bbf->bbf_payload_bytes_left, t2mi->t2mi_payload_bytes_left);
-		t2mi_stream_dprintk(t2mi, "resetting\n");
+		t2mi_stream_dprintk_nice(t2mi, "resetting\n");
 		t2mi_stream_reset(t2mi, false /*full_reset*/);
 		*p = NULL;
 		return true;
@@ -1319,7 +1323,7 @@ static inline const uint8_t* skip_t2mi_bytes(struct t2mi_stream* t2mi, const uin
 	return p + num_ts_bytes;
 }
 
-
+//dma
 static void t2mi_stream_add_packet(struct dvb_demux* demux, struct t2mi_stream* t2mi,  const uint8_t* packet)
 {
 	if(!t2mi) {
@@ -1579,6 +1583,7 @@ static void t2mi_stream_add_packet(struct dvb_demux* demux, struct t2mi_stream* 
 #endif
 }
 
+//dma
 static void stid_stream_add_packet(struct dvb_demux* demux, struct stid_stream* stid,
 																			 const uint8_t* packet)
 {
@@ -1660,6 +1665,7 @@ static void stid_stream_add_packet(struct dvb_demux* demux, struct stid_stream* 
 /*
 	Process a packet received from sub_demux
  */
+//dma
 static void dvb_dmx_swfilter_packet(struct dvb_demux *demux, const uint8_t *buf,
 																		struct dvb_demux_feeds* feeds, bool frombbf)
 {
@@ -1813,6 +1819,7 @@ static void dvb_dmx_swfilter_packet(struct dvb_demux *demux, const uint8_t *buf,
 	}
 }
 
+//dma
 void dvb_dmx_swfilter_packets(struct dvb_demux *demux, const uint8_t *buf, size_t count)
 {
 	unsigned long flags;
