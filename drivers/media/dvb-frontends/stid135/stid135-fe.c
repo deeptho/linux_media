@@ -1775,14 +1775,14 @@ static int stid135_set_demux_default_stream_id(struct dvb_frontend* fe) {
 	dprintk("isi=%d/%d is_mis=%d is_ts=%d\n", state->signal_info.isi, (p->stream_id)&0xff, is_mis, is_ts);
 	if(stream_id==0xff)
 		stream_id = -1;
-	//only apply bbframes_auto in very specific case of a mult-stream transport stream
+	//only apply bbframes_auto in very specific case of a multi-stream transport stream
 #if 0
 	output_bbframes = (p->output_bbframes || (bbframes_auto && is_mis && is_ts)) && (stream_id!=-1);
 #else
 	output_bbframes = p->output_bbframes || (bbframes_auto && is_mis && is_ts);
 #endif
-	state_dprintk("before: p->output_bbframes=%d stream_id=%d bbframes_auto=%d\n",
-					p->output_bbframes, stream_id, bbframes_auto);
+	state_dprintk("before: p->output_bbframes=%d stream_id=%d bbframes_auto=%d is_mis=%d is_ts=%d matype=0x%x\n",
+								p->output_bbframes, stream_id, bbframes_auto, is_mis, is_ts, state->signal_info.matype);
 	p->output_bbframes = output_bbframes;
 
 	if(demux) {
@@ -1823,7 +1823,6 @@ static int stid135_tune_(struct dvb_frontend* fe, bool re_tune,
 		}
 		state->tune_time = jiffies;
 
-		stid135_set_demux_default_stream_id(fe);
 
 		vprintk("[%d] RETUNE: GET SIGNAL\n", state->nr+1);
 		/*
@@ -1832,6 +1831,7 @@ static int stid135_tune_(struct dvb_frontend* fe, bool re_tune,
 		*/
 		memset(&state->signal_info.isi_list, 0, sizeof(state->signal_info.isi_list));
 		fe_stid135_get_signal_info(state);
+		stid135_set_demux_default_stream_id(fe);
 		if(p->output_bbframes) {
 			state_dprintk("Calling stid135_set_bbframe_output\n");
 		  stid135_set_bbframe_output(state);
