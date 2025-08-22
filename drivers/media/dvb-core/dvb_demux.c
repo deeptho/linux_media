@@ -2937,6 +2937,7 @@ int dvb_demux_set_bbframes_state(struct dvb_demux* demux, bool embedding_is_on, 
 		demux->fe_bbframes_stream->feeds->include_default_feeds = true;
 		demux->fe_feeds->include_default_feeds = false;
 	} else {
+		WARN_ON(demux->fe_bbframes_stream);
 		demux->fe_feeds->include_default_feeds = true;
 	}
 	mutex_unlock(&demux->mutex);
