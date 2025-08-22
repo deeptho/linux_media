@@ -407,11 +407,11 @@ static inline void embedded_stream_reset(struct embedded_stream* emb, bool full_
 		memset(emb->high_rolloff_mode, 0, sizeof(emb->high_rolloff_mode));
 		emb->num_streams = 0;
 		memset(emb->matypes, 0, sizeof(emb->matypes));
-		unsigned long index;
-		struct bbframes_stream* entry;
-		xa_for_each(&emb->bbf_streams, index, entry) {
-			bbframes_stream_reset(entry);
-		}
+	}
+	unsigned long index;
+	struct bbframes_stream* entry;
+	xa_for_each(&emb->bbf_streams, index, entry) {
+		bbframes_stream_reset(entry);
 	}
 }
 
