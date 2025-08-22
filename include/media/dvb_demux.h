@@ -268,7 +268,7 @@ struct stid_stream {
  */
 struct t2mi_stream {
 	struct embedded_stream emb;
-	int default_isi; //arbitrary isi to use if none was specifified by user
+	int default_isi; //isi to use if none was specifified by user
 	int packet_type;
 	int superframe_idx;
 	int crc_idx;
@@ -283,7 +283,9 @@ struct t2mi_stream {
 	int header_idx;
 	int bbheader_idx;
 	uint8_t buff[188];
-	int num_crc_errors;
+	int num_cc_errors;
+	int num_crc8_errors;
+	int num_crc32_errors;
 };
 
 

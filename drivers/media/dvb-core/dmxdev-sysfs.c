@@ -147,8 +147,11 @@ static ssize_t dvb_demux_show_feeds(const char* feeds_name, struct dvb_demux_fee
 				} else {
 					struct t2mi_stream* t2mi = embedded_stream_get_super_class(entry, EMBEDDED_STREAM_TYPE_T2MI);
 					if(t2mi) {
-						ret += sprintf(buf+ret, "%*st2mi=%p bbframes_pid=%d parent_feeds=%p crc_errs=%d stid.refcount=%d\n", indent, " ",
-													 t2mi, t2mi->emb.embedding_pid, t2mi->emb.parent_feeds, t2mi->num_crc_errors,
+						ret += sprintf(buf+ret, "%*st2mi=%p bbframes_pid=%d parent_feeds=%p cc_errs=%d crc8_errs=%d crc32_errs=%d "
+													 "stid.refcount=%d\n", indent, " ",
+													 t2mi, t2mi->emb.embedding_pid, t2mi->emb.parent_feeds,
+													 t2mi->num_cc_errors,
+													 t2mi->num_crc8_errors, t2mi->num_crc32_errors,
 													 atomic_read(&t2mi->emb.refcount.refcount.refs));
 						indent += 2;
 						ret += sprintf(buf+ret, "%*sStreams:\n", indent, " ");

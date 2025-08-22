@@ -496,7 +496,9 @@ static void t2mi_stream_init(struct t2mi_stream* t2mi, struct dvb_demux_feeds*pa
 	embedded_stream_init(&t2mi->emb, parent_feeds, EMBEDDED_STREAM_TYPE_T2MI, embedding_pid);
 	t2mi->default_isi = -1;
 	t2mi_stream_reset(t2mi, true/*full_reset*/);
-	t2mi->num_crc_errors=0;
+	t2mi->num_cc_errors=0;
+	t2mi->num_crc8_errors=0;
+	t2mi->num_crc32_errors=0;
 }
 
 /*
@@ -563,9 +565,11 @@ static void bbframes_stream_release_(struct kref *ref)
 	struct dvb_demux_feeds* feeds = bbf->feeds;
 	bbf_dprintk(bbf, "erasing bbf=%p for isi=%d in parent=%p\n", bbf, bbf? bbf->isi : -1,
 					bbf->parent_embedded_stream);
-
+	int isi = bbf->isi;
+	if (isi < 0)
+		isi = 256;
 	kref_put(&feeds->refcount,  dvb_demux_feeds_release_);
-	xa_erase(&bbf->parent_embedded_stream->bbf_streams, bbf->isi);
+	xa_erase(&bbf->parent_embedded_stream->bbf_streams, isi);
 	dprintk("FREE bbf=%p\n", bbf);
 	kfree(bbf);
 	dprintk("AFTER FREE bbf=%p\n", bbf);
@@ -574,7 +578,7 @@ static void bbframes_stream_release_(struct kref *ref)
 static void bbframes_stream_release(struct bbframes_stream* bbf) {
 	struct embedded_stream* emb = bbf->parent_embedded_stream; //save because pointer will be erases
 	WARN_ON(!bbf);
-	int isi = bbf->isi ;
+	int isi = bbf->isi;
 	embedded_stream_dprintk(emb, "bbf=%p isi=%d bbf.refcount=%d\n",
 												bbf, isi, atomic_read(&bbf->refcount.refcount.refs));
 	kref_put(&bbf->refcount, bbframes_stream_release_);
@@ -1061,7 +1065,7 @@ static const uint8_t* bbf_output_ts_bytes(struct dvb_demux* demux,
 }
 
 /*
-	Get the 3-byte t2mi_bbf header and the assocaited bbframe header
+	Get the 3-byte t2mi_bbf header and the associated bbframe header
 	In t2mi, exactly one bbframe header is included per t2mi packet and it is immediately
 	after the packet header
 	returns true if header is complete.
@@ -1121,7 +1125,7 @@ static inline bool get_t2mi_bbheader(struct t2mi_stream* t2mi, const uint8_t** p
 		t2mi_stream_dprintk_nice(t2mi, "bad t2mi header crc\n");
 		t2mi_stream_dprintk_nice(t2mi, "resetting\n");
 		t2mi_stream_reset(t2mi, false /*full_reset*/);
-		t2mi->num_crc_errors++;
+		t2mi->num_crc8_errors++;
 		*p = NULL;
 		return true;
 	}
@@ -1372,7 +1376,8 @@ static void t2mi_stream_add_packet(struct dvb_demux* demux, struct t2mi_stream* 
 		bool cc_error = !discontinuity && new_cc_counter != (t2mi->emb.cc_counter+1)%16 && t2mi->emb.cc_counter>=0;
 
 		if(cc_error) {
-			t2mi_stream_dprintk_nice(t2mi, "CC counter error t2mi->emb.cc_counter=%d\n", t2mi->emb.cc_counter);
+			t2mi_stream_dprintk_nice(t2mi, "CC counter error t2mi->emb.cc_counter=%d/%d\n", t2mi->emb.cc_counter, new_cc_counter);
+			t2mi->num_cc_errors++;
 			t2mi_stream_dprintk(t2mi, "resetting\n");
 			t2mi_stream_reset(t2mi, false /*full_reset*/);
 			return;
@@ -1564,8 +1569,10 @@ static void t2mi_stream_add_packet(struct dvb_demux* demux, struct t2mi_stream* 
 					return;
 				}
 				if(t2mi->crc_idx ==4) {
-					if(t2mi->t2mi_crc32!=0)
+					if(t2mi->t2mi_crc32 != 0) {
 						t2mi_stream_dprintk_nice(t2mi, "crc error crc=%d\n", t2mi->t2mi_crc32);
+						t2mi->num_crc32_errors++;
+					}
 				}
 			}
 		}
@@ -1776,7 +1783,7 @@ static void dvb_dmx_swfilter_packet(struct dvb_demux *demux, const uint8_t *buf,
 		//dmx_demux_dprintk_nice(demux, "emb=%p t2mi=%p pid=%d\n", emb, t2mi, pid);
 		if(!flag_error && t2mi) {
 			t2mi_stream_add_packet(demux, t2mi, buf);
-			//do not return, as it is possible that some demux users what the pid itself, rather than the embedded stream
+			//do not return, as it is possible that some demux users want the pid itself, rather than the embedded stream
 		}
 		list_for_each_entry(feed, &feeds->output_feed_list, next) {
 			if ((feed->pid != pid) && (feed->pid != 0x2000))
@@ -2106,7 +2113,7 @@ static struct bbframes_stream* dvb_dmx_find_or_alloc_bbf_stream
 	dprintk("called with demux=%p emb=%p embedding_pid=%d isi=%d bbf_streams=%p\n",
 					demux, emb, isi, emb? &emb->bbf_streams : (struct xarray*) NULL);
 	if (isi <0)
-		isi=256;
+		isi = 256;
 	bbf = xa_load(&emb->bbf_streams, isi);
 	if(!bbf) {
 		bbf = kzalloc(sizeof(struct bbframes_stream), GFP_KERNEL);
@@ -2286,10 +2293,10 @@ static int dvbdmx_allocate_t2mi_stream_(struct dvb_demux* demux,
 
 	if(!t2mi) {
 		/*this could happen when two demux users have conflicting opinions on the type of an
-			embedded stream; only one type can be correct. A more graceul way would be to allow
-				two conflicting types to co-exist (e.g., use two xarrays, one for stid and one for t2mi,
-				and process the same TS stream twice, once as stid and once as t2mi. The solution below is to just
-				log the error and then return a stream_ret in the wrong type of data structure.
+			embedded stream; only one type can be correct. A more graceful way would be to allow
+			two conflicting types to co-exist (e.g., use two xarrays, one for stid and one for t2mi,
+			and process the same TS stream twice, once as stid and once as t2mi. The solution below is to just
+			log the error and then return a stream_ret in the wrong type of data structure.
 		*/
 		embedded_stream_dprintk(emb, "attempting to allocate an stid stream for other embedded stream\n");
 	}
