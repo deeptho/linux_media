@@ -836,14 +836,18 @@ restart:
 					}
 
 					if (fe->ops.tune) {
+#if 0
 						fe_dprintk("calling tune: re_tune=%d", re_tune);
+#endif
 						fe->ops.tune(fe, re_tune, fepriv->tune_mode_flags, &fepriv->delay, &status);
 					}
 				}
 				if ((status != fepriv->status && !(fepriv->tune_mode_flags & FE_TUNE_MODE_ONESHOT))
 						|| (fepriv->heartbeat_interval>0)) {
+#if 0
 					fe_dprintk("Adapter=%d Adding event val=0x%x old=0x%x\n", fe->dvb->num, status, fepriv->status);
 					dev_dbg(fe->dvb->device, "%s: state changed, adding current state\n", __func__);
+#endif
 					dvb_frontend_add_event(fe, status);
 					fepriv->status = status;
 				}
