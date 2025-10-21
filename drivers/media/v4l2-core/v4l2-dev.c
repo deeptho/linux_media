@@ -1169,6 +1169,22 @@ EXPORT_SYMBOL_GPL(video_device_pipeline);
 
 #endif /* CONFIG_MEDIA_CONTROLLER */
 
+static void dvb_git_versions(const char ** neumo, const char ** rev, const char ** tag, const char ** branch)
+{
+	//neumo_version_string; this comment is needed to  make version_patch.pl work
+	*neumo  = "\"neumo\";\nversion = \"1.7\";";
+}
+
+static void version_log(void)
+{
+	char const* neumo;
+	char const* rev;
+	char const* tag;
+	char const * branch;
+	dvb_git_versions(&neumo, &rev, &tag, &branch);
+	printk(KERN_ERR "neumodvb blindscan drivers %s; %s;%s;\n", rev, tag, branch);
+}
+
 /*
  *	Initialise video for linux
  */
@@ -1176,7 +1192,7 @@ static int __init videodev_init(void)
 {
 	dev_t dev = MKDEV(VIDEO_MAJOR, 0);
 	int ret;
-
+	version_log();
 	pr_info("Linux video capture interface: v2.00\n");
 	ret = register_chrdev_region(dev, VIDEO_NUM_DEVICES, VIDEO_NAME);
 	if (ret < 0) {

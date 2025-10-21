@@ -1073,17 +1073,37 @@ static char *dvb_devnode(const struct device *dev, umode_t *mode)
 
 static struct kobject *info_kobject;
 
+
+static void dvb_git_versions(const char ** neumo, const char ** rev, const char ** tag, const char ** branch)
+{
+	//neumo_version_string; this comment is needed to  make version_patch.pl work
+	*neumo  = "type = \"neumo\";\nversion = \"1.7\";";
+}
+
 static ssize_t version_show(struct kobject *kobj, struct kobj_attribute *attr,
                       char *buf)
 {
+	char const* neumo;
+	char const* rev;
+	char const* tag;
+	char const * branch;
+	dvb_git_versions(&neumo, &rev, &tag, &branch);
+	return sprintf(buf, "%s\n%s\n%s\n%s\n", neumo, rev, tag, branch);
 	/*
 		show() must not use snprintf() when formatting the value to be
 		returned to user space. If you can guarantee that an overflow
 		will never happen you can use sprintf() otherwise you must use
 		scnprintf().*/
-	return sprintf(buf,
-								 "type = \"neumo\";\n"
-								 "version = \"1.7\";\n");
+}
+
+static void version_log(void)
+{
+	char const* neumo;
+	char const* rev;
+	char const* tag;
+	char const * branch;
+	dvb_git_versions(&neumo, &rev, &tag, &branch);
+	printk(KERN_ERR "neumodvb blindscan drivers %s; %s;%s;\n", rev, tag, branch);
 }
 
 static ssize_t version_store(struct kobject *kobj, struct kobj_attribute *attr,
@@ -1114,6 +1134,7 @@ static int __init init_dvbdev(void)
 {
 	int retval;
 	dev_t dev = MKDEV(DVB_MAJOR, 0);
+	version_log();
 	dvb_module_make_info();
 
 	retval = register_chrdev_region(dev, MAX_DVB_MINORS, "DVB");

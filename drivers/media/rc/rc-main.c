@@ -2049,10 +2049,25 @@ void rc_unregister_device(struct rc_dev *dev)
 
 EXPORT_SYMBOL_GPL(rc_unregister_device);
 
+void dvb_git_versions(const char ** neumo, const char ** rev, const char ** tag, const char ** branch)
+{
+	//neumo_version_string; this comment is needed to  make version_patch.pl work
+	*neumo  = "\"neumo\";\nversion = \"1.7\";";
+}
+
+static void version_log()
+{
+	char const* neumo;
+	char const* rev;
+	char const* tag;
+	char const * branch;
+	dvb_git_versions(&neumo, &rev, &tag, &branch);
+	printk(KERN_ERR "neumodvb blindscan drivers %s; %s;%s;\n", ref, tag, branch);
+}
+
 /*
  * Init/exit code for the module. Basically, creates/removes /sys/class/rc
  */
-
 static int __init rc_core_init(void)
 {
 	int rc = class_register(&rc_class);
