@@ -546,10 +546,6 @@ static void embedded_stream_release_(struct kref *kref)
 	xa_erase(&emb->parent_feeds->embedded_streams, emb->embedding_pid);
 	dprintk("FREE emb=%p\n", emb);
 	xa_destroy(&emb->bbf_streams);
-	void* p = embedded_stream_get_super_class(emb, EMBEDDED_STREAM_TYPE_UNKNOWN);
-	WARN_ON(p);
-	dprintk("AFTER WARN emb NOW=%p\n", emb);
-	//kfree(p);
 }
 
 
@@ -1007,10 +1003,6 @@ static const uint8_t* bbf_output_ts_bytes(struct dvb_demux* demux,
 					bbf->num_crc_errors++;
 					return NULL;
 				}
-#if 0
-				else
-					bbf_dprintk_nice(bbf, "Good crc (bbf->bbf_crc8=%d  p[0]=%d\n", bbf->bbf_crc8,+ p[0]);
-#endif
 				bbf->bbf_crc8 = 0;
 				ts->buff[0] = 0x47;
 				ts->buff_idx ++;
@@ -1137,7 +1129,7 @@ static inline bool get_t2mi_bbheader(struct t2mi_stream* t2mi, const uint8_t** p
 	/*
 		in theory t2mi streams can have more than one PLP (identified by plp_id,
 		which is the same as isi) embedded in them, but almost always they have only one.
-		Therefore we allow the called setting isi=T2MI_UNSPECIFIED_PLP as the stream_id.,
+		Therefore we allow the called setting isi=T2MI_UNSPECIFIED_PLP as the stream_id,
 		In that case we pick a stream_id at random, which will be fine if there is only one present.
 	 */
 	if(t2mi->default_isi < 0) {
@@ -2027,9 +2019,9 @@ static void dvb_demux_output_feed_del(struct dvb_demux_feed *feed)
 		goto out;
 	}
 
-	feeds_dprintk(feeds, "before list_del feed->next=%p\n");
+	feeds_dprintk(feeds, "before list_del feed->next=%p\n", &feed->next);
 	list_del(&feed->next);
-	feeds_dprintk(feeds, "After list_del feed->next=%p\n");
+	feeds_dprintk(feeds, "After list_del feed->next=%p\n", &feed->next);
 	feeds_dprintk(feeds, "calling kref_put feeds.refcount=%d\n",
 								atomic_read(&feeds->refcount.refcount.refs));
 	kref_put(&feeds->refcount, dvb_demux_feeds_release_);
@@ -2111,7 +2103,7 @@ static struct bbframes_stream* dvb_dmx_find_or_alloc_bbf_stream
 	struct bbframes_stream* bbf = NULL;
 	struct bbframes_stream* old_bbf = NULL;
 	dprintk("called with demux=%p emb=%p embedding_pid=%d isi=%d bbf_streams=%p\n",
-					demux, emb, isi, emb? &emb->bbf_streams : (struct xarray*) NULL);
+					demux, emb, embedding_pid, isi, emb? &emb->bbf_streams : (struct xarray*) NULL);
 	if (isi <0)
 		isi = 256;
 	bbf = xa_load(&emb->bbf_streams, isi);
@@ -2442,7 +2434,7 @@ static int dvbdmx_release_pid_stream(struct dmx_demux *dmx, struct pid_stream *p
 	feed->state = DMX_STATE_FREE;
 	if(feed->section_filter)
 		feed->section_filter->state = DMX_STATE_FREE;
-	dvb_demux_feed_dprintk(feed, "calling dvb_demux_output_feed_del\n", feeds);
+	dvb_demux_feed_dprintk(feed, "calling dvb_demux_output_feed_del\n");
 	dvb_demux_output_feed_del(feed);
 	dvb_demux_feed_dprintk(feed, "called  dvb_demux_feed_del\n");
 
