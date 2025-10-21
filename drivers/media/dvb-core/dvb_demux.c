@@ -2953,7 +2953,7 @@ int dvb_demux_get_matypes(struct dvb_demux* demux, int32_t (*isi_bitset)[8], int
 	}
 	mutex_unlock(&demux->mutex);
 	if(num_streams>0) {
-		char buf[4096]="";
+		char* buf = kzalloc(8192, GFP_KERNEL);
 		int ret=0;
 		int indent=0;
 		ret += sprintf(buf+ret, "%*sISI/PLP:matype: ", indent, " ");
@@ -2967,6 +2967,7 @@ int dvb_demux_get_matypes(struct dvb_demux* demux, int32_t (*isi_bitset)[8], int
 		}
 		ret += sprintf(buf+ret, "\n");
 		dprintk("%s", buf);
+		kfree(buf);
 	}
 	return 0;
 }
