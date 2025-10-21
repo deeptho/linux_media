@@ -1043,7 +1043,10 @@ static int dvb_dmxdev_add_pid(struct dmxdev *dmxdev,
 	pid_feed->f.feed_type = DMXDEV_FEED_TYPE_PID;
 	pid_feed->pid = pid;
 	//feed->sub_demux_feed = filter->current_sub_demux_feed;
-	dmxdev_pid_feed_dprintk(pid_feed, "Adding pid=%d\n", pid);
+	dmxdev_pid_feed_dprintk(pid_feed, "Adding pid=%d next.next=%p filter->feed.dmxdev_feed_list->next.next=%p\n",
+													pid, pid_feed->f.next.next, filter->feed.dmxdev_feed_list.next);
+	if(!filter->feed.dmxdev_feed_list.next)
+		return -1;
 	list_add(&pid_feed->f.next, &filter->feed.dmxdev_feed_list);
 
 	if (filter->state >= DMXDEV_STATE_GO)
