@@ -1024,11 +1024,8 @@ static bool pls_search_list(struct dvb_frontend* fe)
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
 	struct stv *state = fe->demodulator_priv;
-	struct fe_sat_signal_info* signal_info = &state->signal_info;
 	int i = 0;
 	int locked = 0;
-	int matype_info;
-	u8 isi;
 	for(i=0; i<p->pls_search_codes_len;++i) {
 		u32 pls_code = p->pls_search_codes[i];
 		s32 pktdelin;
@@ -1104,7 +1101,6 @@ static bool pls_search_range(struct dvb_frontend* fe)
 {
 	struct stv *state = fe->demodulator_priv;
 	fe_lla_error_t error = FE_LLA_NO_ERROR;
-	struct fe_sat_signal_info* signal_info = &state->signal_info;
 	struct dtv_frontend_properties *p = &fe->dtv_property_cache;
 	u32 pls_code = 0;
 	int locked = 0;
