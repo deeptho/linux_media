@@ -982,6 +982,7 @@ static int dvb_demux_open(struct inode *inode, struct file *file)
 static int dvb_dmxdev_filter_free(struct dmxdev *dmxdev,
 				  struct dmxdev_filter *dmxdevfilter)
 {
+
 	mutex_lock(&dmxdev->mutex);
 	mutex_lock(&dmxdevfilter->mutex);
 	if (dvb_vb2_is_streaming(&dmxdevfilter->vb2_ctx))
@@ -1504,9 +1505,17 @@ static int dvb_demux_mmap(struct file *file, struct vm_area_struct *vma)
 static int dvb_demux_release(struct inode *inode, struct file *file)
 {
 	struct dmxdev_filter *dmxdevfilter = file->private_data;
+	if(!dmxdevfilter) {
+		dprintk("ERROR inode=%p file=%p dmxdevfilter=%p\n", inode, file, dmxdevfilter);
+		return -1;
+	}
 	struct dmxdev *dmxdev = dmxdevfilter->dev;
+	if(!dmxdev) {
+		dprintk("ERROR inode=%p file=%p dmxdv=%p dmxdevfilter=%p\n", inode, file, dmxdev, dmxdevfilter);
+		return -1;
+	}
 	int ret;
-
+	dprintk("inode=%p file=%p dmxdev=%p dmxdevfilter=%p\n", inode, file, dmxdev, dmxdevfilter);
 	ret = dvb_dmxdev_filter_free(dmxdev, dmxdevfilter);
 
 	mutex_lock(&dmxdev->mutex);
@@ -1516,7 +1525,7 @@ static int dvb_demux_release(struct inode *inode, struct file *file)
 		wake_up(&dmxdev->dvbdev->wait_queue);
 	} else
 		mutex_unlock(&dmxdev->mutex);
-
+	dprintk("success: inode=%p file=%p dmxdev=%p dmxdevfilter=%p\n", inode, file, dmxdev, dmxdevfilter);
 	return ret;
 }
 
