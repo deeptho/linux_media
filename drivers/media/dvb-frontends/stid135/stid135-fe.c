@@ -973,7 +973,7 @@ static int stid135_select_rf_in_legacy_(struct stv* state)
 		ic.owner = (pid_t)0xffffffff;
 		ic.config_id = 1;
 		ic.rf_in = rf_in_no;
-		ic.unicable_mode = true;
+		ic.unicable_mode = false;
 		if(!state_chip_is_locked_by_state(state)) {
 			state_dprintk("Attempting select_rf_in_ without chip lock");
 			dump_stack();
