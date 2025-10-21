@@ -197,7 +197,7 @@ static fe_lla_error_t fe_stid135_fft_save_registers(struct stv* state, FE_OXFORD
 	Reg[i++] = reg_value;
 
 
-	dprintk("demod%d: Saved %d registers\n", state->nr, i);
+	dprintk("demod%d: Saved %d registers error=%d\n", state->nr, i, error);
 	return error;
 }
 
@@ -656,7 +656,7 @@ static fe_lla_error_t fe_stid135_fft(struct stv* state, u32 mode, u32 nb_acquisi
 
 	// Configure demodulator in ultra-fast blind scan
 	error |= ChipSetField (pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_GCTRL_UFBS_ENABLE(path), 1);
-
+	state_dprintk("Error=%d\n", error);
 	/* Set frequency, i.e., initial value for carrier offset;
 		 cfr_init is in MHz = Mclk * cfr_init / 2^24 (signed)
 
@@ -691,7 +691,7 @@ static fe_lla_error_t fe_stid135_fft(struct stv* state, u32 mode, u32 nb_acquisi
 
 	// start acquisition
 	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_GCTRL_UFBS_RESTART(path), 1);
-
+	state_dprintk("Error=%d\n", error);
 #ifdef	DEBUG_TIME
 	{
 	ktime_t now = ktime_get();
@@ -713,6 +713,8 @@ static fe_lla_error_t fe_stid135_fft(struct stv* state, u32 mode, u32 nb_acquisi
 			state_chip_sleep(state, 1);
 		}
 	}
+
+	state_dprintk("Error=%d\n", error);
 #ifdef	DEBUG_TIME
 	{
 		ktime_t now = ktime_get();
@@ -746,7 +748,9 @@ static fe_lla_error_t fe_stid135_fft(struct stv* state, u32 mode, u32 nb_acquisi
 	error |= ChipSetFieldImage(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_MEMADDR0_MEM_ADDR(path), 0x00);
 	error |= ChipSetRegisters(pParams->handle_demod, (u16)REG_RC8CODEW_DVBSX_DEMOD_MEMADDR1(path), 2);
 	// Sleep down hardware fft
+	state_dprintk("Error=%d\n", error);
 	error |= ChipSetField(pParams->handle_demod, FLD_FC8CODEW_DVBSX_DEMOD_GCTRL_UFBS_RESTART(path), 1);
+	state_dprintk("Error=%d\n", error);
 	return error;
 }
 
@@ -1058,7 +1062,7 @@ static int get_spectrum_scan_fft(struct dvb_frontend *fe)
 
 	error |= (error1=fe_stid135_term_fft(state, Reg));
 
-	dprintk("demod=%d: Terminated fft\n", state->nr);
+	dprintk("demod=%d: Terminated fft err=%d\n", state->nr, error1);
 	if(error) {
 		dprintk("demod=%d: fe_stid135_term_fft FAILED: error=%d\n", state->nr, error1);
 	}

@@ -10757,7 +10757,7 @@ fe_lla_error_t set_stream_index(struct stv *state, s32 isi, s32 pls_mode, s32 pl
 		//dev_dbg(&state->chip->i2c->dev, "%s: disable ISI filtering !\n", __func__);
 		set_pls_mode_code(state, 0, 1);
 		err |= fe_stid135_set_mis_filtering(state,  FALSE, 0, 0xFF);
-		state_dprintk("SET stream_id=%d pls_code=%d pls_mode=%d",  isi, pls_code, pls_mode);
+		state_dprintk("SET stream_id=%d pls_code=%d pls_mode=%d",  isi, 0, 1);
 		state->signal_info.isi = -1;
 		state->signal_info.matype = 256;
 		state->signal_info.pls_mode = 0;

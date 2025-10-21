@@ -836,7 +836,8 @@ static enum fe_ioctl_result stid135_select_rf_in_(struct stv* state, struct fe_r
 			return result;
 	} else {
 
-		state_dprintk("old_rf_in=%d RELEASED; result=%s ic=%p new+tuner=%p\n", old_rf_in, reservation_result_str(result), ic, new_tuner);
+		state_dprintk("old_rf_in=%d RELEASED; result=%s ic=%p new_tuner=%p\n", old_rf_in_no,
+									reservation_result_str(result), ic, new_tuner);
 
 		if(result != FE_RESERVATION_RELEASED)
 			state_dprintk("BUG: result=%s\n", reservation_result_str(result));
@@ -2160,6 +2161,12 @@ static int stid135_send_long_master_cmd_(struct stv *state, struct dvb_diseqc_lo
 	} else {
 		err |= fe_stid135_diseqc_init(&rf_in->controlling_chip->ip, rf_in->rf_in_no + 1, FE_SAT_DISEQC_2_3_PWM);
 		err |= fe_stid135_diseqc_send(state, rf_in->rf_in_no + 1, cmd->msg, cmd->msg_len);
+		char msg[64];
+		int ret= sprintf(msg, "DISEQC: ");
+		for(int i=0; i< cmd->msg_len; ++i)
+			ret+= sprintf(msg+ret, "%02x ", cmd->msg[i]);
+		ret+=sprintf(msg+ret, "\n");
+		state_dprintk("%s", msg);
 		state_dprintk("diseqc sent: rf_in=%d; tuner[%d].use_count=%d rf_in[%d].use_count=%d\n", rf_in->rf_in_no,
 								tuner->tuner_no,
 									tuner->reservation.use_count, rf_in->rf_in_no, rf_in->reservation.use_count);
@@ -2288,7 +2295,7 @@ static int stid135_send_burst(struct dvb_frontend* fe, enum fe_sec_mini_cmd burs
 		return 0;
 	}
 
-	dprintk("Not implemented!\n");
+	dprintk("err=%d\n",err);
 	return err != 0 ? -1 : 0;
 }
 
