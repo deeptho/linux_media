@@ -746,6 +746,8 @@ static int dvb_dmxdev_start_pid_feed(struct dmxdev *dmxdev,
 		ts_type |= TS_PACKET;
 	else if (otype == DMX_OUT_TSDEMUX_TAP)
 		ts_type |= TS_PACKET | TS_DEMUX;
+	else if (otype == DMX_OUT_DEMUX_TAP)
+		ts_type |= TS_PACKET | TS_DEMUX | TS_PAYLOAD_ONLY;
 	else if (otype == DMX_OUT_TAP)
 		ts_type |= TS_PACKET | TS_DEMUX | TS_PAYLOAD_ONLY;
 
