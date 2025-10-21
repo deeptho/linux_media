@@ -3347,15 +3347,18 @@ static int dvb_frontend_handle_ioctl(struct file *file,
 
 	case FE_SET_RF_INPUT_LEGACY: {
 		s32 rf_in_legacy = (intptr_t)parg & 0xffffffff;
-		fe_dprintk("Old style FE_SET_RF_INPUT: rf_in=%d\n", rf_in_legacy);
 		struct fe_rf_input_control rf_input;
 		rf_input.owner =0xffffffff;
 		rf_input.config_id = -1;
 		rf_input.rf_in =rf_in_legacy;
 		rf_input.mode = FE_RESERVATION_MODE_MASTER_OR_SLAVE;
-		if (fe->ops.set_rf_input)
-			fe->ops.set_rf_input(fe, &rf_input);
-		err = 0;
+		if (fe->ops.set_rf_input) {
+			err = fe->ops.set_rf_input(fe, &rf_input);
+			if (err>0)
+				err = 0;
+		} else
+			err = FE_RESERVATION_NOT_SUPPORTED;
+		fe_dprintk("Old style FE_SET_RF_INPUT: rf_in=%d err=%d\n", rf_in_legacy, err);
 	}
 		break;
 
