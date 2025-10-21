@@ -4416,16 +4416,22 @@ fe_lla_error_t FE_STiD135_Algo(struct stv* state, BOOL satellite_scan, enum fe_s
 				if(error1)
 					dprintk("demod=%d: ERROR=%d\n", state->nr, error1);
 				vprintk("demod=%d: here first_lock=%d\n", state->nr, fld_value);
-
-				while ((fld_value != TRUE) && (pdel_status_timeout < 220)) {
+				int limit=220;
+				while ((fld_value != TRUE) && (pdel_status_timeout < limit)) {
 					state_chip_sleep(state, 5);
 					pdel_status_timeout = (u8)(pdel_status_timeout + 5);
 					//stv09x1 checks bit 1 (PKTDELIN_LOCK)  whereas this code checks bit 0 ( FIRST_LOCK)
 					error |= (error1=ChipGetField(state->chip->ip.handle_demod, FLD_FC8CODEW_DVBSX_PKTDELIN_PDELSTATUS1_FIRST_LOCK(Demod), &fld_value));
 					if(error1)
 						dprintk("demod=%d: ERROR=%d\n", state->nr, error1);
+					if((pdel_status_timeout > limit && limit < 880)) {
+							limit = limit*2;
+							state_dprintk("Changing limit to %d\n", limit);
+					}
 				}
-				state->signal_info.has_viterbi = fld_value;
+				if(fld_value != 0 && fld_value != 1)
+					state_dprintk("FLD=0x%x\n", fld_value);
+				state->signal_info.has_viterbi = (fld_value &0x1);
 				if(fld_value) {
 					state->signal_info.fec_locked=1;
 				}
@@ -10616,7 +10622,7 @@ fe_lla_error_t fe_stid135_isi_scan(struct stv* state, struct fe_sat_isi_struct_t
 					p_isi_struct->isi_bitset[j] |= mask;
 #if 1
 				if( ((CurrentISI ==255) ? -1 : (int) CurrentISI) == state->signal_info.isi) {
-					if(state->signal_info.matype != matype && state->signal_info.matype>=0)
+					if(state->signal_info.matype != matype && state->signal_info.matype >= 0)
 						state_dprintk("Unexpected: state->signal_info.matype=%d != matype=%d isi=%d/%d\n",
 														state->signal_info.matype, matype, CurrentISI, state->signal_info.isi);
 					state->signal_info.matype = matype;
