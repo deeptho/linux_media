@@ -1110,8 +1110,6 @@ static bool pls_search_range(struct dvb_frontend* fe)
 	int locked = 0;
 	u8 timeout = p->pls_search_range_start & 0xff;
 	int count=0;
-	int matype_info;
-	u8 isi;
 	if(p->pls_search_range_end == 0)
 		return false;
 	if(p->pls_search_range_start >= p->pls_search_range_end) {
@@ -1182,17 +1180,30 @@ static bool pls_search_range(struct dvb_frontend* fe)
 	return locked;
 }
 
+static inline int is_valid_rf_input(struct stv* state, struct fe_rf_input_control* ic)
+{
+	int i;
+	for(i=0; i < 	state->fe.ops.info.num_rf_inputs; ++i) {
+		if(ic->rf_in == state->fe.ops.info.rf_inputs[i])
+			return 0;
+	}
+	return -EINVAL;
+}
 
 static int stid135_set_rf_input(struct dvb_frontend* fe, struct fe_rf_input_control* ic)
 {
 	struct stv *state = fe->demodulator_priv;
 	enum fe_ioctl_result result = FE_RESERVATION_FAILED;
 	state_chip_lock(state);
-	card_lock(state);
-	state->legacy_rf_in = ic->config_id <0;
-	result = stid135_select_rf_in_(state, ic);
-	card_unlock(state);
+	result = is_valid_rf_input(state, ic);
+	if (result >=0) {
+		card_lock(state);
+		state->legacy_rf_in = ic->config_id <0;
+		result = stid135_select_rf_in_(state, ic);
+		card_unlock(state);
+	}
 	state_chip_unlock(state);
+	state_dprintk("result=%d\n", result);
 	return result;
 }
 
