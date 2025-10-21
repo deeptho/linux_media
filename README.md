@@ -372,6 +372,32 @@ continuing to work ``as is''.
    DMX_SET_PES_FILTER is used to select a first PID to add to the output, and DMX_ADD_PID to add addional
    pids.
 
+# Changes in release-1.9
+
+* unicable_mode incorrect set in stid135_select_rf_in_legacy_
+* Detect incorrect values of rf_in
+* stid135: Improve lock detection code.
+* Improved logging.
+* Reduce log verbosity
+* Properly log neumo driver versions.
+* Properly handle drivers not supporting set_rf_input
+* Avoid large on stack allocation
+* Code cleanup and improved debug messages
+* Experimental fix for null pointer dereference in dvb_dmxdev_add_pid
+* Fix for DMX_OUT_DEMUX_TAP
+* Update README
+* dvb_demux: improved logging of cc and crc errors.
+* Bug: incorrect resetting of embedded t2mi stream, causing startup problems if demux is opened too early on 16.0 Bosnia/Herzegovina t2mi mux
+* Bug: incorrect decision on whether to respect bbframes_auto
+* Bug: t2mi packets processed twice in case of input errors and input errors not properly handled.
+* Avoid dprintk in routines called by dma code. Use dprintk_nice instead.
+* Bug: TBS5927 and other cards based on stv6120 no longer working.
+* Avoid calling FE_STiD135_GetDemodLock twice. Hopelly fixes some cases where QPSK lock is locked at tune.
+* Only call pls_search_list if there is no fec_lock
+* fix default plp bug
+* Code cleanup
+* Bug: regression due to 49da7a826c4d698 causes problems for t2mi mux 1606V@5.0W by adding data twice.
+
 # Changes in release-1.8
 
 * BUG: when user specifies isi=-1 on a multistream, a corrupt mix of all streams is produced; also an incorrect isi=-1 is returned. The new code picks an arbitrary stream
