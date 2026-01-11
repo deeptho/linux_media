@@ -6,7 +6,7 @@
  *                  & Ralph  Metzler <ralph@convergence.de>
  *                    for convergence integrated media GmbH
  *
- * Copyright (C) 2025 Deep Thought <deeptho@gmail.com>
+ * Copyright (C) 2025-2026 Deep Thought <deeptho@gmail.com>
  */
 
 #ifndef _UAPI_DVBDMX_H_
