@@ -255,7 +255,7 @@ err:
 	return ret;
 }
 
-static void tda18212_remove(struct i2c_client *client)
+void tda18212_remove(struct i2c_client *client)
 {
 	struct tda18212_dev *dev = i2c_get_clientdata(client);
 	struct dvb_frontend *fe = dev->cfg.fe;

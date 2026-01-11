@@ -1935,7 +1935,11 @@ static int stid135_set_voltage(struct dvb_frontend* fe, enum fe_sec_voltage volt
 
 	if (state->chip->set_voltage && (!tuner || ! rf_in)) {//@todo: locking maybe not needed
 		if(!rf_in && voltage == SEC_VOLTAGE_OFF) {
+			if(tuner) {
+				state_dprintk("Skipping SEC_VOLTAGE_OFF; legacy call? tuner[%d].use_count=%d\n", tuner->tuner_no, tuner->reservation.use_count);
+			} else {
 			state_dprintk("Skipping SEC_VOLTAGE_OFF; legacy call?\n");
+			}
 			return 0;
 		} else if (voltage == SEC_VOLTAGE_OFF) {
 			state_dprintk("Calling legact SEC_VOLTAGE_OFF; rf_in=%p\n", rf_in);
@@ -3027,6 +3031,7 @@ static inline int num_cards(void)
 static void init_stv_reservation(struct stv_reservation_t* res)
 {
 	res->owner = -1;
+	res->use_count = 0;
 	res->config_id =-1;
 }
 

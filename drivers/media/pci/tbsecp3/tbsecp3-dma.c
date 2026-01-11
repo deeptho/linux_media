@@ -89,7 +89,7 @@ static void tbsecp3_dma_tasklet(unsigned long adap)
 			dvb_dmx_swfilter_packets(&adapter->demux, data, adapter->dma.buffer_pkts);
 			read_buffer = (read_buffer + 1) & (TBSECP3_DMA_BUFFERS - 1);
 		}
-		}
+	}
 
 	adapter->dma.next_buffer = (u8)next_buffer;
 

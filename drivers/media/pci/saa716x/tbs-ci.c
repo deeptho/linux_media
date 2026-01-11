@@ -54,7 +54,7 @@ int tbsci_i2c_write(struct tbsci_state *state,
 			.buf = &buf[0], .len = len + 1 };
 
 	if (((state->mode == 2) || (state->mode == 4) ||
-			(state->mode == 6) || (state->mode == 8) || (state->mode == 9)) 
+			(state->mode == 6) || (state->mode == 8) || (state->mode == 9))
 		&& (state->nr == 1))
 		msg.addr += 1;
 
@@ -63,7 +63,7 @@ int tbsci_i2c_write(struct tbsci_state *state,
 
 	memcpy(&buf[1], data, len);
 	buf[0] = addr;
-	
+
 	ret = i2c_transfer(state->i2c_adap, &msg, 1);
 
 	if (ret != 1) {
@@ -74,7 +74,7 @@ int tbsci_i2c_write(struct tbsci_state *state,
 	return 0;
 };
 
-int tbsci_read_cam_control(struct dvb_ca_en50221 *ca, 
+int tbsci_read_cam_control(struct dvb_ca_en50221 *ca,
 	int slot, u8 address)
 {
 	struct tbsci_state *state = ca->data;
@@ -188,18 +188,18 @@ static int tbsci_set_video_port(struct dvb_ca_en50221 *ca,
 	switch (state->mode) {
 	case 0:
 	case 1:
-		saa716x_gpio_set_output(saa716x, 
+		saa716x_gpio_set_output(saa716x,
 			state->nr ? 16 : 17);
 		msleep(1);
-		saa716x_gpio_write(saa716x, 
+		saa716x_gpio_write(saa716x,
 			state->nr ? 16 : 17, (enable & 1));
 		msleep(100);
 		break;
 	case 2:
-		saa716x_gpio_set_output(saa716x, 
+		saa716x_gpio_set_output(saa716x,
 			state->nr ? 6 : 16);
 		msleep(1);
-		saa716x_gpio_write(saa716x, 
+		saa716x_gpio_write(saa716x,
 			state->nr ? 6 : 16, (enable & 1));
 		msleep(100);
 		break;
@@ -242,7 +242,7 @@ int tbsci_slot_reset(struct dvb_ca_en50221 *ca, int slot)
 
 	if (slot != 0)
 		return -EINVAL;
-	
+
 	mutex_lock (&state->ca_mutex);
 
 	data = 1;
@@ -261,14 +261,14 @@ int tbsci_slot_reset(struct dvb_ca_en50221 *ca, int slot)
 	return 0;
 }
 
-int tbsci_poll_slot_status(struct dvb_ca_en50221 *ca, 
+int tbsci_poll_slot_status(struct dvb_ca_en50221 *ca,
 	int slot, int open)
 {
 	struct tbsci_state *state = ca->data;
 	struct saa716x_adapter *adap = state->priv;
 	struct saa716x_dev *saa716x = adap->saa716x;
 	unsigned char data, value;
-	
+
 	if (slot != 0)
 		return -EINVAL;
 
@@ -374,7 +374,7 @@ int tbsci_init(struct saa716x_adapter *adap, int tbsci_nr, int tbsci_mode)
 	}
 
 	adap->adap_priv = state;
-	
+
 	state->nr = tbsci_nr;
 	state->mode = tbsci_mode;
 	state->status = 0;
@@ -434,16 +434,16 @@ int tbsci_init(struct saa716x_adapter *adap, int tbsci_nr, int tbsci_mode)
 				printk("tbsci: Initializing TBS 6991SE CI %d slot\n",
 					tbsci_nr);
 				//Fix Data Rate
-									
-			}else
-                        if (state->mode == 9) {
-                                printk("tbsci: Initializing TBS 6290 CI %d slot\n",
-                                        tbsci_nr);
-                        } else {
-			if (state->mode != 6) {
-				printk("tbsci: Initializing TBS 6991 v13 CI %d slot\n",
-					tbsci_nr);
-				state->mode = 4;
+
+			} else
+				if (state->mode == 9) {
+					printk("tbsci: Initializing TBS 6290 CI %d slot\n",
+								 tbsci_nr);
+				} else {
+					if (state->mode != 6) {
+						printk("tbsci: Initializing TBS 6991 v13 CI %d slot\n",
+									 tbsci_nr);
+						state->mode = 4;
 
 				data = 0;
 				tbsci_i2c_write(state, 0xd0, &data, 1);
@@ -468,14 +468,14 @@ int tbsci_init(struct saa716x_adapter *adap, int tbsci_nr, int tbsci_mode)
 	if (state->mode == 10) {
 		data = 0xc0;
 		tbsci_i2c_write(state, 0x40, &data, 1);
-		data = tbsci_i2c_read(state);		
-		
+		data = tbsci_i2c_read(state);
+
 		data = 0x01;
 		tbsci_i2c_write(state, 0xc0, &data, 1);
 
 		data = 0xc0;
 		tbsci_i2c_write(state, 0x40, &data, 1);
-		data = tbsci_i2c_read(state);		
+		data = tbsci_i2c_read(state);
 
 		data = 0xc1;
 		tbsci_i2c_write(state, 0x40, &data, 1);
@@ -520,9 +520,9 @@ int tbsci_init(struct saa716x_adapter *adap, int tbsci_nr, int tbsci_mode)
 	printk("tbsci: Adapter %d CI slot initialized\n", adap->dvb_adapter.num);
 
 	return 0;
-	
-error2: 
-	//memset (&state->ca, 0, sizeof (state->ca)); 
+
+error2:
+	//memset (&state->ca, 0, sizeof (state->ca));
 	kfree(state);
 error1:
 	printk("tbsci: Adapter %d CI slot initialization failed\n", adap->dvb_adapter.num);
