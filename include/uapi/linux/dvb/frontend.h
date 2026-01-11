@@ -297,7 +297,7 @@ enum fe_sec_mini_cmd {
  * @FE_HAS_SYNC:	Synchronization bytes was found.
  * @FE_HAS_LOCK:	Digital TV were locked and everything is working.
  * @FE_TIMEDOUT:	Fo lock within the last about 2 seconds.
- * @FE_HAS_TIMING_LOCK:		TIming loop has locked
+ * @FE_HAS_TIMING_LOCK:		Timing loop has locked
  * @FE_IDLE:		Frontend has gone idle
  * size: 4 byes
  */
