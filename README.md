@@ -59,6 +59,7 @@ sudo vi /etc/rsyslog.conf # add "kern.debug /var/log/debug" line
 sudo systemctl enable rsyslog
 sudo systemctl start rsyslog #to have log messages in /var/log/debug
 ```
+Pay attention to error messages. All steps need to succeed.
 
 Now install the firmware (if needed):
 
@@ -86,6 +87,20 @@ the file tbsecp3-cards.c. In that file lcate the entry for your card and change 
 to 9.
 
 If you have this problem then report it. Also report if the solution works,
+
+# Updating
+```
+cd neumo_media_build
+git pull
+git reset --hard
+cd ../media
+git pull
+cd ../neumo_media_build
+make distclean
+./install.sh
+```
+Pay attention to error messages. All steps need to succeed.
+
 
 # Usage
 These drivers were designed for use with neumoDVB to support advanced features provided by
