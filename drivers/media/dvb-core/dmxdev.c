@@ -982,15 +982,16 @@ static int dvb_demux_open(struct inode *inode, struct file *file)
 static int dvb_dmxdev_filter_free(struct dmxdev *dmxdev,
 				  struct dmxdev_filter *dmxdevfilter)
 {
-
+	dprintk("start\n");
 	mutex_lock(&dmxdev->mutex);
 	mutex_lock(&dmxdevfilter->mutex);
 	if (dvb_vb2_is_streaming(&dmxdevfilter->vb2_ctx))
 		dvb_vb2_stream_off(&dmxdevfilter->vb2_ctx);
 	dvb_vb2_release(&dmxdevfilter->vb2_ctx);
-
+	dprintk("before dvb_dmxdev_filter_stop(\n");
 
 	dvb_dmxdev_filter_stop(dmxdevfilter);
+	dprintk("before dvb_dmxdev_filter_reset\n");
 	dvb_dmxdev_filter_reset(dmxdevfilter, DMXDEV_STATE_ALLOCATED);
 
 	if (dmxdevfilter->buffer.data) {
@@ -1001,7 +1002,7 @@ static int dvb_dmxdev_filter_free(struct dmxdev *dmxdev,
 		spin_unlock_irq(&dmxdev->lock);
 		vfree(mem);
 	}
-
+	dprintk("before dvb_dmxdev_filter_state_set\n");
 	dvb_dmxdev_filter_state_set(dmxdevfilter, DMXDEV_STATE_FREE);
 	wake_up(&dmxdevfilter->buffer.queue);
 	mutex_unlock(&dmxdevfilter->mutex);
@@ -1248,9 +1249,10 @@ static int dvb_demux_do_ioctl(struct file *file,
 			      unsigned int cmd, void *parg)
 {
 	struct dmxdev_filter *dmxdevfilter = file->private_data;
-	struct dmxdev *dmxdev = dmxdevfilter->dev;
+	struct dmxdev *dmxdev = dmxdevfilter ? dmxdevfilter->dev : NULL;
 	unsigned long arg = (unsigned long)parg;
 	int ret = 0;
+	dprintk("dmxdevfilter=%p dmxdev=%p\n", file->private_data, dmxdev);
 
 	if (mutex_lock_interruptible(&dmxdev->mutex))
 		return -ERESTARTSYS;
@@ -1517,8 +1519,8 @@ static int dvb_demux_release(struct inode *inode, struct file *file)
 	int ret;
 	dprintk("inode=%p file=%p dmxdev=%p dmxdevfilter=%p\n", inode, file, dmxdev, dmxdevfilter);
 	ret = dvb_dmxdev_filter_free(dmxdev, dmxdevfilter);
-
 	mutex_lock(&dmxdev->mutex);
+	dprintk("Here num_users=%d\n", dmxdev->dvbdev->users);
 	dmxdev->dvbdev->users--;
 	if (dmxdev->dvbdev->users == 1 && dmxdev->exit == 1) {
 		mutex_unlock(&dmxdev->mutex);
