@@ -10,6 +10,8 @@
 #define DVB_USB_COMMON_H
 
 #include "dvb_usb.h"
+#define dprintk(fmt, arg...)																					\
+	printk(KERN_DEBUG pr_fmt("%s:%d " fmt),  __func__, __LINE__, ##arg)
 
 /* commonly used  methods */
 extern int usb_urb_initv2(struct usb_data_stream *stream,
